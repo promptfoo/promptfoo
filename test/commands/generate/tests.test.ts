@@ -1,9 +1,10 @@
 import fs from 'fs';
 
+import { Command } from 'commander';
 import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache } from '../../../src/cache';
-import { doGenerateTests } from '../../../src/commands/generate/tests';
+import { doGenerateTests, generateTestsCommand } from '../../../src/commands/generate/tests';
 import { generateTestSuite } from '../../../src/generation/index';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
@@ -269,6 +270,91 @@ describe('generate tests command', () => {
       );
     });
 
+    it('should include optional dataset and assertion feature flags', async () => {
+      const configPath = 'config.yaml';
+
+      await doGenerateTests({
+        cache: true,
+        config: configPath,
+        numPersonas: '5',
+        numTestCasesPerPersona: '3',
+        numAssertions: '7',
+        write: false,
+        type: 'llm-rubric',
+        edgeCases: true,
+        diversity: true,
+        diversityTarget: '0.9',
+        iterative: true,
+        coverage: true,
+        validate: true,
+        negativeTests: true,
+        defaultConfig: {},
+        defaultConfigPath: configPath,
+      });
+
+      expect(generateTestSuite).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          dataset: expect.objectContaining({
+            edgeCases: expect.objectContaining({ enabled: true }),
+            diversity: expect.objectContaining({ enabled: true, targetScore: 0.9 }),
+            iterative: expect.objectContaining({ enabled: true }),
+          }),
+          assertions: expect.objectContaining({
+            numQuestions: 7,
+            coverage: expect.objectContaining({ enabled: true }),
+            validation: expect.objectContaining({ enabled: true }),
+            negativeTests: expect.objectContaining({ enabled: true }),
+          }),
+        }),
+      );
+    });
+
+    it('should serialize generated edge cases into the emitted config', async () => {
+      const configPath = 'config.yaml';
+      vi.mocked(generateTestSuite).mockResolvedValue({
+        ...mockCombinedResult,
+        dataset: {
+          ...mockCombinedResult.dataset,
+          edgeCases: [
+            {
+              vars: { var1: 'edge-value' },
+              type: 'boundary',
+              description: 'Boundary probe',
+            },
+          ],
+        },
+      });
+
+      await doGenerateTests({
+        cache: true,
+        config: configPath,
+        numPersonas: '5',
+        numTestCasesPerPersona: '3',
+        output: 'output.yaml',
+        write: false,
+        type: 'pi',
+        defaultConfig: {},
+        defaultConfigPath: configPath,
+      });
+
+      expect(yaml.dump).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              vars: { var1: 'edge-value' },
+              metadata: expect.objectContaining({
+                edgeCase: true,
+                type: 'boundary',
+                description: 'Boundary probe',
+              }),
+            }),
+          ]),
+        }),
+      );
+    });
+
     it('should disable cache when cache option is false', async () => {
       const configPath = 'config.yaml';
 
@@ -330,6 +416,72 @@ describe('generate tests command', () => {
           defaultConfigPath: configPath,
         }),
       ).rejects.toThrow('Generation failed');
+    });
+  });
+
+  describe('generateTestsCommand', () => {
+    it('should register the tests command with commander', () => {
+      const program = new Command();
+      generateTestsCommand(program, {}, 'config.yaml');
+
+      expect(program.commands.map((command) => command.name())).toContain('tests');
+    });
+
+    it('should reject unsupported assertion types at parse time', () => {
+      const program = new Command().exitOverride();
+      generateTestsCommand(program, {}, 'config.yaml');
+
+      expect(() =>
+        program.parse(['tests', '--type', 'unsupported'], { from: 'user' }),
+      ).toThrow('Option --type must be one of');
+    });
+
+    it('should execute the registered action path', async () => {
+      vi.mocked(generateTestSuite).mockResolvedValue({
+        dataset: {
+          testCases: [],
+          metadata: {
+            totalGenerated: 0,
+            durationMs: 0,
+            provider: 'test-provider',
+          },
+        },
+        assertions: {
+          assertions: [],
+          metadata: {
+            totalGenerated: 0,
+            pythonConverted: 0,
+            durationMs: 0,
+            provider: 'test-provider',
+          },
+        },
+        metadata: {
+          totalDurationMs: 0,
+          provider: 'test-provider',
+        },
+      });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        testSuite: {
+          prompts: [{ raw: 'test prompt', label: 'test' }],
+          tests: [],
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn() as any,
+            },
+          ],
+        },
+        config: {},
+        basePath: '',
+      });
+      vi.mocked(yaml.dump).mockReturnValue('yaml content');
+
+      const program = new Command().exitOverride();
+      generateTestsCommand(program, {}, 'config.yaml');
+
+      await program.parseAsync(['tests'], { from: 'user' });
+
+      expect(generateTestSuite).toHaveBeenCalled();
     });
   });
 });

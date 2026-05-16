@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { extractConcepts } from '../../../src/generation/dataset/conceptExtractor';
+import {
+  extractConcepts,
+  extractEntities,
+  extractTopics,
+} from '../../../src/generation/dataset/conceptExtractor';
 
 import type { ApiProvider } from '../../../src/types';
 
@@ -129,5 +133,38 @@ describe('conceptExtractor', () => {
       expect(result.constraints).toEqual([]);
       expect(result.variableRelationships).toEqual([]);
     });
+  });
+
+  it('should extract only topic names for lightweight topic analysis', async () => {
+    mockCallApi.mockResolvedValue({
+      output: JSON.stringify({
+        topics: [{ name: 'Billing' }, { name: 'Support' }],
+        entities: [],
+        constraints: [],
+      }),
+    });
+
+    await expect(extractTopics(['Help with billing'], mockProvider, 2)).resolves.toEqual([
+      'Billing',
+      'Support',
+    ]);
+  });
+
+  it('should extract entity names and types for lightweight entity analysis', async () => {
+    mockCallApi.mockResolvedValue({
+      output: JSON.stringify({
+        topics: [],
+        entities: [
+          { name: 'Customer', type: 'person' },
+          { name: 'Invoice', type: 'document' },
+        ],
+        constraints: [],
+      }),
+    });
+
+    await expect(extractEntities(['Summarize the invoice'], mockProvider, 2)).resolves.toEqual([
+      { name: 'Customer', type: 'person' },
+      { name: 'Invoice', type: 'document' },
+    ]);
   });
 });

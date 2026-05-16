@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   analyzeCoverage,
   extractRequirements,
+  suggestAssertions,
 } from '../../../src/generation/assertions/coverageAnalyzer';
 
 import type { Requirement } from '../../../src/generation/types';
@@ -235,6 +236,39 @@ describe('coverageAnalyzer', () => {
 
       expect(result.overallScore).toBeGreaterThan(0);
       expect(result.requirements[0].coverageLevel).not.toBe('none');
+    });
+  });
+
+  describe('suggestAssertions', () => {
+    it('should skip provider calls when there are no coverage gaps', async () => {
+      await expect(
+        suggestAssertions(
+          ['Return JSON'],
+          { requirements: [], overallScore: 1, gaps: [] },
+          mockProvider,
+        ),
+      ).resolves.toEqual([]);
+      expect(mockCallApi).not.toHaveBeenCalled();
+    });
+
+    it('should parse suggested assertions from the provider response', async () => {
+      mockCallApi.mockResolvedValue({
+        output: JSON.stringify({
+          suggestions: ['Check JSON validity', 'Verify a summary is included'],
+        }),
+      });
+
+      await expect(
+        suggestAssertions(
+          ['Return JSON'],
+          {
+            requirements: [],
+            overallScore: 0.25,
+            gaps: ['JSON format is uncovered'],
+          },
+          mockProvider,
+        ),
+      ).resolves.toEqual(['Check JSON validity', 'Verify a summary is included']);
     });
   });
 });

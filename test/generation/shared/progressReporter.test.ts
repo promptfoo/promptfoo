@@ -8,6 +8,8 @@ import {
 } from '../../../src/generation/shared/progressReporter';
 
 vi.mock('../../../src/generation/shared/jobManager', () => ({
+  emitAssertion: vi.fn(),
+  emitTestCase: vi.fn(),
   updateJobProgress: vi.fn(),
 }));
 
@@ -96,6 +98,51 @@ describe('progressReporter', () => {
       expect(progress.total).toBe(10);
       expect(progress.phase).toBe('Phase 1');
       expect(progress.percentage).toBe(50);
+    });
+
+    it('should support job id updates, phase updates, and arbitrary increments', async () => {
+      const callback = vi.fn();
+      const reporter = new ProgressReporter({ callback });
+
+      reporter.setJobId('job-1');
+      expect(reporter.getJobId()).toBe('job-1');
+
+      await reporter.start(10, 'Starting');
+      reporter.incrementBy(3);
+      reporter.setPhase('Refining');
+
+      expect(reporter.getProgress()).toEqual({
+        current: 3,
+        total: 10,
+        phase: 'Refining',
+        percentage: 30,
+      });
+      expect(callback).toHaveBeenLastCalledWith(3, 10, 'Refining');
+      expect(jobManager.updateJobProgress).toHaveBeenCalledWith('job-1', 3, 10, 'Refining');
+    });
+
+    it('should stream generated test cases and assertions when enabled', () => {
+      const reporter = new ProgressReporter({ jobId: 'job-2', enableStreaming: true });
+
+      reporter.emitTestCase({ city: 'Paris' });
+      reporter.emitTestCases([{ city: 'Berlin' }]);
+      reporter.emitAssertion({ type: 'contains', value: 'Paris' });
+      reporter.emitAssertions([{ type: 'contains', value: 'Berlin' }]);
+
+      expect(jobManager.emitTestCase).toHaveBeenNthCalledWith(1, 'job-2', { city: 'Paris' }, 0);
+      expect(jobManager.emitTestCase).toHaveBeenNthCalledWith(2, 'job-2', { city: 'Berlin' }, 1);
+      expect(jobManager.emitAssertion).toHaveBeenNthCalledWith(
+        1,
+        'job-2',
+        { type: 'contains', value: 'Paris' },
+        0,
+      );
+      expect(jobManager.emitAssertion).toHaveBeenNthCalledWith(
+        2,
+        'job-2',
+        { type: 'contains', value: 'Berlin' },
+        1,
+      );
     });
   });
 

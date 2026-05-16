@@ -5,9 +5,12 @@ import {
   completeJob,
   createJob,
   deleteJob,
+  emitAssertion,
+  emitTestCase,
   failJob,
   generationJobs,
   getJob,
+  jobEventEmitter,
   listJobs,
   updateJobProgress,
 } from '../../../src/generation/shared/jobManager';
@@ -110,6 +113,15 @@ describe('jobManager', () => {
       expect(job.status).toBe('complete');
       expect(job.result).toBe(mockResult);
     });
+
+    it('should ignore completion requests for unknown jobs', () => {
+      expect(() =>
+        completeJob('missing-job', {
+          testCases: [],
+          metadata: { totalGenerated: 0, durationMs: 0, provider: 'test' },
+        }),
+      ).not.toThrow();
+    });
   });
 
   describe('failJob', () => {
@@ -130,6 +142,10 @@ describe('jobManager', () => {
 
       expect(job.error).toBe('String error');
     });
+
+    it('should ignore failures for unknown jobs', () => {
+      expect(() => failJob('missing-job', 'missing')).not.toThrow();
+    });
   });
 
   describe('addJobLog', () => {
@@ -140,6 +156,36 @@ describe('jobManager', () => {
       addJobLog(job.id, 'Log message 2');
 
       expect(job.logs).toEqual(['Log message 1', 'Log message 2']);
+    });
+
+    it('should ignore logs for unknown jobs', () => {
+      expect(() => addJobLog('missing-job', 'ignored')).not.toThrow();
+    });
+  });
+
+  describe('streaming events', () => {
+    it('should emit testcase and assertion events on the job channel', () => {
+      const job = createJob('dataset');
+      const listener = vi.fn();
+      jobEventEmitter.on(`job:${job.id}`, listener);
+
+      emitTestCase(job.id, { city: 'Paris' }, 0);
+      emitAssertion(job.id, { type: 'contains', value: 'Paris' }, 1);
+
+      expect(listener).toHaveBeenNthCalledWith(1, {
+        type: 'testcase',
+        jobId: job.id,
+        testCase: { city: 'Paris' },
+        index: 0,
+      });
+      expect(listener).toHaveBeenNthCalledWith(2, {
+        type: 'assertion',
+        jobId: job.id,
+        assertion: { type: 'contains', value: 'Paris' },
+        index: 1,
+      });
+
+      jobEventEmitter.removeListener(`job:${job.id}`, listener);
     });
   });
 

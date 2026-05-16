@@ -6,12 +6,24 @@ import {
   DiversityMetricsSchema,
   EdgeCaseSchema,
   GenerationJobSchema,
+  getNumAssertions,
   PersonaSchema,
   RequirementCoverageSchema,
   RequirementSchema,
 } from '../../src/generation/types';
 
 describe('generation types', () => {
+  describe('getNumAssertions', () => {
+    it('should prefer numAssertions over legacy numQuestions', () => {
+      expect(getNumAssertions({ numAssertions: 7, numQuestions: 3 })).toBe(7);
+    });
+
+    it('should fall back to numQuestions and then the default', () => {
+      expect(getNumAssertions({ numQuestions: 4 })).toBe(4);
+      expect(getNumAssertions({})).toBe(5);
+    });
+  });
+
   describe('PersonaSchema', () => {
     it('should validate a complete persona', () => {
       const persona = {
