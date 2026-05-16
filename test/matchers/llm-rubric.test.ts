@@ -611,7 +611,6 @@ describe('matchesLlmRubric', () => {
       rubricPrompt: 'Grading prompt',
       provider: createMockProvider({
         response: {
-          error: null,
           output: null,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         },
