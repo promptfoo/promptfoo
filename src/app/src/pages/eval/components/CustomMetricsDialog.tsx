@@ -81,13 +81,6 @@ function formatProviderLabel(prompt: PromptHeader, index: number): string {
     return prompt.provider;
   }
 
-  if (typeof prompt.provider === 'object' && prompt.provider !== null) {
-    const providerId = 'id' in prompt.provider ? prompt.provider.id : undefined;
-    if (typeof providerId === 'string' && providerId.trim()) {
-      return providerId;
-    }
-  }
-
   return `Prompt ${index + 1}`;
 }
 
