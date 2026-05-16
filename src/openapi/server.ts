@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 69;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -608,6 +608,41 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{evalId}/results/bulk-rating',
+    operationId: 'bulkRateEvalResults',
+    tags: ['Eval'],
+    summary: 'Submit a bulk rating for matching evaluation results',
+    request: {
+      params: params('BulkRatingParams', EvalSchemas.BulkRating.Params),
+      body: jsonBody('BulkRatingRequest', EvalSchemas.BulkRating.Request),
+    },
+    responses: {
+      200: jsonResponse('BulkRatingResponse', EvalSchemas.BulkRating.Response),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{evalId}/results/bulk-rating/preview',
+    operationId: 'previewBulkEvalResultRating',
+    tags: ['Eval'],
+    summary: 'Preview how many evaluation results match bulk-rating filters',
+    request: {
+      params: params('BulkRatingPreviewParams', EvalSchemas.BulkRatingPreview.Params),
+      query: query('BulkRatingPreviewQuery', EvalSchemas.BulkRatingPreview.Query),
+    },
+    responses: {
+      200: jsonResponse('BulkRatingPreviewResponse', EvalSchemas.BulkRatingPreview.Response),
+      400: validationError(),
       500: serverError(),
     },
   });
