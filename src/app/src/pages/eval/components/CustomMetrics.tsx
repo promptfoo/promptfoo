@@ -81,16 +81,16 @@ const CustomMetrics = ({
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
 
-  const metrics = Object.entries(lookup);
+  const metrics = Object.entries(lookup).sort(([metricA], [metricB]) =>
+    metricA.localeCompare(metricB),
+  );
   const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
 
   return (
     <div className="custom-metric-container my-2" data-testid="custom-metrics">
-      {displayMetrics
-        .sort(([metricA], [metricB]) => metricA.localeCompare(metricB))
-        .map(([metric, score]) => {
+      {displayMetrics.map(([metric, score]) => {
           let displayLabel: string = metric;
           let tooltipContent: React.ReactNode | null = null;
           // Display a tooltip for policy metrics.

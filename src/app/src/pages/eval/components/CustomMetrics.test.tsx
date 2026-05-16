@@ -198,6 +198,28 @@ describe('CustomMetrics', () => {
     ]);
   });
 
+  it('sorts the full metric list before truncating visible metrics', async () => {
+    const user = userEvent.setup();
+    const lookup = {
+      zebra: 3,
+      alpha: 1,
+      beta: 2,
+    };
+
+    renderWithProviders(<CustomMetrics lookup={lookup} truncationCount={2} />);
+
+    expect(
+      screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent),
+    ).toEqual(['alpha', 'beta']);
+    expect(screen.queryByTestId('metric-name-zebra')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('toggle-show-more'));
+
+    expect(
+      screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent),
+    ).toEqual(['alpha', 'beta', 'zebra']);
+  });
+
   it('handles missing metrics in counts/totals objects', () => {
     const lookup = { metric1: 10, metric2: 20 };
     const counts = { metric1: 20 };
