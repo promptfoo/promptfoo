@@ -3085,6 +3085,11 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
             score: 1,
             text: 'test output',
           },
+          {
+            pass: true,
+            score: 1,
+            text: 'second prompt output',
+          },
         ],
         test: {},
         vars: [],
@@ -3181,6 +3186,60 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
         'Filtered: 10/10 passing (100.00%). Total: 8/10 passing (80.00%)',
       );
     });
+  });
+
+  it('auto-hides prompt columns that are empty in a filtered result view', () => {
+    const mockFilteredSparseTable = {
+      body: Array(3).fill({
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'visible filtered output',
+          },
+        ],
+        test: {},
+        vars: [],
+      }),
+      head: {
+        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockFilteredSparseTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {
+          testFilter: {
+            id: 'testFilter',
+            type: 'metric',
+            operator: 'equals',
+            value: 'test',
+            logicOperator: 'and',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+      filterMode: 'all',
+      filteredResultsCount: 3,
+      totalResultsCount: 10,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.queryByLabelText('No output for this prompt')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(3);
   });
 });
 

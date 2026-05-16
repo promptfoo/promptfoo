@@ -1485,10 +1485,17 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
+  const hasFilteredResultView =
+    Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
+
   // Auto-hide prompt columns that have no output data in the current filtered view.
   // This handles 1:1 configurations where filtered results may leave some prompt columns entirely empty.
   const effectiveColumnVisibility = React.useMemo(() => {
     const visibility: VisibilityState = { ...columnVisibility };
+    if (!hasFilteredResultView) {
+      return visibility;
+    }
+
     head.prompts.forEach((_, idx) => {
       const colId = `Prompt ${idx + 1}`;
       // Only auto-hide if the column is currently set to visible
@@ -1506,7 +1513,7 @@ function ResultsTable({
       }
     });
     return visibility;
-  }, [columnVisibility, head.prompts, body]);
+  }, [body, columnVisibility, hasFilteredResultView, head.prompts]);
 
   const visiblePromptCount = React.useMemo(
     () =>
