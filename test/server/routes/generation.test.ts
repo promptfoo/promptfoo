@@ -10,7 +10,11 @@ import {
   generateAssertions,
   validateAssertions,
 } from '../../../src/generation/assertions';
-import { extractConcepts, generateDataset, measureDiversity } from '../../../src/generation/dataset';
+import {
+  extractConcepts,
+  generateDataset,
+  measureDiversity,
+} from '../../../src/generation/dataset';
 import { generateTestSuite } from '../../../src/generation/index';
 import {
   completeJob,
@@ -95,7 +99,7 @@ describe('generation routes', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     generationJobs.clear();
-    vi.mocked(getEnvString).mockReturnValue(undefined);
+    vi.mocked(getEnvString).mockReturnValue(undefined as never);
     vi.mocked(getDefaultProviders).mockResolvedValue({
       synthesizeProvider: {
         id: () => 'route-provider',
@@ -111,7 +115,10 @@ describe('generation routes', () => {
       metadata: { totalGenerated: 1, pythonConverted: 0, durationMs: 1, provider: 'assertions' },
     } as never);
     vi.mocked(generateTestSuite).mockResolvedValue({
-      dataset: { testCases: [], metadata: { totalGenerated: 0, durationMs: 0, provider: 'dataset' } },
+      dataset: {
+        testCases: [],
+        metadata: { totalGenerated: 0, durationMs: 0, provider: 'dataset' },
+      },
       assertions: {
         assertions: [],
         metadata: { totalGenerated: 0, pythonConverted: 0, durationMs: 0, provider: 'assertions' },
@@ -389,6 +396,5 @@ describe('generation routes', () => {
       .expect((response) => {
         expect(response.text).toContain('"type":"error"');
       });
-
   });
 });

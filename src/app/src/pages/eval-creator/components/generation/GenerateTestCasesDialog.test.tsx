@@ -203,10 +203,13 @@ describe('GenerateTestCasesDialog', () => {
       completeJob?.({
         dataset: {
           testCases: [{ city: 'Paris' }, { city: 'Berlin' }],
+          metadata: { totalGenerated: 2, durationMs: 1, provider: 'dataset' },
         },
         assertions: {
           assertions: [{ type: 'contains', value: 'city' }],
+          metadata: { totalGenerated: 1, durationMs: 1 },
         },
+        metadata: { totalDurationMs: 2, provider: 'tests' },
       } as GenerationResult);
     });
 

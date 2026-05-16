@@ -4,8 +4,8 @@ import {
   generateEdgeCasesByType,
 } from '../../../src/generation/dataset/edgeCaseGenerator';
 
-import type { ApiProvider } from '../../../src/types';
 import type { ConceptAnalysis } from '../../../src/generation/types';
+import type { ApiProvider } from '../../../src/types';
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -120,7 +120,9 @@ describe('edgeCaseGenerator', () => {
         severity: undefined,
       },
     ]);
-    expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining('Context from Concept Analysis'));
+    expect(mockCallApi).toHaveBeenCalledWith(
+      expect.stringContaining('Context from Concept Analysis'),
+    );
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining('ADVERSARIAL'));
   });
 
@@ -188,12 +190,7 @@ describe('edgeCaseGenerator', () => {
     });
 
     await expect(
-      generateEdgeCasesByType(
-        ['Probe {{prompt}}'],
-        mockProvider,
-        ['adversarial', 'boundary'],
-        1,
-      ),
+      generateEdgeCasesByType(['Probe {{prompt}}'], mockProvider, ['adversarial', 'boundary'], 1),
     ).resolves.toHaveLength(2);
     expect(mockCallApi).toHaveBeenCalledWith(expect.stringContaining('ADVERSARIAL'));
   });

@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDefaultProviders } from '../../../src/providers/defaults';
-import { loadApiProvider } from '../../../src/providers/index';
-import {
-  generateDataset,
-  synthesize,
-} from '../../../src/generation/dataset';
+import { generateDataset, synthesize } from '../../../src/generation/dataset';
 import { extractConcepts } from '../../../src/generation/dataset/conceptExtractor';
 import {
   identifyGaps,
@@ -15,6 +10,8 @@ import {
   generatePersonas,
   personaToString,
 } from '../../../src/generation/dataset/personaGenerator';
+import { getDefaultProviders } from '../../../src/providers/defaults';
+import { loadApiProvider } from '../../../src/providers/index';
 import { retryWithDeduplication } from '../../../src/util/generation';
 
 import type { ApiProvider } from '../../../src/types';
@@ -141,9 +138,14 @@ describe('generation dataset index', () => {
       [{ raw: 'Recommend travel to {{city}}', label: 'Prompt' }],
       [{ vars: { city: 'Existing' } }],
       {
-        concepts: { maxTopics: 2 },
-        edgeCases: { enabled: true },
-        diversity: { enabled: true },
+        concepts: { maxTopics: 2, maxEntities: 10, extractRelationships: true },
+        edgeCases: {
+          enabled: true,
+          types: ['boundary', 'format', 'empty', 'special-chars'],
+          count: 10,
+          includeAdversarial: false,
+        },
+        diversity: { enabled: true, targetScore: 0.7, measureMethod: 'embedding' },
         iterative: { enabled: true, maxRounds: 1, targetDiversity: 0.8 },
         numPersonas: 1,
         numTestCasesPerPersona: 1,
@@ -168,27 +170,25 @@ describe('generation dataset index', () => {
   });
 
   it('supports explicit providers, no-gap iterative exit, and the synthesize compatibility wrapper', async () => {
-    vi.mocked(measureDiversity).mockReset().mockResolvedValue({
-      score: 0.95,
-      averageDistance: 0.95,
-      minDistance: 0.9,
-      maxDistance: 1,
-    } as never);
+    vi.mocked(measureDiversity)
+      .mockReset()
+      .mockResolvedValue({
+        score: 0.95,
+        averageDistance: 0.95,
+        minDistance: 0.9,
+        maxDistance: 1,
+      } as never);
     callApi.mockResolvedValue({
       output: JSON.stringify({ vars: [{ city: 'Tokyo' }] }),
     });
 
-    const result = await generateDataset(
-      [{ raw: 'Visit {{city}}', label: 'Prompt' }],
-      [],
-      {
-        provider: 'custom-provider',
-        concepts: { maxTopics: 1 },
-        iterative: { enabled: true, maxRounds: 2, targetDiversity: 0.7 },
-        numPersonas: 1,
-        numTestCasesPerPersona: 1,
-      },
-    );
+    const result = await generateDataset([{ raw: 'Visit {{city}}', label: 'Prompt' }], [], {
+      provider: 'custom-provider',
+      concepts: { maxTopics: 1, maxEntities: 10, extractRelationships: true },
+      iterative: { enabled: true, maxRounds: 2, targetDiversity: 0.7 },
+      numPersonas: 1,
+      numTestCasesPerPersona: 1,
+    });
 
     expect(loadApiProvider).toHaveBeenCalledWith('custom-provider', expect.any(Object));
     expect(result.metadata.iterationRounds).toBeUndefined();

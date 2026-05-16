@@ -99,11 +99,7 @@ describe('generateTestSuite', () => {
     expect(mockGenerateDataset).toHaveBeenCalledWith(prompts, existingTests, {}, undefined);
     expect(mockGenerateAssertions).toHaveBeenCalledWith(
       prompts,
-      [
-        ...existingTests,
-        { vars: { city: 'Berlin' } },
-        { vars: { city: 'Tokyo' } },
-      ],
+      [...existingTests, { vars: { city: 'Berlin' } }, { vars: { city: 'Tokyo' } }],
       expect.objectContaining({ provider: 'assertion-provider' }),
       undefined,
     );

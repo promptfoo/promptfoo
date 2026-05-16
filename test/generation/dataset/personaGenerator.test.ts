@@ -5,8 +5,8 @@ import {
   personaToString,
 } from '../../../src/generation/dataset/personaGenerator';
 
-import type { ApiProvider } from '../../../src/types';
 import type { ConceptAnalysis, Persona } from '../../../src/generation/types';
+import type { ApiProvider } from '../../../src/types';
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -195,9 +195,7 @@ describe('personaGenerator', () => {
 
     expect(personaToString(detailedPersona)).toContain('Demographics: Age: 25-34');
     expect(personaToString(detailedPersona)).toContain('Goals: Learn quickly');
-    expect(personaToString(detailedPersona)).toContain(
-      'Behaviors: Asks follow-up questions',
-    );
+    expect(personaToString(detailedPersona)).toContain('Behaviors: Asks follow-up questions');
     expect(personaToString(detailedPersona)).toContain('Special characteristic: Time constrained');
     expect(
       personaToString({

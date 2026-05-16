@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDefaultProviders } from '../../../src/providers/defaults';
-import { loadApiProvider } from '../../../src/providers/index';
-import {
-  generateAssertions,
-  synthesize,
-} from '../../../src/generation/assertions';
+import { generateAssertions, synthesize } from '../../../src/generation/assertions';
 import {
   generateSampleOutputs,
   validateAssertions,
@@ -14,6 +9,8 @@ import {
   extractRequirements,
 } from '../../../src/generation/assertions/coverageAnalyzer';
 import { generateNegativeTests } from '../../../src/generation/assertions/negativeTestGenerator';
+import { getDefaultProviders } from '../../../src/providers/defaults';
+import { loadApiProvider } from '../../../src/providers/index';
 
 import type { ApiProvider } from '../../../src/types';
 
@@ -112,17 +109,22 @@ describe('generation assertions index', () => {
           ],
         }),
       })
-      .mockResolvedValueOnce({ output: '```python\nreturn {"pass": True, "score": 1.0}\n```' })
-      .mockResolvedValueOnce({ output: 'None' });
+      .mockImplementation((prompt: string) =>
+        Promise.resolve({
+          output: prompt.includes('Return JSON?')
+            ? '```python\nreturn {"pass": True, "score": 1.0}\n```'
+            : 'None',
+        }),
+      );
 
     const progress = vi.fn();
     const result = await generateAssertions(
       [{ raw: 'Return JSON', label: 'Prompt' }],
       [{ assert: [{ type: 'contains', value: 'existing' }] }],
       {
-        coverage: { enabled: true, extractRequirements: true },
+        coverage: { enabled: true, extractRequirements: true, minCoverageScore: 0.8 },
         validation: { enabled: true, autoGenerateSamples: true, sampleCount: 1 },
-        negativeTests: { enabled: true, count: 1 },
+        negativeTests: { enabled: true, types: ['should-not-contain'], count: 1 },
         numAssertions: 2,
         type: 'llm-rubric',
       },
@@ -131,8 +133,8 @@ describe('generation assertions index', () => {
 
     expect(result.assertions).toEqual(
       expect.arrayContaining([
-      expect.objectContaining({ type: 'python', metric: 'JSON' }),
-      expect.objectContaining({ type: 'llm-rubric', metric: 'Tone' }),
+        expect.objectContaining({ type: 'python', metric: 'JSON' }),
+        expect.objectContaining({ type: 'llm-rubric', metric: 'Tone' }),
       ]),
     );
     expect(result.validation).toEqual([{ accuracy: 1 }]);
@@ -157,18 +159,16 @@ describe('generation assertions index', () => {
       })
       .mockResolvedValueOnce({ output: 'return {"pass": True, "score": 1.0}' });
 
-    const result = await generateAssertions(
-      [{ raw: 'Return exactly', label: 'Prompt' }],
-      [],
-      {
-        provider: 'custom-provider',
-        validation: {
-          enabled: true,
-          sampleOutputs: [{ output: 'exact', expectedPass: true }],
-        },
-        numQuestions: 1,
+    const result = await generateAssertions([{ raw: 'Return exactly', label: 'Prompt' }], [], {
+      provider: 'custom-provider',
+      validation: {
+        enabled: true,
+        autoGenerateSamples: false,
+        sampleCount: 5,
+        sampleOutputs: [{ output: 'exact', expectedPass: true }],
       },
-    );
+      numQuestions: 1,
+    });
 
     expect(loadApiProvider).toHaveBeenCalledWith('custom-provider', expect.any(Object));
     expect(generateSampleOutputs).not.toHaveBeenCalled();

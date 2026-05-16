@@ -431,9 +431,9 @@ describe('generate tests command', () => {
       const program = new Command().exitOverride();
       generateTestsCommand(program, {}, 'config.yaml');
 
-      expect(() =>
-        program.parse(['tests', '--type', 'unsupported'], { from: 'user' }),
-      ).toThrow('Option --type must be one of');
+      expect(() => program.parse(['tests', '--type', 'unsupported'], { from: 'user' })).toThrow(
+        'Option --type must be one of',
+      );
     });
 
     it('should execute the registered action path', async () => {

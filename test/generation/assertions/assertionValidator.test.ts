@@ -6,8 +6,8 @@ import {
 } from '../../../src/generation/assertions/assertionValidator';
 import { runPythonCode } from '../../../src/python/wrapper';
 
-import type { ApiProvider, Assertion } from '../../../src/types';
 import type { AssertionValidationResult } from '../../../src/generation/types';
+import type { ApiProvider, Assertion } from '../../../src/types';
 
 vi.mock('../../../src/python/wrapper', () => ({
   runPythonCode: vi.fn(),
@@ -144,9 +144,11 @@ describe('assertionValidator', () => {
 
     callApi.mockResolvedValueOnce({});
     await expect(
-      validateAssertions([{ type: 'g-eval', value: 'Must be factual' }], [
-        { output: 'sample', expectedPass: true },
-      ], provider),
+      validateAssertions(
+        [{ type: 'g-eval', value: 'Must be factual' }],
+        [{ output: 'sample', expectedPass: true }],
+        provider,
+      ),
     ).rejects.toThrow('Provider response must have output');
   });
 
@@ -180,10 +182,7 @@ describe('assertionValidator', () => {
       { type: 'contains', value: 'keep' },
       { type: 'contains', value: 'drop' },
     ];
-    const validation = [
-      { accuracy: 0.9 },
-      { accuracy: 0.2 },
-    ] as AssertionValidationResult[];
+    const validation = [{ accuracy: 0.9 }, { accuracy: 0.2 }] as AssertionValidationResult[];
 
     expect(filterAssertionsByValidation(assertions, validation)).toEqual([assertions[0]]);
     expect(filterAssertionsByValidation(assertions, validation, 0.1)).toEqual(assertions);
