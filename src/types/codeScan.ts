@@ -24,6 +24,15 @@ export const FileChangeStatus = {
 } as const;
 export type FileChangeStatus = (typeof FileChangeStatus)[keyof typeof FileChangeStatus];
 
+export const CodeScanOutputFormat = {
+  TEXT: 'text',
+  JSON: 'json',
+  SARIF: 'sarif',
+} as const;
+export type CodeScanOutputFormat = (typeof CodeScanOutputFormat)[keyof typeof CodeScanOutputFormat];
+
+export const CodeScanOutputFormatSchema = z.enum(['text', 'json', 'sarif']);
+
 // ============================================================================
 // Severity Utility Types
 // ============================================================================

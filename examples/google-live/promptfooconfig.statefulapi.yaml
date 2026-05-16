@@ -4,8 +4,8 @@ description: 'Example for mocking a stateful python api'
 prompts: '{{query}}'
 
 providers:
-  # Using gemini-2.5-flash-native-audio for Live API (supports both text and audio)
-  - id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025'
+  # Using Gemini 3.1 Flash Live Preview
+  - id: 'google:live:gemini-3.1-flash-live-preview'
     config:
       tools: file://tools.json
       functionToolStatefulApi:
@@ -14,7 +14,8 @@ providers:
         # Optionally specify a custom Python executable path
         # pythonExecutable: '/usr/local/bin/python3'
       generationConfig:
-        response_modalities: ['text']
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
       timeoutMs: 10000
 
 tests:

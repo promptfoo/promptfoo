@@ -113,6 +113,70 @@ describe('DataTable', () => {
     expect(screen.getByText('Test Item 2')).toBeInTheDocument();
   });
 
+  it('keeps filter value controls usable on narrow filter popovers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+
+    const filterRow = screen.getByTestId('data-table-filter-row');
+    const valueInput = screen.getByPlaceholderText('Value...');
+
+    expect(filterRow).toHaveClass('flex-wrap');
+    expect(valueInput).toHaveClass('min-w-[150px]');
+    expect(within(filterRow).getByRole('combobox', { name: 'Column for filter 1' })).toBeVisible();
+    expect(
+      within(filterRow).getByRole('combobox', { name: 'Operator for ID filter' }),
+    ).toBeVisible();
+    expect(within(filterRow).getByRole('textbox', { name: 'Value for ID filter' })).toBeVisible();
+    expect(within(filterRow).getByRole('button', { name: 'Remove filter for ID' })).toBeVisible();
+  });
+
+  it('keeps toolbar controls easier to tap on narrow screens', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    expect(screen.getByText('Columns').closest('button')).toHaveClass('h-11', 'sm:h-8');
+    expect(screen.getByText('Filters').closest('button')).toHaveClass('h-11', 'sm:h-8');
+  });
+
+  it('exposes toolbar multi-select filters as labeled checkbox controls', async () => {
+    const user = userEvent.setup();
+
+    render(<DataTable columns={headerFilterColumns} data={headerFilterRows} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+    const filterRow = screen.getByTestId('data-table-filter-row');
+
+    await user.click(within(filterRow).getByRole('combobox', { name: 'Column for filter 1' }));
+    await user.click(await screen.findByRole('option', { name: 'Status' }));
+
+    await user.click(
+      within(filterRow).getByRole('combobox', { name: 'Operator for Status filter' }),
+    );
+    await user.click(await screen.findByRole('option', { name: 'is any of' }));
+
+    await user.click(
+      within(filterRow).getByRole('button', {
+        name: 'Value for Status filter: No values selected',
+      }),
+    );
+    const alphaOption = screen.getByRole('checkbox', { name: 'Alpha' });
+    expect(alphaOption).not.toBeChecked();
+
+    alphaOption.focus();
+    await user.keyboard('[Space]');
+    expect(alphaOption).toBeChecked();
+    expect(
+      within(filterRow).getByRole('button', {
+        name: 'Value for Status filter: 1 selected: Alpha',
+      }),
+    ).toBeVisible();
+  });
+
   it('should render table with data when data is provided', () => {
     const data: TestRow[] = [
       { id: '1', name: 'Test Item 1' },
@@ -207,6 +271,33 @@ describe('DataTable', () => {
     expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
+  });
+
+  it('should expose an accessible search label', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Apple' }];
+
+    render(<DataTable columns={columns} data={data} globalFilterLabel="Search apples" />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search apples' })).toBeInTheDocument();
+  });
+
+  it('should expose sort direction on sortable headers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Apple' },
+      { id: '2', name: 'Banana' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    const idHeader = screen.getByRole('columnheader', { name: /ID/i });
+    expect(idHeader).toHaveAttribute('aria-sort', 'none');
+
+    await user.click(idHeader);
+    expect(idHeader).toHaveAttribute('aria-sort', 'ascending');
+
+    await user.click(idHeader);
+    expect(idHeader).toHaveAttribute('aria-sort', 'descending');
   });
 
   it('should show no-results state instead of empty state when manual column filters are active with no data', () => {
@@ -317,6 +408,11 @@ describe('DataTable', () => {
         await act(async () => {
           scrollContainer.scrollTop = 20_000;
           scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
+        });
+        // TanStack Virtual debounces scroll-end notification after scroll events.
+        // Let it settle before jsdom teardown so React does not receive a late update.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
         });
       }
 
@@ -638,7 +734,13 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={data} />);
 
       const popover = await openHeaderFilterPopover('Name', user);
-      await user.type(within(popover).getByPlaceholderText('Value...'), 'Alpha');
+      expect(
+        within(popover).getByRole('combobox', { name: 'Operator for Name filter' }),
+      ).toBeVisible();
+      await user.type(
+        within(popover).getByRole('textbox', { name: 'Value for Name filter' }),
+        'Alpha',
+      );
 
       await waitFor(() => expect(screen.queryByText('Row Two')).not.toBeInTheDocument());
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
@@ -651,8 +753,9 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
       const popover = await openHeaderFilterPopover('Status');
-      const comboboxes = within(popover).getAllByRole('combobox');
-      const valueSelect = comboboxes[1];
+      const valueSelect = within(popover).getByRole('combobox', {
+        name: 'Value for Status filter',
+      });
 
       await user.click(valueSelect);
       await user.click(await screen.findByRole('option', { name: 'Beta' }));
@@ -670,13 +773,30 @@ describe('DataTable', () => {
 
       const popover = await openHeaderFilterPopover('Status');
 
-      const operatorSelect = within(popover).getAllByRole('combobox')[0];
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Status filter',
+      });
       await user.click(operatorSelect);
       await user.click(await screen.findByRole('option', { name: 'is any of' }));
 
-      await user.click(within(popover).getByRole('button', { name: 'Select values...' }));
-      await user.click(within(popover).getByText('Alpha'));
-      await user.click(within(popover).getByText('Beta'));
+      // Switching to 'is any of' auto-opens the dropdown.
+      expect(
+        within(popover).getByRole('button', {
+          name: 'Value for Status filter: No values selected',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      const alphaOption = within(popover).getByRole('checkbox', { name: 'Alpha' });
+      expect(alphaOption).not.toBeChecked();
+      alphaOption.focus();
+      await user.keyboard('[Space]');
+      expect(alphaOption).toBeChecked();
+      expect(within(popover).getByRole('checkbox', { name: 'Alpha' })).toBeInTheDocument();
+      expect(
+        within(popover).getByRole('button', {
+          name: 'Value for Status filter: 1 selected: Alpha',
+        }),
+      ).toBeVisible();
+      await user.click(within(popover).getByRole('checkbox', { name: 'Beta' }));
 
       await waitFor(() => expect(screen.queryByText('Row Three')).not.toBeInTheDocument());
       expect(screen.getByText('Row One')).toBeInTheDocument();
@@ -684,13 +804,60 @@ describe('DataTable', () => {
       expect(screen.getByText('Row Four')).toBeInTheDocument();
     });
 
+    it('toggles and dismisses the multi-select dropdown via the trigger and Escape key', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
+
+      const popover = await openHeaderFilterPopover('Status');
+
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Status filter',
+      });
+      await user.click(operatorSelect);
+      await user.click(await screen.findByRole('option', { name: 'is any of' }));
+
+      const trigger = within(popover).getByRole('button', {
+        name: 'Value for Status filter: No values selected',
+      });
+      const dropdownLabel = 'Select values for Status filter';
+      expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(within(popover).getByRole('dialog', { name: dropdownLabel })).toBeVisible();
+
+      // Click on the open trigger toggles the dropdown closed.
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        within(popover).queryByRole('dialog', { name: dropdownLabel }),
+      ).not.toBeInTheDocument();
+
+      // Click reopens.
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      // Escape closes the dropdown and leaves the parent header filter popover open.
+      const dropdown = within(popover).getByRole('dialog', { name: dropdownLabel });
+      const alpha = within(dropdown).getByRole('checkbox', { name: 'Alpha' });
+      alpha.focus();
+      await user.keyboard('[Escape]');
+      expect(
+        within(popover).queryByRole('dialog', { name: dropdownLabel }),
+      ).not.toBeInTheDocument();
+      expect(popover).toBeInTheDocument();
+    });
+
     it('should open header filter popovers with an active interactive row by default', async () => {
       const user = userEvent.setup();
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
       const popover = await openHeaderFilterPopover('Name', user);
-      const operatorSelect = within(popover).getByRole('combobox');
-      const valueInput = within(popover).getByPlaceholderText('Value...');
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Name filter',
+      });
+      const valueInput = within(popover).getByRole('textbox', {
+        name: 'Value for Name filter',
+      });
 
       expect(operatorSelect).toBeInTheDocument();
       expect(valueInput).toBeInTheDocument();
@@ -721,8 +888,59 @@ describe('DataTable', () => {
         return dialog as HTMLElement;
       });
       expect(toolbarDialog).toBeDefined();
+      expect(toolbarDialog).toHaveClass('w-[min(520px,calc(100vw-1rem))]');
       expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
       expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
+      expect(
+        within(toolbarDialog).getByRole('button', { name: 'Remove filter for Status' }),
+      ).toBeVisible();
+    });
+
+    it('keeps externally-added static filter rows usable on narrow popovers', async () => {
+      const user = userEvent.setup();
+      const onColumnFiltersChange = vi.fn();
+      const { rerender } = render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Filters/ }));
+
+      rerender(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[
+            { id: 'status', value: { operator: 'equals', value: 'beta' } },
+            { id: 'status', value: { operator: 'is any of', value: ['alpha', 'beta', 'gamma'] } },
+            { id: 'name', value: { operator: 'contains', value: 'Row' } },
+          ]}
+          onColumnFiltersChange={onColumnFiltersChange}
+        />,
+      );
+
+      const staticFilterRows = await screen.findAllByTestId('data-table-static-filter-row');
+      expect(staticFilterRows).toHaveLength(3);
+
+      for (const staticFilterRow of staticFilterRows) {
+        expect(staticFilterRow).toHaveClass('flex-wrap');
+      }
+
+      expect(within(staticFilterRows[0]).getByText(/beta/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+      expect(within(staticFilterRows[1]).getByText(/3 selected/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+      expect(within(staticFilterRows[2]).getByText(/contains Row/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
     });
   });
 
@@ -946,6 +1164,75 @@ describe('DataTable', () => {
     expect(headerCells[2].className).toContain('overflow-hidden');
     expect(headerCells[3].className).toContain('px-4');
     expect(headerCells[3].className).toContain('overflow-hidden');
+  });
+
+  it('should overlay sortable header actions without consuming label width', () => {
+    const layoutColumns: ColumnDef<TestRow>[] = [
+      {
+        accessorKey: 'id',
+        header: 'Identifier',
+        size: 96,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Right Aligned Header',
+        size: 128,
+        meta: {
+          align: 'right',
+        },
+      },
+    ];
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={layoutColumns} data={data} />);
+
+    const assertHeaderLayout = (headerText: string, shouldBeRightAligned = false) => {
+      const headerLabel = screen.getByText(headerText);
+      const headerContent = headerLabel.closest('div');
+      expect(headerContent).not.toBeNull();
+      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center');
+      expect(headerContent).not.toHaveClass('gap-1');
+      expect(headerContent).toHaveClass('overflow-hidden');
+
+      if (shouldBeRightAligned) {
+        expect(headerContent).toHaveClass('flex-row-reverse');
+      } else {
+        expect(headerContent).not.toHaveClass('flex-row-reverse');
+      }
+
+      expect(headerLabel).toHaveClass('block', 'min-w-0', 'flex-1', 'truncate');
+
+      const actionGroup = headerContent?.querySelector('button')?.closest('span');
+      expect(actionGroup).toBeInTheDocument();
+      expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
+      expect(actionGroup).toHaveClass(
+        'opacity-100',
+        'pointer-events-auto',
+        'sm:opacity-0',
+        'sm:pointer-events-none',
+        'sm:group-hover:opacity-100',
+        'sm:group-hover:pointer-events-auto',
+      );
+      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+
+      const sortButton = headerContent?.querySelector('button');
+      expect(sortButton).toHaveAttribute('aria-label', `Sort ${headerText} ascending`);
+    };
+
+    assertHeaderLayout('Identifier');
+    assertHeaderLayout('Right Aligned Header', true);
+  });
+
+  it('uses a clear label when the next sort action removes sorting', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: 'Sort ID ascending' }));
+    await user.click(screen.getByRole('button', { name: 'Sort ID descending' }));
+
+    expect(screen.getByRole('button', { name: 'Clear sorting for ID' })).toBeInTheDocument();
   });
 
   describe('cell content wrapper', () => {
@@ -1224,6 +1511,26 @@ describe('DataTable', () => {
       expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
     });
 
+    it('should keep row expansion on the explicit disclosure control', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const firstRow = screen.getByText('Item 1').closest('tr');
+      const firstExpandButton = screen.getAllByRole('button', { name: /expand row/i })[0];
+
+      expect(firstRow).not.toHaveAttribute('tabindex');
+      expect(firstRow).not.toHaveAttribute('aria-expanded');
+      expect(firstExpandButton).toHaveAttribute('aria-expanded', 'false');
+
+      firstExpandButton.focus();
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(firstExpandButton).toHaveAttribute('aria-expanded', 'true');
+      expect(firstExpandButton).toHaveAccessibleName('Collapse row');
+    });
+
     it('should NOT toggle expansion on row click when onRowClick IS provided', async () => {
       const user = userEvent.setup();
       const onRowClick = vi.fn();
@@ -1243,6 +1550,33 @@ describe('DataTable', () => {
 
       expect(onRowClick).toHaveBeenCalledOnce();
       expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+    });
+
+    it('should call onRowClick from the keyboard without hijacking nested controls', async () => {
+      const user = userEvent.setup();
+      const onRowClick = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          onRowClick={onRowClick}
+        />,
+      );
+
+      const firstRow = screen.getByText('Item 1').closest('tr');
+      const firstExpandButton = screen.getAllByRole('button', { name: /expand row/i })[0];
+
+      expect(firstRow).toHaveAttribute('tabindex', '0');
+      firstRow?.focus();
+      await user.keyboard('{Enter}');
+      expect(onRowClick).toHaveBeenCalledOnce();
+
+      firstExpandButton.focus();
+      await user.keyboard('{Enter}');
+      expect(onRowClick).toHaveBeenCalledOnce();
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
     });
 
     it('should render expanded content spanning all columns', async () => {
@@ -1296,6 +1630,50 @@ describe('DataTable', () => {
 
       const expandedRow = screen.getByTestId('expanded-1').closest('tr');
       expect(expandedRow).toHaveClass('bg-transparent');
+    });
+  });
+
+  describe('sticky columns', () => {
+    it('should pin configured edge columns during horizontal scrolling', () => {
+      const stickyColumns: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'id',
+          header: 'Identifier',
+          size: 96,
+          meta: { sticky: 'left' },
+        },
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          size: 160,
+        },
+        {
+          id: 'actions',
+          header: 'Actions',
+          size: 80,
+          meta: { sticky: 'right' },
+          cell: () => 'Open',
+        },
+      ];
+      const data: TestRow[] = [{ id: '1', name: 'Pinned row' }];
+
+      render(<DataTable columns={stickyColumns} data={data} />);
+
+      const leftHeader = screen.getByText('Identifier').closest('th');
+      const rightHeader = screen.getByText('Actions').closest('th');
+      const leftCell = screen.getByText('1').closest('td');
+      const rightCell = screen.getByText('Open').closest('td');
+
+      expect(leftHeader).toHaveClass('sticky');
+      expect(leftHeader).toHaveStyle({ left: '0px' });
+      expect(leftHeader).toHaveClass('border-r');
+      expect(rightHeader).toHaveClass('sticky');
+      expect(rightHeader).toHaveStyle({ right: '0px' });
+      expect(rightHeader).toHaveClass('border-l');
+      expect(leftCell).toHaveClass('sticky');
+      expect(leftCell).toHaveStyle({ left: '0px' });
+      expect(rightCell).toHaveClass('sticky');
+      expect(rightCell).toHaveStyle({ right: '0px' });
     });
   });
 });

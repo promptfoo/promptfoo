@@ -383,4 +383,4 @@ For questions about financial plugins:
 - [Harmful Content Plugins](/docs/red-team/plugins/harmful/)
 - [PII Protection Plugins](/docs/red-team/plugins/pii/)
 - [Contract Plugin](/docs/red-team/plugins/contracts/)
-- [Custom Policy Plugin](/docs/red-team/plugins/custom/)
+- [Custom Policy Plugin](/docs/red-team/plugins/policy/)

@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import {
   formatTrajectoryArgs,
   formatTrajectoryStep,
@@ -520,6 +520,10 @@ export const handleTrajectoryGoalSuccess = async (
 
   if (!params.inverse) {
     return result;
+  }
+
+  if (isGraderFailure(result)) {
+    return { ...result, assertion: params.assertion };
   }
 
   return {
