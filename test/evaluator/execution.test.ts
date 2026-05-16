@@ -73,6 +73,53 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps raw SVG text available to llm-rubric judges while indexing media metadata', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('svg-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: svg,
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async (prompt) => {
+        const messages = JSON.parse(String(prompt)) as Array<{ content: string }>;
+        const judgeInput = messages.at(-1)?.content;
+        expect(judgeInput).toContain(svg);
+        expect(judgeInput).not.toContain('promptfoo://blob/');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'saw raw SVG' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Generate SVG')],
+      tests: [
+        {
+          assert: [{ type: 'llm-rubric', value: 'Output should be SVG', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const completedEval = await evaluate(testSuite, evalRecord, {});
+    const results = await completedEval.getResults();
+
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results[0].response).toEqual(
+      expect.objectContaining({
+        output: svg,
+        metadata: expect.objectContaining({
+          blobUris: [expect.stringMatching(/^promptfoo:\/\/blob\/[a-f0-9]{64}$/)],
+        }),
+      }),
+    );
+  });
+
   type ConcurrencyProbe = {
     maxActiveCalls: number;
     callApi: ReturnType<typeof vi.fn>;
@@ -99,7 +146,16 @@ describeEvaluator('evaluator execution control', () => {
       }
       // Wait until either the barrier trips (parallel path) or a short
       // fallback fires (serial path — we'll never reach targetConcurrency).
-      await Promise.race([holdPromise, new Promise<void>((resolve) => setTimeout(resolve, 100))]);
+      let resolveFallback!: () => void;
+      const fallback = new Promise<void>((r) => {
+        resolveFallback = r;
+      });
+      const fallbackHandle = setTimeout(() => resolveFallback(), 100);
+      try {
+        await Promise.race([holdPromise, fallback]);
+      } finally {
+        clearTimeout(fallbackHandle);
+      }
       activeCalls -= 1;
       return {
         output: String(prompt),
@@ -913,18 +969,24 @@ describeEvaluator('evaluator execution control', () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
-    const waitForTarget = (ms: number, signal?: AbortSignal) =>
-      new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(resolve, ms);
-        signal?.addEventListener(
-          'abort',
-          () => {
-            clearTimeout(timeout);
-            reject(new Error('target aborted'));
-          },
-          { once: true },
-        );
+    const waitForTarget = (ms: number, signal?: AbortSignal) => {
+      let resolveSleep!: () => void;
+      let rejectSleep!: (err: Error) => void;
+      const sleepPromise = new Promise<void>((resolve, reject) => {
+        resolveSleep = resolve;
+        rejectSleep = reject;
       });
+      const timeout = setTimeout(() => resolveSleep(), ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeout);
+          rejectSleep(new Error('target aborted'));
+        },
+        { once: true },
+      );
+      return sleepPromise;
+    };
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('target-provider'),
       callApi: vi.fn(async (prompt: string, _context, options) => {
