@@ -2,8 +2,18 @@ import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const securityGuardMocks = vi.hoisted(() => ({
+  doGenerateRedteam: vi.fn(),
+  doRedteamRun: vi.fn(),
+  loadApiProvider: vi.fn(),
+  loadApiProviders: vi.fn(),
+  loadDefaultConfig: vi.fn(),
+  resolveConfigs: vi.fn(),
+  synthesizeFromTestSuite: vi.fn(),
+}));
+
 vi.mock('../../../../src/testCase/synthesis', () => ({
-  synthesizeFromTestSuite: vi.fn().mockResolvedValue([{ name: 'Ada' }]),
+  synthesizeFromTestSuite: securityGuardMocks.synthesizeFromTestSuite,
 }));
 
 vi.mock('../../../../src/types/index', () => ({
@@ -12,10 +22,7 @@ vi.mock('../../../../src/types/index', () => ({
 }));
 
 vi.mock('../../../../src/util/config/default', () => ({
-  loadDefaultConfig: vi.fn().mockResolvedValue({
-    defaultConfig: {},
-    defaultConfigPath: 'promptfooconfig.yaml',
-  }),
+  loadDefaultConfig: securityGuardMocks.loadDefaultConfig,
 }));
 
 vi.mock('../../../../src/util/config/load', () => ({
@@ -27,48 +34,20 @@ vi.mock('../../../../src/util/config/load', () => ({
       this.cliMessage = cliMessage;
     }
   },
-  resolveConfigs: vi.fn().mockResolvedValue({
-    config: {
-      prompts: ['Hello {{name}}'],
-      providers: ['echo'],
-      tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'contains', value: 'Ada' }] }],
-    },
-    testSuite: {
-      prompts: [{ label: 'hello', raw: 'Hello {{name}}' }],
-      providers: [{ id: 'echo' }],
-      tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'contains', value: 'Ada' }] }],
-    },
-  }),
+  resolveConfigs: securityGuardMocks.resolveConfigs,
 }));
 
 vi.mock('../../../../src/redteam/commands/generate', () => ({
-  doGenerateRedteam: vi.fn().mockResolvedValue({
-    defaultTest: { metadata: { entities: [], purpose: 'test' } },
-    tests: [],
-  }),
+  doGenerateRedteam: securityGuardMocks.doGenerateRedteam,
 }));
 
 vi.mock('../../../../src/redteam/shared', () => ({
-  doRedteamRun: vi.fn().mockResolvedValue({
-    id: 'redteam-eval',
-    toEvaluateSummary: vi.fn().mockResolvedValue({
-      results: [],
-      stats: { errors: 0, failures: 0, successes: 0 },
-    }),
-  }),
+  doRedteamRun: securityGuardMocks.doRedteamRun,
 }));
 
 vi.mock('../../../../src/providers/index', () => ({
-  loadApiProvider: vi.fn().mockResolvedValue({
-    callApi: vi.fn().mockResolvedValue({ output: '9' }),
-    id: 'mock-provider',
-  }),
-  loadApiProviders: vi.fn().mockResolvedValue([
-    {
-      callApi: vi.fn().mockResolvedValue({ output: '9' }),
-      id: 'mock-provider',
-    },
-  ]),
+  loadApiProvider: securityGuardMocks.loadApiProvider,
+  loadApiProviders: securityGuardMocks.loadApiProviders,
 }));
 
 vi.mock('../../../../src/logger', () => ({
@@ -106,7 +85,45 @@ function outsideWorkspacePath(filename: string) {
 
 describe('MCP tool security guards', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    securityGuardMocks.synthesizeFromTestSuite.mockResolvedValue([{ name: 'Ada' }]);
+    securityGuardMocks.loadDefaultConfig.mockResolvedValue({
+      defaultConfig: {},
+      defaultConfigPath: 'promptfooconfig.yaml',
+    });
+    securityGuardMocks.resolveConfigs.mockResolvedValue({
+      config: {
+        prompts: ['Hello {{name}}'],
+        providers: ['echo'],
+        tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'contains', value: 'Ada' }] }],
+      },
+      testSuite: {
+        prompts: [{ label: 'hello', raw: 'Hello {{name}}' }],
+        providers: [{ id: 'echo' }],
+        tests: [{ vars: { name: 'Ada' }, assert: [{ type: 'contains', value: 'Ada' }] }],
+      },
+    });
+    securityGuardMocks.doGenerateRedteam.mockResolvedValue({
+      defaultTest: { metadata: { entities: [], purpose: 'test' } },
+      tests: [],
+    });
+    securityGuardMocks.doRedteamRun.mockResolvedValue({
+      id: 'redteam-eval',
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        stats: { errors: 0, failures: 0, successes: 0 },
+      }),
+    });
+    securityGuardMocks.loadApiProvider.mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({ output: '9' }),
+      id: 'mock-provider',
+    });
+    securityGuardMocks.loadApiProviders.mockResolvedValue([
+      {
+        callApi: vi.fn().mockResolvedValue({ output: '9' }),
+        id: 'mock-provider',
+      },
+    ]);
   });
 
   it('should reject generate_test_cases output paths outside the workspace', async () => {
