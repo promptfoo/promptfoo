@@ -32,6 +32,33 @@ export interface ClampedLines {
   line: number;
 }
 
+function closeCurrentRange(
+  currentRanges: LineRange[],
+  hunkStartLine: number,
+  currentNewLine: number,
+) {
+  if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
+    currentRanges.push({
+      start: hunkStartLine,
+      end: currentNewLine - 1,
+    });
+  }
+}
+
+function saveCurrentFileRanges(
+  ranges: FileLineRanges,
+  currentFile: string | null,
+  currentRanges: LineRange[],
+) {
+  if (currentFile && currentRanges.length > 0) {
+    ranges.set(currentFile, currentRanges);
+  }
+}
+
+function shouldAdvanceNewLine(line: string) {
+  return line.startsWith('+') || line.startsWith(' ') || line === '';
+}
+
 /**
  * Extract valid line ranges from a unified diff.
  *
@@ -75,18 +102,8 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
     // or +++ b/path (for new file path)
     const fileMatch = line.match(/^\+\+\+ b\/(.+)$/);
     if (fileMatch) {
-      // Close current hunk if we have one (before switching files)
-      if (currentFile && hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-        currentRanges.push({
-          start: hunkStartLine,
-          end: currentNewLine - 1,
-        });
-      }
-
-      // Save previous file's ranges
-      if (currentFile && currentRanges.length > 0) {
-        ranges.set(currentFile, currentRanges);
-      }
+      closeCurrentRange(currentRanges, hunkStartLine, currentNewLine);
+      saveCurrentFileRanges(ranges, currentFile, currentRanges);
 
       currentFile = fileMatch[1];
       currentRanges = [];
@@ -98,13 +115,7 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
     // Match hunk header: @@ -old,count +new,count @@
     const hunkHeader = parseHunkHeader(line);
     if (hunkHeader && currentFile) {
-      // Save the previous hunk's range if we have one
-      if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-        currentRanges.push({
-          start: hunkStartLine,
-          end: currentNewLine - 1,
-        });
-      }
+      closeCurrentRange(currentRanges, hunkStartLine, currentNewLine);
 
       // Start tracking new hunk
       hunkStartLine = hunkHeader.newStart;
@@ -120,13 +131,13 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
     // Track line numbers within hunks
     if (currentFile && hunkStartLine > 0) {
       if (line.startsWith('-')) {
-        // Removed line - doesn't exist in new file
         continue;
-      } else if (line.startsWith('+') || line.startsWith(' ') || line === '') {
-        // Added line, context line, or empty line within hunk
+      }
+      if (shouldAdvanceNewLine(line)) {
         currentNewLine++;
-      } else if (line.startsWith('\\')) {
-        // Special marker like "\ No newline at end of file" - skip
+        continue;
+      }
+      if (line.startsWith('\\')) {
         continue;
       }
     }
@@ -134,15 +145,8 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
 
   // Save the last file's ranges
   if (currentFile) {
-    if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
-      currentRanges.push({
-        start: hunkStartLine,
-        end: currentNewLine - 1,
-      });
-    }
-    if (currentRanges.length > 0) {
-      ranges.set(currentFile, currentRanges);
-    }
+    closeCurrentRange(currentRanges, hunkStartLine, currentNewLine);
+    saveCurrentFileRanges(ranges, currentFile, currentRanges);
   }
 
   return ranges;

@@ -360,6 +360,81 @@ function truncateBody(body: string, sanitize: boolean = true): string {
   return processed.slice(0, MAX_BODY_LENGTH - 15) + '... [truncated]';
 }
 
+function setTokenUsageAttributes(span: Span, tokenUsage: NonNullable<GenAISpanResult['tokenUsage']>) {
+  const usageAttributes: Array<[string, number | undefined]> = [
+    [GenAIAttributes.USAGE_INPUT_TOKENS, tokenUsage.prompt],
+    [GenAIAttributes.USAGE_OUTPUT_TOKENS, tokenUsage.completion],
+    [GenAIAttributes.USAGE_TOTAL_TOKENS, tokenUsage.total],
+    [GenAIAttributes.USAGE_CACHED_TOKENS, tokenUsage.cached],
+  ];
+  for (const [attribute, value] of usageAttributes) {
+    if (value !== undefined) {
+      span.setAttribute(attribute, value);
+    }
+  }
+
+  if (!tokenUsage.completionDetails) {
+    return;
+  }
+  const completionAttributes: Array<[string, number | undefined]> = [
+    [GenAIAttributes.USAGE_REASONING_TOKENS, tokenUsage.completionDetails.reasoning],
+    [
+      GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
+      tokenUsage.completionDetails.acceptedPrediction,
+    ],
+    [
+      GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
+      tokenUsage.completionDetails.rejectedPrediction,
+    ],
+    [
+      GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+      tokenUsage.completionDetails.cacheReadInputTokens,
+    ],
+    [
+      GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+      tokenUsage.completionDetails.cacheCreationInputTokens,
+    ],
+  ];
+  for (const [attribute, value] of completionAttributes) {
+    if (value !== undefined) {
+      span.setAttribute(attribute, value);
+    }
+  }
+}
+
+function setResponseMetadataAttributes(span: Span, result: GenAISpanResult) {
+  if (result.responseModel) {
+    span.setAttribute(GenAIAttributes.RESPONSE_MODEL, result.responseModel);
+  }
+  if (result.responseId) {
+    span.setAttribute(GenAIAttributes.RESPONSE_ID, result.responseId);
+  }
+  if (result.finishReasons && result.finishReasons.length > 0) {
+    span.setAttribute(GenAIAttributes.RESPONSE_FINISH_REASONS, result.finishReasons);
+  }
+}
+
+function setPromptfooResponseAttributes(span: Span, result: GenAISpanResult, sanitize: boolean) {
+  if (result.cacheHit !== undefined) {
+    span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
+  }
+  if (result.responseBody) {
+    span.setAttribute(PromptfooAttributes.RESPONSE_BODY, truncateBody(result.responseBody, sanitize));
+  }
+}
+
+function setAdditionalAttributes(span: Span, result: GenAISpanResult, sanitize: boolean) {
+  if (!result.additionalAttributes) {
+    return;
+  }
+  for (const [key, value] of Object.entries(result.additionalAttributes)) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    span.setAttribute(key, typeof value === 'string' ? truncateBody(value, sanitize) : value);
+  }
+}
+
 /**
  * Set response attributes on a span after the API call completes.
  *
@@ -372,94 +447,12 @@ export function setGenAIResponseAttributes(
   result: GenAISpanResult,
   sanitize: boolean = true,
 ): void {
-  // Token usage
   if (result.tokenUsage) {
-    const usage = result.tokenUsage;
-
-    if (usage.prompt !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_INPUT_TOKENS, usage.prompt);
-    }
-    if (usage.completion !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
-    }
-    if (usage.total !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_TOTAL_TOKENS, usage.total);
-    }
-    if (usage.cached !== undefined) {
-      span.setAttribute(GenAIAttributes.USAGE_CACHED_TOKENS, usage.cached);
-    }
-
-    // Completion details (reasoning tokens, etc.)
-    if (usage.completionDetails) {
-      if (usage.completionDetails.reasoning !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_REASONING_TOKENS,
-          usage.completionDetails.reasoning,
-        );
-      }
-      if (usage.completionDetails.acceptedPrediction !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
-          usage.completionDetails.acceptedPrediction,
-        );
-      }
-      if (usage.completionDetails.rejectedPrediction !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
-          usage.completionDetails.rejectedPrediction,
-        );
-      }
-      if (usage.completionDetails.cacheReadInputTokens !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
-          usage.completionDetails.cacheReadInputTokens,
-        );
-      }
-      if (usage.completionDetails.cacheCreationInputTokens !== undefined) {
-        span.setAttribute(
-          GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
-          usage.completionDetails.cacheCreationInputTokens,
-        );
-      }
-    }
+    setTokenUsageAttributes(span, result.tokenUsage);
   }
-
-  // Response metadata
-  if (result.responseModel) {
-    span.setAttribute(GenAIAttributes.RESPONSE_MODEL, result.responseModel);
-  }
-  if (result.responseId) {
-    span.setAttribute(GenAIAttributes.RESPONSE_ID, result.responseId);
-  }
-  if (result.finishReasons && result.finishReasons.length > 0) {
-    span.setAttribute(GenAIAttributes.RESPONSE_FINISH_REASONS, result.finishReasons);
-  }
-
-  // Promptfoo-specific response attributes
-  if (result.cacheHit !== undefined) {
-    span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
-  }
-  if (result.responseBody) {
-    span.setAttribute(
-      PromptfooAttributes.RESPONSE_BODY,
-      truncateBody(result.responseBody, sanitize),
-    );
-  }
-
-  // Provider-specific additional attributes
-  // Apply same sanitization/truncation as request/response bodies to prevent secret leakage
-  if (result.additionalAttributes) {
-    for (const [key, value] of Object.entries(result.additionalAttributes)) {
-      if (value !== undefined && value !== null) {
-        // Sanitize string values (e.g., reasoning text, conversation content)
-        if (typeof value === 'string') {
-          span.setAttribute(key, truncateBody(value, sanitize));
-        } else {
-          span.setAttribute(key, value);
-        }
-      }
-    }
-  }
+  setResponseMetadataAttributes(span, result);
+  setPromptfooResponseAttributes(span, result, sanitize);
+  setAdditionalAttributes(span, result, sanitize);
 }
 
 /**

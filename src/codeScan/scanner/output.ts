@@ -56,6 +56,91 @@ export function createSpinner(options: SpinnerOptions): ReturnType<typeof ora> |
   return undefined;
 }
 
+function getReviewText(response: ScanResponse): string | undefined {
+  const { comments, review } = response;
+  if (review) {
+    return review;
+  }
+  return comments?.find((comment) => comment.severity === CodeScanSeverity.NONE)?.finding;
+}
+
+function getSortedIssues(response: ScanResponse) {
+  const validSeverities: CodeScanSeverity[] = [
+    CodeScanSeverity.CRITICAL,
+    CodeScanSeverity.HIGH,
+    CodeScanSeverity.MEDIUM,
+    CodeScanSeverity.LOW,
+  ];
+  return [...(response.comments || [])]
+    .filter((comment) => comment.severity && validSeverities.includes(comment.severity))
+    .sort((a, b) => {
+      const rankA = a.severity ? getSeverityRank(a.severity) : 0;
+      const rankB = b.severity ? getSeverityRank(b.severity) : 0;
+      return rankB - rankA;
+    });
+}
+
+function displayTextSummary(response: ScanResponse, duration: number) {
+  const severityCounts = countBySeverity(response.comments || []);
+  printBorder();
+  logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
+  if (severityCounts.total > 0) {
+    logger.info(
+      chalk.yellow(`⚠ Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`),
+    );
+  }
+  printBorder();
+  return severityCounts;
+}
+
+function displayReviewText(reviewText: string | undefined) {
+  if (!reviewText) {
+    return;
+  }
+  logger.info('');
+  logger.info(reviewText);
+  logger.info('');
+  printBorder();
+}
+
+function displayIssueDetails(response: ScanResponse, githubPr?: string) {
+  const sortedComments = getSortedIssues(response);
+  logger.info('');
+  for (let i = 0; i < sortedComments.length; i++) {
+    const comment = sortedComments[i];
+    const severity = formatSeverity(comment.severity);
+    const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
+
+    logger.info(`${severity} ${chalk.gray(location)}`);
+    logger.info('');
+    logger.info(comment.finding);
+
+    if (comment.fix) {
+      logger.info('');
+      logger.info(chalk.bold('Suggested Fix:'));
+      logger.info(comment.fix);
+    }
+
+    if (comment.aiAgentPrompt) {
+      logger.info('');
+      logger.info(chalk.bold('AI Agent Prompt:'));
+      logger.info(comment.aiAgentPrompt);
+    }
+
+    if (i < sortedComments.length - 1) {
+      logger.info('');
+      logger.info(chalk.gray('─'.repeat(TERMINAL_MAX_WIDTH)));
+      logger.info('');
+    }
+  }
+  printBorder();
+
+  if (githubPr) {
+    logger.info(`» Comments posted to PR: ${chalk.cyan(githubPr)}`);
+    printBorder();
+  }
+}
+
 /**
  * Display scan results in the appropriate format
  *
@@ -69,99 +154,17 @@ export function displayScanResults(
   options: OutputOptions,
 ): void {
   if (options.format === CodeScanOutputFormat.JSON) {
-    // Output full scan response to stdout for programmatic consumption
     console.log(JSON.stringify(response, null, 2));
-  } else if (options.format === CodeScanOutputFormat.SARIF) {
+    return;
+  }
+  if (options.format === CodeScanOutputFormat.SARIF) {
     console.log(JSON.stringify(scanResponseToSarif(response), null, 2));
-  } else {
-    // Pretty-print results for human consumption
-    const { comments, review } = response;
-    const severityCounts = countBySeverity(comments || []);
+    return;
+  }
 
-    // 1. Completion message and issue summary
-    printBorder();
-    logger.info(`${chalk.green('✓')} Scan complete (${formatDuration(duration / 1000)})`);
-    if (severityCounts.total > 0) {
-      logger.info(
-        chalk.yellow(
-          `⚠ Found ${severityCounts.total} issue${severityCounts.total === 1 ? '' : 's'}`,
-        ),
-      );
-    }
-    printBorder();
-
-    // 3. Review summary - shown even when no issues
-    // If no review field, check for severity="none" comment to use as review
-    let reviewText = review;
-    if (!reviewText && comments && comments.length > 0) {
-      const noneComment = comments.find((c) => c.severity === CodeScanSeverity.NONE);
-      if (noneComment) {
-        reviewText = noneComment.finding;
-      }
-    }
-
-    if (reviewText) {
-      logger.info('');
-      logger.info(reviewText);
-      logger.info('');
-      printBorder();
-    }
-
-    // 4. Detailed findings (only show issues with valid severity)
-    if (severityCounts.total > 0) {
-      const validSeverities: CodeScanSeverity[] = [
-        CodeScanSeverity.CRITICAL,
-        CodeScanSeverity.HIGH,
-        CodeScanSeverity.MEDIUM,
-        CodeScanSeverity.LOW,
-      ];
-      const issuesWithSeverity = (comments || []).filter(
-        (c) => c.severity && validSeverities.includes(c.severity),
-      );
-
-      // Sort by severity (descending)
-      const sortedComments = [...issuesWithSeverity].sort((a, b) => {
-        const rankA = a.severity ? getSeverityRank(a.severity) : 0;
-        const rankB = b.severity ? getSeverityRank(b.severity) : 0;
-        return rankB - rankA;
-      });
-
-      logger.info('');
-      for (let i = 0; i < sortedComments.length; i++) {
-        const comment = sortedComments[i];
-        const severity = formatSeverity(comment.severity);
-        const location = comment.line ? `${comment.file}:${comment.line}` : comment.file || '';
-
-        logger.info(`${severity} ${chalk.gray(location)}`);
-        logger.info('');
-        logger.info(comment.finding);
-
-        if (comment.fix) {
-          logger.info('');
-          logger.info(chalk.bold('Suggested Fix:'));
-          logger.info(comment.fix);
-        }
-
-        if (comment.aiAgentPrompt) {
-          logger.info('');
-          logger.info(chalk.bold('AI Agent Prompt:'));
-          logger.info(comment.aiAgentPrompt);
-        }
-
-        // Add separator between comments (but not after the last one)
-        if (i < sortedComments.length - 1) {
-          logger.info('');
-          logger.info(chalk.gray('─'.repeat(TERMINAL_MAX_WIDTH)));
-          logger.info('');
-        }
-      }
-      printBorder();
-
-      // 5. Next steps (only if there are issues)
-      if (options.githubPr) {
-        logger.info(`» Comments posted to PR: ${chalk.cyan(options.githubPr)}`);
-        printBorder();
-      }
-    }
+  const severityCounts = displayTextSummary(response, duration);
+  displayReviewText(getReviewText(response));
+  if (severityCounts.total > 0) {
+    displayIssueDetails(response, options.githubPr);
   }
 }
