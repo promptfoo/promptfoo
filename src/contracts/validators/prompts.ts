@@ -1,0 +1,34 @@
+import { z } from 'zod';
+
+import type { Prompt, PromptConfig, PromptFunction } from '../prompts';
+
+// Zod schemas for validation
+export const PromptConfigSchema = z.object({
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+});
+
+const PromptFunctionSchema = z.custom<PromptFunction>((v) => typeof v === 'function');
+
+export const PromptSchema = z.object({
+  id: z.string().optional(),
+  raw: z.string(),
+  template: z.string().optional(),
+  /**
+   * @deprecated in > 0.59.0. Use `label` instead.
+   */
+  display: z.string().optional(),
+  label: z.string(),
+  function: PromptFunctionSchema.optional(),
+
+  // These config options are merged into the provider config.
+  config: z.any().optional(),
+});
+
+// Ensure that schemas match their corresponding types
+type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
+function assert<_T extends true>() {}
+
+assert<AssertEqual<PromptConfig, z.infer<typeof PromptConfigSchema>>>();
+assert<AssertEqual<PromptFunction, z.infer<typeof PromptFunctionSchema>>>();
+assert<AssertEqual<Prompt, z.infer<typeof PromptSchema>>>();
