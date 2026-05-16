@@ -1,3 +1,6 @@
+import * as path from 'path';
+import type { ChildProcess } from 'child_process';
+
 import confirm from '@inquirer/confirm';
 import opener from 'opener';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -112,7 +115,7 @@ describe('doRecon', () => {
       stateful: true,
     });
     mockedConfirm.mockResolvedValue(true);
-    mockedOpener.mockResolvedValue(undefined);
+    mockedOpener.mockResolvedValue({} as ChildProcess);
     mockedSelectProvider.mockReturnValue({ type: 'openai', model: 'gpt-test' });
   });
 
@@ -121,6 +124,8 @@ describe('doRecon', () => {
   });
 
   it('writes config and pending handoff without opening the browser when disabled', async () => {
+    const directory = path.resolve('/repo');
+
     vi.mocked(createOpenAIReconProvider).mockImplementationOnce(
       async (_directory, _scratchpad, _model, onProgress) => {
         onProgress?.({ type: 'step', message: 'Reading files' });
@@ -141,7 +146,7 @@ describe('doRecon', () => {
     expect(createOpenAIReconProvider).toHaveBeenCalled();
     expect(buildReconPrompt).toHaveBeenCalledWith('/tmp/recon-notes/notes.md', ['node_modules']);
     expect(displayResults).toHaveBeenCalledWith(result, true);
-    expect(buildRedteamConfig).toHaveBeenCalledWith(result, '/repo');
+    expect(buildRedteamConfig).toHaveBeenCalledWith(result, directory);
     expect(writePromptfooConfig).toHaveBeenCalledWith(
       { description: 'generated config' },
       'promptfooconfig.yaml',
@@ -150,7 +155,7 @@ describe('doRecon', () => {
     expect(buildPendingConfig).toHaveBeenCalledWith(
       { description: 'generated config' },
       result,
-      '/repo',
+      directory,
     );
     expect(spinner.text).toBe('Reading files');
     expect(writePendingReconConfig).toHaveBeenCalled();
