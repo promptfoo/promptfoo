@@ -110,6 +110,5 @@ npm i sharp
 - [Video Jailbreaking](video.md) - Similar approach using video instead of images
 - [Base64 Encoding](base64.md) - Similar encoding technique using text-to-base64 conversion
 - [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

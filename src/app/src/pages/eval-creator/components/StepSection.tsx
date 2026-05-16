@@ -1,4 +1,4 @@
-import { Card, CardContent } from '@app/components/ui/card';
+import { useId } from 'react';
 
 interface StepSectionProps {
   stepNumber: number;
@@ -9,35 +9,46 @@ interface StepSectionProps {
   count?: number;
   guidance?: React.ReactNode;
   children: React.ReactNode;
-  defaultOpen?: boolean;
 }
 
 export function StepSection({
-  stepNumber: _stepNumber,
+  stepNumber,
   title,
   description,
-  isComplete: _isComplete,
-  isRequired: _isRequired = false,
-  count: _count,
+  isComplete,
+  isRequired = false,
+  count,
   guidance,
   children,
-  defaultOpen: _defaultOpen = false,
 }: StepSectionProps) {
+  const titleId = useId();
+
   return (
-    <div className="space-y-6">
+    <section aria-labelledby={titleId} className="flex flex-col gap-4 lg:gap-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold mb-2">{title}</h2>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>Step {stepNumber}</span>
+          <span aria-hidden="true">/</span>
+          <span>{isRequired ? 'Required' : 'Optional'}</span>
+          {isComplete && (
+            <>
+              <span aria-hidden="true">/</span>
+              <span>{count === undefined ? 'Configured' : `${count} configured`}</span>
+            </>
+          )}
+        </div>
+        <h2 id={titleId} className="mb-2 text-2xl font-bold">
+          {title}
+        </h2>
         <p className="text-muted-foreground">{description}</p>
       </div>
 
+      {/* Content */}
+      <div className="min-w-0">{children}</div>
+
       {/* Guidance */}
       {guidance && <div>{guidance}</div>}
-
-      {/* Content */}
-      <Card className="bg-white dark:bg-zinc-900 shadow-sm">
-        <CardContent className="p-6">{children}</CardContent>
-      </Card>
-    </div>
+    </section>
   );
 }

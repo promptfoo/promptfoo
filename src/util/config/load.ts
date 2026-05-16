@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
@@ -48,6 +47,33 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+
+type ConfigResolutionLogLevel = 'error' | 'warn';
+
+interface ConfigResolutionErrorOptions {
+  cliMessage?: string;
+  logLevel?: ConfigResolutionLogLevel;
+}
+
+export class ConfigResolutionError extends Error {
+  readonly cliMessage: string;
+  readonly logLevel: ConfigResolutionLogLevel;
+
+  constructor(message: string, options: ConfigResolutionErrorOptions = {}) {
+    super(message);
+    this.name = 'ConfigResolutionError';
+    this.cliMessage = options.cliMessage ?? message;
+    this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
+  }
+}
+
+export function logConfigResolutionError(error: ConfigResolutionError, prefix?: string): void {
+  logger[error.logLevel](prefix ? `${prefix}${error.cliMessage}` : error.cliMessage);
+}
+
+function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
+  throw new ConfigResolutionError(message, options);
+}
 
 /**
  * Type guard to check if a test case has vars property
@@ -646,11 +672,10 @@ export async function resolveConfigs(
       feature: 'standalone assertions mode',
     });
     if (!cmdObj.modelOutputs) {
-      logger.error('You must provide --model-outputs when using --assertions');
-      process.exit(1);
+      failConfigResolution('You must provide --model-outputs when using --assertions');
     }
     const modelOutputs = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+      await fsPromises.readFile(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
     ) as string[] | { output: string; tags?: string[] }[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
@@ -748,7 +773,7 @@ export async function resolveConfigs(
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
     const extList = DEFAULT_CONFIG_EXTENSIONS.join(', ');
-    logger.warn(dedent`
+    const cliMessage = dedent`
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
       ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for promptfooconfig.{${extList}}`)}
@@ -760,12 +785,14 @@ export async function resolveConfigs(
       ${chalk.white('Or create a config with:')}
 
       ${chalk.green(promptfooCommand('init'))}
-    `);
-    process.exit(1);
+    `;
+    failConfigResolution('No promptfooconfig found', {
+      cliMessage,
+      logLevel: 'warn',
+    });
   }
   if (!hasPrompts) {
-    logger.error('You must provide at least 1 prompt');
-    process.exit(1);
+    failConfigResolution('You must provide at least 1 prompt');
   }
 
   if (
@@ -774,8 +801,7 @@ export async function resolveConfigs(
     type !== 'AssertionGeneration' &&
     !hasProviders
   ) {
-    logger.error('You must specify at least 1 provider (for example, openai:gpt-4.1)');
-    process.exit(1);
+    failConfigResolution('You must specify at least 1 provider (for example, openai:gpt-4.1)');
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
@@ -883,10 +909,9 @@ export async function resolveConfigs(
   );
 
   if (parsedPrompts.length === 0) {
-    logger.error(
-      'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
-    );
-    process.exit(1);
+    const message =
+      'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.';
+    failConfigResolution(message);
   }
 
   const defaultTest: TestCase = {

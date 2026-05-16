@@ -6,7 +6,7 @@ description: Deprecated - use jailbreak-templates instead
 
 import {Redirect} from '@docusaurus/router';
 
-<Redirect to="/docs/red-team/strategies/jailbreak-templates" />
+<Redirect to="/docs/red-team/strategies/jailbreak-templates/" />
 
 # Prompt Injection Strategy (Deprecated)
 
