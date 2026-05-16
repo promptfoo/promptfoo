@@ -87,7 +87,7 @@ describe('handleRougeScore', () => {
     expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
   });
 
-  it('should handle inverse scoring', () => {
+  it('should fail inverse scoring when score is above threshold', () => {
     vi.mocked(rouge.n).mockReturnValue(0.8);
 
     const result = handleRougeScore({
@@ -97,7 +97,21 @@ describe('handleRougeScore', () => {
 
     expect(result.pass).toBe(false);
     expect(result.score).toBeCloseTo(0.2, 5);
-    expect(result.reason).toBe('ROUGE-N score 0.80 is less than threshold 0.75');
+    expect(result.reason).toBe('ROUGE-N score 0.80 is greater than or equal to threshold 0.75');
+    expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
+  });
+
+  it('should pass inverse scoring when score is below threshold', () => {
+    vi.mocked(rouge.n).mockReturnValue(0.7);
+
+    const result = handleRougeScore({
+      ...baseParams,
+      inverse: true,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBeCloseTo(0.3, 5);
+    expect(result.reason).toBe('ROUGE-N score 0.70 is less than threshold 0.75');
     expect(rouge.n).toHaveBeenCalledWith('actual text', 'expected text', {});
   });
 

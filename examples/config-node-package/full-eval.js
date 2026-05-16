@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import promptfoo from '../../dist/src/index.js';
+import promptfoo from 'promptfoo';
 
 const prompts = [
   // Prompts can be raw text...
@@ -87,10 +87,27 @@ const tests = [
       },
     ],
   },
+  {
+    vars: {
+      body: 'Tell me a joke',
+    },
+    options: {
+      // Transform functions can be passed directly when using the node package.
+      transform: (output) => output.toLowerCase(),
+    },
+    assert: [
+      {
+        type: 'contains',
+        value: 'joke',
+        // Per-assertion transforms also accept functions.
+        transform: (output) => output.trim(),
+      },
+    ],
+  },
 ];
 
 (async () => {
-  const results = await promptfoo.evaluate({
+  const evalRecord = await promptfoo.evaluate({
     prompts,
     providers,
     tests,
@@ -101,6 +118,7 @@ const tests = [
     // Uncomment to enable sharing (requires cloud account or self-hosted server)
     // sharing: true,
   });
+  const results = await evalRecord.toEvaluateSummary();
 
   console.log('RESULTS:');
   const resultsString = JSON.stringify(results, null, 2);

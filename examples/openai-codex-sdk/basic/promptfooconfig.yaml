@@ -9,11 +9,13 @@ providers:
     config:
       model: gpt-5.2-codex
       model_reasoning_effort: high
+      cli_config:
+        model_verbosity: medium
+      sandbox_mode: read-only
+      skip_git_repo_check: true
 
 tests:
   - vars: {}
     assert:
       - type: contains
         value: 'def factorial'
-      - type: llm-rubric
-        value: 'Should generate working Python code for factorial calculation'

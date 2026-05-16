@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
@@ -20,6 +21,24 @@ import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
+
+/**
+ * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
+ * surfaces when a path component isn't a directory) yield false; other errors
+ * such as EACCES/EPERM are rethrown so permission problems remain visible.
+ */
+export async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      return false;
+    }
+    throw err;
+  }
+}
 
 /**
  * Simple Nunjucks engine specifically for file paths
@@ -243,15 +262,13 @@ export function maybeLoadConfigFromExternalFile(
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
-  if (config && typeof config === 'object' && config !== null) {
+  if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
       const isAssertionValue =
         key === 'value' &&
-        typeof config === 'object' &&
-        config &&
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
@@ -261,7 +278,18 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      result[key] = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+
+      if (key === '__proto__') {
+        Object.defineProperty(result, key, {
+          value,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        result[key] = value;
+      }
     }
     return result;
   }
