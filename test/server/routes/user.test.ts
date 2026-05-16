@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies before imports
@@ -31,7 +33,26 @@ const mockedCloudConfig = vi.mocked(cloudConfig);
 const mockedTelemetry = vi.mocked(telemetry);
 
 describe('User Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -39,8 +60,6 @@ describe('User Routes', () => {
     // Setup telemetry mock
     mockedTelemetry.record = vi.fn().mockResolvedValue(undefined);
     mockedTelemetry.saveConsent = vi.fn().mockResolvedValue(undefined);
-
-    app = createApp();
   });
 
   afterEach(() => {
@@ -49,14 +68,14 @@ describe('User Routes', () => {
 
   describe('POST /api/user/email', () => {
     it('should return 400 when body is empty', async () => {
-      const response = await request(app).post('/api/user/email').send({});
+      const response = await api.post('/api/user/email').send({});
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('email');
     });
 
     it('should return 400 when email is not a string', async () => {
-      const response = await request(app).post('/api/user/email').send({ email: 123 });
+      const response = await api.post('/api/user/email').send({ email: 123 });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('email');
@@ -65,9 +84,7 @@ describe('User Routes', () => {
     it('should return 200 when email is valid', async () => {
       mockedSetUserEmail.mockImplementation(() => {});
 
-      const response = await request(app)
-        .post('/api/user/email')
-        .send({ email: 'test@example.com' });
+      const response = await api.post('/api/user/email').send({ email: 'test@example.com' });
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -88,7 +105,7 @@ describe('User Routes', () => {
     });
 
     it('should return 200 with default validate=false when no query param', async () => {
-      const response = await request(app).get('/api/user/email/status');
+      const response = await api.get('/api/user/email/status');
 
       expect(response.status).toBe(200);
       expect(response.body.hasEmail).toBe(true);
@@ -98,7 +115,7 @@ describe('User Routes', () => {
     });
 
     it('should return 200 when validate=true', async () => {
-      const response = await request(app).get('/api/user/email/status?validate=true');
+      const response = await api.get('/api/user/email/status?validate=true');
 
       expect(response.status).toBe(200);
       expect(response.body.hasEmail).toBe(true);
@@ -108,7 +125,7 @@ describe('User Routes', () => {
     });
 
     it('should return 200 when validate=yes (permissive - treated as false)', async () => {
-      const response = await request(app).get('/api/user/email/status?validate=yes');
+      const response = await api.get('/api/user/email/status?validate=yes');
 
       expect(response.status).toBe(200);
       expect(response.body.hasEmail).toBe(true);
@@ -116,7 +133,15 @@ describe('User Routes', () => {
     });
 
     it('should return 200 when validate=1 (permissive - treated as false)', async () => {
-      const response = await request(app).get('/api/user/email/status?validate=1');
+      const response = await api.get('/api/user/email/status?validate=1');
+
+      expect(response.status).toBe(200);
+      expect(response.body.hasEmail).toBe(true);
+      expect(mockedCheckEmailStatus).toHaveBeenCalledWith({ validate: false });
+    });
+
+    it('should return 200 when validate is repeated (permissive - treated as false)', async () => {
+      const response = await api.get('/api/user/email/status?validate=true&validate=false');
 
       expect(response.status).toBe(200);
       expect(response.body.hasEmail).toBe(true);
@@ -126,21 +151,21 @@ describe('User Routes', () => {
 
   describe('POST /api/user/login', () => {
     it('should return 400 when body is empty', async () => {
-      const response = await request(app).post('/api/user/login').send({});
+      const response = await api.post('/api/user/login').send({});
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('apiKey');
     });
 
     it('should return 400 when apiKey is not a string', async () => {
-      const response = await request(app).post('/api/user/login').send({ apiKey: 123 });
+      const response = await api.post('/api/user/login').send({ apiKey: 123 });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('apiKey');
     });
 
     it('should return 400 when apiKey is empty string', async () => {
-      const response = await request(app).post('/api/user/login').send({ apiKey: '' });
+      const response = await api.post('/api/user/login').send({ apiKey: '' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('API key is required');
@@ -153,7 +178,7 @@ describe('User Routes', () => {
       mockedCloudConfig.getApiKey.mockReturnValue('test-api-key');
       mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
 
-      const response = await request(app).get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud/status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -169,7 +194,7 @@ describe('User Routes', () => {
       mockedCloudConfig.getApiKey.mockReturnValue(undefined);
       mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
 
-      const response = await request(app).get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud/status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -185,7 +210,7 @@ describe('User Routes', () => {
       mockedCloudConfig.getApiKey.mockReturnValue('enterprise-api-key');
       mockedCloudConfig.getAppUrl.mockReturnValue('https://enterprise.company.com');
 
-      const response = await request(app).get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud/status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -208,7 +233,7 @@ describe('User Routes', () => {
         mockedCloudConfig.getApiKey.mockReturnValue('test-api-key');
         mockedCloudConfig.getAppUrl.mockReturnValue(url);
 
-        const response = await request(app).get('/api/user/cloud/status');
+        const response = await api.get('/api/user/cloud/status');
 
         expect(response.status).toBe(200);
         expect(response.body.isEnterprise).toBe(false);
@@ -226,7 +251,7 @@ describe('User Routes', () => {
         mockedCloudConfig.getApiKey.mockReturnValue(undefined);
         mockedCloudConfig.getAppUrl.mockReturnValue(url);
 
-        const response = await request(app).get('/api/user/cloud/status');
+        const response = await api.get('/api/user/cloud/status');
 
         expect(response.status).toBe(200);
         expect(response.body).toMatchObject({
@@ -246,7 +271,7 @@ describe('User Routes', () => {
         mockedCloudConfig.getApiKey.mockReturnValue('test-api-key');
         mockedCloudConfig.getAppUrl.mockReturnValue(url);
 
-        const response = await request(app).get('/api/user/cloud/status');
+        const response = await api.get('/api/user/cloud/status');
 
         expect(response.status).toBe(200);
         expect(response.body).toMatchObject({
@@ -263,7 +288,7 @@ describe('User Routes', () => {
       mockedCloudConfig.getApiKey.mockReturnValue(undefined);
       mockedCloudConfig.getAppUrl.mockReturnValue('https://enterprise.company.com');
 
-      const response = await request(app).get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud/status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -279,7 +304,7 @@ describe('User Routes', () => {
         throw new Error('test error');
       });
 
-      const response = await request(app).get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud/status');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({

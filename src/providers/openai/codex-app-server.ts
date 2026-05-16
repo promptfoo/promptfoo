@@ -19,7 +19,10 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
+import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import type { Usage as CodexSdkUsage } from '@openai/codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -169,6 +172,7 @@ export interface CodexAppServerRequestPolicy {
   permissions?: {
     permissions?: Record<string, unknown>;
     scope?: 'turn' | 'session';
+    strict_auto_review?: boolean | null;
   };
   user_input?: CodexAppServerUserInputPolicy;
   mcp_elicitation?: CodexAppServerMcpElicitationPolicy;
@@ -196,7 +200,7 @@ export interface CodexAppServerConfig {
   sandbox_policy?: Record<string, unknown>;
   network_access_enabled?: boolean;
   approval_policy?: CodexAppServerApprovalPolicy;
-  approvals_reviewer?: 'user' | 'guardian_subagent';
+  approvals_reviewer?: 'user' | 'auto_review' | 'guardian_subagent';
   model_reasoning_effort?: CodexAppServerReasoningEffort;
   reasoning_summary?: CodexAppServerReasoningSummary;
   personality?: CodexAppServerPersonality;
@@ -289,6 +293,7 @@ interface CodexAppServerTurnState {
   serverRequests: ServerRequestRecord[];
   agentMessageDeltas: string[];
   agentMessageDeltasByItemId: Map<string, string>;
+  commandExecutionOutputDeltasByItemId: Map<string, string>;
   tokenUsage?: ProviderResponse['tokenUsage'];
   rawTokenUsage?: unknown;
   turn?: any;
@@ -342,21 +347,6 @@ const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
   'SSH_AUTH_SOCK',
   'GIT_SSH_COMMAND',
 ] as const;
-
-const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
-  'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
-  'gpt-5.4-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
-  'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
-  'gpt-5.2': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.2-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.1-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  'gpt-5.1-codex-max': { input: 3.0, output: 12.0, cache_read: 0.3 },
-  'gpt-5.1-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
-  'gpt-5-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  'gpt-5-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
-  'gpt-5': { input: 2.0, output: 8.0, cache_read: 0.2 },
-};
 
 const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
 
@@ -447,6 +437,7 @@ const ServerRequestPolicySchema = z
       .object({
         permissions: z.record(z.string(), z.unknown()).optional(),
         scope: z.enum(['turn', 'session']).optional(),
+        strict_auto_review: z.boolean().nullable().optional(),
       })
       .optional(),
     user_input: z
@@ -495,7 +486,7 @@ const CodexAppServerConfigShape = {
   sandbox_policy: z.record(z.string(), z.unknown()).optional(),
   network_access_enabled: z.boolean().optional(),
   approval_policy: CodexAppServerApprovalPolicySchema.optional(),
-  approvals_reviewer: z.enum(['user', 'guardian_subagent']).optional(),
+  approvals_reviewer: z.enum(['user', 'auto_review', 'guardian_subagent']).optional(),
   model_reasoning_effort: CodexAppServerReasoningEffortSchema.optional(),
   reasoning_summary: z.enum(['auto', 'concise', 'detailed', 'none']).optional(),
   personality: z.enum(['none', 'friendly', 'pragmatic']).optional(),
@@ -677,6 +668,20 @@ function getJsonRpcErrorMessage(message: JsonRpcMessage): string {
     return message.error.message;
   }
   return 'Unknown app-server error';
+}
+
+class JsonRpcError extends Error {
+  readonly code?: number;
+
+  constructor(message: string, code?: number) {
+    super(message);
+    this.name = 'JsonRpcError';
+    this.code = code;
+  }
+}
+
+function isMethodNotFoundError(error: unknown): boolean {
+  return error instanceof JsonRpcError && error.code === -32601;
 }
 
 function createAbortError(message: string): Error {
@@ -945,7 +950,7 @@ class CodexAppServerConnection {
     }
 
     if (message.error) {
-      pendingRequest.reject(new Error(getJsonRpcErrorMessage(message)));
+      pendingRequest.reject(new JsonRpcError(getJsonRpcErrorMessage(message), message.error.code));
       return;
     }
     try {
@@ -1352,7 +1357,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (!config.working_dir) {
       return process.cwd();
     }
-    return path.resolve(basePath, config.working_dir);
+    return resolveAgenticWorkingDir(config.working_dir, basePath) ?? process.cwd();
   }
 
   private resolveAdditionalDirectories(config: CodexAppServerConfig): string[] | undefined {
@@ -1532,6 +1537,26 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.initializingConnections.add(connection);
     try {
       await connection.initialize(config);
+      const apiKey = this.getApiKey(config);
+      if (apiKey) {
+        try {
+          await connection.request(
+            'account/login/start',
+            {
+              type: 'apiKey',
+              apiKey,
+            },
+            { timeoutMs: this.getRequestTimeoutMs(config) },
+          );
+        } catch (error) {
+          if (!isMethodNotFoundError(error)) {
+            throw error;
+          }
+          logger.debug(
+            '[CodexAppServer] account/login/start is unavailable; continuing with API key env auth',
+          );
+        }
+      }
       return connection;
     } catch (error) {
       await connection.close().catch((closeError) => {
@@ -2119,6 +2144,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       serverRequests: [],
       agentMessageDeltas: [],
       agentMessageDeltasByItemId: new Map(),
+      commandExecutionOutputDeltasByItemId: new Map(),
       completed: createDeferred<void>(),
       activeSpans: new Map(),
       itemStartTimes: new Map(),
@@ -2210,6 +2236,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       case 'item/agentMessage/delta':
         this.handleAgentMessageDelta(state, params);
         break;
+      case 'item/commandExecution/outputDelta':
+        this.handleCommandExecutionOutputDelta(state, params);
+        break;
       case 'thread/tokenUsage/updated':
         state.rawTokenUsage = params.tokenUsage;
         state.tokenUsage = this.buildTokenUsage(params.tokenUsage);
@@ -2258,12 +2287,30 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       return;
     }
 
-    state.items.push(item);
-    const itemId = item.id ? String(item.id) : crypto.randomUUID();
+    const completedItem = this.withCommandExecutionOutput(state, item);
+    if (
+      completedItem?.type === 'commandExecution' &&
+      typeof completedItem.id === 'string' &&
+      typeof completedItem.aggregatedOutput === 'string'
+    ) {
+      const existingOutput = state.commandExecutionOutputDeltasByItemId.get(completedItem.id);
+      if (
+        typeof existingOutput !== 'string' ||
+        completedItem.aggregatedOutput.startsWith(existingOutput)
+      ) {
+        state.commandExecutionOutputDeltasByItemId.set(
+          completedItem.id,
+          completedItem.aggregatedOutput,
+        );
+      }
+    }
+    state.items.push(completedItem);
+    const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();
     const span =
-      state.activeSpans.get(itemId) ?? this.startItemSpan(item, itemId, state.lastEventTime);
+      state.activeSpans.get(itemId) ??
+      this.startItemSpan(completedItem, itemId, state.lastEventTime);
     const startTime = state.itemStartTimes.get(itemId) ?? state.lastEventTime;
-    this.applyItemCompletionAttributes(span, item, eventTime, startTime);
+    this.applyItemCompletionAttributes(span, completedItem, eventTime, startTime);
     span.end();
     state.activeSpans.delete(itemId);
     state.itemStartTimes.delete(itemId);
@@ -2278,6 +2325,50 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       const existing = state.agentMessageDeltasByItemId.get(params.itemId) ?? '';
       state.agentMessageDeltasByItemId.set(params.itemId, existing + params.delta);
     }
+  }
+
+  private handleCommandExecutionOutputDelta(state: CodexAppServerTurnState, params: any): void {
+    if (typeof params.itemId !== 'string' || typeof params.delta !== 'string') {
+      return;
+    }
+
+    const existing = state.commandExecutionOutputDeltasByItemId.get(params.itemId) ?? '';
+    const aggregatedOutput = existing + params.delta;
+    state.commandExecutionOutputDeltasByItemId.set(params.itemId, aggregatedOutput);
+
+    const completedItem = state.items.find(
+      (item) => item?.type === 'commandExecution' && String(item.id) === params.itemId,
+    );
+    if (
+      completedItem &&
+      (typeof completedItem.aggregatedOutput !== 'string' ||
+        completedItem.aggregatedOutput === existing)
+    ) {
+      completedItem.aggregatedOutput = aggregatedOutput;
+    }
+  }
+
+  private withCommandExecutionOutput(state: CodexAppServerTurnState, item: any): any {
+    if (item?.type !== 'commandExecution' || typeof item.id !== 'string') {
+      return item;
+    }
+
+    const aggregatedOutput = state.commandExecutionOutputDeltasByItemId.get(item.id);
+    if (typeof aggregatedOutput !== 'string') {
+      return item;
+    }
+
+    if (
+      typeof item.aggregatedOutput === 'string' &&
+      !aggregatedOutput.startsWith(item.aggregatedOutput)
+    ) {
+      return item;
+    }
+
+    return {
+      ...item,
+      aggregatedOutput,
+    };
   }
 
   private async handleServerRequest(
@@ -2324,6 +2415,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         return {
           permissions: policy.permissions?.permissions ?? {},
           scope: policy.permissions?.scope ?? 'turn',
+          ...(policy.permissions?.strict_auto_review === undefined
+            ? {}
+            : { strictAutoReview: policy.permissions.strict_auto_review }),
         };
       case 'item/tool/requestUserInput':
         return this.buildUserInputResponse(message.params, policy.user_input ?? 'empty');
@@ -2624,12 +2718,16 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   ): ProviderResponse {
     const output = this.getFinalOutput(state);
     const normalizedItems = state.items.map((item) => this.normalizeItemForMetadata(item));
+    const rawItems = state.items.map((item) => this.normalizeItemForRaw(item));
+    const rawTokenUsage = this.sanitizeForMetadata(state.rawTokenUsage);
     const raw = {
+      finalResponse: output,
       output,
       thread: this.sanitizeForMetadata(threadHandle.response?.thread),
       turn: this.sanitizeForMetadata(state.turn),
-      items: normalizedItems,
-      tokenUsage: this.sanitizeForMetadata(state.rawTokenUsage),
+      items: rawItems,
+      usage: this.buildSdkUsage(state.rawTokenUsage),
+      tokenUsage: rawTokenUsage,
       serverRequests: state.serverRequests,
       ...(config.include_raw_events
         ? { notifications: this.sanitizeForMetadata(state.notifications) }
@@ -2756,45 +2854,169 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
   }
 
-  private buildTokenUsage(rawTokenUsage: any): ProviderResponse['tokenUsage'] {
+  private normalizeItemForRaw(item: any): Record<string, unknown> {
+    const base: Record<string, unknown> = {
+      id: item?.id,
+      type: item?.type,
+      status: item?.status,
+    };
+
+    switch (item?.type) {
+      case 'commandExecution':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'command_execution',
+          command: item.command,
+          cwd: item.cwd,
+          exit_code: item.exitCode,
+          duration_ms: item.durationMs,
+          aggregated_output: item.aggregatedOutput,
+        }) as Record<string, unknown>;
+      case 'fileChange':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'file_change',
+          changes: item.changes,
+        }) as Record<string, unknown>;
+      case 'mcpToolCall':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'mcp_tool_call',
+          server: item.server,
+          tool: item.tool,
+          arguments: item.arguments,
+          result: item.result,
+          error: item.error,
+          duration_ms: item.durationMs,
+        }) as Record<string, unknown>;
+      case 'dynamicToolCall':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'dynamic_tool_call',
+          tool: item.tool,
+          arguments: item.arguments,
+          success: item.success,
+          content_items: item.contentItems,
+          duration_ms: item.durationMs,
+        }) as Record<string, unknown>;
+      case 'webSearch':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'web_search',
+          query: item.query,
+          action: item.action,
+        }) as Record<string, unknown>;
+      case 'agentMessage':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'agent_message',
+          text: item.text,
+        }) as Record<string, unknown>;
+      case 'reasoning':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'reasoning',
+          text: this.extractReasoningText(item),
+          summary: item.summary,
+          content: item.content,
+        }) as Record<string, unknown>;
+      case 'todoList':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'todo_list',
+          items: item.items,
+        }) as Record<string, unknown>;
+      case 'error':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'error',
+          message: item.message,
+        }) as Record<string, unknown>;
+      case 'userMessage':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'user_message',
+          content: item.content,
+        }) as Record<string, unknown>;
+      default:
+        return this.sanitizeForMetadata(base) as Record<string, unknown>;
+    }
+  }
+
+  private extractReasoningText(item: any): string | undefined {
+    if (typeof item?.text === 'string') {
+      return item.text;
+    }
+    const blocks = [item?.summary, item?.content].find(Array.isArray) as unknown[] | undefined;
+    if (!blocks) {
+      return undefined;
+    }
+    const parts = blocks.flatMap((block) => {
+      if (typeof block === 'string') {
+        return [block];
+      }
+      const text = (block as { text?: unknown } | null)?.text;
+      return typeof text === 'string' && text.length > 0 ? [text] : [];
+    });
+    return parts.length > 0 ? parts.join('\n') : undefined;
+  }
+
+  private resolveRawUsage(rawTokenUsage: any):
+    | {
+        input: number;
+        output: number;
+        cached: number;
+        reasoning: number;
+      }
+    | undefined {
     const usage = rawTokenUsage?.last ?? rawTokenUsage?.total ?? rawTokenUsage;
     if (!usage) {
       return undefined;
     }
-    const prompt = usage.inputTokens ?? usage.input_tokens;
-    const completion = usage.outputTokens ?? usage.output_tokens;
-    const cached = usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0;
-    if (typeof prompt !== 'number' || typeof completion !== 'number') {
+    const input = usage.inputTokens ?? usage.input_tokens;
+    const output = usage.outputTokens ?? usage.output_tokens;
+    if (typeof input !== 'number' || typeof output !== 'number') {
       return undefined;
     }
     return {
-      prompt,
-      completion,
-      total: prompt + completion,
-      cached,
+      input,
+      output,
+      cached: usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0,
+      reasoning: usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0,
+    };
+  }
+
+  private buildSdkUsage(rawTokenUsage: any): CodexSdkUsage | undefined {
+    const usage = this.resolveRawUsage(rawTokenUsage);
+    if (!usage) {
+      return undefined;
+    }
+    return {
+      input_tokens: usage.input,
+      cached_input_tokens: usage.cached,
+      output_tokens: usage.output,
+      reasoning_output_tokens: usage.reasoning,
+    };
+  }
+
+  private buildTokenUsage(rawTokenUsage: any): ProviderResponse['tokenUsage'] {
+    const usage = this.resolveRawUsage(rawTokenUsage);
+    if (!usage) {
+      return undefined;
+    }
+    return {
+      prompt: usage.input,
+      completion: usage.output,
+      total: usage.input + usage.output,
+      cached: usage.cached,
     };
   }
 
   private calculateResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
-  ): number {
-    if (!tokenUsage || !model) {
-      return 0;
-    }
-
-    const pricing = CODEX_MODEL_PRICING[model];
-    if (!pricing) {
-      return 0;
-    }
-
-    const cachedTokens = tokenUsage.cached || 0;
-    const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
-    return (
-      uncachedInputTokens * (pricing.input / 1_000_000) +
-      cachedTokens * (pricing.cache_read / 1_000_000) +
-      (tokenUsage.completion || 0) * (pricing.output / 1_000_000)
-    );
+  ): number | undefined {
+    return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
   }
 
   private getItemCounts(items: any[]): Record<string, number> {

@@ -211,7 +211,15 @@ function extractCommand(
   const toolArgs = getToolArgs();
   if (isCommandToolName(toolName) && toolArgs && typeof toolArgs === 'object') {
     const args = toolArgs as Record<string, unknown>;
-    const command = args.cmd ?? args.command;
+    const commandSource =
+      args.cmd === undefined
+        ? args.command === undefined
+          ? args.commands === undefined
+            ? undefined
+            : { value: args.commands, separator: '; ' }
+          : { value: args.command, separator: ' ' }
+        : { value: args.cmd, separator: ' ' };
+    const command = commandSource?.value;
     if (typeof command === 'string' && command.trim()) {
       return command.trim();
     }
@@ -219,7 +227,7 @@ function extractCommand(
       const joined = command
         .map((part) => String(part).trim())
         .filter(Boolean)
-        .join(' ');
+        .join(commandSource?.separator ?? ' ');
       if (joined) {
         return joined;
       }

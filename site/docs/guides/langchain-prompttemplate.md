@@ -68,8 +68,8 @@ To make the evaluation of prompts more seamless, the prompts can be loaded direc
 Change the prompt to a function that can be loaded in the Promptfoo configuration file, as described in the [prompt functions documentation](/docs/configuration/prompts/). Change how the substitution of variables is done to regular JS substitution.
 
 ```tsx
-export function toneEvaluationInstructions(vars): string {
-  `## Objective
+export function toneEvaluationInstructions({ vars }: { vars: { prompt: string } }): string {
+  return `## Objective
 Evaluate if the user prompt falls under any of the following tone or language categories.
 
 ## Criteria for Prompts
@@ -83,13 +83,13 @@ Evaluate if the user prompt falls under any of the following tone or language ca
 
 ## Response Format
 Do not respond in markdown and respond in JSON format:
-{{
+{
   "rudeOrOffensiveLanguage": "true" | "false",
   "unprofessionalTone": "true" | "false",
-}}
+}
 
 ## Prompt: 
-${vars.vars.prompt}
+${vars.prompt}
 `;
 }
 ```
@@ -98,11 +98,11 @@ ${vars.vars.prompt}
 In this example, we're using Typescript (.ts) - but you can use regular Javascript (.js) too
 :::
 
-In Promptfoo tests, load the prompt. Promptfoo tests will pass variables in a vars object. In this vars object, the variables are accessible as vars.vars. The example above shows accessing prompt as vars.vars.prompt.
+In Promptfoo tests, load the prompt. Promptfoo passes test variables to prompt functions through the `vars` object. The example above destructures `vars` from the prompt function context and accesses the test value as `vars.prompt`. See [JavaScript prompt functions](/docs/configuration/prompts/#javascript-functions) for the full context shape.
 
 ```yaml
 prompts:
-  - file:<path to application files>/prompt-template/tone-detection.ts:toneEvaluationInstructions
+  - file://<path to application files>/prompt-template/tone-detection.ts:toneEvaluationInstructions
 
 providers:
   - openai:gpt-5-mini
@@ -131,19 +131,17 @@ An example of formatting issues between Nunjucks and LangChain PromptTemplate:
 Finally, change how variables are passed to the prompt in application code.
 
 ```tsx
-// Format prompt to be similar with Promptfoo passed variables from test
-function formatPrompt(prompt: string): promptfooWrapper {
-  return { vars: { prompt: prompt } };
-}
-
 export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> {
-  const promptfooWrapper = formatPrompt(prompt);
-  const instructionTemplate = PromptTemplate.fromTemplate(evaluationInstructions);
+  // Pass the prompt in the same `{ vars }` shape Promptfoo uses, so the same
+  // function works from both tests and application code. The result is a fully
+  // rendered string, so `attemptCompletion` takes a single argument here — no
+  // LangChain `PromptTemplate` is needed.
+  const instruction = toneEvaluationInstructions({ vars: { prompt } });
 
-  const validationResult = await attemptCompletion(promptfooWrapper, instructionTemplate);
+  const validationResult = await attemptCompletion(instruction);
 
   // ... Rest of the code
 }
 ```
 
-In conclusion, this setup allows you to load the most up-to-date prompts from your application code, test them continuously, and integrate with LangChain PromptTemplate by properly handling the formatting differences between the two systems. For more information, see the [LangChain PromptTemplate documentation](https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.prompt.PromptTemplate.html) and [Promptfoo's prompt functions guide](/docs/configuration/prompts/).
+This setup allows you to load the most up-to-date prompts from your application code, test them continuously, and integrate with LangChain PromptTemplate by properly handling the formatting differences between the two systems. For more information, see the [LangChain PromptTemplate documentation](https://python.langchain.com/api_reference/core/prompts/langchain_core.prompts.prompt.PromptTemplate.html) and [Promptfoo's prompt functions guide](/docs/configuration/prompts/).

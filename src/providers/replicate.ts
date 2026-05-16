@@ -3,7 +3,7 @@ import { createHmac } from 'crypto';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
@@ -255,7 +255,7 @@ export class ReplicateProvider implements ApiProvider {
           },
           body: JSON.stringify(data),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       );
 
@@ -333,7 +333,7 @@ export class ReplicateProvider implements ApiProvider {
             Authorization: `Bearer ${this.apiKey}`,
           },
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         false, // Don't cache polling requests
       );
@@ -505,7 +505,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
           },
           body: JSON.stringify(data),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       );
 
