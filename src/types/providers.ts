@@ -2,7 +2,6 @@ import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
 import type { MinimalApiProvider } from '../contracts/prompts';
-import type { ChildLogger } from '../logger';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
@@ -53,6 +52,14 @@ interface AtomicTestCase {
   metadata?: Record<string, any>;
   options?: Record<string, any>;
 }
+
+interface ProviderLogger {
+  error: (message: string, context?: Record<string, unknown>) => unknown;
+  warn: (message: string, context?: Record<string, unknown>) => unknown;
+  info: (message: string, context?: Record<string, unknown>) => unknown;
+  debug: (message: string, context?: Record<string, unknown>) => unknown;
+}
+
 export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
@@ -79,7 +86,7 @@ export interface ProviderOptions {
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
-  logger?: winston.Logger | ChildLogger;
+  logger?: winston.Logger | ProviderLogger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, VarValue>;
