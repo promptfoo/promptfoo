@@ -32,7 +32,7 @@ promptfoo view
 
 This example includes configurations to test different Grok capabilities:
 
-- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with Grok 4.3, Grok 4.20, Grok 4.1 Fast, Grok 4 Fast, Grok 4, and Grok 3 models
+- **Text Generation** (`promptfooconfig.yaml`) - Mathematical reasoning with the current Grok 4.3 and Grok 4.20 families
 - **Image Generation** (`promptfooconfig.images.yaml`) - Artistic image creation using Grok's image models
 - **Search Tools** (`promptfooconfig.search.yaml`) - Real-time web and X search using the Responses API
 - **Agent Tools (Responses API)** (`promptfooconfig.responses.yaml`) - Autonomous web and X search using Agent Tools
@@ -64,6 +64,7 @@ promptfoo eval -c promptfooconfig.promptfoo-search.yaml
 The recommended starting point for general text workflows:
 
 - `xai:grok-4.3` - General-purpose reasoning model
+- `reasoning_effort` - Supports `none`, `low`, `medium`, and `high` in chat configs
 - `xai:responses:grok-4.3` - Recommended form for server-side tools
 
 ### Grok 4.20
@@ -72,25 +73,9 @@ The recommended starting point for general text workflows:
 - `xai:grok-4.20-non-reasoning` - Non-reasoning model
 - `xai:grok-4.20-multi-agent` - Multi-agent variant
 
-### Grok 4.1 Fast
+### Legacy Model Note
 
-A frontier model optimized for agentic tool calling with a 2M context window:
-
-- `xai:grok-4-1-fast-reasoning` - Maximum intelligence with reasoning
-- `xai:grok-4-1-fast-non-reasoning` - Fast responses without reasoning
-
-### Grok 4 Fast
-
-Fast reasoning models with 2M context:
-
-- `xai:grok-4-fast-reasoning` - Reasoning variant
-- `xai:grok-4-fast-non-reasoning` - Non-reasoning variant
-
-### Grok 4
-
-Flagship reasoning model:
-
-- `xai:grok-4` - Full reasoning capabilities
+xAI periodically retires older model slugs and may keep them working through redirects to newer replacements. This example uses Grok 4.3 plus alias-style Grok 4.20 family IDs, matching xAI's guidance for configs that should track the current release within a family.
 
 ### Agent Tools (Responses API)
 
