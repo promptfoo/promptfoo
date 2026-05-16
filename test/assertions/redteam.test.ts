@@ -307,6 +307,8 @@ describe('handleRedteam', () => {
       prompt: 'test prompt',
       provider: undefined,
       providerCallContext: {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
         traceparent: '00-trace-id-span-id-01',
       },
       providerResponse,
