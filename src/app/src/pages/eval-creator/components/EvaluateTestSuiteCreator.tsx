@@ -29,6 +29,7 @@ import { countTests, normalizePrompts, normalizeProviders } from './setupReadine
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { UnifiedConfig } from '@promptfoo/types';
+
 import type { GenerationPrompt } from '../api/generation';
 
 type SetupStepId = 1 | 2 | 3 | 4;
