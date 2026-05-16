@@ -129,127 +129,163 @@ export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): st
   }
 }
 
-export function convertSlashCommentsToHash(str: string): string {
-  // Split into lines, process each line, then join back
-  return str
-    .split('\n')
-    .map((line) => {
-      let state = 'normal'; // 'normal' | 'singleQuote' | 'doubleQuote'
-      let result = '';
-      let i = 0;
+type CommentConversionState = 'normal' | 'singleQuote' | 'doubleQuote';
 
-      while (i < line.length) {
-        const char = line[i];
-        const nextChar = line[i + 1];
-        const prevChar = i > 0 ? line[i - 1] : '';
+function findTokenStart(line: string, index: number): number {
+  for (let cursor = index - 1; cursor >= 0; cursor--) {
+    if (/\s/.test(line[cursor])) {
+      return cursor + 1;
+    }
+  }
+  return 0;
+}
 
-        switch (state) {
-          case 'normal':
-            // Check for string start, but ignore apostrophes in words
-            if (char === "'" && !/[a-zA-Z]/.test(prevChar)) {
-              state = 'singleQuote';
-              result += char;
-            } else if (char === '"') {
-              state = 'doubleQuote';
-              result += char;
-            } else if (char === '/' && nextChar === '/') {
-              // Avoid treating URL schemes as comments (e.g., http://, https://).
-              let tokenStart = 0;
-              for (let j = i - 1; j >= 0; j--) {
-                if (/\s/.test(line[j])) {
-                  tokenStart = j + 1;
-                  break;
-                }
-              }
-              const tokenPrefix = line.slice(tokenStart, i + 2);
-              if (tokenPrefix.includes('://')) {
-                result += char;
-                break;
-              }
+function countConsecutiveSlashes(line: string, index: number): number {
+  let slashCount = 2;
+  while (index + slashCount < line.length && line[index + slashCount] === '/') {
+    slashCount++;
+  }
+  return slashCount;
+}
 
-              // Count consecutive slashes
-              let slashCount = 2;
-              while (i + slashCount < line.length && line[i + slashCount] === '/') {
-                slashCount++;
-              }
-              // Convert to equivalent number of #s
-              const hashes = '#'.repeat(Math.floor(slashCount / 2));
-              return result + hashes + line.slice(i + slashCount);
-            } else {
-              result += char;
-            }
-            break;
+function convertLineSlashCommentsToHash(line: string): string {
+  let state: CommentConversionState = 'normal';
+  let result = '';
+  let index = 0;
 
-          case 'singleQuote':
-            result += char;
-            // Check for string end, but ignore apostrophes in words
-            if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
-              state = 'normal';
-            }
-            break;
+  while (index < line.length) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+    const prevChar = index > 0 ? line[index - 1] : '';
 
-          case 'doubleQuote':
-            result += char;
-            if (char === '"' && prevChar !== '\\') {
-              state = 'normal';
-            }
-            break;
-        }
-
-        i++;
+    if (state === 'singleQuote') {
+      result += char;
+      if (char === "'" && prevChar !== '\\' && !/[a-zA-Z]/.test(nextChar)) {
+        state = 'normal';
       }
+      index++;
+      continue;
+    }
 
-      return result;
-    })
-    .join('\n');
+    if (state === 'doubleQuote') {
+      result += char;
+      if (char === '"' && prevChar !== '\\') {
+        state = 'normal';
+      }
+      index++;
+      continue;
+    }
+
+    if (char === "'" && !/[a-zA-Z]/.test(prevChar)) {
+      state = 'singleQuote';
+      result += char;
+      index++;
+      continue;
+    }
+    if (char === '"') {
+      state = 'doubleQuote';
+      result += char;
+      index++;
+      continue;
+    }
+    if (char !== '/' || nextChar !== '/') {
+      result += char;
+      index++;
+      continue;
+    }
+
+    const tokenStart = findTokenStart(line, index);
+    const tokenPrefix = line.slice(tokenStart, index + 2);
+    if (tokenPrefix.includes('://')) {
+      result += char;
+      index++;
+      continue;
+    }
+
+    const slashCount = countConsecutiveSlashes(line, index);
+    const hashes = '#'.repeat(Math.floor(slashCount / 2));
+    return result + hashes + line.slice(index + slashCount);
+  }
+
+  return result;
+}
+
+export function convertSlashCommentsToHash(str: string): string {
+  return str.split('\n').map(convertLineSlashCommentsToHash).join('\n');
+}
+
+const MAX_JSON_LENGTH = 100000;
+
+function tryParseJsonCandidate(
+  str: string,
+  startIndex: number,
+  endIndex: number,
+  openBraces: number,
+  closeBraces: number,
+): object | undefined {
+  let potentialJson = str.slice(startIndex, endIndex);
+  if (openBraces > closeBraces) {
+    potentialJson += '}'.repeat(openBraces - closeBraces);
+  }
+
+  try {
+    const parsedObj = yaml.load(convertSlashCommentsToHash(potentialJson), { json: true });
+    return typeof parsedObj === 'object' && parsedObj !== null ? parsedObj : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function scanJsonObjectFrom(
+  str: string,
+  startIndex: number,
+): { parsed: object; endIndex: number } | undefined {
+  let openBraces = 1;
+  let closeBraces = 0;
+  let cursor = startIndex + 1;
+  const scanLimit = Math.min(startIndex + MAX_JSON_LENGTH, str.length);
+
+  while (cursor < scanLimit && openBraces > closeBraces) {
+    if (str[cursor] === '{') {
+      openBraces++;
+    } else if (str[cursor] === '}') {
+      closeBraces++;
+    }
+    cursor++;
+
+    const isCandidateBoundary =
+      openBraces === closeBraces || cursor === str.length || cursor === scanLimit;
+    if (!isCandidateBoundary) {
+      continue;
+    }
+
+    const parsed = tryParseJsonCandidate(str, startIndex, cursor, openBraces, closeBraces);
+    if (parsed) {
+      return { parsed, endIndex: cursor };
+    }
+    if (openBraces === closeBraces) {
+      return undefined;
+    }
+  }
+
+  return undefined;
 }
 
 export function extractJsonObjects(str: string): object[] {
   const jsonObjects: object[] = [];
-  const maxJsonLength = 100000; // Prevent processing extremely large invalid JSON
 
-  for (let i = 0; i < str.length; i++) {
-    if (str[i] === '{') {
-      let openBraces = 1;
-      let closeBraces = 0;
-      let j = i + 1;
-
-      // Track braces as we go to detect potential JSON objects
-      while (j < Math.min(i + maxJsonLength, str.length) && openBraces > closeBraces) {
-        if (str[j] === '{') {
-          openBraces++;
-        }
-        if (str[j] === '}') {
-          closeBraces++;
-        }
-        j++;
-
-        // When we have a potential complete object OR we've reached the end
-        if (openBraces === closeBraces || j === str.length || j === i + maxJsonLength) {
-          try {
-            // If we're at the end but braces don't match, add missing closing braces
-            let potentialJson = str.slice(i, j);
-            if (openBraces > closeBraces) {
-              potentialJson += '}'.repeat(openBraces - closeBraces);
-            }
-
-            const processedJson = convertSlashCommentsToHash(potentialJson);
-            const parsedObj = yaml.load(processedJson, { json: true });
-
-            if (typeof parsedObj === 'object' && parsedObj !== null) {
-              jsonObjects.push(parsedObj);
-              i = j - 1; // Move i to the end of the valid JSON object
-              break;
-            }
-          } catch {
-            // If not valid yet, continue only if braces haven't balanced
-            if (openBraces === closeBraces) {
-              break;
-            }
-          }
-        }
-      }
+  for (let index = 0; index < str.length; index++) {
+    if (str[index] !== '{') {
+      continue;
     }
+
+    const scanned = scanJsonObjectFrom(str, index);
+    if (!scanned) {
+      continue;
+    }
+
+    jsonObjects.push(scanned.parsed);
+    index = scanned.endIndex - 1;
   }
 
   return jsonObjects;
