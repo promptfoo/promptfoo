@@ -16,18 +16,13 @@ import { evalJobs } from '../../../src/server/routes/eval';
 import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
 
-const { mockDoEvaluate } = vi.hoisted(() => ({
+const { mockDoEvaluate, mockResolveConfigs } = vi.hoisted(() => ({
   mockDoEvaluate: vi.fn(),
+  mockResolveConfigs: vi.fn(),
 }));
 
 vi.mock('../../../src/util/config/load', () => ({
-  resolveConfigs: vi.fn().mockResolvedValue({
-    testSuite: {
-      prompts: [{ raw: 'test prompt', label: 'test' }],
-      providers: [{ id: 'test-provider' }],
-      tests: [{ vars: { state: 'colorado' } }],
-    },
-  }),
+  resolveConfigs: mockResolveConfigs,
 }));
 
 vi.mock('../../../src/evaluator', () => ({
@@ -57,6 +52,14 @@ describe('POST /api/eval/:id/resume', () => {
     mockDoEvaluate.mockResolvedValue({
       id: 'test-eval-id',
       toEvaluateSummary: vi.fn().mockResolvedValue({ version: 3, results: [] }),
+    });
+    mockResolveConfigs.mockReset();
+    mockResolveConfigs.mockResolvedValue({
+      testSuite: {
+        prompts: [{ raw: 'test prompt', label: 'test' }],
+        providers: [{ id: 'test-provider' }],
+        tests: [{ vars: { state: 'colorado' } }],
+      },
     });
   });
 
