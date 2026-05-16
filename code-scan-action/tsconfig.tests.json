@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@actions/github": ["./node_modules/@actions/github/lib/github.d.ts"],
+      "@octokit/rest": ["./node_modules/@octokit/rest/dist-types/index.d.ts"]
+    }
+  },
+  "include": ["src/**/*", "../test/code-scan-action/**/*", "../test/util/utils.ts"]
+}

@@ -8,8 +8,8 @@ providers:
   - id: openai:codex-sdk
     config:
       model: gpt-5.2
-      # Defaults assume you run this config from examples/openai-codex-sdk/skills.
-      # From the repo root, set CODEX_SKILLS_WORKING_DIR and CODEX_HOME_OVERRIDE.
+      # Relative working_dir values resolve from this config file's directory.
+      # Codex resolves CODEX_HOME itself; set CODEX_HOME_OVERRIDE when running this config from another cwd.
       # sample-codex-home has no auth state; use an API key or point CODEX_HOME_OVERRIDE at ~/.codex.
       working_dir: '{{ env.CODEX_SKILLS_WORKING_DIR | default("./sample-project") }}'
       skip_git_repo_check: true
