@@ -1669,7 +1669,7 @@ describe('file utilities', () => {
         docsUrl: 'https://promptfoo.dev/docs/providers/file/',
       });
       expect(notFound).toContain('File not found');
-      const normalizedNotFound = notFound.replaceAll('\\', '/');
+      const normalizedNotFound = notFound.replaceAll('\\', '/').replaceAll('\b', '/b');
       expect(normalizedNotFound).toContain(
         path.resolve('/base/missing.yaml').replaceAll('\\', '/'),
       );
