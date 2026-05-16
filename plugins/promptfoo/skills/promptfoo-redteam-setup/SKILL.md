@@ -94,11 +94,11 @@ a resolved Promptfoo Cloud policy object.
 
 ### 4. Choose strategies conservatively
 
-- Use `basic` for the first setup/generation pass.
-- Add `jailbreak:composite` or `jailbreak:meta` after the first generated cases
-  look sane.
-- Add multi-turn strategies only when the target is stateful and sessions are
-  configured.
+- Use `jailbreak:meta` for the default first setup/generation pass.
+- Use `jailbreak:hydra` instead when the target is stateful, supports
+  multi-turn conversations, and sessions are configured.
+- Add broader follow-up strategies such as `jailbreak:composite` only after the
+  first generated cases look sane.
 
 ### 5. Configure generation and grading
 

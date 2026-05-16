@@ -71,7 +71,7 @@ describe('ThemeSelector', () => {
       screen.getByRole('button', {
         name: 'Theme preference: System theme (light). Switch to Dark theme.',
       }),
-    ).toHaveClass('size-9');
+    ).toHaveClass('size-11', 'sm:size-9');
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
