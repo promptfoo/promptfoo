@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import {
+  createAnthropicReconProvider,
+  createOpenAIReconProvider,
   DEFAULT_ANTHROPIC_MODEL,
   DEFAULT_OPENAI_MODEL,
   parseReconOutput,
@@ -25,6 +27,32 @@ import { getEnvString } from '../../../../src/envars';
 import logger from '../../../../src/logger';
 
 const mockedGetEnvString = getEnvString as Mock;
+const providerMocks = vi.hoisted(() => ({
+  openAiCallApi: vi.fn(),
+  anthropicCallApi: vi.fn(),
+  openAiConfig: undefined as Record<string, unknown> | undefined,
+  anthropicConfig: undefined as Record<string, unknown> | undefined,
+}));
+
+vi.mock('../../../../src/providers/openai/codex-sdk', () => ({
+  OpenAICodexSDKProvider: class {
+    constructor(options: { config: Record<string, unknown> }) {
+      providerMocks.openAiConfig = options.config;
+    }
+
+    callApi = providerMocks.openAiCallApi;
+  },
+}));
+
+vi.mock('../../../../src/providers/claude-agent-sdk', () => ({
+  ClaudeCodeSDKProvider: class {
+    constructor(options: { config: Record<string, unknown> }) {
+      providerMocks.anthropicConfig = options.config;
+    }
+
+    callApi = providerMocks.anthropicCallApi;
+  },
+}));
 
 describe('selectProvider', () => {
   beforeEach(() => {
@@ -298,6 +326,43 @@ describe('parseReconOutput', () => {
       expect(result.purpose).toBe('Test app');
       // Extra fields should be preserved after falling back to raw object
     });
+
+    it('should sanitize known array fields when schema validation falls back', () => {
+      const input = {
+        purpose: 42,
+        entities: ['Acme', 123],
+        suggestedPlugins: ['pii:direct', false],
+        securityNotes: ['High privilege', null],
+        keyFiles: ['src/app.ts', { file: 'bad' }],
+        discoveredTools: [
+          {
+            name: 'lookup',
+            description: 'Lookup user',
+            file: 'src/tools.ts',
+            parameters: '{"id":"string"}',
+          },
+          { name: 'missing description' },
+          null,
+        ],
+        stateful: true,
+      };
+
+      const result = parseReconOutput(input);
+
+      expect(result.entities).toEqual(['Acme']);
+      expect(result.suggestedPlugins).toEqual(['pii:direct']);
+      expect(result.securityNotes).toEqual(['High privilege']);
+      expect(result.keyFiles).toEqual(['src/app.ts']);
+      expect(result.discoveredTools).toEqual([
+        {
+          name: 'lookup',
+          description: 'Lookup user',
+          file: 'src/tools.ts',
+          parameters: '{"id":"string"}',
+        },
+      ]);
+      expect(result.stateful).toBe(true);
+    });
   });
 
   describe('edge cases', () => {
@@ -413,5 +478,138 @@ describe('parseReconOutput', () => {
 
       expect(() => parseReconOutput(input)).toThrow('Invalid recon output: expected JSON object');
     });
+  });
+});
+
+describe('recon provider factories', () => {
+  const scratchpad = {
+    dir: '/tmp/recon-scratchpad',
+    path: '/tmp/recon-scratchpad/notes.md',
+    cleanup: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    providerMocks.openAiConfig = undefined;
+    providerMocks.anthropicConfig = undefined;
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('creates an OpenAI provider with streaming progress and parses successful output', async () => {
+    const onProgress = vi.fn();
+    providerMocks.openAiCallApi.mockResolvedValue({
+      output: JSON.stringify({ purpose: 'Recon target' }),
+    });
+
+    const provider = await createOpenAIReconProvider('/repo', scratchpad, 'gpt-test', onProgress);
+    const onEvent = providerMocks.openAiConfig?.on_event as
+      | ((event: Record<string, unknown>) => void)
+      | undefined;
+
+    onEvent?.({
+      type: 'event',
+      item: {
+        type: 'command_execution',
+        command: 'npm run test -- --coverage --reporter verbose',
+      },
+    });
+    onEvent?.({ type: 'event', item: { type: 'file_change', path: 'notes.md' } });
+    onEvent?.({ type: 'event', item: { type: 'mcp_tool_call', tool: 'search' } });
+    onEvent?.({ type: 'event', item: { type: 'web_search' } });
+    onEvent?.({ type: 'event', item: { type: 'reasoning' } });
+    onEvent?.({ type: 'event', item: { type: 'agent_message' } });
+    onEvent?.({ type: 'event', item: { type: 'unknown' } });
+    onEvent?.({ type: 'event' });
+
+    await expect(provider.analyze('/repo', 'prompt')).resolves.toEqual({
+      purpose: 'Recon target',
+    });
+    expect(providerMocks.openAiConfig).toEqual(
+      expect.objectContaining({
+        working_dir: scratchpad.dir,
+        additional_directories: ['/repo'],
+        model: 'gpt-test',
+        enable_streaming: true,
+      }),
+    );
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('Running:') }),
+    );
+    expect(onProgress).toHaveBeenCalledWith({ type: 'event', message: 'Editing: notes.md' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'event', message: 'Calling tool: search' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'event', message: 'Searching web...' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'event', message: 'Thinking...' });
+  });
+
+  it('surfaces OpenAI provider call errors', async () => {
+    providerMocks.openAiCallApi.mockResolvedValue({ error: 'bad request' });
+
+    const provider = await createOpenAIReconProvider('/repo', scratchpad);
+
+    await expect(provider.analyze('/repo', 'prompt')).rejects.toThrow(
+      'OpenAI Codex SDK error: bad request',
+    );
+  });
+
+  it('creates an Anthropic provider with progress hooks and parses output', async () => {
+    const onProgress = vi.fn();
+    providerMocks.anthropicCallApi.mockResolvedValue({
+      output: { purpose: 'Claude target' },
+    });
+
+    const provider = await createAnthropicReconProvider(
+      '/repo',
+      scratchpad,
+      'opus-test',
+      onProgress,
+    );
+    const hooks = providerMocks.anthropicConfig?.hooks as
+      | {
+          PreToolUse?: Array<{
+            hooks?: Array<(input: Record<string, unknown>) => Promise<{ continue: boolean }>>;
+          }>;
+        }
+      | undefined;
+    const toolHook = hooks?.PreToolUse?.[0]?.hooks?.[0];
+
+    await toolHook?.({ tool_name: 'Read', tool_input: { file_path: 'src/app.ts' } });
+    await toolHook?.({ tool_name: 'Grep', tool_input: { pattern: 'router' } });
+    await toolHook?.({ tool_name: 'Glob', tool_input: { pattern: '**/*.ts' } });
+    await toolHook?.({ tool_name: 'WebFetch' });
+    await toolHook?.({ tool_name: 'WebSearch' });
+    await toolHook?.({ tool_name: 'OtherTool' });
+    await toolHook?.({});
+
+    await expect(provider.analyze('/repo', 'prompt')).resolves.toEqual({
+      purpose: 'Claude target',
+    });
+    expect(providerMocks.anthropicConfig).toEqual(
+      expect.objectContaining({
+        working_dir: scratchpad.dir,
+        additional_directories: ['/repo'],
+        model: 'opus-test',
+        max_budget_usd: 25,
+        permission_mode: 'default',
+      }),
+    );
+    expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Reading: src/app.ts' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Searching for: router' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Finding files: **/*.ts' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Fetching web content...' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Searching web...' });
+    expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Using OtherTool' });
+  });
+
+  it('surfaces Anthropic provider call errors', async () => {
+    providerMocks.anthropicCallApi.mockResolvedValue({ error: 'budget exceeded' });
+
+    const provider = await createAnthropicReconProvider('/repo', scratchpad);
+
+    await expect(provider.analyze('/repo', 'prompt')).rejects.toThrow(
+      'Claude Agent SDK error: budget exceeded',
+    );
   });
 });
