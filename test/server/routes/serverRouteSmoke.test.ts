@@ -474,6 +474,18 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'get',
+    openApiPath: '/api/eval/{id}/config',
+    path: '/api/eval/eval-1/config',
+    expectedStatus: 404,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/eval/{evalId}/results/{resultId}/detail',
+    path: '/api/eval/eval-1/results/result-1/detail',
+    expectedStatus: 404,
+  },
+  {
+    method: 'get',
     openApiPath: '/api/eval/{id}/metadata-keys',
     path: '/api/eval/ab/metadata-keys',
     expectedStatus: 400,
