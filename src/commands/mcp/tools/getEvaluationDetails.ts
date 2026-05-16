@@ -6,6 +6,101 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 import type { EvaluationDetailsSummary } from '../lib/types';
 
+function getEvaluationResults(evalData: any) {
+  if ('results' in evalData && 'results' in (evalData.results as any)) {
+    return (evalData.results as any).results;
+  }
+  return 'results' in evalData && Array.isArray(evalData.results) ? evalData.results : [];
+}
+
+function buildEvaluationDetailsSummary(id: string, evalData: any): EvaluationDetailsSummary {
+  const results = getEvaluationResults(evalData);
+  const summary = { id } as EvaluationDetailsSummary;
+  if (Array.isArray(results)) {
+    summary.totalTests = results.length;
+    summary.passedTests = results.filter((result: any) => result.success).length;
+    summary.failedTests = results.filter((result: any) => !result.success).length;
+  } else {
+    summary.totalTests = 0;
+    summary.passedTests = 0;
+    summary.failedTests = 0;
+  }
+  if ('table' in evalData && evalData.table?.head) {
+    summary.providers = evalData.table.head.providers || [];
+    summary.prompts = evalData.table.head.prompts?.length || 0;
+  } else {
+    summary.providers = [];
+    summary.prompts = 0;
+  }
+  return summary;
+}
+
+function filterEvaluationResults(evalData: any, filter: string | undefined) {
+  const results = getEvaluationResults(evalData);
+  if (!filter || filter === 'all' || !Array.isArray(results)) {
+    return;
+  }
+  const filteredResults = results.filter((result: any) => {
+    switch (filter) {
+      case 'failures':
+        return !result.success;
+      case 'passes':
+        return result.success && !result.error;
+      case 'errors':
+        return !!result.error;
+      case 'highlights':
+        return result.metadata?.highlighted || result.metadata?.starred;
+      default:
+        return true;
+    }
+  });
+  if ('results' in evalData && 'results' in (evalData.results as any)) {
+    (evalData.results as any).results = filteredResults;
+  } else if ('results' in evalData && Array.isArray(evalData.results)) {
+    (evalData as any).results = filteredResults;
+  }
+}
+
+async function getEvaluationDetailsResponse(id: string, filter: string | undefined) {
+  const result = await readResult(id);
+  if (!result) {
+    return createToolResponse(
+      'get_evaluation_details',
+      false,
+      {
+        providedId: id,
+        suggestion: 'Check if the evaluation ID is correct or if it has been deleted.',
+      },
+      `Evaluation with ID '${id}' not found. Use list_evaluations to find valid IDs.`,
+    );
+  }
+  const evalData = result.result;
+  const summary = buildEvaluationDetailsSummary(id, evalData);
+  filterEvaluationResults(evalData, filter);
+  return createToolResponse('get_evaluation_details', true, {
+    evaluation: evalData,
+    summary,
+  });
+}
+
+function getEvaluationDetailsErrorResponse(error: unknown) {
+  if (error instanceof Error && error.message.includes('database')) {
+    return createToolResponse(
+      'get_evaluation_details',
+      false,
+      { originalError: error.message },
+      'Failed to access evaluation database. Ensure promptfoo is properly initialized.',
+    );
+  }
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  return createToolResponse(
+    'get_evaluation_details',
+    false,
+    undefined,
+    `Failed to retrieve evaluation details: ${errorMessage}`,
+  );
+}
+
 /**
  * Tool to retrieve detailed results for a specific evaluation run
  */
@@ -32,103 +127,10 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
     },
     async (args) => {
       const { id, filter } = args;
-
       try {
-        const result = await readResult(id);
-
-        if (!result) {
-          return createToolResponse(
-            'get_evaluation_details',
-            false,
-            {
-              providedId: id,
-              suggestion: 'Check if the evaluation ID is correct or if it has been deleted.',
-            },
-            `Evaluation with ID '${id}' not found. Use list_evaluations to find valid IDs.`,
-          );
-        }
-
-        // Extract key metrics for easier consumption
-        const evalData = result.result;
-        const summary = {
-          id,
-        } as EvaluationDetailsSummary;
-
-        // Handle different eval data structures
-        const results =
-          'results' in evalData && 'results' in (evalData.results as any)
-            ? (evalData.results as any).results
-            : 'results' in evalData && Array.isArray(evalData.results)
-              ? evalData.results
-              : [];
-
-        if (Array.isArray(results)) {
-          summary.totalTests = results.length;
-          summary.passedTests = results.filter((r: any) => r.success).length;
-          summary.failedTests = results.filter((r: any) => !r.success).length;
-        } else {
-          summary.totalTests = 0;
-          summary.passedTests = 0;
-          summary.failedTests = 0;
-        }
-
-        if ('table' in evalData && evalData.table) {
-          const table = evalData.table as any;
-          if (table.head) {
-            summary.providers = table.head.providers || [];
-            summary.prompts = table.head.prompts?.length || 0;
-          } else {
-            summary.providers = [];
-            summary.prompts = 0;
-          }
-        } else {
-          summary.providers = [];
-          summary.prompts = 0;
-        }
-
-        if (filter && filter !== 'all' && Array.isArray(results)) {
-          const filteredResults = results.filter((r: any) => {
-            switch (filter) {
-              case 'failures':
-                return !r.success;
-              case 'passes':
-                return r.success && !r.error;
-              case 'errors':
-                return !!r.error;
-              case 'highlights':
-                return r.metadata?.highlighted || r.metadata?.starred;
-              default:
-                return true;
-            }
-          });
-
-          if ('results' in evalData && 'results' in (evalData.results as any)) {
-            (evalData.results as any).results = filteredResults;
-          } else if ('results' in evalData && Array.isArray(evalData.results)) {
-            (evalData as any).results = filteredResults;
-          }
-        }
-        return createToolResponse('get_evaluation_details', true, {
-          evaluation: evalData,
-          summary,
-        });
+        return await getEvaluationDetailsResponse(id, filter);
       } catch (error: unknown) {
-        if (error instanceof Error && error.message.includes('database')) {
-          return createToolResponse(
-            'get_evaluation_details',
-            false,
-            { originalError: error.message },
-            'Failed to access evaluation database. Ensure promptfoo is properly initialized.',
-          );
-        }
-
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        return createToolResponse(
-          'get_evaluation_details',
-          false,
-          undefined,
-          `Failed to retrieve evaluation details: ${errorMessage}`,
-        );
+        return getEvaluationDetailsErrorResponse(error);
       }
     },
   );
