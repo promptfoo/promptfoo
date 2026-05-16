@@ -28,12 +28,7 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
-import {
-  CommandLineOptionsSchema,
-  MAX_SUGGESTIONS_COUNT,
-  OutputFileExtension,
-  TestSuiteSchema,
-} from '../types/index';
+import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
@@ -46,6 +41,7 @@ import {
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
+import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
@@ -60,13 +56,8 @@ import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from 
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  Scenario,
-  TestSuite,
-  UnifiedConfig,
-} from '../types/index';
+import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
+import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -121,11 +112,7 @@ function handleRecoverableWatchError(error: unknown): boolean {
     // Account helpers already render these user-facing failures.
     return true;
   }
-  if (error instanceof EvalRunError) {
-    logger.error(error.message);
-    return true;
-  }
-  if (error instanceof PromptSuggestionsRejectedError) {
+  if (error instanceof EvalRunError || error instanceof PromptSuggestionsRejectedError) {
     logger.error(error.message);
     return true;
   }
@@ -135,8 +122,8 @@ function handleRecoverableWatchError(error: unknown): boolean {
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
-  evaluateOptions: EvaluateOptions,
-): Pick<EvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
+  evaluateOptions: InternalEvaluateOptions,
+): Pick<InternalEvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
   const { suggestPrompts } = cmdObj as EvalCommandOptions;
 
   // --suggest-prompts is itself an enable signal — passing a count opts in even
@@ -185,7 +172,7 @@ export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: EvaluateOptions,
+  evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
@@ -441,7 +428,7 @@ export async function doEval(
     if (resumeRaw) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
-        {}) as EvaluateOptions;
+        {}) as InternalEvaluateOptions;
       repeat =
         Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
           ? (persisted.repeat as number)
@@ -474,7 +461,7 @@ export async function doEval(
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
     const explicitMaxConcurrency = resumeRaw
-      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+      ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency)
@@ -495,7 +482,7 @@ export async function doEval(
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
-    const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
+    const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
       typeof resumeRuntimeOptions?.filterRange === 'string'
         ? resumeRuntimeOptions.filterRange
@@ -586,7 +573,7 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
-    const options: EvaluateOptions = {
+    const options: InternalEvaluateOptions = {
       ...evaluateOptions,
       showProgressBar:
         getLogLevel() === 'debug'
@@ -1087,7 +1074,7 @@ export function evalCommand(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-  const evaluateOptions: EvaluateOptions = {};
+  const evaluateOptions: InternalEvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.suggestionsCount = defaultConfig.evaluateOptions.suggestionsCount;
@@ -1204,7 +1191,7 @@ export function evalCommand(
     // Output configuration
     .option(
       '-o, --output <paths...>',
-      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
+      `Path to output file (${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}), default is no output file`,
     )
     .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
@@ -1287,12 +1274,10 @@ export function evalCommand(
       }
 
       for (const maybeFilePath of validatedOpts.output ?? []) {
-        const { data: extension } = OutputFileExtension.safeParse(
-          maybeFilePath.split('.').pop()?.toLowerCase(),
-        );
+        const extension = getOutputFileFormat(maybeFilePath);
         invariant(
           extension,
-          `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+          `Unsupported output file format: ${maybeFilePath}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
         );
       }
       await doEval(

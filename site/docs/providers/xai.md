@@ -22,6 +22,12 @@ When xAI is the selected fallback provider family, Promptfoo can use xAI default
 
 The xAI provider includes support for the following model formats. xAI's public model catalog currently recommends `grok-4.3` for general chat and coding workloads; consult the catalog when choosing a new default for a long-lived integration.
 
+:::caution Legacy xAI model aliases
+
+xAI periodically retires older model slugs and keeps them working by redirecting them to newer replacements. As of the May 15, 2026 (12:00 PM PT) retirement, requests to `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-4-0709`, `grok-code-fast-1`, and `grok-3` (including the `*-beta`, `*-fast`, and `*-latest` aliases on each of those families) are redirected to `grok-4.3` — reasoning variants run with `low` reasoning effort, non-reasoning variants run with `none` — and billed at standard Grok 4.3 pricing. The `grok-imagine-image-pro` slug is similarly redirected to xAI's quality image model. For new configs, prefer current catalog models such as `grok-4.3` or `grok-imagine-image-quality` directly.
+
+:::
+
 ### Grok 4.3 Models
 
 - `xai:grok-4.3` - General-purpose reasoning model
@@ -104,10 +110,10 @@ The provider supports all [OpenAI provider](/docs/providers/openai) configuratio
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: xai:grok-3-mini-beta
+  - id: xai:grok-4.3
     config:
       temperature: 0.7
-      reasoning_effort: 'high' # Only for grok-3-mini models
+      reasoning_effort: 'high' # none, low, medium, or high
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
 
@@ -115,7 +121,7 @@ providers:
 
 Multiple Grok models support reasoning capabilities:
 
-**Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. It reasons automatically and does not support `reasoning_effort`.
+**Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
 
 **Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
 
@@ -128,8 +134,8 @@ Multiple Grok models support reasoning capabilities:
 Grok 4.3 is the best starting point for general text workflows:
 
 - **Responses API recommended**: Use `xai:responses:grok-4.3` for server-side tools, multi-turn state, and newer xAI capabilities
-- **Automatic reasoning**: No `reasoning_effort` parameter is required or supported
-- **Unsupported parameters**: Same restrictions as other Grok 4-family reasoning models (`presence_penalty`, `frequency_penalty`, `stop`, `reasoning_effort`)
+- **Configurable reasoning**: `reasoning_effort` defaults to xAI's `low` mode; set `none`, `medium`, or `high` when the workload calls for it
+- **Unsupported parameters**: Same restrictions as other Grok 4-family reasoning models (`presence_penalty`, `frequency_penalty`, and `stop`)
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -367,22 +373,22 @@ tests:
 
 #### Responses API Configuration
 
-| Parameter              | Type    | Description                               |
-| ---------------------- | ------- | ----------------------------------------- |
-| `temperature`          | number  | Sampling temperature (0-2)                |
-| `max_output_tokens`    | number  | Maximum tokens to generate                |
-| `max_tool_calls`       | number  | Maximum tool calls for one request        |
-| `top_p`                | number  | Nucleus sampling parameter                |
-| `tools`                | array   | Agent tools to enable                     |
-| `tool_choice`          | string  | Tool selection mode: auto, required, none |
-| `parallel_tool_calls`  | boolean | Allow parallel tool execution             |
-| `stream`               | boolean | Request streamed response deltas          |
-| `instructions`         | string  | System-level instructions                 |
-| `previous_response_id` | string  | For multi-turn conversations              |
-| `store`                | boolean | Store response for later retrieval        |
-| `include`              | array   | Additional response data to return        |
-| `reasoning`            | object  | Multi-agent configuration where supported |
-| `response_format`      | object  | JSON schema for structured output         |
+| Parameter              | Type    | Description                                                |
+| ---------------------- | ------- | ---------------------------------------------------------- |
+| `temperature`          | number  | Sampling temperature (0-2)                                 |
+| `max_output_tokens`    | number  | Maximum tokens to generate                                 |
+| `max_tool_calls`       | number  | Maximum tool calls for one request                         |
+| `top_p`                | number  | Nucleus sampling parameter                                 |
+| `tools`                | array   | Agent tools to enable                                      |
+| `tool_choice`          | string  | Tool selection mode: auto, required, none                  |
+| `parallel_tool_calls`  | boolean | Allow parallel tool execution                              |
+| `stream`               | boolean | Request streamed response deltas                           |
+| `instructions`         | string  | System-level instructions                                  |
+| `previous_response_id` | string  | For multi-turn conversations                               |
+| `store`                | boolean | Store response for later retrieval                         |
+| `include`              | array   | Additional response data to return                         |
+| `reasoning`            | object  | Reasoning configuration for Grok 4.3 or multi-agent models |
+| `response_format`      | object  | JSON schema for structured output                          |
 
 #### Supported Models
 
@@ -539,7 +545,10 @@ providers:
 Current Grok Imagine image model IDs include:
 
 - `xai:image:grok-imagine-image`
+- `xai:image:grok-imagine-image-quality`
 - `xai:image:grok-imagine-image-pro`
+
+`grok-imagine-image-quality` is xAI's newer quality-oriented image model and the better default for new higher-quality image workflows. Older image-model aliases may continue to resolve through xAI-managed redirects.
 
 Example configuration for image generation:
 
@@ -579,6 +588,10 @@ providers:
 prompts:
   - 'Render this as a pencil sketch with detailed shading'
 ```
+
+#### Pricing
+
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to its local Imagine image estimate, including documented output rates and source-image media-input charges on edit requests.
 
 ### Video Generation
 
@@ -665,7 +678,7 @@ Reference-to-video requires a non-empty prompt, cannot be combined with `image` 
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available, and falls back to the legacy estimate only when the API omits usage.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
 
 ### Voice Agent API
 
