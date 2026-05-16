@@ -6,11 +6,12 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { z } from 'zod';
-import { disableCache } from '../../cache';
+import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   getUserEmail,
   promptForEmailUnverified,
@@ -29,7 +30,11 @@ import {
   isCloudProvider,
   resolveTeamId,
 } from '../../util/cloud';
-import { resolveConfigs } from '../../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
@@ -52,7 +57,7 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import { PartialGenerationError } from '../types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -73,6 +78,13 @@ export type RedteamGenerationResult = {
   pluginResults: GenerationMetricResults;
   strategyResults: GenerationMetricResults;
 };
+
+function emptyResults(): Pick<RedteamGenerationResult, 'pluginResults' | 'strategyResults'> {
+  return {
+    pluginResults: {},
+    strategyResults: {},
+  };
+}
 
 /**
  * Handles failed plugins based on strict mode.
@@ -113,6 +125,33 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
       `Continuing with partial results. Use ${chalk.bold('--strict')} flag to fail on plugin generation errors.`,
     ),
   );
+}
+
+function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): string {
+  const basicStrategy = strategies.find((strategy) => strategy.id === 'basic');
+  const basicDisabled = basicStrategy?.config?.enabled === false;
+
+  if (!basicDisabled) {
+    return 'No test cases generated. Please check for errors and try again.';
+  }
+
+  const activeStrategies = strategies.filter(
+    (strategy) => !(strategy.id === 'basic' && strategy.config?.enabled === false),
+  );
+
+  if (activeStrategies.length === 0) {
+    return dedent`
+      No final test cases were generated because the Basic strategy is disabled and no other strategies are selected.
+
+      The Basic strategy runs plugin-generated test cases as-is. Enable Basic to run your configured plugin tests directly, or select another strategy to transform them.
+    `;
+  }
+
+  return dedent`
+    No final test cases were generated. The Basic strategy is disabled, so plugin-generated test cases are excluded unless another selected strategy creates replacement tests.
+
+    Enable Basic to include plugin tests as-is, or review the selected strategies for generation errors.
+  `;
 }
 
 async function getConfigHash(configPath: string): Promise<string> {
@@ -173,17 +212,18 @@ async function withGenerationConcurrency<T>(
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<RedteamGenerationResult> {
-  const emptyResults = (): Pick<RedteamGenerationResult, 'pluginResults' | 'strategyResults'> => ({
-    pluginResults: {},
-    strategyResults: {},
-  });
-
   setupEnv(options.envFile);
-  if (!options.cache) {
+  const cacheOverride = options.cache === false ? false : undefined;
+  if (cacheOverride === false) {
     logger.info('Cache is disabled');
-    disableCache();
   }
 
+  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+}
+
+async function doGenerateRedteamInternal(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<RedteamGenerationResult> {
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
@@ -198,8 +238,7 @@ export async function doGenerateRedteam(
 
       For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
     `);
-    process.exitCode = 1;
-    return { config: null, ...emptyResults() };
+    throw new ProbeLimitExceededError(probeLimitResult.used, MONTHLY_PROBE_LIMIT);
   }
 
   let testSuite: TestSuite;
@@ -697,7 +736,7 @@ export async function doGenerateRedteam(
     handleFailedPlugins(failedPlugins, options.strict ?? false);
 
     if (redteamTests.length === 0) {
-      logger.warn('No test cases generated. Please check for errors and try again.');
+      logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));
       return { config: null, pluginResults, strategyResults };
     }
 
@@ -1045,7 +1084,13 @@ export function redteamGenerateCommand(
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else {
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
+        } else if (
+          !(error instanceof EmailValidationError) &&
+          !(error instanceof ProbeLimitExceededError)
+        ) {
+          // These expected failures are already logged by their helpers.
           // Log the stack trace, which already includes the error message
           logger.error(
             error instanceof Error && error.stack

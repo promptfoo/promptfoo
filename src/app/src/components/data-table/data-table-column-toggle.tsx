@@ -17,7 +17,7 @@ export function DataTableColumnToggle<TData>({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="h-11 sm:h-8">
           <Columns3 className="mr-2 size-4" />
           Columns
         </Button>
