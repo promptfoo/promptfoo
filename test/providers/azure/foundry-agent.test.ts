@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { mockProcessEnv } from '../../util/utils';
@@ -184,13 +185,17 @@ describe('AzureFoundryAgentProvider', () => {
         }),
         {
           body: {
-            agent: {
+            agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
           },
         },
       );
+      // Guard against regressing to the deprecated `agent` key, which the
+      // Foundry Responses API now rejects with a 400.
+      const responseOptions = mockResponsesCreate.mock.calls[0][1];
+      expect(responseOptions.body).not.toHaveProperty('agent');
       expect(result.output).toBe('Test response');
     });
 
@@ -216,7 +221,7 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockListAgents).toHaveBeenCalledTimes(1);
       expect(mockResponsesCreate).toHaveBeenCalledWith(expect.any(Object), {
         body: {
-          agent: {
+          agent_reference: {
             name: 'weather-agent',
             type: 'agent_reference',
           },
@@ -322,7 +327,7 @@ describe('AzureFoundryAgentProvider', () => {
         },
         {
           body: {
-            agent: {
+            agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
@@ -427,6 +432,86 @@ describe('AzureFoundryAgentProvider', () => {
       expect(firstRequestBody).not.toHaveProperty('tool_resources');
       expect(vi.mocked(logger.warn)).toHaveBeenCalledTimes(1);
     });
+
+    it('should hash the request body in cache keys', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+
+      const secret = 'sk-test-12345678901234567890';
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      await provider.callApi(`weather in Paris ${secret}`);
+
+      const cacheKey = mockCache.get.mock.calls[0][0] as string;
+      expect(cacheKey).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain(projectUrl);
+      expect(cacheKey).not.toContain(secret);
+      expect(cacheKey).not.toContain('weather in Paris');
+      expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(Object));
+    });
+
+    it('should scope cache keys by project URL', async () => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+
+      const prompt = 'same weather prompt';
+      const otherProjectUrl = 'https://test.services.ai.azure.com/api/projects/other-project';
+      const providerA = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+      const providerB = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl: otherProjectUrl },
+      });
+
+      await providerA.callApi(prompt);
+      await providerB.callApi(prompt);
+
+      const [cacheKeyA, cacheKeyB] = mockCache.get.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKeyB).toMatch(/^azure_foundry_agent:weather-agent:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      expect(cacheKeyA).not.toContain(projectUrl);
+      expect(cacheKeyB).not.toContain(otherProjectUrl);
+      expect(cacheKeyA).not.toContain(prompt);
+      expect(cacheKeyB).not.toContain(prompt);
+    });
+
+    it('should not log raw prompts on cache hits', async () => {
+      const secret = 'cached-foundry-secret-prompt';
+      const mockCache = {
+        get: vi.fn().mockResolvedValue({ output: 'cached response' }),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache as any);
+
+      const provider = new AzureFoundryAgentProvider('weather-agent', {
+        config: { projectUrl },
+      });
+
+      await provider.callApi(`weather in Paris ${secret}`);
+
+      const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(debugLogs).not.toContain(secret);
+      expect(debugLogs).not.toContain('weather in Paris');
+      expect(debugLogs).toContain('Cache hit for Foundry agent response');
+    });
   });
 
   describe('error formatting', () => {
@@ -475,6 +560,118 @@ describe('AzureFoundryAgentProvider', () => {
 
       expect(result.error).toContain('Error in Azure Foundry Agent API call');
       expect(result.error).toContain('Something unexpected happened');
+    });
+
+    describe('SDK-shape 429 classification (classifySdkRateLimit)', () => {
+      // The OpenAI / Azure SDK rejects with a plain object that has `status`,
+      // not an HttpRateLimitError instance, since it bypasses fetchWithRetries.
+      // We verify formatError still classifies these correctly by `status === 429`
+      // and the body-level error code.
+
+      function makeSdkError(status: number, code?: string, message = 'sdk error'): unknown {
+        return Object.assign(new Error(message), { status, error: code ? { code } : undefined });
+      }
+
+      it('classifies SDK 429 with insufficient_quota body code as quota', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Quota exceeded');
+        expect(result.error).toContain('insufficient_quota');
+        expect(result.error).toContain('Retries will not help');
+      });
+
+      it('classifies SDK 429 with rate_limit_exceeded body code as rate_limit', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'rate_limit_exceeded'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+        expect(result.error).not.toContain('Retries will not help');
+      });
+
+      it('classifies SDK 429 with no body code as rate_limit by default', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).not.toContain('Retries will not help');
+      });
+
+      it('does not misclassify non-429 SDK errors with insufficient_quota body', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        // 500 with the same code shouldn't trigger the rate-limit branch
+        mockResponsesCreate.mockRejectedValue(makeSdkError(500, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).not.toContain('Quota exceeded');
+        expect(result.error).not.toContain('Rate limit exceeded');
+      });
+
+      it('falls through for non-object errors', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue('string error');
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Error in Azure Foundry Agent API call');
+      });
+
+      it('detects 429 nested under err.response.status (older SDK shape)', async () => {
+        // Some SDK wrappers / older openai-node versions nest the response.
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const sdkErr = Object.assign(new Error('sdk wrapper'), {
+          response: { status: 429 },
+          error: { code: 'rate_limit_exceeded' },
+        });
+        mockResponsesCreate.mockRejectedValue(sdkErr);
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+      });
+
+      it('prefers body-level err.error.code over top-level err.code', async () => {
+        // The OpenAI SDK can set `err.code` to a transport-level value while
+        // the body's error.code is the authoritative API code. Body wins.
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const sdkErr = Object.assign(new Error('sdk shadow'), {
+          status: 429,
+          code: 'ETIMEDOUT',
+          error: { code: 'rate_limit_exceeded' },
+        });
+        mockResponsesCreate.mockRejectedValue(sdkErr);
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+      });
+
+      it('populates metadata.rateLimitKind on SDK 429 errors', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+      });
     });
   });
 });

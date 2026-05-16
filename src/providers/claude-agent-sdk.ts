@@ -1,6 +1,7 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
@@ -19,7 +20,12 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
-import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
+import {
+  cacheResponse,
+  getCachedResponse,
+  initializeAgenticCache,
+  resolveAgenticWorkingDir,
+} from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
@@ -33,6 +39,7 @@ import type {
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKResultMessage,
   SettingSource,
   Settings,
   SpawnedProcess,
@@ -263,7 +270,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
+      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -317,6 +324,15 @@ export interface ClaudeCodeOptions {
   permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
 
   /**
+   * Custom workflow instructions for plan mode. Only takes effect when
+   * `permission_mode` is `'plan'`; the string replaces the default
+   * code-implementation workflow body in the plan-mode system reminder.
+   * The CLI still wraps it with the read-only enforcement preamble and the
+   * ExitPlanMode protocol footer.
+   */
+  plan_mode_instructions?: string;
+
+  /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
    */
   custom_system_prompt?: string;
@@ -359,6 +375,39 @@ export interface ClaudeCodeOptions {
    * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
    */
   plugins?: Array<{ type: 'local'; path: string }>;
+
+  /**
+   * Filters which Skills are loaded into the main session.
+   *
+   * - omitted: no SDK-side filtering — the CLI's own defaults still apply
+   *   (this is **not** "skills off")
+   * - `'all'`: enable every discovered skill
+   * - `string[]`: enable only the listed skills, matched by SKILL.md `name` /
+   *   directory name, or `plugin:skill` for plugin-qualified skills
+   *
+   * When set, the SDK auto-allows the `Skill` tool for the session — you do
+   * not need to add it to `append_allowed_tools` / `custom_allowed_tools`.
+   *
+   * This is a context filter, not a sandbox: unlisted skills are hidden from
+   * the model's listing and rejected by the Skill tool, but their files
+   * remain on disk and are reachable via Read/Bash. Do not store secrets in
+   * skill files.
+   *
+   * Skills are discovered from the directories enabled by `setting_sources`
+   * and from `plugins`; this option only narrows the set, it does not
+   * discover new skills.
+   *
+   * @example
+   * ```yaml
+   * skills: all
+   * skills:
+   *   - pdf
+   *   - docx
+   * ```
+   *
+   * @see https://platform.claude.com/docs/en/agent-sdk/skills
+   */
+  skills?: string[] | 'all';
 
   /**
    * Maximum budget in USD for this session. When exceeded, the SDK will stop with error_max_budget_usd.
@@ -420,6 +469,17 @@ export interface ClaudeCodeOptions {
   include_partial_messages?: boolean;
 
   /**
+   * When true, forwards subagent text and thinking blocks as assistant/user
+   * messages with `parent_tool_use_id` set. By default the SDK only emits
+   * tool_use/tool_result blocks from subagents (enough for a heartbeat
+   * counter). Enable this if you want a complete subagent transcript in
+   * `metadata.toolCalls` / OTel spans.
+   *
+   * @default false
+   */
+  forward_subagent_text?: boolean;
+
+  /**
    * When true, includes hook lifecycle events (hook_started, hook_progress, hook_response)
    * in the output stream. SessionStart and Setup hook events are always emitted regardless.
    *
@@ -478,6 +538,27 @@ export interface ClaudeCodeOptions {
   settings?: string | Settings;
 
   /**
+   * Policy-tier settings supplied by the embedding parent. Loaded into the
+   * managed-settings layer (above HKCU, below IT-controlled sources), so
+   * user/project settings cannot widen restrictions set here. Use this when
+   * promptfoo runs inside an app that derives lockdown configuration from
+   * its own enterprise policy and needs to enforce it on the SDK subprocess
+   * without writing root-owned files.
+   *
+   * Differs from `settings` (flag layer, user-controllable) — prefer
+   * `managed_settings` for fields like `sandbox.network.allowManagedDomainsOnly`.
+   *
+   * @example
+   * ```yaml
+   * managed_settings:
+   *   sandbox:
+   *     network:
+   *       allowManagedDomainsOnly: true
+   * ```
+   */
+  managed_settings?: Settings;
+
+  /**
    * Callback for handling MCP elicitation requests.
    * Called when an MCP server requests user input (form fields, URL auth, etc.)
    * and no hook handles the request first. If not provided, elicitation requests
@@ -487,6 +568,13 @@ export interface ClaudeCodeOptions {
    * not via YAML config.
    */
   on_elicitation?: OnElicitation;
+
+  /**
+   * Callback forwarded to Claude Agent SDK's `canUseTool` option.
+   * Available only in programmatic configs because functions cannot be
+   * represented in YAML.
+   */
+  can_use_tool?: CanUseTool;
 
   /**
    * Enable beta features. Currently supports:
@@ -1021,16 +1109,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = safeResolve(basePath, config.working_dir);
+      workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
     } else {
       isTempDir = true;
     }
 
     // Create canUseTool callback for ask_user_question convenience option
     // AskUserQuestion is handled via canUseTool per SDK documentation
-    let canUseTool: CanUseTool | undefined;
+    let canUseTool = config.can_use_tool;
     if (config.ask_user_question) {
-      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+      canUseTool = createAskUserQuestionCanUseTool(
+        config.ask_user_question.behavior,
+        config.can_use_tool,
+      );
     }
 
     // Just the keys we'll use to compute the cache key first
@@ -1054,6 +1145,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
       permissionMode: config.permission_mode,
+      planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt
         : {
@@ -1069,6 +1161,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         ...plugin,
         path: safeResolve(basePath, plugin.path),
       })),
+      skills: config.skills,
       maxBudgetUsd: config.max_budget_usd,
       additionalDirectories: config.additional_directories?.map((dir) =>
         safeResolve(basePath, dir),
@@ -1082,6 +1175,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
+      forwardSubagentText: config.forward_subagent_text,
       toolConfig: config.tool_config,
       promptSuggestions: config.prompt_suggestions,
       agentProgressSummaries: config.agent_progress_summaries,
@@ -1089,10 +1183,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         typeof config.settings === 'string' && config.settings
           ? safeResolve(basePath, config.settings)
           : config.settings,
+      managedSettings: config.managed_settings,
       betas: config.betas,
       thinking: config.thinking,
-      // The SDK runtime accepts `xhigh` for newer models before the bundled d.ts does.
-      effort: config.effort as QueryOptions['effort'],
+      effort: config.effort,
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
@@ -1114,20 +1208,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    // Cache handling using shared utilities
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir,
-        bustCache: context?.bustCache,
-        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
-        cacheMcp: config.cache_mcp,
-      },
-      {
-        prompt,
-        cacheKeyQueryOptions,
-      },
-    );
+    // Cache handling using shared utilities. A user-supplied can_use_tool
+    // callback can change tool inputs/decisions in ways that aren't representable
+    // in the cache key, so we skip caching entirely when one is provided to avoid
+    // serving or poisoning entries across different callback implementations.
+    const userProvidedCanUseTool = Boolean(config.can_use_tool);
+    if (userProvidedCanUseTool) {
+      logger.debug(
+        '[ClaudeCodeSDKProvider] Bypassing cache: user-supplied can_use_tool callback present',
+      );
+    }
+    const cacheResult = userProvidedCanUseTool
+      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+      : await initializeAgenticCache(
+          {
+            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+            workingDir,
+            bustCache: context?.bustCache,
+            mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+            cacheMcp: config.cache_mcp,
+          },
+          {
+            prompt,
+            cacheKeyQueryOptions,
+          },
+        );
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
@@ -1140,9 +1245,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     if (workingDir) {
       // verify the working dir exists and is a directory
-      let stats: fs.Stats;
+      let stats: Stats;
       try {
-        stats = fs.statSync(workingDir);
+        stats = await fs.stat(workingDir);
       } catch (err: any) {
         throw new Error(
           `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
@@ -1153,7 +1258,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     } else if (isTempDir) {
       // use a temp dir
-      workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
+      workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
 
     // Make sure we didn't already abort
@@ -1272,6 +1377,22 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             toolStartTimes.clear();
           };
 
+          // The Claude Agent SDK interleaves a `result` message for each background
+          // sub-agent (Task tool with run_in_background: true) into the parent
+          // session's stream before the main agent's terminal `result` arrives.
+          // As of @anthropic-ai/claude-agent-sdk 0.2.126, result messages carry
+          // `origin.kind`: the user-prompted main result is `human` and background
+          // sub-agent completions are `task-notification` followups. Prefer the
+          // last non-task-notification result, falling back to the last result
+          // overall for older SDK servers that don't emit `origin` (in which case
+          // the pre-0.2.126 position heuristic still applies — the main agent's
+          // result is the last one in the stream). Otherwise we'd return the
+          // first sub-agent's summary and skip the main agent's actual final
+          // response. See https://github.com/promptfoo/promptfoo/issues/9054.
+          let lastResultMsg: SDKResultMessage | undefined;
+          let lastMainResultMsg: SDKResultMessage | undefined;
+          let resultMsgCount = 0;
+
           for await (const msg of res) {
             if (msg.type === 'assistant') {
               // Extract tool_use content blocks from assistant messages
@@ -1308,100 +1429,147 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 }
               }
             } else if (msg.type === 'result') {
-              const raw = JSON.stringify(msg);
-              const tokenUsage: ProviderResponse['tokenUsage'] = {
-                prompt: msg.usage?.input_tokens,
-                completion: msg.usage?.output_tokens,
-                total:
-                  msg.usage?.input_tokens && msg.usage?.output_tokens
-                    ? msg.usage?.input_tokens + msg.usage?.output_tokens
-                    : undefined,
-              };
-              const cost = msg.total_cost_usd ?? 0;
-              const sessionId = msg.session_id;
-
-              const toolCallsArray = Array.from(toolCallsMap.values());
-              const skillCalls = deriveSkillCalls(toolCallsArray);
-
-              // The stream is about to close; emit any orphan tool spans first so
-              // abort/hook-stop runs don't silently drop them.
-              drainOrphans();
-
-              // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
-              // Mark the provider span ERROR directly — without poisoning the
-              // response's `output`/`error` contract, since any produced output is
-              // still useful and downstream assertions may depend on it.
-              const abortedTerminalReason =
-                typeof msg.terminal_reason === 'string' &&
-                (msg.terminal_reason.startsWith('aborted_') ||
-                  msg.terminal_reason === 'hook_stopped')
-                  ? msg.terminal_reason
-                  : undefined;
-              if (abortedTerminalReason) {
-                otelTrace.getActiveSpan()?.setStatus({
-                  code: SpanStatusCode.ERROR,
-                  message: `aborted: ${abortedTerminalReason}`,
-                });
-              }
-
-              if (msg.subtype === 'success') {
-                logger.debug(`Claude Agent SDK response: ${raw}`);
-                // When structured output is enabled and available, use it as the output
-                // Otherwise fall back to the text result
-                const output =
-                  msg.structured_output === undefined ? msg.result : msg.structured_output;
-                const response: ProviderResponse = {
-                  output,
-                  tokenUsage,
-                  cost,
-                  raw,
-                  sessionId,
-                  metadata: {
-                    skillCalls,
-                    toolCalls: toolCallsArray,
-                    numTurns: msg.num_turns,
-                    durationMs: msg.duration_ms,
-                    durationApiMs: msg.duration_api_ms,
-                    modelUsage: msg.modelUsage,
-                    permissionDenials: msg.permission_denials,
-                    ...(msg.terminal_reason === undefined
-                      ? {}
-                      : { terminalReason: msg.terminal_reason }),
-                    ...(msg.structured_output === undefined
-                      ? {}
-                      : { structuredOutput: msg.structured_output }),
-                  },
-                };
-
-                // Cache the response using shared utilities
-                await cacheResponse(cacheResult, response, 'Claude Agent SDK');
-                return response;
-              } else {
-                return {
-                  error: `Claude Agent SDK call failed: ${msg.subtype}`,
-                  tokenUsage,
-                  cost,
-                  raw,
-                  sessionId,
-                  metadata: {
-                    skillCalls,
-                    toolCalls: toolCallsArray,
-                    numTurns: msg.num_turns,
-                    durationMs: msg.duration_ms,
-                    durationApiMs: msg.duration_api_ms,
-                    modelUsage: msg.modelUsage,
-                    permissionDenials: msg.permission_denials,
-                    ...(msg.terminal_reason === undefined
-                      ? {}
-                      : { terminalReason: msg.terminal_reason }),
-                  },
-                };
+              lastResultMsg = msg;
+              resultMsgCount++;
+              // SDK >= 0.2.126: prefer the user-prompted ("human") result and
+              // skip task-notification followups from background sub-agents.
+              // Treat absent origin (older SDKs) and any non-task-notification
+              // kind as a candidate for the main result; the position-based
+              // last-wins fallback below preserves prior behavior in that case.
+              if (msg.origin?.kind !== 'task-notification') {
+                lastMainResultMsg = msg;
               }
             }
           }
 
+          // The stream is about to close; emit any orphan tool spans first so
+          // abort/hook-stop runs don't silently drop them.
           drainOrphans();
-          return { error: "Claude Agent SDK call didn't return a result" };
+
+          // Prefer the origin-tagged main result; fall back to the last result
+          // overall when older SDK servers don't emit `origin` (or — defensively
+          // — when every result was a task-notification, which would indicate
+          // the main agent's result never arrived).
+          const finalMsg = lastMainResultMsg ?? lastResultMsg;
+
+          if (!finalMsg) {
+            return { error: "Claude Agent SDK call didn't return a result" };
+          }
+
+          // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
+          // definitive answer, so only warn when origin was unavailable for
+          // every result (lastMainResultMsg defaulted to the last result) AND
+          // we saw >1 results AND the chosen result is a non-terminal success.
+          //
+          // Gate on subtype === 'success' because non-success subtypes
+          // ('error_during_execution', 'error_max_turns', etc.) are themselves
+          // a definitive terminal signal — they're how the SDK reports the
+          // run ending in error, not a truncation indicator. Warning on those
+          // would be a false positive on every legitimate main-agent failure
+          // that follows a background sub-agent.
+          const usedPositionHeuristic =
+            !lastMainResultMsg || lastMainResultMsg.origin === undefined;
+          if (
+            usedPositionHeuristic &&
+            resultMsgCount > 1 &&
+            finalMsg.subtype === 'success' &&
+            finalMsg.terminal_reason === undefined
+          ) {
+            logger.warn(
+              `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
+            );
+            otelTrace.getActiveSpan()?.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: 'stream closed without terminal_reason after multiple result messages',
+            });
+          }
+          const raw = JSON.stringify(finalMsg);
+          const tokenUsage: ProviderResponse['tokenUsage'] = {
+            prompt: finalMsg.usage?.input_tokens,
+            completion: finalMsg.usage?.output_tokens,
+            total:
+              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
+                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
+                : undefined,
+          };
+          const cost = finalMsg.total_cost_usd ?? 0;
+          const sessionId = finalMsg.session_id;
+
+          const toolCallsArray = Array.from(toolCallsMap.values());
+          const skillCalls = deriveSkillCalls(toolCallsArray);
+
+          // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
+          // Mark the provider span ERROR directly — without poisoning the
+          // response's `output`/`error` contract, since any produced output is
+          // still useful and downstream assertions may depend on it.
+          const abortedTerminalReason =
+            typeof finalMsg.terminal_reason === 'string' &&
+            (finalMsg.terminal_reason.startsWith('aborted_') ||
+              finalMsg.terminal_reason === 'hook_stopped')
+              ? finalMsg.terminal_reason
+              : undefined;
+          if (abortedTerminalReason) {
+            otelTrace.getActiveSpan()?.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: `aborted: ${abortedTerminalReason}`,
+            });
+          }
+
+          if (finalMsg.subtype === 'success') {
+            logger.debug(`Claude Agent SDK response: ${raw}`);
+            // When structured output is enabled and available, use it as the output
+            // Otherwise fall back to the text result
+            const output =
+              finalMsg.structured_output === undefined
+                ? finalMsg.result
+                : finalMsg.structured_output;
+            const response: ProviderResponse = {
+              output,
+              tokenUsage,
+              cost,
+              raw,
+              sessionId,
+              metadata: {
+                skillCalls,
+                toolCalls: toolCallsArray,
+                numTurns: finalMsg.num_turns,
+                durationMs: finalMsg.duration_ms,
+                durationApiMs: finalMsg.duration_api_ms,
+                modelUsage: finalMsg.modelUsage,
+                permissionDenials: finalMsg.permission_denials,
+                ...(finalMsg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: finalMsg.terminal_reason }),
+                ...(finalMsg.structured_output === undefined
+                  ? {}
+                  : { structuredOutput: finalMsg.structured_output }),
+              },
+            };
+
+            // Cache the response using shared utilities
+            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
+            return response;
+          }
+
+          return {
+            error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+            tokenUsage,
+            cost,
+            raw,
+            sessionId,
+            metadata: {
+              skillCalls,
+              toolCalls: toolCallsArray,
+              numTurns: finalMsg.num_turns,
+              durationMs: finalMsg.duration_ms,
+              durationApiMs: finalMsg.duration_api_ms,
+              modelUsage: finalMsg.modelUsage,
+              permissionDenials: finalMsg.permission_denials,
+              ...(finalMsg.terminal_reason === undefined
+                ? {}
+                : { terminalReason: finalMsg.terminal_reason }),
+            },
+          };
         },
         (response) => {
           const metadata = response.metadata ?? {};
@@ -1477,7 +1645,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     } finally {
       if (isTempDir && workingDir) {
         // Clean up the temp dir
-        fs.rmSync(workingDir, { recursive: true, force: true });
+        await fs.rm(workingDir, { recursive: true, force: true });
       }
       if (callOptions?.abortSignal && abortHandler) {
         callOptions.abortSignal.removeEventListener('abort', abortHandler);

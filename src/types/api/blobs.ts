@@ -9,7 +9,10 @@ export const GetBlobParamsSchema = z.object({
   hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
 });
 
+export const BlobBinaryResponseSchema = z.instanceof(Uint8Array);
+
 export type GetBlobParams = z.infer<typeof GetBlobParamsSchema>;
+export type BlobBinaryResponse = z.infer<typeof BlobBinaryResponseSchema>;
 
 // GET /api/blobs/library
 
@@ -49,7 +52,7 @@ const MediaItemContextSchema = z.object({
 });
 
 const MediaItemSchema = z.object({
-  hash: z.string(),
+  hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
   mimeType: z.string(),
   sizeBytes: z.number(),
   kind: z.enum(['image', 'video', 'audio', 'other']),
@@ -96,6 +99,7 @@ export type MediaLibraryEvalsResponse = z.infer<typeof MediaLibraryEvalsResponse
 export const BlobsSchemas = {
   Get: {
     Params: GetBlobParamsSchema,
+    BinaryResponse: BlobBinaryResponseSchema,
   },
   Library: {
     Query: MediaLibraryQuerySchema,
