@@ -6,11 +6,15 @@ import Eval from '../../src/models/eval';
 
 import type { SchedulerMetrics } from '../../src/types';
 
+const mocks = vi.hoisted(() => ({
+  getUserEmail: vi.fn(),
+}));
+
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
   return {
     ...actual,
-    getUserEmail: vi.fn().mockReturnValue('test@example.com'),
+    getUserEmail: mocks.getUserEmail,
   };
 });
 
@@ -30,6 +34,8 @@ describe('SchedulerMetrics persistence', () => {
   };
 
   beforeEach(async () => {
+    mocks.getUserEmail.mockReset().mockReturnValue('test@example.com');
+
     // Create a new eval
     evalInstance = await Eval.create({ description: 'Test eval for scheduler metrics' }, [], {
       id: randomUUID(),
