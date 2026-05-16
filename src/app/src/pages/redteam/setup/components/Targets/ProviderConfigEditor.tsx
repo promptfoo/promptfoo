@@ -37,6 +37,279 @@ const shouldRemoveMcpConfig = (
   previousTargetId.startsWith('bedrock:converse:') &&
   !nextTargetId.startsWith('bedrock:converse:');
 
+const FOUNDATION_PROVIDER_TYPES = new Set([
+  'openai',
+  'anthropic',
+  'google',
+  'vertex',
+  'mistral',
+  'cohere',
+  'groq',
+  'deepseek',
+  'azure',
+  'bedrock',
+  'openrouter',
+  'perplexity',
+  'cerebras',
+]);
+
+const CUSTOM_PROVIDER_TYPES = new Set(['javascript', 'python', 'go', 'custom', 'mcp', 'exec']);
+
+function cloneProvider(provider: ProviderOptions): ProviderOptions {
+  return {
+    ...provider,
+    config: { ...(provider.config ?? {}) },
+  } as ProviderOptions;
+}
+
+function getPromptTemplateError(): React.ReactNode {
+  return (
+    <>
+      Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will inject
+      the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>. Promptfoo
+      uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the actual test content.{' '}
+      <a
+        href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Learn more
+      </a>
+    </>
+  );
+}
+
+function providerHasInputs(provider: ProviderOptions): boolean {
+  return Boolean(provider.inputs && Object.keys(provider.inputs).length > 0);
+}
+
+function applyProviderIdUpdate(
+  updatedTarget: ProviderOptions,
+  provider: ProviderOptions,
+  providerType: string | undefined,
+  value: unknown,
+): void {
+  updatedTarget.id = value as string;
+  if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
+    delete updatedTarget.config.mcp;
+  }
+}
+
+function applyProviderUrlUpdate(
+  updatedTarget: ProviderOptions,
+  value: unknown,
+  validateUrl: (url: string, type?: 'http' | 'websocket') => boolean,
+  setUrlError: (error: string | null) => void,
+): void {
+  const url = value as string;
+  updatedTarget.config.url = url;
+  setUrlError(validateUrl(url) ? null : 'Invalid URL format');
+}
+
+function applyProviderBodyUpdate(
+  updatedTarget: ProviderOptions,
+  value: unknown,
+  setBodyError: (error: string | React.ReactNode | null) => void,
+): void {
+  updatedTarget.config.body =
+    typeof value === 'string' || (typeof value === 'object' && value !== null)
+      ? value
+      : String(value);
+
+  const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  if (bodyStr.includes('{{prompt}}') || providerHasInputs(updatedTarget)) {
+    setBodyError(null);
+    return;
+  }
+  if (!updatedTarget.config.request) {
+    setBodyError(getPromptTemplateError());
+  }
+}
+
+function applyProviderRequestUpdate(
+  updatedTarget: ProviderOptions,
+  value: unknown,
+  setBodyError: (error: string | React.ReactNode | null) => void,
+): void {
+  updatedTarget.config.request = value as string;
+  if (
+    value &&
+    typeof value === 'string' &&
+    !value.includes('{{prompt}}') &&
+    !providerHasInputs(updatedTarget)
+  ) {
+    setBodyError('Raw request must contain {{prompt}} template variable');
+    return;
+  }
+  setBodyError(null);
+}
+
+function applyProviderInputsUpdate(
+  updatedTarget: ProviderOptions,
+  value: unknown,
+  setBodyError: (error: string | React.ReactNode | null) => void,
+): void {
+  if (value === undefined) {
+    delete updatedTarget.inputs;
+    return;
+  }
+
+  updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
+  if (Object.keys(updatedTarget.inputs).length > 0) {
+    setBodyError(null);
+  }
+}
+
+function updateProviderField({
+  provider,
+  providerType,
+  field,
+  value,
+  validateUrl,
+  setBodyError,
+  setUrlError,
+}: {
+  provider: ProviderOptions;
+  providerType?: string;
+  field: string;
+  value: unknown;
+  validateUrl: (url: string, type?: 'http' | 'websocket') => boolean;
+  setBodyError: (error: string | React.ReactNode | null) => void;
+  setUrlError: (error: string | null) => void;
+}): ProviderOptions {
+  const updatedTarget = cloneProvider(provider);
+
+  switch (field) {
+    case 'id':
+      applyProviderIdUpdate(updatedTarget, provider, providerType, value);
+      break;
+    case 'url':
+      applyProviderUrlUpdate(updatedTarget, value, validateUrl, setUrlError);
+      break;
+    case 'method':
+      updatedTarget.config.method = value as string;
+      break;
+    case 'body':
+      applyProviderBodyUpdate(updatedTarget, value, setBodyError);
+      break;
+    case 'request':
+      applyProviderRequestUpdate(updatedTarget, value, setBodyError);
+      break;
+    case 'transformResponse':
+      updatedTarget.config.transformResponse = value as string;
+      break;
+    case 'label':
+      updatedTarget.label = value as string;
+      break;
+    case 'delay':
+      updatedTarget.delay = value as number;
+      break;
+    case 'config':
+      updatedTarget.config = value as typeof updatedTarget.config;
+      break;
+    case 'inputs':
+      applyProviderInputsUpdate(updatedTarget, value, setBodyError);
+      break;
+    default:
+      updatedTarget.config[field] = value;
+      break;
+  }
+
+  return updatedTarget;
+}
+
+function validateHttpProvider(
+  provider: ProviderOptions,
+  bodyError: string | React.ReactNode | null,
+  validateUrl: (url: string, type?: 'http' | 'websocket') => boolean,
+): Array<string | React.ReactNode> {
+  const errors: Array<string | React.ReactNode> = [];
+  if (provider.config.request === undefined) {
+    if (!provider.config.url || !validateUrl(provider.config.url)) {
+      errors.push('Valid URL is required');
+    }
+  } else if (!provider.config.request || provider.config.request.trim() === '') {
+    errors.push('HTTP request content is required');
+  }
+  if (bodyError) {
+    errors.push(bodyError);
+  }
+  return errors;
+}
+
+function validateFoundationProvider(provider: ProviderOptions): string[] {
+  const errors: string[] = [];
+  if (!provider.id || provider.id.trim() === '') {
+    errors.push('Model ID is required');
+  }
+  if (
+    provider.config?.temperature !== undefined &&
+    (provider.config.temperature < 0 || provider.config.temperature > 2)
+  ) {
+    errors.push('Temperature must be between 0 and 2');
+  }
+  if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
+    errors.push('Max tokens must be greater than 0');
+  }
+  if (
+    provider.config?.top_p !== undefined &&
+    (provider.config.top_p < 0 || provider.config.top_p > 1)
+  ) {
+    errors.push('Top P must be between 0 and 1');
+  }
+  return errors;
+}
+
+function validateAgentFrameworkProvider(provider: ProviderOptions): string[] {
+  if (!provider.id || provider.id.trim() === '') {
+    return ['Python file path is required'];
+  }
+  if (!provider.id.startsWith('file://')) {
+    return ['Provider ID must start with file:// for Python agent files'];
+  }
+  return [];
+}
+
+function validateCustomProvider(provider: ProviderOptions): string[] {
+  return !provider.id || provider.id.trim() === '' ? ['Provider ID is required'] : [];
+}
+
+function collectValidationErrors({
+  provider,
+  providerType,
+  bodyError,
+  extensionErrors,
+  validateUrl,
+}: {
+  provider: ProviderOptions;
+  providerType?: string;
+  bodyError: string | React.ReactNode | null;
+  extensionErrors: boolean;
+  validateUrl: (url: string, type?: 'http' | 'websocket') => boolean;
+}): Array<string | React.ReactNode> {
+  let errors: Array<string | React.ReactNode> = [];
+
+  if (providerType === 'http') {
+    errors = validateHttpProvider(provider, bodyError, validateUrl);
+  } else if (providerType === 'websocket') {
+    errors =
+      !provider.config.url || !validateUrl(provider.config.url, 'websocket')
+        ? ['Valid WebSocket URL is required']
+        : [];
+  } else if (FOUNDATION_PROVIDER_TYPES.has(providerType || '')) {
+    errors = validateFoundationProvider(provider);
+  } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
+    errors = validateAgentFrameworkProvider(provider);
+  } else if (CUSTOM_PROVIDER_TYPES.has(providerType || '')) {
+    errors = validateCustomProvider(provider);
+  }
+
+  if (extensionErrors) {
+    errors.push('Extension configuration has errors');
+  }
+  return errors;
+}
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -75,86 +348,17 @@ function ProviderConfigEditor({
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
-    // Shallow-clone the config along with the target so subsequent
-    // assignments and `delete` don't mutate the original provider object
-    // by reference (which is React state owned by our parent).
-    const updatedTarget = {
-      ...provider,
-      config: { ...(provider.config ?? {}) },
-    } as ProviderOptions;
-
-    if (field === 'id') {
-      updatedTarget.id = value as string;
-      if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
-        delete updatedTarget.config.mcp;
-      }
-    } else if (field === 'url') {
-      updatedTarget.config.url = value as string;
-      if (validateUrl(value as string)) {
-        setUrlError(null);
-      } else {
-        setUrlError('Invalid URL format');
-      }
-    } else if (field === 'method') {
-      updatedTarget.config.method = value as string;
-    } else if (field === 'body') {
-      updatedTarget.config.body =
-        typeof value === 'string' || (typeof value === 'object' && value !== null)
-          ? value
-          : String(value);
-      const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (bodyStr.includes('{{prompt}}') || hasInputs) {
-        setBodyError(null);
-      } else if (!updatedTarget.config.request) {
-        setBodyError(
-          <>
-            Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
-            inject the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>
-            . Promptfoo uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the
-            actual test content.{' '}
-            <a
-              href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learn more
-            </a>
-          </>,
-        );
-      }
-    } else if (field === 'request') {
-      updatedTarget.config.request = value as string;
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (value && typeof value === 'string' && !value.includes('{{prompt}}') && !hasInputs) {
-        setBodyError('Raw request must contain {{prompt}} template variable');
-      } else {
-        setBodyError(null);
-      }
-    } else if (field === 'transformResponse') {
-      updatedTarget.config.transformResponse = value as string;
-    } else if (field === 'label') {
-      updatedTarget.label = value as string;
-    } else if (field === 'delay') {
-      updatedTarget.delay = value as number;
-    } else if (field === 'config') {
-      updatedTarget.config = value as typeof updatedTarget.config;
-    } else if (field === 'inputs') {
-      // Handle top-level inputs field for multi-variable input configuration
-      if (value === undefined) {
-        delete updatedTarget.inputs;
-      } else {
-        updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
-        // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
-        if (Object.keys(value as NonNullable<ProviderOptions['inputs']>).length > 0) {
-          setBodyError(null);
-        }
-      }
-    } else {
-      updatedTarget.config[field] = value;
-    }
-
-    setProvider(updatedTarget);
+    setProvider(
+      updateProviderField({
+        provider,
+        providerType,
+        field,
+        value,
+        validateUrl,
+        setBodyError,
+        setUrlError,
+      }),
+    );
   };
 
   const updateWebSocketTarget = (field: string, value: unknown) => {
@@ -179,87 +383,13 @@ function ProviderConfigEditor({
   };
 
   const validate = useCallback((): boolean => {
-    const errors: (string | React.ReactNode)[] = [];
-
-    if (providerType === 'http') {
-      // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request === undefined) {
-        // Structured mode: validate URL
-        if (!provider.config.url || !validateUrl(provider.config.url)) {
-          errors.push('Valid URL is required');
-        }
-      } else {
-        // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
-          errors.push('HTTP request content is required');
-        }
-      }
-
-      if (bodyError) {
-        errors.push(bodyError);
-      }
-    } else if (providerType === 'websocket') {
-      if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
-        errors.push('Valid WebSocket URL is required');
-      }
-    } else if (
-      [
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '')
-    ) {
-      // Foundation model providers validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Model ID is required');
-      }
-      // Validate that temperature is within reasonable bounds if provided
-      if (
-        provider.config?.temperature !== undefined &&
-        (provider.config.temperature < 0 || provider.config.temperature > 2)
-      ) {
-        errors.push('Temperature must be between 0 and 2');
-      }
-      // Validate that max_tokens is positive if provided
-      if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
-        errors.push('Max tokens must be greater than 0');
-      }
-      // Validate that top_p is between 0 and 1 if provided
-      if (
-        provider.config?.top_p !== undefined &&
-        (provider.config.top_p < 0 || provider.config.top_p > 1)
-      ) {
-        errors.push('Top P must be between 0 and 1');
-      }
-    } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
-      // Agent frameworks validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Python file path is required');
-      } else if (!provider.id.startsWith('file://')) {
-        errors.push('Provider ID must start with file:// for Python agent files');
-      }
-    } else if (
-      ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
-    ) {
-      // Custom providers validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Provider ID is required');
-      }
-    }
-
-    if (extensionErrors) {
-      errors.push('Extension configuration has errors');
-    }
+    const errors = collectValidationErrors({
+      provider,
+      providerType,
+      bodyError,
+      extensionErrors,
+      validateUrl,
+    });
 
     const hasErrors = errors.length > 0;
     if (setError) {
