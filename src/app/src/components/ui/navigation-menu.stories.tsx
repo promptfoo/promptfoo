@@ -303,3 +303,34 @@ export const AppHeader: Story = {
     </div>
   ),
 };
+
+// Right-aligned dropdown for triggers near the right edge of the header
+export const EndAligned: Story = {
+  render: () => (
+    <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center gap-6">
+        <span className="font-semibold text-lg">Promptfoo</span>
+      </div>
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>Account</NavigationMenuTrigger>
+            <NavigationMenuContent align="end">
+              <ul className="grid w-[260px] gap-3 p-4">
+                <ListItem href="#" title="Profile">
+                  Manage your profile and preferences.
+                </ListItem>
+                <ListItem href="#" title="Billing">
+                  Plans, invoices, and usage.
+                </ListItem>
+                <ListItem href="#" title="Sign out">
+                  End your current session.
+                </ListItem>
+              </ul>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>
+    </div>
+  ),
+};

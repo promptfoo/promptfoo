@@ -29,10 +29,10 @@ pipelines:
         script:
           - npm ci
           - npm install -g promptfoo
-          - npx promptfoo eval
+          - npx promptfoo eval -o promptfoo-results.json -o promptfoo-results.junit.xml
         artifacts:
           - promptfoo-results.json
-          - promptfoo-results.xml
+          - promptfoo-results.junit.xml
 ```
 
 ## Environment Variables
@@ -162,11 +162,11 @@ pipelines:
         script:
           - npm ci
           - npm install -g promptfoo
-          - npx promptfoo eval
+          - npx promptfoo eval -o promptfoo-results.junit.xml
         after-script:
           - pipe: atlassian/junit-report:0.3.0
             variables:
-              REPORT_PATHS: 'promptfoo-results.xml'
+              REPORT_PATHS: 'promptfoo-results.junit.xml'
 ```
 
 ## Troubleshooting
