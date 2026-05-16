@@ -107,6 +107,18 @@ interface RunStepsResponse {
   }>;
 }
 
+type RequiredToolCalls = NonNullable<
+  NonNullable<RunResponse['required_action']>['submit_tool_outputs']
+>['tool_calls'];
+type RequiredToolCall = RequiredToolCalls[number];
+type FunctionToolCall = RequiredToolCall & {
+  type: 'function';
+  function: NonNullable<RequiredToolCall['function']>;
+};
+type RunStep = RunStepsResponse['data'][number];
+type RunStepToolCall = NonNullable<NonNullable<RunStep['step_details']>['tool_calls']>[number];
+type MessageContent = MessageListResponse['data'][number]['content'][number];
+
 const AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY = 'promptfoo-azure-assistant-cache-key-v1';
 
 function normalizeAzureAssistantCacheValue(value: unknown, seen = new WeakSet<object>()): unknown {
@@ -202,12 +214,45 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       this.assistantConfig.tools,
       context?.vars,
     );
+    const cacheKey = this.buildAssistantCacheKey(apiBaseUrl, apiVersion, prompt, loadedTools);
+    const cachedResult = await this.getCachedAssistantResult(cacheKey, prompt);
+    if (cachedResult) {
+      return cachedResult;
+    }
 
-    // Create a simple cache key based on the input and configuration
-    const cacheKey = `azure_assistant:${this.deploymentName}:${hmacAzureAssistantCacheValue({
+    // Execute the conversation flow
+    try {
+      const threadResponse = await this.createAssistantThread(apiBaseUrl, apiVersion, prompt);
+      const runResponse = await this.createAssistantRun(
+        apiBaseUrl,
+        apiVersion,
+        threadResponse.id,
+        loadedTools,
+      );
+      const result = await this.executeAssistantRun(
+        apiBaseUrl,
+        apiVersion,
+        threadResponse.id,
+        runResponse.id,
+      );
+      await this.cacheAssistantResult(cacheKey, result, prompt);
+      return result;
+    } catch (err: any) {
+      logger.error(`Error in Azure Assistant API call: ${err}`);
+      return this.formatError(err);
+    }
+  }
+
+  private buildAssistantCacheKey(
+    apiBaseUrl: string,
+    apiVersion: string,
+    prompt: string,
+    loadedTools: unknown,
+  ): string {
+    return `azure_assistant:${this.deploymentName}:${hmacAzureAssistantCacheValue({
       apiBaseUrl,
       apiVersion,
-      auth: getAuthHeadersCacheIdentity(this.authHeaders),
+      auth: getAuthHeadersCacheIdentity(this.authHeaders ?? {}),
       instructions: this.assistantConfig.instructions,
       max_tokens: this.assistantConfig.max_tokens,
       model: this.assistantConfig.modelName,
@@ -219,158 +264,145 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       tools: loadedTools,
       top_p: this.assistantConfig.top_p,
     })}`;
+  }
 
-    // Check the cache if enabled
-    if (isCacheEnabled()) {
-      try {
-        const cache = await getCache();
-        const cachedResult = await cache.get<ProviderResponse>(cacheKey);
-
-        if (cachedResult) {
-          logger.debug('Cache hit for assistant prompt', { promptLength: prompt.length });
-          return { ...cachedResult, cached: true };
-        }
-      } catch (err) {
-        logger.warn(`Error checking cache: ${err}`);
-        // Continue if cache check fails
-      }
+  private async getCachedAssistantResult(
+    cacheKey: string,
+    prompt: string,
+  ): Promise<ProviderResponse | undefined> {
+    if (!isCacheEnabled()) {
+      return undefined;
     }
 
-    // Execute the conversation flow
     try {
-      // Create a thread
-      const threadResponse = await this.makeRequest<ThreadResponse>(
-        `${apiBaseUrl}/openai/threads?api-version=${apiVersion}`,
-        {
-          method: 'POST',
-          headers: await this.getHeaders(),
-          body: JSON.stringify({}),
-        },
-      );
-
-      logger.debug('Created thread for assistant prompt', {
-        threadId: threadResponse.id,
-        promptLength: prompt.length,
-      });
-
-      // Create a message
-      await this.makeRequest(
-        `${apiBaseUrl}/openai/threads/${threadResponse.id}/messages?api-version=${apiVersion}`,
-        {
-          method: 'POST',
-          headers: await this.getHeaders(),
-          body: JSON.stringify({
-            role: 'user',
-            content: prompt,
-          }),
-        },
-      );
-
-      // Prepare the run options
-      const runOptions: Record<string, any> = {
-        assistant_id: this.deploymentName,
-      };
-
-      // Add configuration parameters
-      if (this.assistantConfig.temperature !== undefined) {
-        runOptions.temperature = this.assistantConfig.temperature;
+      const cache = await getCache();
+      const cachedResult = await cache.get<ProviderResponse>(cacheKey);
+      if (!cachedResult) {
+        return undefined;
       }
-      if (this.assistantConfig.top_p !== undefined) {
-        runOptions.top_p = this.assistantConfig.top_p;
-      }
-      if (this.assistantConfig.tool_resources) {
-        runOptions.tool_resources = this.assistantConfig.tool_resources;
-      }
-      if (this.assistantConfig.tool_choice) {
-        runOptions.tool_choice = this.assistantConfig.tool_choice;
-      }
-      if (this.assistantConfig.tools) {
-        if (loadedTools !== undefined) {
-          runOptions.tools = loadedTools;
-        }
-      }
-      if (this.assistantConfig.modelName) {
-        runOptions.model = this.assistantConfig.modelName;
-      }
-      if (this.assistantConfig.instructions) {
-        runOptions.instructions = this.assistantConfig.instructions;
-      }
+      logger.debug('Cache hit for assistant prompt', { promptLength: prompt.length });
+      return { ...cachedResult, cached: true };
+    } catch (err) {
+      logger.warn(`Error checking cache: ${err}`);
+      return undefined;
+    }
+  }
 
-      // Create a run
-      const runResponse = await this.makeRequest<RunResponse>(
-        `${apiBaseUrl}/openai/threads/${threadResponse.id}/runs?api-version=${apiVersion}`,
-        {
-          method: 'POST',
-          headers: await this.getHeaders(),
-          body: JSON.stringify(runOptions),
-        },
-      );
+  private async createAssistantThread(
+    apiBaseUrl: string,
+    apiVersion: string,
+    prompt: string,
+  ): Promise<ThreadResponse> {
+    const threadResponse = await this.makeRequest<ThreadResponse>(
+      `${apiBaseUrl}/openai/threads?api-version=${apiVersion}`,
+      {
+        method: 'POST',
+        headers: await this.getHeaders(),
+        body: JSON.stringify({}),
+      },
+    );
+    logger.debug('Created thread for assistant prompt', {
+      threadId: threadResponse.id,
+      promptLength: prompt.length,
+    });
+    await this.makeRequest(
+      `${apiBaseUrl}/openai/threads/${threadResponse.id}/messages?api-version=${apiVersion}`,
+      {
+        method: 'POST',
+        headers: await this.getHeaders(),
+        body: JSON.stringify({ role: 'user', content: prompt }),
+      },
+    );
+    return threadResponse;
+  }
 
-      // Handle function calls if needed or poll for completion
-      let result: ProviderResponse;
-      if (
-        this.assistantConfig.functionToolCallbacks &&
-        Object.keys(this.assistantConfig.functionToolCallbacks).length > 0
-      ) {
-        result = await this.pollRunWithToolCallHandling(
-          apiBaseUrl,
-          apiVersion,
-          threadResponse.id,
-          runResponse.id,
-        );
-      } else {
-        // Poll for completion
-        const completedRun = await this.pollRun(
-          apiBaseUrl,
-          apiVersion,
-          threadResponse.id,
-          runResponse.id,
-        );
-
-        // Process the completed run
-        if (completedRun.status === 'completed') {
-          result = await this.processCompletedRun(
-            apiBaseUrl,
-            apiVersion,
-            threadResponse.id,
-            completedRun,
-          );
-        } else {
-          if (completedRun.last_error) {
-            const errorCode = completedRun.last_error.code || '';
-            const errorMessage = completedRun.last_error.message || '';
-
-            if (errorCode === 'content_filter' || isContentFilterError(errorMessage)) {
-              result = formatContentFilterResponse(errorMessage);
-            } else {
-              result = {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-          } else {
-            result = {
-              error: `Thread run failed with status: ${completedRun.status}`,
-            };
-          }
-        }
+  private buildAssistantRunOptions(loadedTools: unknown): Record<string, any> {
+    const runOptions: Record<string, any> = { assistant_id: this.deploymentName };
+    const maybeAssign = (key: string, value: unknown) => {
+      if (value !== undefined && value !== null) {
+        runOptions[key] = value;
       }
+    };
+    maybeAssign('temperature', this.assistantConfig.temperature);
+    maybeAssign('top_p', this.assistantConfig.top_p);
+    maybeAssign('tool_resources', this.assistantConfig.tool_resources);
+    maybeAssign('tool_choice', this.assistantConfig.tool_choice);
+    maybeAssign('model', this.assistantConfig.modelName);
+    maybeAssign('instructions', this.assistantConfig.instructions);
+    if (this.assistantConfig.tools && loadedTools !== undefined) {
+      runOptions.tools = loadedTools;
+    }
+    return runOptions;
+  }
 
-      // Cache successful results if caching is enabled
-      if (isCacheEnabled() && !result.error) {
-        try {
-          const cache = await getCache();
-          await cache.set(cacheKey, result);
-          logger.debug('Cached assistant response for prompt', { promptLength: prompt.length });
-        } catch (err) {
-          logger.warn(`Error caching result: ${err}`);
-          // Continue even if caching fails
-        }
-      }
+  private async createAssistantRun(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    loadedTools: unknown,
+  ): Promise<RunResponse> {
+    return this.makeRequest<RunResponse>(
+      `${apiBaseUrl}/openai/threads/${threadId}/runs?api-version=${apiVersion}`,
+      {
+        method: 'POST',
+        headers: await this.getHeaders(),
+        body: JSON.stringify(this.buildAssistantRunOptions(loadedTools)),
+      },
+    );
+  }
 
-      return result;
-    } catch (err: any) {
-      logger.error(`Error in Azure Assistant API call: ${err}`);
-      return this.formatError(err);
+  private async executeAssistantRun(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+  ): Promise<ProviderResponse> {
+    if (this.hasFunctionToolCallbacks()) {
+      return this.pollRunWithToolCallHandling(apiBaseUrl, apiVersion, threadId, runId);
+    }
+
+    const completedRun = await this.pollRun(apiBaseUrl, apiVersion, threadId, runId);
+    if (completedRun.status === 'completed') {
+      return this.processCompletedRun(apiBaseUrl, apiVersion, threadId, completedRun);
+    }
+    return this.formatFailedRun(completedRun);
+  }
+
+  private hasFunctionToolCallbacks(): boolean {
+    return Boolean(
+      this.assistantConfig.functionToolCallbacks &&
+        Object.keys(this.assistantConfig.functionToolCallbacks).length > 0,
+    );
+  }
+
+  private formatFailedRun(run: RunResponse): ProviderResponse {
+    if (!run.last_error) {
+      return { error: `Thread run failed with status: ${run.status}` };
+    }
+
+    const errorCode = run.last_error.code || '';
+    const errorMessage = run.last_error.message || '';
+    if (errorCode === 'content_filter' || isContentFilterError(errorMessage)) {
+      return formatContentFilterResponse(errorMessage);
+    }
+    return { error: `Thread run failed: ${errorCode} - ${errorMessage}` };
+  }
+
+  private async cacheAssistantResult(
+    cacheKey: string,
+    result: ProviderResponse,
+    prompt: string,
+  ): Promise<void> {
+    if (!isCacheEnabled() || result.error) {
+      return;
+    }
+
+    try {
+      const cache = await getCache();
+      await cache.set(cacheKey, result);
+      logger.debug('Cached assistant response for prompt', { promptLength: prompt.length });
+    } catch (err) {
+      logger.warn(`Error caching result: ${err}`);
     }
   }
 
@@ -584,165 +616,26 @@ export class AzureAssistantProvider extends AzureGenericProvider {
 
         logger.debug(`Run status: ${run.status}`);
 
-        // Check for required action
         if (run.status === 'requires_action') {
-          if (
-            run.required_action?.type === 'submit_tool_outputs' &&
-            run.required_action.submit_tool_outputs?.tool_calls
-          ) {
-            const toolCalls = run.required_action.submit_tool_outputs.tool_calls;
-
-            // Filter for function calls that have callbacks
-            const functionCallsWithCallbacks = toolCalls.filter((toolCall) => {
-              return (
-                toolCall.type === 'function' &&
-                toolCall.function &&
-                toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-              );
-            });
-
-            if (functionCallsWithCallbacks.length === 0) {
-              // No matching callbacks found, but we should still handle the required action
-              // Let's log this situation but continue without breaking
-              logger.debug(
-                `No matching callbacks found for tool calls. Available functions: ${Object.keys(
-                  this.assistantConfig.functionToolCallbacks || {},
-                ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
-              );
-
-              // Submit empty outputs for all tool calls
-              const emptyOutputs = toolCalls.map((toolCall) => ({
-                tool_call_id: toolCall.id,
-                output: JSON.stringify({
-                  message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
-                }),
-              }));
-
-              // Submit the empty outputs to continue the run
-              try {
-                await this.makeRequest(
-                  `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
-                  {
-                    method: 'POST',
-                    headers: await this.getHeaders(),
-                    body: JSON.stringify({
-                      tool_outputs: emptyOutputs,
-                    }),
-                  },
-                );
-                // Continue polling after submission
-                await sleep(pollIntervalMs);
-                continue;
-              } catch (error: any) {
-                logger.error(`Error submitting empty tool outputs: ${error.message}`);
-                return {
-                  error: `Error submitting empty tool outputs: ${error.message}`,
-                };
-              }
-            }
-
-            // Build context for function callbacks
-            const callbackContext: CallbackContext = {
-              threadId,
-              runId,
-              assistantId: this.deploymentName, // Azure uses deploymentName as the assistant ID
-              provider: 'azure',
-            };
-
-            // Process tool calls that have matching callbacks
-            const toolOutputs = await Promise.all(
-              functionCallsWithCallbacks.map(async (toolCall) => {
-                const functionName = toolCall.function!.name;
-                const functionArgs = toolCall.function!.arguments;
-
-                try {
-                  logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
-
-                  // Use the shared FunctionCallbackHandler with context
-                  const result = await this.functionCallbackHandler.processCall(
-                    { name: functionName, arguments: functionArgs },
-                    this.assistantConfig.functionToolCallbacks,
-                    callbackContext,
-                  );
-
-                  // Check if the callback had an error
-                  if (result.isError) {
-                    throw new Error('Function callback failed');
-                  }
-
-                  const outputResult = result.output;
-
-                  logger.debug(`Function ${functionName} result: ${outputResult}`);
-                  return {
-                    tool_call_id: toolCall.id,
-                    output: outputResult,
-                  };
-                } catch (error) {
-                  logger.error(`Error calling function ${functionName}: ${error}`);
-                  return {
-                    tool_call_id: toolCall.id,
-                    output: JSON.stringify({
-                      error: `Error in ${functionName}: ${error instanceof Error ? error.message : String(error)}`,
-                    }),
-                  };
-                }
-              }),
-            );
-
-            // Submit tool outputs
-            const validToolOutputs = toolOutputs.filter((output) => output !== null);
-            if (validToolOutputs.length === 0) {
-              logger.error('No valid tool outputs to submit');
-              break;
-            }
-
-            logger.debug(`Submitting tool outputs: ${JSON.stringify(validToolOutputs)}`);
-
-            // Submit tool outputs
-            try {
-              await this.makeRequest(
-                `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
-                {
-                  method: 'POST',
-                  headers: await this.getHeaders(),
-                  body: JSON.stringify({
-                    tool_outputs: validToolOutputs,
-                  }),
-                },
-              );
-            } catch (error: any) {
-              logger.error(`Error submitting tool outputs: ${error.message}`);
-              return {
-                error: `Error submitting tool outputs: ${error.message}`,
-              };
-            }
-          } else {
-            logger.error(`Unknown required action type: ${run.required_action?.type}`);
+          const actionResult = await this.handleRequiredToolAction(
+            apiBaseUrl,
+            apiVersion,
+            threadId,
+            runId,
+            run,
+            pollIntervalMs,
+          );
+          if (actionResult) {
+            return actionResult;
+          }
+          if (!this.isSubmitToolOutputsAction(run)) {
             break;
           }
         } else if (['completed', 'failed', 'cancelled', 'expired'].includes(run.status)) {
-          // Run is in a terminal state
           if (run.status !== 'completed') {
-            // Return error for failed runs
-            if (run.last_error) {
-              const errorCode = run.last_error.code || '';
-              const errorMessage = run.last_error.message || '';
-
-              if (errorCode === 'content_filter' || isContentFilterError(errorMessage)) {
-                return formatContentFilterResponse(errorMessage);
-              }
-
-              return {
-                error: `Thread run failed: ${errorCode} - ${errorMessage}`,
-              };
-            }
-
-            return {
-              error: `Thread run failed with status: ${run.status}`,
-            };
+            return this.formatFailedRun(run);
           }
-
-          break; // Exit the loop if completed successfully
+          break;
         }
 
         // Wait before polling again
@@ -775,6 +668,154 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     return await this.processCompletedRun(apiBaseUrl, apiVersion, threadId, runId);
   }
 
+  private isSubmitToolOutputsAction(run: RunResponse): boolean {
+    return Boolean(
+      run.required_action?.type === 'submit_tool_outputs' &&
+        run.required_action.submit_tool_outputs?.tool_calls,
+    );
+  }
+
+  private async handleRequiredToolAction(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+    run: RunResponse,
+    pollIntervalMs: number,
+  ): Promise<ProviderResponse | undefined> {
+    if (!this.isSubmitToolOutputsAction(run)) {
+      logger.error(`Unknown required action type: ${run.required_action?.type}`);
+      return undefined;
+    }
+
+    const toolCalls = run.required_action!.submit_tool_outputs!.tool_calls;
+    const functionCallsWithCallbacks = this.getFunctionCallsWithCallbacks(toolCalls);
+    if (functionCallsWithCallbacks.length === 0) {
+      return this.submitEmptyToolOutputs(
+        apiBaseUrl,
+        apiVersion,
+        threadId,
+        runId,
+        toolCalls,
+        pollIntervalMs,
+      );
+    }
+
+    const toolOutputs = await this.buildToolOutputs(threadId, runId, functionCallsWithCallbacks);
+    if (toolOutputs.length === 0) {
+      logger.error('No valid tool outputs to submit');
+      return undefined;
+    }
+    return this.submitToolOutputs(apiBaseUrl, apiVersion, threadId, runId, toolOutputs);
+  }
+
+  private getFunctionCallsWithCallbacks(toolCalls: RequiredToolCalls): FunctionToolCall[] {
+    return toolCalls.filter((toolCall): toolCall is FunctionToolCall => {
+      return Boolean(
+        toolCall.type === 'function' &&
+          toolCall.function &&
+          toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+      );
+    });
+  }
+
+  private async submitEmptyToolOutputs(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+    toolCalls: RequiredToolCalls,
+    pollIntervalMs: number,
+  ): Promise<ProviderResponse | undefined> {
+    logger.debug(
+      `No matching callbacks found for tool calls. Available functions: ${Object.keys(
+        this.assistantConfig.functionToolCallbacks || {},
+      ).join(', ')}. Tool calls: ${JSON.stringify(toolCalls)}`,
+    );
+    const emptyOutputs = toolCalls.map((toolCall) => ({
+      tool_call_id: toolCall.id,
+      output: JSON.stringify({
+        message: `No callback registered for function ${toolCall.type === 'function' ? toolCall.function?.name : toolCall.type}`,
+      }),
+    }));
+
+    const submissionResult = await this.submitToolOutputs(
+      apiBaseUrl,
+      apiVersion,
+      threadId,
+      runId,
+      emptyOutputs,
+      'empty',
+    );
+    if (submissionResult) {
+      return submissionResult;
+    }
+    await sleep(pollIntervalMs);
+    return undefined;
+  }
+
+  private async buildToolOutputs(threadId: string, runId: string, toolCalls: FunctionToolCall[]) {
+    const callbackContext: CallbackContext = {
+      threadId,
+      runId,
+      assistantId: this.deploymentName,
+      provider: 'azure',
+    };
+    return Promise.all(
+      toolCalls.map(async (toolCall) => {
+        const functionName = toolCall.function!.name;
+        const functionArgs = toolCall.function!.arguments;
+        try {
+          logger.debug(`Calling function ${functionName} with args: ${functionArgs}`);
+          const result = await this.functionCallbackHandler.processCall(
+            { name: functionName, arguments: functionArgs },
+            this.assistantConfig.functionToolCallbacks,
+            callbackContext,
+          );
+          if (result.isError) {
+            throw new Error('Function callback failed');
+          }
+          logger.debug(`Function ${functionName} result: ${result.output}`);
+          return { tool_call_id: toolCall.id, output: result.output };
+        } catch (error) {
+          logger.error(`Error calling function ${functionName}: ${error}`);
+          return {
+            tool_call_id: toolCall.id,
+            output: JSON.stringify({
+              error: `Error in ${functionName}: ${error instanceof Error ? error.message : String(error)}`,
+            }),
+          };
+        }
+      }),
+    );
+  }
+
+  private async submitToolOutputs(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+    toolOutputs: Array<{ tool_call_id: string; output: string }>,
+    label = '',
+  ): Promise<ProviderResponse | undefined> {
+    try {
+      logger.debug(`Submitting tool outputs: ${JSON.stringify(toolOutputs)}`);
+      await this.makeRequest(
+        `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/submit_tool_outputs?api-version=${apiVersion}`,
+        {
+          method: 'POST',
+          headers: await this.getHeaders(),
+          body: JSON.stringify({ tool_outputs: toolOutputs }),
+        },
+      );
+      return undefined;
+    } catch (error: any) {
+      const prefix = label ? `${label} ` : '';
+      logger.error(`Error submitting ${prefix}tool outputs: ${error.message}`);
+      return { error: `Error submitting ${prefix}tool outputs: ${error.message}` };
+    }
+  }
+
   /**
    * Process a completed run to extract messages and tool calls
    */
@@ -785,148 +826,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     runIdOrResponse: string | RunResponse,
   ): Promise<ProviderResponse> {
     try {
-      const runId = typeof runIdOrResponse === 'string' ? runIdOrResponse : runIdOrResponse.id;
-
-      // Get run information if we only have the ID
-      if (typeof runIdOrResponse === 'string') {
-        await this.makeRequest<RunResponse>(
-          `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
-          {
-            method: 'GET',
-            headers: await this.getHeaders(),
-          },
-        );
-      }
-
-      // Get all messages in the thread
-      const messagesResponse = await this.makeRequest<MessageListResponse>(
-        `${apiBaseUrl}/openai/threads/${threadId}/messages?api-version=${apiVersion}`,
-        {
-          method: 'GET',
-          headers: await this.getHeaders(),
-        },
-      );
-
-      // Get run steps to process tool calls
-      const stepsResponse = await this.makeRequest<RunStepsResponse>(
-        `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/steps?api-version=${apiVersion}`,
-        {
-          method: 'GET',
-          headers: await this.getHeaders(),
-        },
-      );
-
-      // Process user messages first, then assistant messages and tool calls
-      const outputBlocks: string[] = [];
-
-      // Get all messages - sort by creation time
-      const allMessages = messagesResponse.data.sort((a, b) => a.created_at - b.created_at); // Sort chronologically
-
-      // We need to extract the user message that triggered this run
-      // Since we create a new thread for each evaluation, the only user message is the one we created
-      const userMessage = allMessages.find((message) => message.role === 'user');
-
-      // Always start with the user's message if we found one
-      if (userMessage) {
-        const userContent = userMessage.content
-          .map((content: { type: string; text?: { value: string } }) =>
-            content.type === 'text' && content.text
-              ? content.text.value
-              : `<${content.type} output>`,
-          )
-          .join('\n');
-
-        outputBlocks.push(`[User] ${userContent}`);
-      }
-
-      // Generate the sequence of file searches, function calls, and assistant responses
-      // Since all tools steps are part of the assistant's thinking process, we'll place them
-      // before the assistant's response to maintain a logical flow: user → tool operations → assistant response
-
-      // First, extract all the tool calls and organize them
-      const toolCallBlocks: string[] = [];
-      for (const step of stepsResponse.data || []) {
-        // Check if step is a tool call step with tool_calls array
-        if (
-          step.type === 'tool_calls' &&
-          step.step_details &&
-          typeof step.step_details === 'object' &&
-          'tool_calls' in step.step_details &&
-          Array.isArray(step.step_details.tool_calls)
-        ) {
-          const toolCalls = step.step_details.tool_calls;
-
-          for (const toolCall of toolCalls) {
-            if (toolCall.type === 'function' && toolCall.function) {
-              toolCallBlocks.push(
-                `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
-              );
-              if (toolCall.function.output) {
-                toolCallBlocks.push(`[Function output: ${toolCall.function.output}]`);
-              }
-            } else if (toolCall.type === 'code_interpreter' && toolCall.code_interpreter) {
-              const outputs = toolCall.code_interpreter.outputs || [];
-              const input = toolCall.code_interpreter.input || '';
-
-              const outputText =
-                outputs
-                  .map((output: { type: string; logs?: string }) =>
-                    output.type === 'logs' ? output.logs : `<${output.type} output>`,
-                  )
-                  .join('\n') || '[No output]';
-
-              toolCallBlocks.push(`[Code interpreter input]`);
-              toolCallBlocks.push(input || '[No input]');
-              toolCallBlocks.push(`[Code interpreter output]`);
-              toolCallBlocks.push(outputText);
-            } else if (toolCall.type === 'file_search' && toolCall.file_search) {
-              toolCallBlocks.push(`[Ran file search]`);
-              toolCallBlocks.push(`[File search details: ${JSON.stringify(toolCall.file_search)}]`);
-            } else if (toolCall.type && String(toolCall.type) === 'retrieval') {
-              toolCallBlocks.push(`[Ran retrieval]`);
-            } else {
-              toolCallBlocks.push(`[Unknown tool call type: ${String(toolCall.type)}]`);
-            }
-          }
-        }
-      }
-
-      // Next, extract the assistant's response -
-      // Filter assistant messages to only those created for this run
-      const assistantMessages = allMessages.filter((message) => message.role === 'assistant');
-
-      // For each assistant message, add it to the output blocks
-      for (const message of assistantMessages) {
-        const contentBlocks = message.content
-          .map((content: { type: string; text?: { value: string } }) =>
-            content.type === 'text' ? content.text!.value : `<${content.type} output>`,
-          )
-          .join('\n');
-
-        outputBlocks.push(`[${toTitleCase(message.role)}] ${contentBlocks}`);
-      }
-
-      // Now, combine everything in the correct order:
-      // 1. User message (already added)
-      // 2. Tool call blocks (file search, etc.)
-      // 3. Assistant messages (already added)
-
-      // Add tool call blocks after user message but before assistant response
-      // Find the index of the first assistant message block
-      const assistantBlockIndex = outputBlocks.findIndex((block) =>
-        block.startsWith('[Assistant]'),
-      );
-
-      if (assistantBlockIndex > 0) {
-        // Insert the tool calls before the first assistant message
-        outputBlocks.splice(assistantBlockIndex, 0, ...toolCallBlocks);
-      } else {
-        // If there are no assistant messages, just append the tool calls
-        outputBlocks.push(...toolCallBlocks);
-      }
-
+      const runId = this.getCompletedRunId(runIdOrResponse);
+      await this.ensureCompletedRunLoaded(apiBaseUrl, apiVersion, threadId, runIdOrResponse, runId);
+      const [messagesResponse, stepsResponse] = await Promise.all([
+        this.fetchCompletedRunMessages(apiBaseUrl, apiVersion, threadId),
+        this.fetchCompletedRunSteps(apiBaseUrl, apiVersion, threadId, runId),
+      ]);
       return {
-        output: outputBlocks.join('\n\n').trim(),
+        output: this.buildCompletedRunOutput(messagesResponse, stepsResponse),
       };
     } catch (err: any) {
       logger.error(`Error processing run results: ${err}`);
@@ -936,5 +843,178 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         error: `Error processing run results: ${errorMessage}`,
       };
     }
+  }
+
+  private getCompletedRunId(runIdOrResponse: string | RunResponse): string {
+    return typeof runIdOrResponse === 'string' ? runIdOrResponse : runIdOrResponse.id;
+  }
+
+  private async ensureCompletedRunLoaded(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runIdOrResponse: string | RunResponse,
+    runId: string,
+  ): Promise<void> {
+    if (typeof runIdOrResponse !== 'string') {
+      return;
+    }
+
+    await this.makeRequest<RunResponse>(
+      `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}?api-version=${apiVersion}`,
+      {
+        method: 'GET',
+        headers: await this.getHeaders(),
+      },
+    );
+  }
+
+  private async fetchCompletedRunMessages(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+  ): Promise<MessageListResponse> {
+    return this.makeRequest<MessageListResponse>(
+      `${apiBaseUrl}/openai/threads/${threadId}/messages?api-version=${apiVersion}`,
+      {
+        method: 'GET',
+        headers: await this.getHeaders(),
+      },
+    );
+  }
+
+  private async fetchCompletedRunSteps(
+    apiBaseUrl: string,
+    apiVersion: string,
+    threadId: string,
+    runId: string,
+  ): Promise<RunStepsResponse> {
+    return this.makeRequest<RunStepsResponse>(
+      `${apiBaseUrl}/openai/threads/${threadId}/runs/${runId}/steps?api-version=${apiVersion}`,
+      {
+        method: 'GET',
+        headers: await this.getHeaders(),
+      },
+    );
+  }
+
+  private buildCompletedRunOutput(
+    messagesResponse: MessageListResponse,
+    stepsResponse: RunStepsResponse,
+  ): string {
+    const allMessages = [...messagesResponse.data].sort((a, b) => a.created_at - b.created_at);
+    const outputBlocks = [
+      ...this.buildUserMessageBlocks(allMessages),
+      ...this.buildAssistantMessageBlocks(allMessages),
+    ];
+    const toolCallBlocks = this.buildToolCallBlocks(stepsResponse.data || []);
+    this.insertToolCallBlocks(outputBlocks, toolCallBlocks);
+    return outputBlocks.join('\n\n').trim();
+  }
+
+  private buildUserMessageBlocks(messages: MessageListResponse['data']): string[] {
+    const userMessage = messages.find((message) => message.role === 'user');
+    if (!userMessage) {
+      return [];
+    }
+    return [`[User] ${this.formatMessageContent(userMessage.content, false)}`];
+  }
+
+  private buildAssistantMessageBlocks(messages: MessageListResponse['data']): string[] {
+    return messages
+      .filter((message) => message.role === 'assistant')
+      .map(
+        (message) =>
+          `[${toTitleCase(message.role)}] ${this.formatMessageContent(message.content, true)}`,
+      );
+  }
+
+  private formatMessageContent(content: MessageContent[], assumeText = false): string {
+    return content
+      .map((item) => {
+        if (item.type === 'text' && item.text) {
+          return item.text.value;
+        }
+        if (assumeText && item.type === 'text') {
+          return '';
+        }
+        return `<${item.type} output>`;
+      })
+      .join('\n');
+  }
+
+  private buildToolCallBlocks(steps: RunStep[]): string[] {
+    return steps.flatMap((step) => this.buildToolCallBlocksForStep(step));
+  }
+
+  private buildToolCallBlocksForStep(step: RunStep): string[] {
+    if (!this.isToolCallStep(step)) {
+      return [];
+    }
+    return step.step_details!.tool_calls!.flatMap((toolCall) => this.formatToolCall(toolCall));
+  }
+
+  private isToolCallStep(step: RunStep): boolean {
+    return Boolean(
+      step.type === 'tool_calls' &&
+        step.step_details &&
+        typeof step.step_details === 'object' &&
+        'tool_calls' in step.step_details &&
+        Array.isArray(step.step_details.tool_calls),
+    );
+  }
+
+  private formatToolCall(toolCall: RunStepToolCall): string[] {
+    if (toolCall.type === 'function' && toolCall.function) {
+      return this.formatFunctionToolCall(toolCall.function);
+    }
+    if (toolCall.type === 'code_interpreter' && toolCall.code_interpreter) {
+      return this.formatCodeInterpreterToolCall(toolCall.code_interpreter);
+    }
+    if (toolCall.type === 'file_search' && toolCall.file_search) {
+      return [
+        '[Ran file search]',
+        `[File search details: ${JSON.stringify(toolCall.file_search)}]`,
+      ];
+    }
+    if (toolCall.type && String(toolCall.type) === 'retrieval') {
+      return ['[Ran retrieval]'];
+    }
+    return [`[Unknown tool call type: ${String(toolCall.type)}]`];
+  }
+
+  private formatFunctionToolCall(functionCall: NonNullable<RunStepToolCall['function']>): string[] {
+    const blocks = [
+      `[Call function ${functionCall.name} with arguments ${functionCall.arguments}]`,
+    ];
+    if (functionCall.output) {
+      blocks.push(`[Function output: ${functionCall.output}]`);
+    }
+    return blocks;
+  }
+
+  private formatCodeInterpreterToolCall(
+    codeInterpreter: NonNullable<RunStepToolCall['code_interpreter']>,
+  ): string[] {
+    const outputText =
+      codeInterpreter.outputs
+        .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
+        .join('\n') || '[No output]';
+
+    return [
+      '[Code interpreter input]',
+      codeInterpreter.input || '[No input]',
+      '[Code interpreter output]',
+      outputText,
+    ];
+  }
+
+  private insertToolCallBlocks(outputBlocks: string[], toolCallBlocks: string[]): void {
+    const assistantBlockIndex = outputBlocks.findIndex((block) => block.startsWith('[Assistant]'));
+    if (assistantBlockIndex > 0) {
+      outputBlocks.splice(assistantBlockIndex, 0, ...toolCallBlocks);
+      return;
+    }
+    outputBlocks.push(...toolCallBlocks);
   }
 }
