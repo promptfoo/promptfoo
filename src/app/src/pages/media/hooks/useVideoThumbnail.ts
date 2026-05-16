@@ -8,6 +8,12 @@ interface UseVideoThumbnailResult {
   error: string | null;
 }
 
+interface ThumbnailLoadState {
+  setThumbnailState: (thumbnail: string) => void;
+  setIsLoading: (isLoading: boolean) => void;
+  setError: (error: string | null) => void;
+}
+
 /**
  * Configuration for thumbnail generation
  */
@@ -146,6 +152,85 @@ async function generateThumbnail(videoUrl: string, signal?: AbortSignal): Promis
   });
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+async function loadCachedThumbnail(
+  hash: string,
+  signal: AbortSignal,
+  state: ThumbnailLoadState,
+): Promise<boolean> {
+  const cached = await getThumbnail(hash);
+  if (!cached) {
+    return false;
+  }
+
+  if (!signal.aborted) {
+    state.setThumbnailState(cached);
+    state.setIsLoading(false);
+  }
+
+  return true;
+}
+
+async function generateAndCacheThumbnail(
+  videoUrl: string,
+  hash: string,
+  signal: AbortSignal,
+  state: ThumbnailLoadState,
+): Promise<void> {
+  await concurrencyQueue.acquire();
+  if (signal.aborted) {
+    concurrencyQueue.release();
+    return;
+  }
+
+  try {
+    const generated = await generateThumbnail(videoUrl, signal);
+    if (signal.aborted) {
+      return;
+    }
+
+    state.setThumbnailState(generated);
+    setThumbnail(hash, generated).catch(() => {
+      // Silently ignore cache write errors
+    });
+  } finally {
+    concurrencyQueue.release();
+  }
+}
+
+async function runThumbnailLoad(
+  videoUrl: string,
+  hash: string,
+  signal: AbortSignal,
+  state: ThumbnailLoadState,
+): Promise<void> {
+  state.setIsLoading(true);
+  state.setError(null);
+
+  try {
+    if (await loadCachedThumbnail(hash, signal, state)) {
+      return;
+    }
+
+    await generateAndCacheThumbnail(videoUrl, hash, signal, state);
+  } catch (error) {
+    if (isAbortError(error)) {
+      return;
+    }
+
+    if (!signal.aborted) {
+      state.setError(error instanceof Error ? error.message : 'Failed to generate thumbnail');
+    }
+  } finally {
+    if (!signal.aborted) {
+      state.setIsLoading(false);
+    }
+  }
+}
+
 /**
  * Hook to generate and cache video thumbnails.
  *
@@ -168,58 +253,11 @@ export function useVideoThumbnail(
     }
 
     const abortController = new AbortController();
-
-    const loadThumbnail = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Check cache first (no concurrency slot needed)
-        const cached = await getThumbnail(hash);
-        if (cached) {
-          if (!abortController.signal.aborted) {
-            setThumbnailState(cached);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Wait for a concurrency slot before creating a video element
-        await concurrencyQueue.acquire();
-        if (abortController.signal.aborted) {
-          concurrencyQueue.release();
-          return;
-        }
-
-        try {
-          // Generate new thumbnail with abort support
-          const generated = await generateThumbnail(videoUrl, abortController.signal);
-          if (!abortController.signal.aborted) {
-            setThumbnailState(generated);
-            // Cache for future use (don't await - fire and forget)
-            setThumbnail(hash, generated).catch(() => {
-              // Silently ignore cache write errors
-            });
-          }
-        } finally {
-          concurrencyQueue.release();
-        }
-      } catch (err) {
-        // Ignore abort errors - they're expected on cleanup
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return;
-        }
-        if (!abortController.signal.aborted) {
-          setError(err instanceof Error ? err.message : 'Failed to generate thumbnail');
-        }
-      } finally {
-        if (!abortController.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadThumbnail();
+    runThumbnailLoad(videoUrl, hash, abortController.signal, {
+      setThumbnailState,
+      setIsLoading,
+      setError,
+    });
 
     return () => {
       abortController.abort();

@@ -1,4 +1,11 @@
-import { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
+import {
+  type MutableRefObject,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
@@ -38,27 +45,419 @@ import { clearExpiredThumbnails } from './hooks/useThumbnailCache';
 
 import type { MediaItem, MediaSort, MediaTypeFilter } from './types';
 
+type InternalSelectionState = string | null | 'cleared';
+
+const MEDIA_TYPE_FILTERS: MediaTypeFilter[] = ['all', 'image', 'video', 'audio', 'other'];
+const MEDIA_SORT_FIELDS: MediaSort['field'][] = ['createdAt', 'sizeBytes'];
+const MEDIA_SORT_ORDERS: MediaSort['order'][] = ['asc', 'desc'];
+
+function getMediaUrlState(searchParams: URLSearchParams) {
+  const rawType = searchParams.get('type');
+  const rawSortField = searchParams.get('sortField');
+  const rawSortOrder = searchParams.get('sortOrder');
+
+  return {
+    hashParam: searchParams.get('hash'),
+    typeParam:
+      rawType && MEDIA_TYPE_FILTERS.includes(rawType as MediaTypeFilter)
+        ? (rawType as MediaTypeFilter)
+        : 'all',
+    evalParam: searchParams.get('evalId') || '',
+    sortFieldParam:
+      rawSortField && MEDIA_SORT_FIELDS.includes(rawSortField as MediaSort['field'])
+        ? (rawSortField as MediaSort['field'])
+        : null,
+    sortOrderParam:
+      rawSortOrder && MEDIA_SORT_ORDERS.includes(rawSortOrder as MediaSort['order'])
+        ? (rawSortOrder as MediaSort['order'])
+        : null,
+  };
+}
+
+function buildMediaSearchParams({
+  typeFilter,
+  evalFilter,
+  sort,
+  selectedItem,
+  hashParam,
+  lastInternalSelectionRef,
+}: {
+  typeFilter: MediaTypeFilter;
+  evalFilter: string;
+  sort: MediaSort;
+  selectedItem: MediaItem | null;
+  hashParam: string | null;
+  lastInternalSelectionRef: MutableRefObject<InternalSelectionState>;
+}) {
+  const params = new URLSearchParams();
+
+  if (typeFilter !== 'all') {
+    params.set('type', typeFilter);
+  }
+  if (evalFilter) {
+    params.set('evalId', evalFilter);
+  }
+  if (sort.field !== 'createdAt' || sort.order !== 'desc') {
+    params.set('sortField', sort.field);
+    params.set('sortOrder', sort.order);
+  }
+  if (selectedItem) {
+    params.set('hash', selectedItem.hash);
+  } else if (lastInternalSelectionRef.current !== 'cleared' && hashParam) {
+    params.set('hash', hashParam);
+  }
+
+  return params;
+}
+
+function useMediaUrlSync({
+  typeFilter,
+  evalFilter,
+  selectedItem,
+  sort,
+  hashParam,
+  setSearchParams,
+  lastInternalSelectionRef,
+}: {
+  typeFilter: MediaTypeFilter;
+  evalFilter: string;
+  selectedItem: MediaItem | null;
+  sort: MediaSort;
+  hashParam: string | null;
+  setSearchParams: ReturnType<typeof useSearchParams>[1];
+  lastInternalSelectionRef: MutableRefObject<InternalSelectionState>;
+}) {
+  const prevUrlStateRef = useRef({
+    typeFilter: '',
+    evalFilter: '',
+    selectedHash: '',
+    sortField: 'createdAt',
+    sortOrder: 'desc',
+  });
+
+  useEffect(() => {
+    const currentHash = selectedItem?.hash || '';
+    const prev = prevUrlStateRef.current;
+    const hasFilterChange = typeFilter !== prev.typeFilter || evalFilter !== prev.evalFilter;
+    const hasSelectionChange = currentHash !== prev.selectedHash;
+    const hasSortChange = sort.field !== prev.sortField || sort.order !== prev.sortOrder;
+
+    if (!hasFilterChange && !hasSelectionChange && !hasSortChange) {
+      return;
+    }
+
+    prevUrlStateRef.current = {
+      typeFilter,
+      evalFilter,
+      selectedHash: currentHash,
+      sortField: sort.field,
+      sortOrder: sort.order,
+    };
+
+    const params = buildMediaSearchParams({
+      typeFilter,
+      evalFilter,
+      sort,
+      selectedItem,
+      hashParam,
+      lastInternalSelectionRef,
+    });
+    const isUserSelection =
+      hasSelectionChange &&
+      !!selectedItem &&
+      lastInternalSelectionRef.current === selectedItem.hash;
+
+    setSearchParams(params, { replace: !isUserSelection });
+  }, [
+    typeFilter,
+    evalFilter,
+    selectedItem,
+    sort,
+    setSearchParams,
+    hashParam,
+    lastInternalSelectionRef,
+  ]);
+}
+
+function getDeepLinkErrorMessage(
+  error?: 'not_found' | 'network_error' | 'server_error',
+): string | null {
+  if (!error) {
+    return null;
+  }
+
+  const errorMessages = {
+    not_found: 'Media item not found. It may have been deleted or the link is invalid.',
+    network_error: 'Unable to load media item. Please check your connection and try again.',
+    server_error: 'Server error while loading media item. Please try again later.',
+  };
+
+  return errorMessages[error];
+}
+
+function useDeepLinkedMediaSelection({
+  hashParam,
+  items,
+  isLoading,
+  setSelectedItem,
+  setDeepLinkError,
+  setIsDeepLinkLoading,
+  lastInternalSelectionRef,
+  lastResolvedDeepLinkRef,
+}: {
+  hashParam: string | null;
+  items: MediaItem[];
+  isLoading: boolean;
+  setSelectedItem: (item: MediaItem | null) => void;
+  setDeepLinkError: (error: string | null) => void;
+  setIsDeepLinkLoading: (isLoading: boolean) => void;
+  lastInternalSelectionRef: MutableRefObject<InternalSelectionState>;
+  lastResolvedDeepLinkRef: MutableRefObject<string | null>;
+}) {
+  useEffect(() => {
+    if (!hashParam) {
+      lastResolvedDeepLinkRef.current = null;
+      lastInternalSelectionRef.current = null;
+      setDeepLinkError(null);
+      setSelectedItem(null);
+      return;
+    }
+
+    if (
+      lastInternalSelectionRef.current === 'cleared' ||
+      hashParam === lastInternalSelectionRef.current ||
+      lastResolvedDeepLinkRef.current === hashParam
+    ) {
+      return;
+    }
+
+    const item = items.find((candidate) => candidate.hash === hashParam);
+    if (item) {
+      lastResolvedDeepLinkRef.current = hashParam;
+      setSelectedItem(item);
+      setDeepLinkError(null);
+      return;
+    }
+
+    if (isLoading) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsDeepLinkLoading(true);
+    fetchMediaItemByHash(hashParam).then((result) => {
+      if (cancelled) {
+        return;
+      }
+
+      setIsDeepLinkLoading(false);
+      if (result.item) {
+        lastResolvedDeepLinkRef.current = hashParam;
+        setSelectedItem(result.item);
+        setDeepLinkError(null);
+        return;
+      }
+
+      if (result.error === 'not_found') {
+        lastResolvedDeepLinkRef.current = hashParam;
+      }
+      setDeepLinkError(getDeepLinkErrorMessage(result.error));
+    });
+
+    return () => {
+      cancelled = true;
+      setIsDeepLinkLoading(false);
+    };
+  }, [
+    hashParam,
+    items,
+    isLoading,
+    lastInternalSelectionRef,
+    lastResolvedDeepLinkRef,
+    setDeepLinkError,
+    setIsDeepLinkLoading,
+    setSelectedItem,
+  ]);
+}
+
+function DownloadProgressStatus({
+  progress,
+  onCancel,
+}: {
+  progress: {
+    current: number;
+    total: number;
+    currentFile: string;
+  };
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-3 py-2">
+      <div className="flex flex-col gap-1">
+        <Progress
+          value={progress.total > 0 ? (progress.current / progress.total) * 100 : 0}
+          className="w-32 h-2"
+        />
+        {progress.currentFile && (
+          <span className="text-xs text-muted-foreground truncate max-w-32">
+            {progress.currentFile}
+          </span>
+        )}
+      </div>
+      <span className="text-sm text-muted-foreground tabular-nums">
+        {progress.current}/{progress.total}
+      </span>
+      <Button variant="ghost" size="sm" onClick={onCancel} className="h-6 w-6 p-0">
+        <X className="h-4 w-4" />
+        <span className="sr-only">Cancel download</span>
+      </Button>
+    </div>
+  );
+}
+
+function SelectionDownloadControls({
+  selectedCount,
+  totalItems,
+  isDownloading,
+  onToggleAll,
+  onDownload,
+  onCancelSelection,
+}: {
+  selectedCount: number;
+  totalItems: number;
+  isDownloading: boolean;
+  onToggleAll: () => void;
+  onDownload: () => void;
+  onCancelSelection: () => void;
+}) {
+  const hasAllSelected = selectedCount === totalItems;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-muted-foreground">
+        {selectedCount} of {totalItems} selected
+      </span>
+      <Button variant="ghost" size="sm" onClick={onToggleAll}>
+        {hasAllSelected ? 'Deselect All' : 'Select All'}
+      </Button>
+      <Button onClick={onDownload} disabled={isDownloading || selectedCount === 0}>
+        <Download className="h-4 w-4 mr-2" />
+        Download {selectedCount > 0 ? `(${selectedCount})` : ''}
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onCancelSelection}>
+        <X className="h-4 w-4" />
+        <span className="sr-only">Cancel selection</span>
+      </Button>
+    </div>
+  );
+}
+
+function BulkDownloadMenu({
+  isDownloading,
+  itemsCount,
+  hasMore,
+  total,
+  onDownloadAll,
+  onSelectItems,
+}: {
+  isDownloading: boolean;
+  itemsCount: number;
+  hasMore: boolean;
+  total: number;
+  onDownloadAll: () => void;
+  onSelectItems: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" disabled={isDownloading}>
+          <Download className="h-4 w-4 mr-2" />
+          {isDownloading ? 'Downloading...' : 'Download'}
+          <ChevronDown className="h-4 w-4 ml-2" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onDownloadAll}>
+          <Download className="h-4 w-4 mr-2" />
+          Download All ({itemsCount}
+          {hasMore ? ` of ${total}` : ''} loaded)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onSelectItems}>
+          <MousePointerClick className="h-4 w-4 mr-2" />
+          Select Items...
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MediaHeaderActions({
+  itemsCount,
+  total,
+  hasMore,
+  isDownloading,
+  isSelectionMode,
+  selectedCount,
+  downloadProgress,
+  onCancelDownload,
+  onToggleAll,
+  onDownloadSelected,
+  onToggleSelectionMode,
+  onDownloadAll,
+}: {
+  itemsCount: number;
+  total: number;
+  hasMore: boolean;
+  isDownloading: boolean;
+  isSelectionMode: boolean;
+  selectedCount: number;
+  downloadProgress: {
+    current: number;
+    total: number;
+    currentFile: string;
+  };
+  onCancelDownload: () => void;
+  onToggleAll: () => void;
+  onDownloadSelected: () => void;
+  onToggleSelectionMode: () => void;
+  onDownloadAll: () => void;
+}) {
+  if (itemsCount === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      {isDownloading && (
+        <DownloadProgressStatus progress={downloadProgress} onCancel={onCancelDownload} />
+      )}
+      {isSelectionMode ? (
+        <SelectionDownloadControls
+          selectedCount={selectedCount}
+          totalItems={itemsCount}
+          isDownloading={isDownloading}
+          onToggleAll={onToggleAll}
+          onDownload={onDownloadSelected}
+          onCancelSelection={onToggleSelectionMode}
+        />
+      ) : (
+        <BulkDownloadMenu
+          isDownloading={isDownloading}
+          itemsCount={itemsCount}
+          hasMore={hasMore}
+          total={total}
+          onDownloadAll={onDownloadAll}
+          onSelectItems={onToggleSelectionMode}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Media() {
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // URL state — validate enum values to avoid sending invalid params to the backend
-  const hashParam = searchParams.get('hash');
-  const rawType = searchParams.get('type');
-  const typeParam: MediaTypeFilter =
-    rawType && ['all', 'image', 'video', 'audio', 'other'].includes(rawType)
-      ? (rawType as MediaTypeFilter)
-      : 'all';
-  const evalParam = searchParams.get('evalId') || '';
-  const rawSortField = searchParams.get('sortField');
-  const sortFieldParam: MediaSort['field'] | null =
-    rawSortField && ['createdAt', 'sizeBytes'].includes(rawSortField)
-      ? (rawSortField as MediaSort['field'])
-      : null;
-  const rawSortOrder = searchParams.get('sortOrder');
-  const sortOrderParam: MediaSort['order'] | null =
-    rawSortOrder && ['asc', 'desc'].includes(rawSortOrder)
-      ? (rawSortOrder as MediaSort['order'])
-      : null;
+  const { hashParam, typeParam, evalParam, sortFieldParam, sortOrderParam } =
+    getMediaUrlState(searchParams);
 
   // Local state
   const [typeFilter, setTypeFilter] = useState<MediaTypeFilter>(typeParam);
@@ -91,7 +490,7 @@ export default function Media() {
   // - null: initial state, no internal action yet (preserve URL hash for deep linking)
   // - string: user selected an item with this hash
   // - 'cleared': user explicitly closed/cleared selection (remove hash from URL)
-  const lastInternalSelectionRef = useRef<string | null | 'cleared'>(null);
+  const lastInternalSelectionRef = useRef<InternalSelectionState>(null);
   const lastResolvedDeepLinkRef = useRef<string | null>(null);
 
   // Data fetching
@@ -157,148 +556,25 @@ export default function Media() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isSelectionMode]);
 
-  // Sync URL with filters - use a ref to track previous values and avoid
-  // reading searchParams in the effect (which would cause infinite loops)
-  const prevUrlStateRef = useRef({
-    typeFilter: '',
-    evalFilter: '',
-    selectedHash: '',
-    sortField: 'createdAt',
-    sortOrder: 'desc',
+  useMediaUrlSync({
+    typeFilter,
+    evalFilter,
+    selectedItem,
+    sort,
+    hashParam,
+    setSearchParams,
+    lastInternalSelectionRef,
   });
-
-  useEffect(() => {
-    const currentHash = selectedItem?.hash || '';
-    const prev = prevUrlStateRef.current;
-
-    // Only update URL if something actually changed
-    const hasFilterChange = typeFilter !== prev.typeFilter || evalFilter !== prev.evalFilter;
-    const hasSelectionChange = currentHash !== prev.selectedHash;
-    const hasSortChange = sort.field !== prev.sortField || sort.order !== prev.sortOrder;
-
-    if (!hasFilterChange && !hasSelectionChange && !hasSortChange) {
-      return;
-    }
-
-    // Update ref before calling setSearchParams to prevent stale comparisons
-    prevUrlStateRef.current = {
-      typeFilter,
-      evalFilter,
-      selectedHash: currentHash,
-      sortField: sort.field,
-      sortOrder: sort.order,
-    };
-
-    const params = new URLSearchParams();
-    if (typeFilter !== 'all') {
-      params.set('type', typeFilter);
-    }
-    if (evalFilter) {
-      params.set('evalId', evalFilter);
-    }
-    // Only add sort params if not default
-    if (sort.field !== 'createdAt' || sort.order !== 'desc') {
-      params.set('sortField', sort.field);
-      params.set('sortOrder', sort.order);
-    }
-    if (selectedItem) {
-      params.set('hash', selectedItem.hash);
-    } else if (lastInternalSelectionRef.current !== 'cleared') {
-      // Preserve existing hash from URL for deep linking on initial load
-      // Using hashParam (derived from searchParams at render) instead of calling
-      // searchParams.get() inside effect to avoid adding searchParams as dependency
-      if (hashParam) {
-        params.set('hash', hashParam);
-      }
-    }
-    // Push history when the user opens or navigates to a media item so that
-    // the browser Back button closes the modal instead of leaving the page.
-    // Use replace for filter/sort changes, modal close, and deep-link resolution.
-    const isUserSelection =
-      hasSelectionChange &&
-      !!selectedItem &&
-      lastInternalSelectionRef.current === selectedItem.hash;
-
-    setSearchParams(params, { replace: !isUserSelection });
-  }, [typeFilter, evalFilter, selectedItem, sort, setSearchParams, hashParam]);
-
-  // Handle hash param for deep linking (external navigation)
-  useEffect(() => {
-    if (!hashParam) {
-      lastResolvedDeepLinkRef.current = null;
-      lastInternalSelectionRef.current = null;
-      setDeepLinkError(null);
-      // When the hash is removed from the URL (e.g. browser Back), close the modal
-      // so UI state stays in sync with the URL.
-      setSelectedItem(null);
-      return;
-    }
-
-    // Skip if user explicitly cleared selection (closed modal, changed filters).
-    // The URL will be updated shortly to remove the hash.
-    if (lastInternalSelectionRef.current === 'cleared') {
-      return;
-    }
-
-    // Skip if this hash matches our last internal selection.
-    // This means the URL is just catching up to what we already selected
-    // via click/navigation, so we don't need to do anything.
-    if (hashParam === lastInternalSelectionRef.current) {
-      return;
-    }
-
-    // Skip if we already resolved this hash (e.g., from a previous deep-link fetch).
-    // Without this guard, changes to `items` or `isLoading` would re-trigger
-    // the fetch for a hash that was already successfully loaded.
-    if (lastResolvedDeepLinkRef.current === hashParam) {
-      return;
-    }
-
-    // First check if item is in loaded items
-    const item = items.find((i) => i.hash === hashParam);
-    if (item) {
-      lastResolvedDeepLinkRef.current = hashParam;
-      setSelectedItem(item);
-      setDeepLinkError(null);
-      return;
-    }
-
-    // Only fetch if we're done loading and the item wasn't found in the current list
-    if (!isLoading) {
-      // Item not in current list, fetch by hash directly
-      let cancelled = false;
-      setIsDeepLinkLoading(true);
-      fetchMediaItemByHash(hashParam).then((result) => {
-        if (cancelled) {
-          return;
-        }
-        setIsDeepLinkLoading(false);
-        if (result.item) {
-          lastResolvedDeepLinkRef.current = hashParam;
-          setSelectedItem(result.item);
-          setDeepLinkError(null);
-        } else {
-          // Only latch non-transient errors (not_found won't change on retry).
-          // For transient errors (network/server), leave the ref unset so the
-          // user can retry without needing a page reload.
-          if (result.error === 'not_found') {
-            lastResolvedDeepLinkRef.current = hashParam;
-          }
-          // Map error types to user-friendly messages
-          const errorMessages = {
-            not_found: `Media item not found. It may have been deleted or the link is invalid.`,
-            network_error: `Unable to load media item. Please check your connection and try again.`,
-            server_error: `Server error while loading media item. Please try again later.`,
-          };
-          setDeepLinkError(result.error ? errorMessages[result.error] : null);
-        }
-      });
-      return () => {
-        cancelled = true;
-        setIsDeepLinkLoading(false);
-      };
-    }
-  }, [hashParam, items, isLoading]);
+  useDeepLinkedMediaSelection({
+    hashParam,
+    items,
+    isLoading,
+    setSelectedItem,
+    setDeepLinkError,
+    setIsDeepLinkLoading,
+    lastInternalSelectionRef,
+    lastResolvedDeepLinkRef,
+  });
 
   const handleTypeFilterChange = useCallback(
     (type: MediaTypeFilter) => {
@@ -464,106 +740,34 @@ export default function Media() {
                 Browse images, videos, and audio generated by your evaluations
               </p>
             </div>
-            {items.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3">
-                {/* Download Progress */}
-                {isDownloading && (
-                  <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-3 py-2">
-                    <div className="flex flex-col gap-1">
-                      <Progress
-                        value={
-                          downloadProgress.total > 0
-                            ? (downloadProgress.current / downloadProgress.total) * 100
-                            : 0
-                        }
-                        className="w-32 h-2"
-                      />
-                      {downloadProgress.currentFile && (
-                        <span className="text-xs text-muted-foreground truncate max-w-32">
-                          {downloadProgress.currentFile}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-sm text-muted-foreground tabular-nums">
-                      {downloadProgress.current}/{downloadProgress.total}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelDownload}
-                      className="h-6 w-6 p-0"
-                    >
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Cancel download</span>
-                    </Button>
-                  </div>
-                )}
-
-                {/* Download Controls */}
-                {isSelectionMode ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-muted-foreground">
-                      {selectedHashes.size} of {items.length} selected
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={
-                        selectedHashes.size === items.length ? handleDeselectAll : handleSelectAll
-                      }
-                    >
-                      {selectedHashes.size === items.length ? 'Deselect All' : 'Select All'}
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        if (selectedHashes.size > 10) {
-                          setShowBulkDownloadConfirm(true);
-                        } else {
-                          handleBulkDownload();
-                        }
-                      }}
-                      disabled={isDownloading || selectedHashes.size === 0}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download {selectedHashes.size > 0 ? `(${selectedHashes.size})` : ''}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleToggleSelectionMode}>
-                      <X className="h-4 w-4" />
-                      <span className="sr-only">Cancel selection</span>
-                    </Button>
-                  </div>
-                ) : (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" disabled={isDownloading}>
-                        <Download className="h-4 w-4 mr-2" />
-                        {isDownloading ? 'Downloading...' : 'Download'}
-                        <ChevronDown className="h-4 w-4 ml-2" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => {
-                          if (items.length > 10) {
-                            setShowBulkDownloadConfirm(true);
-                          } else {
-                            handleBulkDownload();
-                          }
-                        }}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download All ({items.length}
-                        {hasMore ? ` of ${total}` : ''} loaded)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleToggleSelectionMode}>
-                        <MousePointerClick className="h-4 w-4 mr-2" />
-                        Select Items...
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
-            )}
+            <MediaHeaderActions
+              itemsCount={items.length}
+              total={total}
+              hasMore={hasMore}
+              isDownloading={isDownloading}
+              isSelectionMode={isSelectionMode}
+              selectedCount={selectedHashes.size}
+              downloadProgress={downloadProgress}
+              onCancelDownload={handleCancelDownload}
+              onToggleAll={
+                selectedHashes.size === items.length ? handleDeselectAll : handleSelectAll
+              }
+              onDownloadSelected={() => {
+                if (selectedHashes.size > 10) {
+                  setShowBulkDownloadConfirm(true);
+                } else {
+                  handleBulkDownload();
+                }
+              }}
+              onToggleSelectionMode={handleToggleSelectionMode}
+              onDownloadAll={() => {
+                if (items.length > 10) {
+                  setShowBulkDownloadConfirm(true);
+                } else {
+                  handleBulkDownload();
+                }
+              }}
+            />
           </div>
         </div>
       </PageHeader>

@@ -25,6 +25,217 @@ interface MediaCardProps {
   isViewing?: boolean;
 }
 
+function getMediaCardClassName({
+  isViewing,
+  isSelected,
+  isFocused,
+}: Pick<MediaCardProps, 'isViewing' | 'isSelected' | 'isFocused'>): string {
+  return cn(
+    'group relative rounded-xl border bg-card',
+    'transition-all duration-200',
+    'hover:border-primary/50 hover:shadow-md',
+    isViewing
+      ? 'border-primary ring-2 ring-primary/40 shadow-lg'
+      : isSelected
+        ? 'border-primary ring-2 ring-primary/20'
+        : isFocused
+          ? 'border-primary/70 ring-2 ring-primary/30 ring-offset-2 ring-offset-background'
+          : 'border-border',
+  );
+}
+
+function getMediaCardAriaLabel(
+  item: MediaItem,
+  isViewing: boolean,
+  isSelectionMode: boolean,
+  isSelected: boolean,
+): string {
+  return `${getKindLabel(item.kind)}: ${item.context.evalDescription || 'Media item'}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`;
+}
+
+function MediaPreview({
+  item,
+  mediaUrl,
+  isVisible,
+  imageLoaded,
+  imageError,
+  onImageLoad,
+  onImageError,
+}: {
+  item: MediaItem;
+  mediaUrl: string;
+  isVisible: boolean;
+  imageLoaded: boolean;
+  imageError: boolean;
+  onImageLoad: () => void;
+  onImageError: () => void;
+}) {
+  const KindIcon = getKindIcon(item.kind);
+
+  if (item.kind === 'image' && !imageError) {
+    return (
+      <>
+        {!imageLoaded && <Skeleton className="absolute inset-0 rounded-none" />}
+        <img
+          src={mediaUrl}
+          alt={item.context.evalDescription || 'Generated image'}
+          className={cn(
+            'h-full w-full object-cover transition-opacity duration-200',
+            imageLoaded ? 'opacity-100' : 'opacity-0',
+          )}
+          loading="lazy"
+          onLoad={onImageLoad}
+          onError={onImageError}
+        />
+      </>
+    );
+  }
+
+  if (item.kind === 'video') {
+    return <VideoHoverPreview videoUrl={mediaUrl} hash={item.hash} isVisible={isVisible} />;
+  }
+
+  if (item.kind === 'audio') {
+    return <AudioPreviewButton audioUrl={mediaUrl} hash={item.hash} />;
+  }
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-950/30 dark:to-slate-950/30">
+      <KindIcon className="h-10 w-10 text-gray-400 dark:text-gray-500" />
+      <span className="text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
+    </div>
+  );
+}
+
+function DownloadButton({ onClick }: { onClick: (event: React.MouseEvent) => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          className={cn(
+            'absolute bottom-2 left-2 z-10 flex h-8 w-8 items-center justify-center [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
+            'rounded-md bg-black/60',
+            'opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
+            'hover:bg-black/80',
+          )}
+          aria-label="Download"
+        >
+          <Download className="h-3.5 w-3.5 text-white" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Download</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function SelectionButton({
+  isSelected,
+  onClick,
+}: {
+  isSelected: boolean;
+  onClick: (event: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all',
+        isSelected
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-muted-foreground/50 bg-white/90 dark:bg-zinc-800/90 hover:border-primary',
+      )}
+      aria-label={isSelected ? 'Deselect' : 'Select'}
+    >
+      {isSelected && <Check className="h-4 w-4" />}
+    </button>
+  );
+}
+
+function PlayIndicator({ kind }: { kind: MediaItem['kind'] }) {
+  if (kind !== 'video' && kind !== 'audio') {
+    return null;
+  }
+
+  return (
+    <div className="absolute bottom-2 right-2">
+      <Badge variant="secondary" className="bg-black/70 text-white text-xs px-1.5 py-0.5">
+        {kind === 'video' ? <Video className="h-3 w-3" /> : <Music className="h-3 w-3" />}
+      </Badge>
+    </div>
+  );
+}
+
+function PassFailIndicator({ item }: { item: MediaItem }) {
+  if (item.context.pass === undefined) {
+    return null;
+  }
+
+  return (
+    <div className="absolute top-2 left-2 z-10">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className={cn(
+              'flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium',
+              item.context.pass
+                ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/80 dark:text-emerald-300'
+                : 'bg-red-100/90 text-red-700 dark:bg-red-900/80 dark:text-red-300',
+            )}
+          >
+            {item.context.pass ? (
+              <CheckCircle className="h-3 w-3" />
+            ) : (
+              <XCircle className="h-3 w-3" />
+            )}
+            {item.context.score !== undefined && (
+              <span className="tabular-nums">{Math.round(item.context.score * 100)}%</span>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          {item.context.pass ? 'Passed' : 'Failed'}
+          {item.context.score !== undefined &&
+            ` (Score: ${(item.context.score * 100).toFixed(1)}%)`}
+        </TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
+function MediaCardFooter({ item }: { item: MediaItem }) {
+  const KindIcon = getKindIcon(item.kind);
+
+  return (
+    <div className="p-3 space-y-1.5 relative pointer-events-none">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <KindIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        {item.context.provider ? (
+          <span className="text-xs font-medium text-foreground truncate">
+            {item.context.provider}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground truncate">{item.mimeType}</span>
+        )}
+      </div>
+
+      <p className="text-sm font-medium truncate">
+        {item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
+      </p>
+
+      {(item.context.testIdx !== undefined || item.context.promptIdx !== undefined) && (
+        <p className="text-xs text-muted-foreground">
+          {item.context.testIdx !== undefined && `Test #${item.context.testIdx + 1}`}
+          {item.context.testIdx !== undefined && item.context.promptIdx !== undefined && ', '}
+          {item.context.promptIdx !== undefined && `Prompt #${item.context.promptIdx + 1}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function MediaCard({
   item,
   onClick,
@@ -77,8 +288,6 @@ export function MediaCard({
     };
   }, []);
 
-  const KindIcon = getKindIcon(item.kind);
-  const isPlayable = item.kind === 'video' || item.kind === 'audio';
   const isDownloadOnly = item.kind === 'other';
 
   const handlePrimaryAction = () => {
@@ -104,21 +313,7 @@ export function MediaCard({
   };
 
   return (
-    <div
-      ref={cardRef}
-      className={cn(
-        'group relative rounded-xl border bg-card',
-        'transition-all duration-200',
-        'hover:border-primary/50 hover:shadow-md',
-        isViewing
-          ? 'border-primary ring-2 ring-primary/40 shadow-lg'
-          : isSelected
-            ? 'border-primary ring-2 ring-primary/20'
-            : isFocused
-              ? 'border-primary/70 ring-2 ring-primary/30 ring-offset-2 ring-offset-background'
-              : 'border-border',
-      )}
-    >
+    <div ref={cardRef} className={getMediaCardClassName({ isViewing, isSelected, isFocused })}>
       {/* Primary action overlay keeps the footer and keyboard focus path
           interactive. The preview surface delegates ordinary pointer clicks
           separately so its own controls can remain usable above it. */}
@@ -129,7 +324,7 @@ export function MediaCard({
         onClick={handlePrimaryAction}
         onFocus={onFocus}
         tabIndex={tabIndex}
-        aria-label={`${getKindLabel(item.kind)}: ${item.context.evalDescription || 'Media item'}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
+        aria-label={getMediaCardAriaLabel(item, isViewing, isSelectionMode, isSelected)}
       />
 
       {/* Media Preview Area */}
@@ -137,145 +332,32 @@ export function MediaCard({
         className="relative aspect-square cursor-pointer overflow-hidden rounded-t-xl bg-muted/30"
         onClick={handlePrimaryAction}
       >
-        {item.kind === 'image' && !imageError ? (
-          <>
-            {!imageLoaded && <Skeleton className="absolute inset-0 rounded-none" />}
-            <img
-              src={mediaUrl}
-              alt={item.context.evalDescription || 'Generated image'}
-              className={cn(
-                'h-full w-full object-cover transition-opacity duration-200',
-                imageLoaded ? 'opacity-100' : 'opacity-0',
-              )}
-              loading="lazy"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageError(true)}
-            />
-          </>
-        ) : item.kind === 'video' ? (
-          <VideoHoverPreview videoUrl={mediaUrl} hash={item.hash} isVisible={isVisible} />
-        ) : item.kind === 'audio' ? (
-          <AudioPreviewButton audioUrl={mediaUrl} hash={item.hash} />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-950/30 dark:to-slate-950/30">
-            <KindIcon className="h-10 w-10 text-gray-400 dark:text-gray-500" />
-            <span className="text-xs text-muted-foreground">{formatBytes(item.sizeBytes)}</span>
-          </div>
-        )}
+        <MediaPreview
+          item={item}
+          mediaUrl={mediaUrl}
+          isVisible={isVisible}
+          imageLoaded={imageLoaded}
+          imageError={imageError}
+          onImageLoad={() => setImageLoaded(true)}
+          onImageError={() => setImageError(true)}
+        />
 
         {/* Download Button - Bottom Left Corner (z-10 above overlay) */}
-        {!isSelectionMode && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleDownloadClick}
-                className={cn(
-                  'absolute bottom-2 left-2 z-10 flex h-8 w-8 items-center justify-center [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
-                  'rounded-md bg-black/60',
-                  'opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
-                  'hover:bg-black/80',
-                )}
-                aria-label="Download"
-              >
-                <Download className="h-3.5 w-3.5 text-white" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Download</TooltipContent>
-          </Tooltip>
-        )}
+        {!isSelectionMode && <DownloadButton onClick={handleDownloadClick} />}
 
         {/* Selection Checkbox (z-10 above overlay) */}
         {isSelectionMode && (
-          <button
-            type="button"
-            onClick={handleCheckboxClick}
-            className={cn(
-              'absolute top-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-md border-2 transition-all',
-              isSelected
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-muted-foreground/50 bg-white/90 dark:bg-zinc-800/90 hover:border-primary',
-            )}
-            aria-label={isSelected ? 'Deselect' : 'Select'}
-          >
-            {isSelected && <Check className="h-4 w-4" />}
-          </button>
+          <SelectionButton isSelected={isSelected} onClick={handleCheckboxClick} />
         )}
 
         {/* Play indicator for video/audio */}
-        {isPlayable && (
-          <div className="absolute bottom-2 right-2">
-            <Badge variant="secondary" className="bg-black/70 text-white text-xs px-1.5 py-0.5">
-              {item.kind === 'video' ? (
-                <Video className="h-3 w-3" />
-              ) : (
-                <Music className="h-3 w-3" />
-              )}
-            </Badge>
-          </div>
-        )}
+        <PlayIndicator kind={item.kind} />
 
         {/* Pass/Fail indicator */}
-        {item.context.pass !== undefined && (
-          <div className="absolute top-2 left-2 z-10">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div
-                  className={cn(
-                    'flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium',
-                    item.context.pass
-                      ? 'bg-emerald-100/90 text-emerald-700 dark:bg-emerald-900/80 dark:text-emerald-300'
-                      : 'bg-red-100/90 text-red-700 dark:bg-red-900/80 dark:text-red-300',
-                  )}
-                >
-                  {item.context.pass ? (
-                    <CheckCircle className="h-3 w-3" />
-                  ) : (
-                    <XCircle className="h-3 w-3" />
-                  )}
-                  {item.context.score !== undefined && (
-                    <span className="tabular-nums">{Math.round(item.context.score * 100)}%</span>
-                  )}
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {item.context.pass ? 'Passed' : 'Failed'}
-                {item.context.score !== undefined &&
-                  ` (Score: ${(item.context.score * 100).toFixed(1)}%)`}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        )}
+        <PassFailIndicator item={item} />
       </div>
 
-      {/* Card Footer — pointer-events-none so clicks fall through to the overlay */}
-      <div className="p-3 space-y-1.5 relative pointer-events-none">
-        {/* Provider row - most important for comparing model outputs */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <KindIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          {item.context.provider ? (
-            <span className="text-xs font-medium text-foreground truncate">
-              {item.context.provider}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground truncate">{item.mimeType}</span>
-          )}
-        </div>
-
-        {/* Eval description */}
-        <p className="text-sm font-medium truncate">
-          {item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`}
-        </p>
-
-        {/* Test/Prompt indices - only render if we have data */}
-        {(item.context.testIdx !== undefined || item.context.promptIdx !== undefined) && (
-          <p className="text-xs text-muted-foreground">
-            {item.context.testIdx !== undefined && `Test #${item.context.testIdx + 1}`}
-            {item.context.testIdx !== undefined && item.context.promptIdx !== undefined && ', '}
-            {item.context.promptIdx !== undefined && `Prompt #${item.context.promptIdx + 1}`}
-          </p>
-        )}
-      </div>
+      <MediaCardFooter item={item} />
     </div>
   );
 }
