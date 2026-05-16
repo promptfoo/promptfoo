@@ -73,7 +73,7 @@ function validateShareableEvaluation(evalRecord: Eval): ToolResult | undefined {
       - The evaluation is still running
       - The evaluation did not complete successfully
       - No prompts were defined in the evaluation
-      
+
       Wait for the evaluation to complete or check its status.
     `,
   );
