@@ -70,7 +70,16 @@ const createMockSessionResponse = (id = 'test-session-123') => ({
 // Helper to create mock prompt response
 // SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
-  parts: Array<{ type: string; text?: string }>,
+  parts: Array<{
+    type: string;
+    text?: string;
+    tool?: string;
+    state?: {
+      status?: string;
+      input?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    };
+  }>,
   tokens?: {
     total?: number;
     input?: number;
@@ -451,6 +460,69 @@ describe('OpenCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Part 1\nPart 2');
+      });
+
+      it('should normalize first-class skill tool parts into skillCalls metadata', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              type: 'tool',
+              tool: 'skill',
+              state: {
+                status: 'completed',
+                input: { name: 'review-standards' },
+                metadata: {
+                  name: 'review-standards',
+                  dir: '/repo/.agents/skills/review-standards',
+                },
+              },
+            },
+            { type: 'text', text: 'Skill applied.' },
+          ]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the review-standards skill');
+
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'review-standards',
+            input: { name: 'review-standards' },
+            path: '/repo/.agents/skills/review-standards/SKILL.md',
+            source: 'tool',
+          },
+        ]);
+      });
+
+      it('should retain failed skill tool attempts as errored skillCalls', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              type: 'tool',
+              tool: 'skill',
+              state: {
+                status: 'error',
+                input: { name: 'missing-skill' },
+              },
+            },
+          ]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the missing skill');
+
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'missing-skill',
+            input: { name: 'missing-skill' },
+            source: 'tool',
+            is_error: true,
+          },
+        ]);
       });
 
       it('should handle SDK exceptions', async () => {

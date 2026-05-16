@@ -658,6 +658,7 @@ Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
 

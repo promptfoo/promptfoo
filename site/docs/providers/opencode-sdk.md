@@ -382,6 +382,35 @@ For security-conscious deployments, set `doom_loop: deny` and `external_director
 
 :::
 
+## Skills
+
+OpenCode loads Agent Skills through its native `skill` tool. Enable the tool for
+the eval, point `working_dir` at a repo that contains skills OpenCode can
+discover, and allow the skill permission if you want a non-interactive run:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      working_dir: ./project
+      tools:
+        skill: true
+      permission:
+        skill: allow
+
+tests:
+  - assert:
+      - type: skill-used
+        value: review-standards
+```
+
+Promptfoo normalizes OpenCode's native `skill` tool parts into
+`response.metadata.skillCalls`, so [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used)
+works the same way it does for Claude Agent SDK. Each normalized entry keeps the
+requested skill name and tool input, records tool failures with `is_error: true`,
+and includes the loaded `SKILL.md` path when OpenCode returns the skill directory
+in its result metadata.
+
 ## Session Management
 
 ### Ephemeral Sessions (Default)
