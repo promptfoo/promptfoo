@@ -144,7 +144,6 @@ async function getLangfuseClient(): Promise<LangfuseTracesClient> {
   } catch (error) {
     throw new Error(
       `The langfuse package is required for Langfuse traces integration. Install it with: npm install langfuse. Original error: ${getFetchErrorMessage(error)}`,
-      { cause: error },
     );
   }
 
