@@ -172,6 +172,16 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-name-test-metric')).toHaveTextContent('test-metric');
   });
 
+  it('shows a filter hint tooltip for metric pills', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<CustomMetrics lookup={{ metric1: 10 }} />);
+
+    await user.hover(screen.getByTestId('metric-name-metric1'));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Click to filter by this metric');
+  });
+
   it('handles sorting of metrics with special characters and unusual names', () => {
     const lookup = {
       '1. Metric': 1,

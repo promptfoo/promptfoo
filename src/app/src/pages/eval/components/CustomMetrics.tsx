@@ -143,7 +143,12 @@ const CustomMetrics = ({
                     </span>
                   </div>
                 </TooltipTrigger>
-                {tooltipContent && <TooltipContent>{tooltipContent}</TooltipContent>}
+                <TooltipContent side="top">
+                  <div className="space-y-2 max-w-[400px]">
+                    {tooltipContent}
+                    <p className="text-sm font-medium">Click to filter by this metric</p>
+                  </div>
+                </TooltipContent>
               </Tooltip>
             </div>
           ) : null;
