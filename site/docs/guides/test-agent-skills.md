@@ -1,7 +1,7 @@
 ---
 sidebar_position: 66
 title: Test Agent Skills
-description: Compare Claude, Codex, and OpenCode skill versions with Promptfoo evals that measure invocation, task quality, cost, latency, and trace evidence.
+description: Compare Claude, Codex, and other skill versions with Promptfoo evals that measure invocation, task quality, cost, latency, and trace evidence.
 ---
 
 # Test Agent Skills
