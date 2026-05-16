@@ -116,7 +116,7 @@ vi.mock('./ProviderEditor', async () => {
             HTTP/HTTPS Endpoint
           </button>
 
-          <label htmlFor="provider-name">Provider Name</label>
+          <label htmlFor="provider-name">Target Name</label>
           <input
             id="provider-name"
             value={provider.label ?? ''}
@@ -206,6 +206,22 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
     mockSetRawConfigJson = vi.fn();
+  });
+
+  it('should use custom target copy for the generic configuration screen', () => {
+    renderWithProviders(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    expect(screen.getByText('Custom Target Configuration')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Custom target documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets',
+    );
   });
 
   it('should call updateCustomTarget with "config" field when JSON is edited', async () => {
@@ -573,7 +589,7 @@ Content-Type: application/json
       await user.keyboard('{Control>}a{/Control}');
       await user.paste('wss://example.com/ws');
 
-      const targetNameInput = screen.getByLabelText(/Provider Name/i);
+      const targetNameInput = screen.getByLabelText(/Target Name/i);
       await user.click(targetNameInput);
       await user.keyboard('{Control>}a{/Control}');
       await user.paste('My WebSocket Target');
