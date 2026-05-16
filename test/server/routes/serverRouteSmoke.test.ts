@@ -447,6 +447,12 @@ const smokeCases: SmokeCase[] = [
     expectedStatus: 404,
   },
   {
+    method: 'post',
+    openApiPath: '/api/eval/{id}/resume',
+    path: '/api/eval/missing-eval/resume',
+    expectedStatus: 404,
+  },
+  {
     method: 'patch',
     openApiPath: '/api/eval/{id}',
     path: '/api/eval/eval-1',
