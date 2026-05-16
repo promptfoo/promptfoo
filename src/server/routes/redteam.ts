@@ -59,16 +59,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    // In multi-input mode, some plugins don't support dynamic generation
-    const hasMultiInput =
-      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
-    if (hasMultiInput) {
-      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
-      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
-        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
-        res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
-        return;
-      }
+    if (shouldSkipMultiInputGeneration(plugin)) {
+      logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+      res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+      return;
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)
@@ -104,42 +98,29 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    // Apply strategy to test case
-    let finalTestCases = testCases;
-
-    // Skip applying strategy if it's 'basic' as they don't transform test cases
-    if (!['basic', 'default'].includes(strategy.id)) {
-      try {
-        const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
-
-        const strategyTestCases = await strategyFactory.action(
-          testCases as TestCaseWithPlugin[],
-          injectVar,
-          strategy.config || {},
-          strategy.id,
-        );
-
-        if (strategyTestCases && strategyTestCases.length > 0) {
-          finalTestCases = strategyTestCases;
-        }
-      } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}`, { error });
-        res.status(500).json({
-          error: `Failed to apply strategy ${strategy.id}`,
-        });
-        return;
-      }
+    const strategyResult = await applyGenerateTestStrategy({
+      strategyId: strategy.id,
+      strategyConfig: strategy.config || {},
+      testCases: testCases as TestCaseWithPlugin[],
+      injectVar,
+    });
+    if (!strategyResult.success) {
+      logger.error(`Error applying strategy ${strategy.id}`, { error: strategyResult.error });
+      res.status(500).json({
+        error: `Failed to apply strategy ${strategy.id}`,
+      });
+      return;
     }
+    const finalTestCases = strategyResult.testCases;
 
-    const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
+    const context = buildGeneratedTestContext(plugin.id, strategy.id);
     const purpose = config.applicationDefinition.purpose ?? null;
 
     // Handle multi-turn strategies (always single test case)
     if (isMultiTurnStrategy(strategy.id)) {
       const testCase = finalTestCases[0];
       const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-      const baseMetadata =
-        testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+      const baseMetadata = getTestCaseMetadata(testCase);
       const metadataForStrategy = {
         ...baseMetadata,
         strategyId: strategy.id,
@@ -189,8 +170,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     if (effectiveCount > 1) {
       const batchResults = finalTestCases.map((testCase) => {
         const prompt = extractGeneratedPrompt(testCase, injectVar);
-        const metadata =
-          testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+        const metadata = getTestCaseMetadata(testCase);
         return { prompt, context, metadata };
       });
 
@@ -206,8 +186,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // Handle single test case response (backward compatible)
     const testCase = finalTestCases[0];
     const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-    const baseMetadata =
-      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+    const baseMetadata = getTestCaseMetadata(testCase);
 
     res.json(
       RedteamSchemas.GenerateTest.Response.parse({
@@ -223,6 +202,64 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     });
   }
 });
+
+function shouldSkipMultiInputGeneration(plugin: {
+  id: string;
+  config: Record<string, unknown>;
+}): boolean {
+  const inputs = plugin.config.inputs;
+  if (!inputs || typeof inputs !== 'object' || Object.keys(inputs as object).length === 0) {
+    return false;
+  }
+
+  const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+  return excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number]);
+}
+
+async function applyGenerateTestStrategy({
+  strategyId,
+  strategyConfig,
+  testCases,
+  injectVar,
+}: {
+  strategyId: string;
+  strategyConfig: Record<string, unknown>;
+  testCases: TestCaseWithPlugin[];
+  injectVar: string;
+}): Promise<
+  { success: true; testCases: TestCaseWithPlugin[] } | { success: false; error: unknown }
+> {
+  if (['basic', 'default'].includes(strategyId)) {
+    return { success: true, testCases };
+  }
+
+  try {
+    const strategyFactory = Strategies.find((s) => s.id === strategyId) as StrategyFactory;
+    const strategyTestCases = await strategyFactory.action(
+      testCases,
+      injectVar,
+      strategyConfig,
+      strategyId,
+    );
+    return {
+      success: true,
+      testCases:
+        strategyTestCases && strategyTestCases.length > 0
+          ? (strategyTestCases as TestCaseWithPlugin[])
+          : testCases,
+    };
+  } catch (error) {
+    return { success: false, error };
+  }
+}
+
+function buildGeneratedTestContext(pluginId: string, strategyId: string): string {
+  return `This test case targets the ${pluginId} plugin with strategy ${strategyId} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
+}
+
+function getTestCaseMetadata(testCase: TestCaseWithPlugin): Record<string, unknown> {
+  return testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+}
 
 // Track the current running job
 let currentJobId: string | null = null;

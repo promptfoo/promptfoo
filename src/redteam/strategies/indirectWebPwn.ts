@@ -454,103 +454,29 @@ async function transformForPerTurnLayer(
     let turnNumber: number;
 
     if (pageState) {
-      // Subsequent turn: Update the existing page
-      logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
+      turnNumber = await updatePerTurnPageState({
+        pageState,
         stateKey,
-        uuid: pageState.uuid,
+        attackPrompt,
         evalId,
-        previousTurn: pageState.turnCount,
-        previousEmbeddingLocation: pageState.embeddingLocation,
-        promptLength: attackPrompt.length,
+        useLlmUpdate,
+        preferSmallModel,
       });
-
-      try {
-        const response = await updateWebPage(
-          pageState.uuid,
-          attackPrompt,
-          evalId,
-          useLlmUpdate,
-          preferSmallModel,
-        );
-
-        // Update state with new embedding location and fetch prompt
-        const previousLocation = pageState.embeddingLocation;
-        pageState.turnCount++;
-        pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
-        // Update fetch prompt if server provided a new one
-        if (response.fetchPrompt) {
-          pageState.fetchPrompt = response.fetchPrompt;
-        }
-
-        logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
-          uuid: pageState.uuid,
-          previousEmbeddingLocation: previousLocation,
-          newEmbeddingLocation: pageState.embeddingLocation,
-          turnCount: pageState.turnCount,
-          updateCount: response.updateCount,
-          hasServerFetchPrompt: !!response.fetchPrompt,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to update page', {
-          error: error instanceof Error ? error.message : String(error),
-          uuid: pageState.uuid,
-        });
-        // On error, still use the existing URL
-      }
-
-      turnNumber = pageState.turnCount;
     } else {
-      // First turn: Create a new page
-      logger.debug('[IndirectWebPwn] First turn - creating new page', {
+      const createdPageState = await createPerTurnPageState({
+        testCase,
+        testCaseId,
         stateKey,
-        promptLength: attackPrompt.length,
+        attackPrompt,
+        evalId,
+        useLlmCreate,
+        preferSmallModel,
       });
-
-      try {
-        // Extract goal and purpose from metadata (evalId already extracted above)
-        const goal = testCase.metadata?.goal as string | undefined;
-        const purpose = testCase.metadata?.purpose as string | undefined;
-
-        const response = await createWebPage(
-          testCaseId,
-          attackPrompt,
-          evalId,
-          goal,
-          purpose,
-          useLlmCreate,
-          preferSmallModel,
-        );
-
-        // Clean up expired entries before adding new ones
-        cleanupExpiredPageState();
-
-        pageState = {
-          uuid: response.uuid,
-          fullUrl: response.fullUrl,
-          turnCount: 1,
-          embeddingLocation: response.embeddingLocation || 'main_content',
-          createdAt: Date.now(),
-          fetchPrompt: response.fetchPrompt, // Server-generated fetch prompt (if useLlm)
-        };
-        pageStateMap.set(stateKey, pageState);
-
-        logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
-          uuid: pageState.uuid,
-          fullUrl: pageState.fullUrl,
-          embeddingLocation: pageState.embeddingLocation,
-          turnCount: 1,
-          hasServerFetchPrompt: !!response.fetchPrompt,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to create page', {
-          error: error instanceof Error ? error.message : String(error),
-          stateKey,
-        });
-        // On error, pass through the original prompt
+      if (!createdPageState) {
         results.push(testCase);
         continue;
       }
-
+      pageState = createdPageState;
       turnNumber = 1;
     }
 
@@ -589,6 +515,125 @@ async function transformForPerTurnLayer(
   }
 
   return results;
+}
+
+async function updatePerTurnPageState({
+  pageState,
+  stateKey,
+  attackPrompt,
+  evalId,
+  useLlmUpdate,
+  preferSmallModel,
+}: {
+  pageState: PageState;
+  stateKey: string;
+  attackPrompt: string;
+  evalId?: string;
+  useLlmUpdate: boolean;
+  preferSmallModel: boolean;
+}): Promise<number> {
+  logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
+    stateKey,
+    uuid: pageState.uuid,
+    evalId,
+    previousTurn: pageState.turnCount,
+    previousEmbeddingLocation: pageState.embeddingLocation,
+    promptLength: attackPrompt.length,
+  });
+
+  try {
+    const response = await updateWebPage(
+      pageState.uuid,
+      attackPrompt,
+      evalId,
+      useLlmUpdate,
+      preferSmallModel,
+    );
+    const previousLocation = pageState.embeddingLocation;
+    pageState.turnCount++;
+    pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
+    if (response.fetchPrompt) {
+      pageState.fetchPrompt = response.fetchPrompt;
+    }
+    logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
+      uuid: pageState.uuid,
+      previousEmbeddingLocation: previousLocation,
+      newEmbeddingLocation: pageState.embeddingLocation,
+      turnCount: pageState.turnCount,
+      updateCount: response.updateCount,
+      hasServerFetchPrompt: !!response.fetchPrompt,
+    });
+  } catch (error) {
+    logger.error('[IndirectWebPwn] Failed to update page', {
+      error: error instanceof Error ? error.message : String(error),
+      uuid: pageState.uuid,
+    });
+  }
+
+  return pageState.turnCount;
+}
+
+async function createPerTurnPageState({
+  testCase,
+  testCaseId,
+  stateKey,
+  attackPrompt,
+  evalId,
+  useLlmCreate,
+  preferSmallModel,
+}: {
+  testCase: TestCaseWithPlugin;
+  testCaseId: string;
+  stateKey: string;
+  attackPrompt: string;
+  evalId?: string;
+  useLlmCreate: boolean;
+  preferSmallModel: boolean;
+}): Promise<PageState | undefined> {
+  logger.debug('[IndirectWebPwn] First turn - creating new page', {
+    stateKey,
+    promptLength: attackPrompt.length,
+  });
+
+  try {
+    const goal = testCase.metadata?.goal as string | undefined;
+    const purpose = testCase.metadata?.purpose as string | undefined;
+    const response = await createWebPage(
+      testCaseId,
+      attackPrompt,
+      evalId,
+      goal,
+      purpose,
+      useLlmCreate,
+      preferSmallModel,
+    );
+    cleanupExpiredPageState();
+
+    const pageState: PageState = {
+      uuid: response.uuid,
+      fullUrl: response.fullUrl,
+      turnCount: 1,
+      embeddingLocation: response.embeddingLocation || 'main_content',
+      createdAt: Date.now(),
+      fetchPrompt: response.fetchPrompt,
+    };
+    pageStateMap.set(stateKey, pageState);
+
+    logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
+      uuid: pageState.uuid,
+      fullUrl: pageState.fullUrl,
+      embeddingLocation: pageState.embeddingLocation,
+      turnCount: 1,
+      hasServerFetchPrompt: !!response.fetchPrompt,
+    });
+    return pageState;
+  } catch (error) {
+    logger.error('[IndirectWebPwn] Failed to create page', {
+      error: error instanceof Error ? error.message : String(error),
+      stateKey,
+    });
+    return undefined;
+  }
 }
 
 /**
