@@ -194,202 +194,263 @@ async function withGenerationConcurrency<T>(
   return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
 }
 
-export async function doGenerateRedteam(
-  options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig> | null> {
-  setupEnv(options.envFile);
-  const cacheOverride = options.cache === false ? false : undefined;
-  if (cacheOverride === false) {
-    logger.info('Cache is disabled');
-  }
-
-  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+interface LoadedGenerationContext {
+  testSuite: TestSuite;
+  redteamConfig?: RedteamFileConfig;
+  configPath?: string;
+  commandLineOptions?: Record<string, any>;
+  resolvedConfig?: Partial<UnifiedConfig>;
+  pluginSeverityOverrides: Map<Plugin, Severity>;
+  pluginSeverityOverridesId?: string;
 }
 
-async function doGenerateRedteamInternal(
-  options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig> | null> {
-  // Check monthly probe limit for non-cloud users
+interface PreparedGenerationConfig {
+  parsedConfig: z.infer<typeof RedteamConfigSchema>;
+  targetInputs: TestSuite['providers'][number]['inputs'];
+  targetIds: string[];
+  enhancedPurpose: string;
+  augmentedTestGenerationInstructions: string;
+  strategyObjs: RedteamStrategyObject[];
+  plugins: RedteamPluginObject[];
+  maxConcurrency: number;
+  delay: number | undefined;
+  numTests: number | undefined;
+  sharing: boolean | undefined;
+}
+
+interface GeneratedRedteamTests {
+  redteamTests: any[];
+  purpose: string;
+  entities: string[];
+  finalInjectVar: string;
+  failedPlugins: FailedPluginInfo[];
+}
+
+function enforceProbeLimit(): void {
   const probeLimitResult = checkRedteamProbeLimit();
-  if (!probeLimitResult.withinLimit) {
-    logger.error(dedent`
-      ${chalk.red.bold('Monthly probe limit reached')}
-
-      You've used ${chalk.bold(probeLimitResult.used.toLocaleString())} of your ${chalk.bold(MONTHLY_PROBE_LIMIT.toLocaleString())} free monthly probes.
-
-      To continue, please log in to Promptfoo Cloud:
-
-        ${chalk.cyan('promptfoo auth login')}
-
-      For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
-    `);
-    throw new ProbeLimitExceededError(probeLimitResult.used, MONTHLY_PROBE_LIMIT);
+  if (probeLimitResult.withinLimit) {
+    return;
   }
 
-  let testSuite: TestSuite;
-  let redteamConfig: RedteamFileConfig | undefined;
-  let configPath = options.config || options.defaultConfigPath;
-  const outputPath = options.output || 'redteam.yaml';
-  let commandLineOptions: Record<string, any> | undefined;
-  let resolvedConfig: Partial<UnifiedConfig> | undefined;
+  logger.error(dedent`
+    ${chalk.red.bold('Monthly probe limit reached')}
 
-  // Write a remote config to a temporary file
-  if (options.configFromCloud) {
-    // Write configFromCloud to a temporary file
-    const filename = `redteam-generate-${Date.now()}.yaml`;
-    const tmpFile = path.join('', filename);
-    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
-    await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud));
-    configPath = tmpFile;
-    logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
+    You've used ${chalk.bold(probeLimitResult.used.toLocaleString())} of your ${chalk.bold(MONTHLY_PROBE_LIMIT.toLocaleString())} free monthly probes.
+
+    To continue, please log in to Promptfoo Cloud:
+
+      ${chalk.cyan('promptfoo auth login')}
+
+    For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
+  `);
+  throw new ProbeLimitExceededError(probeLimitResult.used, MONTHLY_PROBE_LIMIT);
+}
+
+async function materializeCloudConfig(
+  options: Partial<RedteamCliGenerateOptions>,
+  configPath: string | undefined,
+): Promise<string | undefined> {
+  if (!options.configFromCloud) {
+    return configPath;
   }
 
-  // Skip generation when a YAML output already matches the current config hash.
+  const filename = `redteam-generate-${Date.now()}.yaml`;
+  const tmpFile = path.join('', filename);
+  await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+  await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud));
+  logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
+  return tmpFile;
+}
+
+async function maybeReuseExistingGeneratedConfig(
+  options: Partial<RedteamCliGenerateOptions>,
+  outputPath: string,
+  configPath: string | undefined,
+): Promise<Partial<UnifiedConfig> | undefined> {
   if (
-    !options.force &&
-    !options.configFromCloud &&
-    !outputPath.endsWith('.burp') &&
-    (await pathExists(outputPath)) &&
-    configPath &&
-    (await pathExists(configPath))
+    options.force ||
+    options.configFromCloud ||
+    outputPath.endsWith('.burp') ||
+    !(await pathExists(outputPath)) ||
+    !configPath ||
+    !(await pathExists(configPath))
   ) {
-    const redteamContent = yaml.load(
-      await fs.readFile(outputPath, 'utf8'),
-    ) as Partial<UnifiedConfig>;
-    const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = await getConfigHash(configPath);
-
-    if (storedHash === currentHash) {
-      logger.warn(
-        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-      );
-      return redteamContent;
-    }
+    return undefined;
   }
 
-  let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
-  let pluginSeverityOverridesId: string | undefined;
+  const redteamContent = yaml.load(await fs.readFile(outputPath, 'utf8')) as Partial<UnifiedConfig>;
+  const storedHash = redteamContent.metadata?.configHash;
+  const currentHash = await getConfigHash(configPath);
 
-  if (configPath) {
-    const resolved = await resolveConfigs(
-      {
-        config: [configPath],
-      },
-      options.defaultConfig || {},
+  if (storedHash !== currentHash) {
+    return undefined;
+  }
+
+  logger.warn(
+    'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+  );
+  return redteamContent;
+}
+
+function warnAboutTestsAndRedteam(testSuite: TestSuite, redteamConfig?: RedteamFileConfig): void {
+  if (!redteamConfig || !testSuite.tests || testSuite.tests.length === 0) {
+    return;
+  }
+
+  logger.warn(
+    chalk.yellow(
+      dedent`
+        ⚠️  Warning: Found both 'tests' section and 'redteam' configuration in your config file.
+
+        The 'tests' section is ignored when generating red team tests. Red team automatically
+        generates its own test cases based on the plugins and strategies you've configured.
+
+        If you want to use custom test variables with red team, consider:
+        1. Using the \`defaultTest\` key to set your vars
+        2. Using environment variables with {{env.VAR_NAME}} syntax
+        3. Using a transformRequest function in your target config
+        4. Using multiple target configurations
+      `,
+    ),
+  );
+}
+
+async function getPluginSeverityOverrides(
+  resolvedConfig: Partial<UnifiedConfig>,
+): Promise<{ overrides: Map<Plugin, Severity>; id?: string }> {
+  try {
+    const providerId = getProviderIds(resolvedConfig.providers!)[0];
+    if (!isCloudProvider(providerId)) {
+      return { overrides: new Map() };
+    }
+
+    const cloudId = getCloudDatabaseId(providerId);
+    const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
+    if (!overrides) {
+      return { overrides: new Map() };
+    }
+
+    return {
+      overrides: new Map(Object.entries(overrides.severities) as [Plugin, Severity][]),
+      id: overrides.id,
+    };
+  } catch (error) {
+    logger.error(
+      `Plugin severity override check failed: ${error instanceof Error ? error.message : String(error)}`,
     );
-    testSuite = resolved.testSuite;
-    redteamConfig = resolved.config.redteam;
-    commandLineOptions = resolved.commandLineOptions;
-    resolvedConfig = resolved.config;
+    return { overrides: new Map() };
+  }
+}
 
-    await checkCloudPermissions(resolved.config);
-
-    // Warn if both tests section and redteam config are present
-    if (redteamConfig && resolved.testSuite.tests && resolved.testSuite.tests.length > 0) {
-      logger.warn(
-        chalk.yellow(
-          dedent`
-            ⚠️  Warning: Found both 'tests' section and 'redteam' configuration in your config file.
-
-            The 'tests' section is ignored when generating red team tests. Red team automatically
-            generates its own test cases based on the plugins and strategies you've configured.
-
-            If you want to use custom test variables with red team, consider:
-            1. Using the \`defaultTest\` key to set your vars
-            2. Using environment variables with {{env.VAR_NAME}} syntax
-            3. Using a transformRequest function in your target config
-            4. Using multiple target configurations
-          `,
+async function loadGenerationContext(
+  options: Partial<RedteamCliGenerateOptions>,
+  configPath: string | undefined,
+): Promise<LoadedGenerationContext | null> {
+  if (!configPath) {
+    if (!options.purpose) {
+      logger.info(
+        chalk.red(
+          `\nCan't generate without configuration - run ${chalk.yellow.bold(
+            promptfooCommand('redteam init'),
+          )} first`,
         ),
       );
+      return null;
     }
 
-    try {
-      // If the provider is a cloud provider, check for plugin severity overrides:
-      const providerId = getProviderIds(resolved.config.providers!)[0];
-      if (isCloudProvider(providerId)) {
-        const cloudId = getCloudDatabaseId(providerId);
-        const overrides = await getPluginSeverityOverridesFromCloud(cloudId);
-        if (overrides) {
-          pluginSeverityOverrides = new Map(
-            Object.entries(overrides.severities) as [Plugin, Severity][],
-          );
-          pluginSeverityOverridesId = overrides.id;
-        }
-      }
-    } catch (error) {
-      logger.error(
-        `Plugin severity override check failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else if (options.purpose) {
-    // There is a purpose, so we can just have a dummy test suite for standalone invocation
-    testSuite = {
-      prompts: [],
-      providers: [],
-      tests: [],
+    return {
+      testSuite: { prompts: [], providers: [], tests: [] },
+      configPath,
+      pluginSeverityOverrides: new Map(),
     };
-  } else {
-    logger.info(
-      chalk.red(
-        `\nCan't generate without configuration - run ${chalk.yellow.bold(
-          promptfooCommand('redteam init'),
-        )} first`,
-      ),
-    );
-    return null;
   }
 
-  // Validate email for remote generation
-  if (!neverGenerateRemote()) {
-    let hasValidEmail = false;
-    while (!hasValidEmail) {
-      const { emailNeedsValidation } = await promptForEmailUnverified();
-      const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
-      hasValidEmail = res === EMAIL_OK_STATUS;
-    }
+  const resolved = await resolveConfigs(
+    {
+      config: [configPath],
+    },
+    options.defaultConfig || {},
+  );
+  await checkCloudPermissions(resolved.config);
+  warnAboutTestsAndRedteam(resolved.testSuite, resolved.config.redteam);
+  const severityOverrides = await getPluginSeverityOverrides(resolved.config);
+
+  return {
+    testSuite: resolved.testSuite,
+    redteamConfig: resolved.config.redteam,
+    configPath,
+    commandLineOptions: resolved.commandLineOptions,
+    resolvedConfig: resolved.config,
+    pluginSeverityOverrides: severityOverrides.overrides,
+    pluginSeverityOverridesId: severityOverrides.id,
+  };
+}
+
+async function ensureRemoteGenerationEmail(): Promise<void> {
+  if (neverGenerateRemote()) {
+    return;
   }
 
-  const startTime = Date.now();
-  telemetry.record('command_used', {
-    name: 'generate redteam - started',
+  let hasValidEmail = false;
+  while (!hasValidEmail) {
+    const { emailNeedsValidation } = await promptForEmailUnverified();
+    const res = await checkEmailStatusAndMaybeExit({ validate: emailNeedsValidation });
+    hasValidEmail = res === EMAIL_OK_STATUS;
+  }
+}
+
+function recordGenerationStartTelemetry(
+  testSuite: TestSuite,
+  redteamConfig?: RedteamFileConfig,
+): void {
+  const plugins =
+    redteamConfig?.plugins?.map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id)) ||
+    [];
+  const strategies =
+    redteamConfig?.strategies?.map((strategy) =>
+      typeof strategy === 'string' ? strategy : strategy.id,
+    ) || [];
+  const isPromptfooSample = testSuite.providers.some(isPromptfooSampleTarget);
+  const payload = {
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
-    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
-    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+    plugins,
+    strategies,
+    isPromptfooSampleTarget: isPromptfooSample,
+  };
+
+  telemetry.record('command_used', {
+    name: 'generate redteam - started',
+    ...payload,
   });
   telemetry.record('redteam generate', {
     phase: 'started',
-    numPrompts: testSuite.prompts.length,
-    numTestsExisting: (testSuite.tests || []).length,
-    plugins: redteamConfig?.plugins?.map((p) => (typeof p === 'string' ? p : p.id)) || [],
-    strategies: redteamConfig?.strategies?.map((s) => (typeof s === 'string' ? s : s.id)) || [],
-    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+    ...payload,
   });
+}
 
-  let plugins: RedteamPluginObject[] = [];
+function buildConfiguredPlugins(
+  options: Partial<RedteamCliGenerateOptions>,
+  redteamConfig?: RedteamFileConfig,
+): RedteamPluginObject[] {
+  if (Array.isArray(options.plugins) && options.plugins.length > 0) {
+    return options.plugins.map((plugin) => ({
+      id: plugin.id,
+      numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
+      ...(plugin.config && { config: plugin.config }),
+    }));
+  }
 
-  // If plugins are defined in the config file
   if (redteamConfig?.plugins && redteamConfig.plugins.length > 0) {
-    plugins = redteamConfig.plugins.map((plugin) => {
-      // Base configuration that all plugins will have
-      const pluginConfig: {
-        id: string;
-        numTests: number | undefined;
-        config?: Record<string, any>;
-        severity?: Severity;
-      } = {
-        // Handle both string-style ('pluginName') and object-style ({ id: 'pluginName' }) plugins
+    return redteamConfig.plugins.map((plugin) => {
+      const pluginConfig: RedteamPluginObject = {
         id: typeof plugin === 'string' ? plugin : plugin.id,
-        // Use plugin-specific numTests if available, otherwise fall back to global settings
         numTests:
           (typeof plugin === 'object' && plugin.numTests) ||
           options.numTests ||
           redteamConfig?.numTests,
       };
 
-      // If plugin has additional config options, include them
       if (typeof plugin === 'object') {
         if (plugin.config) {
           pluginConfig.config = plugin.config;
@@ -401,113 +462,163 @@ async function doGenerateRedteamInternal(
 
       return pluginConfig;
     });
-  } else {
-    // If no plugins specified, use default plugins
-    plugins = Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
-      id: plugin,
-      numTests: options.numTests ?? redteamConfig?.numTests,
-    }));
   }
 
-  // override plugins with command line options
-  if (Array.isArray(options.plugins) && options.plugins.length > 0) {
-    plugins = options.plugins.map((plugin) => {
-      const pluginConfig = {
-        id: plugin.id,
-        numTests: plugin.numTests || options.numTests || redteamConfig?.numTests,
-        ...(plugin.config && { config: plugin.config }),
-      };
-      return pluginConfig;
-    });
-  }
-  invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
+  return Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => ({
+    id: plugin,
+    numTests: options.numTests ?? redteamConfig?.numTests,
+  }));
+}
 
-  // Apply plugin severity overrides
-  if (pluginSeverityOverrides.size > 0) {
-    let intersectionCount = 0;
-    plugins = plugins.map((plugin) => {
-      if (pluginSeverityOverrides.has(plugin.id as Plugin)) {
-        intersectionCount++;
-        return {
-          ...plugin,
-          severity: pluginSeverityOverrides.get(plugin.id as Plugin),
-        };
-      }
+function applyPluginSeverityOverrides(
+  plugins: RedteamPluginObject[],
+  overrides: Map<Plugin, Severity>,
+): RedteamPluginObject[] {
+  if (overrides.size === 0) {
+    return plugins;
+  }
+
+  let intersectionCount = 0;
+  const updatedPlugins = plugins.map((plugin) => {
+    if (!overrides.has(plugin.id as Plugin)) {
       return plugin;
-    });
+    }
 
-    logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
-  }
+    intersectionCount++;
+    return {
+      ...plugin,
+      severity: overrides.get(plugin.id as Plugin),
+    };
+  });
 
-  // Resolve policy references.
-  // Each reference is an id of the policy record stored in Promptfoo Cloud; load their respective texts.
-  // Only reusable policies (with UUID ids) need to be fetched; inline policies already have their text.
+  logger.info(`Applied ${intersectionCount} custom plugin severity levels`);
+  return updatedPlugins;
+}
+
+async function resolvePolicyReferences(plugins: RedteamPluginObject[]): Promise<void> {
   const policyPluginsWithRefs = plugins.filter(
     (plugin) =>
       plugin.config?.policy &&
       isValidPolicyObject(plugin.config?.policy) &&
       determinePolicyTypeFromId(plugin.config.policy.id) === 'reusable',
   );
-  if (policyPluginsWithRefs.length > 0) {
-    // Always use the calling user's team id for fetching policies.
-    // The server will return:
-    // 1. Policies owned by the user's team
-    // 2. Org-scoped policies (accessible to all teams in the org)
-    // This allows users to run scans with org-scoped templates that reference
-    // org-scoped policies, even if those policies are owned by a different team.
-    const teamId = (await resolveTeamId()).id;
+  if (policyPluginsWithRefs.length === 0) {
+    return;
+  }
 
-    const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
+  const teamId = (await resolveTeamId()).id;
+  const policiesById = await getCustomPolicies(policyPluginsWithRefs, teamId);
+  for (const policyPlugin of policyPluginsWithRefs) {
+    const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
+    const policyData = policiesById.get(policyId);
+    if (!policyData) {
+      continue;
+    }
 
-    // Assign, in-place, the policy texts and severities to the plugins
-    for (const policyPlugin of policyPluginsWithRefs) {
-      const policyId = (policyPlugin.config!.policy! as PolicyObject).id;
-      const policyData = policiesById.get(policyId);
-      if (policyData) {
-        // Set the policy details
-        policyPlugin.config!.policy = {
-          id: policyId,
-          name: policyData.name,
-          text: policyData.text,
-        } as PolicyObject;
-        // Set the plugin severity if it hasn't been set already; this allows the user to override the severity
-        // on a per-config basis if necessary.
-        if (policyPlugin.severity == null) {
-          policyPlugin.severity = policyData.severity;
-        }
-      }
+    policyPlugin.config!.policy = {
+      id: policyId,
+      name: policyData.name,
+      text: policyData.text,
+    } as PolicyObject;
+    if (policyPlugin.severity == null) {
+      policyPlugin.severity = policyData.severity;
     }
   }
+}
 
-  let strategies: (string | { id: string })[] =
-    redteamConfig?.strategies ?? DEFAULT_STRATEGIES.map((s) => ({ id: s }));
-  if (options.strategies) {
-    strategies = options.strategies;
-  }
-  const strategyObjs: RedteamStrategyObject[] = strategies.map((s) =>
-    typeof s === 'string' ? { id: s } : s,
-  );
+function buildStrategyObjects(
+  options: Partial<RedteamCliGenerateOptions>,
+  redteamConfig?: RedteamFileConfig,
+): RedteamStrategyObject[] {
+  const strategies: (string | { id: string })[] =
+    options.strategies ??
+    redteamConfig?.strategies ??
+    DEFAULT_STRATEGIES.map((strategy) => ({ id: strategy }));
+  return strategies.map((strategy) => (typeof strategy === 'string' ? { id: strategy } : strategy));
+}
 
+function logGenerationSelections(
+  plugins: RedteamPluginObject[],
+  strategyObjs: RedteamStrategyObject[],
+): void {
   try {
-    logger.debug(`plugins: ${plugins.map((p) => p.id).join(', ')}`);
-    logger.debug(`strategies: ${strategyObjs.map((s) => s.id ?? s).join(', ')}`);
+    logger.debug(`plugins: ${plugins.map((plugin) => plugin.id).join(', ')}`);
+    logger.debug(
+      `strategies: ${strategyObjs.map((strategy) => strategy.id ?? strategy).join(', ')}`,
+    );
   } catch (error) {
     logger.error('Error logging plugins and strategies. One did not have a valid id.');
     logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
 
-  // Read inputs from the first target/provider
+function extractTargetIds(resolvedConfig?: Partial<UnifiedConfig>): string[] {
+  return (
+    (Array.isArray(resolvedConfig?.providers)
+      ? resolvedConfig.providers
+          .filter((target) => typeof target !== 'function')
+          .map((target) => {
+            if (typeof target === 'string') {
+              return target;
+            }
+            return (target as { id?: string }).id;
+          })
+          .filter((id): id is string => typeof id === 'string')
+      : []) ?? []
+  );
+}
+
+async function augmentPurposeWithMcpTools(
+  testSuite: TestSuite,
+  purpose: string | undefined,
+  testGenerationInstructions: string | undefined,
+): Promise<{ enhancedPurpose: string; augmentedInstructions: string }> {
+  let enhancedPurpose = purpose || '';
+  let augmentedInstructions = testGenerationInstructions ?? '';
+
+  try {
+    const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
+    if (!mcpToolsInfo) {
+      return { enhancedPurpose, augmentedInstructions };
+    }
+
+    enhancedPurpose = enhancedPurpose ? `${enhancedPurpose}\n\n${mcpToolsInfo}\n\n` : mcpToolsInfo;
+    logger.info('Added MCP tools information to red team purpose');
+    augmentedInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
+  } catch (error) {
+    logger.warn(
+      `Failed to extract MCP tools information: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  return { enhancedPurpose, augmentedInstructions };
+}
+
+async function prepareGenerationConfig({
+  options,
+  redteamConfig,
+  commandLineOptions,
+  resolvedConfig,
+  testSuite,
+  plugins,
+  strategyObjs,
+}: {
+  options: Partial<RedteamCliGenerateOptions>;
+  redteamConfig?: RedteamFileConfig;
+  commandLineOptions?: Record<string, any>;
+  resolvedConfig?: Partial<UnifiedConfig>;
+  testSuite: TestSuite;
+  plugins: RedteamPluginObject[];
+  strategyObjs: RedteamStrategyObject[];
+}): Promise<PreparedGenerationConfig> {
   const targetInputs = testSuite.providers[0]?.inputs;
-
   const explicitMaxConcurrency =
     options.maxConcurrency ??
     redteamConfig?.maxConcurrency ??
     commandLineOptions?.maxConcurrency ??
     resolvedConfig?.evaluateOptions?.maxConcurrency;
-
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
-    // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
@@ -531,159 +642,175 @@ async function doGenerateRedteamInternal(
   };
   const parsedConfig = RedteamConfigSchema.safeParse(config);
   if (!parsedConfig.success) {
-    const errorMessage = z.prettifyError(parsedConfig.error);
-    throw new Error(`Invalid redteam configuration:\n${errorMessage}`);
+    throw new Error(`Invalid redteam configuration:\n${z.prettifyError(parsedConfig.error)}`);
   }
 
-  // Extract target IDs from the config providers (targets get rewritten to providers)
-  // IDs are used for retry strategy to match failed tests by target ID
-  const targetIds: string[] =
-    (Array.isArray(resolvedConfig?.providers)
-      ? resolvedConfig.providers
-          .filter((target) => typeof target !== 'function')
-          .map((target) => {
-            if (typeof target === 'string') {
-              return target; // Use the provider string as ID
-            }
-            const providerObj = target as { id?: string };
-            return providerObj.id;
-          })
-          .filter((id): id is string => typeof id === 'string')
-      : []) ?? [];
-
+  const targetIds = extractTargetIds(resolvedConfig);
   logger.debug(
     `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
   );
+  const { enhancedPurpose, augmentedInstructions } = await augmentPurposeWithMcpTools(
+    testSuite,
+    parsedConfig.data.purpose,
+    config.testGenerationInstructions,
+  );
 
-  // Extract MCP tools information and add to purpose
-  let enhancedPurpose = parsedConfig.data.purpose || '';
-  let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
-  try {
-    const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
-    if (mcpToolsInfo) {
-      enhancedPurpose = enhancedPurpose
-        ? `${enhancedPurpose}\n\n${mcpToolsInfo}\n\n`
-        : mcpToolsInfo;
-      logger.info('Added MCP tools information to red team purpose');
-      augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
-    }
-  } catch (error) {
-    logger.warn(
-      `Failed to extract MCP tools information: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  return {
+    parsedConfig: parsedConfig.data,
+    targetInputs,
+    targetIds,
+    enhancedPurpose,
+    augmentedTestGenerationInstructions: augmentedInstructions,
+    strategyObjs,
+    plugins,
+    maxConcurrency: config.maxConcurrency,
+    delay: config.delay,
+    numTests: config.numTests,
+    sharing: config.sharing,
+  };
+}
 
-  // Check for contexts - if present, generate tests for each context
-  const contexts = redteamConfig?.contexts;
-  let redteamTests: any[] = [];
-  let purpose: string;
-  let entities: string[] = [];
-  let finalInjectVar: string = '';
-  let failedPlugins: { pluginId: string; requested: number }[] = [];
-
-  if (contexts && contexts.length > 0) {
-    // Multi-context mode: generate tests for each context
-    logger.info(`Generating tests for ${contexts.length} contexts...`);
-
-    // Collect failed plugins across all contexts
-    const allFailedPlugins: { pluginId: string; requested: number }[] = [];
-
-    for (const context of contexts) {
-      logger.info(`  Generating tests for context: ${context.id}`);
-
-      const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
-
-      const contextResult = await withGenerationConcurrency(
-        config.maxConcurrency,
-        config.delay,
-        () =>
-          synthesize({
-            ...parsedConfig.data,
-            inputs: targetInputs,
-            purpose: contextPurpose,
-            numTests: config.numTests,
-            prompts: testSuite.prompts.map((prompt) => prompt.raw),
-            maxConcurrency: config.maxConcurrency,
-            delay: config.delay,
-            abortSignal: options.abortSignal,
-            targetIds,
-            showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: augmentedTestGenerationInstructions,
-          } as SynthesizeOptions),
-      );
-
-      // Collect failed plugins from this context
-      if (contextResult.failedPlugins.length > 0) {
-        allFailedPlugins.push(...contextResult.failedPlugins);
-      }
-
-      // Tag each test with context metadata and merge context vars
-      // IMPORTANT: Set metadata.purpose so graders and strategies use the correct context purpose
-      const taggedTests = contextResult.testCases.map((test: any) => ({
-        ...test,
-        vars: {
-          ...test.vars,
-          ...(context.vars || {}),
-        },
-        metadata: {
-          ...test.metadata,
-          purpose: context.purpose, // Override purpose for graders/strategies
-          contextId: context.id,
-          contextVars: context.vars,
-        },
-      }));
-
-      redteamTests = redteamTests.concat(taggedTests);
-
-      // Keep track of entities and injectVar from first context
-      if (!entities.length) {
-        entities = contextResult.entities;
-      }
-      if (!finalInjectVar) {
-        finalInjectVar = contextResult.injectVar;
-      }
-    }
-
-    // Store failed plugins for handling after the try block starts
-    failedPlugins = allFailedPlugins;
-
-    // Use first context's purpose for backward compatibility in output
-    purpose = contexts[0].purpose;
-    logger.info(
-      `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
-    );
-  } else {
-    // Single purpose mode (existing behavior)
-    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+async function synthesizeContextTests({
+  context,
+  prepared,
+  options,
+  testSuite,
+  targetInputs,
+}: {
+  context: NonNullable<RedteamFileConfig['contexts']>[number];
+  prepared: PreparedGenerationConfig;
+  options: Partial<RedteamCliGenerateOptions>;
+  testSuite: TestSuite;
+  targetInputs: TestSuite['providers'][number]['inputs'];
+}) {
+  logger.info(`  Generating tests for context: ${context.id}`);
+  const contextPurpose =
+    context.purpose + (prepared.enhancedPurpose ? `\n\n${prepared.enhancedPurpose}` : '');
+  const contextResult = await withGenerationConcurrency(
+    prepared.maxConcurrency,
+    prepared.delay,
+    () =>
       synthesize({
-        ...parsedConfig.data,
+        ...prepared.parsedConfig,
         inputs: targetInputs,
-        purpose: enhancedPurpose,
-        numTests: config.numTests,
+        purpose: contextPurpose,
+        numTests: prepared.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
+        maxConcurrency: prepared.maxConcurrency,
+        delay: prepared.delay,
         abortSignal: options.abortSignal,
-        targetIds,
+        targetIds: prepared.targetIds,
         showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
+        testGenerationInstructions: prepared.augmentedTestGenerationInstructions,
       } as SynthesizeOptions),
-    );
+  );
 
-    redteamTests = result.testCases;
-    purpose = result.purpose;
-    entities = result.entities;
-    finalInjectVar = result.injectVar;
-    failedPlugins = result.failedPlugins;
+  const taggedTests = contextResult.testCases.map((test: any) => ({
+    ...test,
+    vars: {
+      ...test.vars,
+      ...(context.vars || {}),
+    },
+    metadata: {
+      ...test.metadata,
+      purpose: context.purpose,
+      contextId: context.id,
+      contextVars: context.vars,
+    },
+  }));
+
+  return {
+    taggedTests,
+    failedPlugins: contextResult.failedPlugins,
+    entities: contextResult.entities,
+    injectVar: contextResult.injectVar,
+  };
+}
+
+async function generateTestsForContexts({
+  contexts,
+  prepared,
+  options,
+  testSuite,
+}: {
+  contexts: NonNullable<RedteamFileConfig['contexts']>;
+  prepared: PreparedGenerationConfig;
+  options: Partial<RedteamCliGenerateOptions>;
+  testSuite: TestSuite;
+}): Promise<GeneratedRedteamTests> {
+  logger.info(`Generating tests for ${contexts.length} contexts...`);
+
+  const allFailedPlugins: FailedPluginInfo[] = [];
+  let redteamTests: any[] = [];
+  let entities: string[] = [];
+  let finalInjectVar = '';
+
+  for (const context of contexts) {
+    const result = await synthesizeContextTests({
+      context,
+      prepared,
+      options,
+      testSuite,
+      targetInputs: prepared.targetInputs,
+    });
+    redteamTests = redteamTests.concat(result.taggedTests);
+    allFailedPlugins.push(...result.failedPlugins);
+    if (!entities.length) {
+      entities = result.entities;
+    }
+    if (!finalInjectVar) {
+      finalInjectVar = result.injectVar;
+    }
   }
 
-  /**
-   * Cleans up the provider after redteam generation completes.
-   * This should always be called before returning, since providers are
-   * re-initialized when running the red team. Cleanup is particularly
-   * important for MCP servers to release resources and prevent memory leaks.
-   */
-  const cleanupProvider = async (): Promise<void> => {
+  logger.info(
+    `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
+  );
+  return {
+    redteamTests,
+    purpose: contexts[0].purpose,
+    entities,
+    finalInjectVar,
+    failedPlugins: allFailedPlugins,
+  };
+}
+
+async function generateTestsForPurpose({
+  prepared,
+  options,
+  testSuite,
+}: {
+  prepared: PreparedGenerationConfig;
+  options: Partial<RedteamCliGenerateOptions>;
+  testSuite: TestSuite;
+}): Promise<GeneratedRedteamTests> {
+  const result = await withGenerationConcurrency(prepared.maxConcurrency, prepared.delay, () =>
+    synthesize({
+      ...prepared.parsedConfig,
+      inputs: prepared.targetInputs,
+      purpose: prepared.enhancedPurpose,
+      numTests: prepared.numTests,
+      prompts: testSuite.prompts.map((prompt) => prompt.raw),
+      maxConcurrency: prepared.maxConcurrency,
+      delay: prepared.delay,
+      abortSignal: options.abortSignal,
+      targetIds: prepared.targetIds,
+      showProgressBar: options.progressBar !== false,
+      testGenerationInstructions: prepared.augmentedTestGenerationInstructions,
+    } as SynthesizeOptions),
+  );
+
+  return {
+    redteamTests: result.testCases,
+    purpose: result.purpose,
+    entities: result.entities,
+    finalInjectVar: result.injectVar,
+    failedPlugins: result.failedPlugins,
+  };
+}
+
+function createGenerationCleanup(testSuite: TestSuite): () => Promise<void> {
+  return async () => {
     try {
       logger.debug('Cleaning up provider');
       const provider = testSuite.providers[0] as ApiProvider;
@@ -697,205 +824,570 @@ async function doGenerateRedteamInternal(
       logger.warn(`Error during provider cleanup: ${cleanupErr}`);
     }
   };
+}
 
-  // Use try/finally to ensure cleanup runs even if an exception is thrown
-  // (e.g., --strict mode failures, write errors)
+function buildUpdatedRedteamConfig({
+  purpose,
+  entities,
+  strategyObjs,
+  plugins,
+  sharing,
+  contexts,
+}: {
+  purpose: string;
+  entities: string[];
+  strategyObjs: RedteamStrategyObject[];
+  plugins: RedteamPluginObject[];
+  sharing: unknown;
+  contexts?: RedteamFileConfig['contexts'];
+}) {
+  return {
+    purpose,
+    entities,
+    strategies: strategyObjs || [],
+    plugins: plugins || [],
+    sharing: sharing as boolean | undefined,
+    ...(contexts && contexts.length > 0 ? { contexts } : {}),
+  };
+}
+
+function createGenerationHeaderComments({
+  title,
+  timestampLabel,
+  redteamTests,
+  plugins,
+  strategyObjs,
+  isUpdate,
+}: {
+  title: string;
+  timestampLabel: string;
+  redteamTests: any[];
+  plugins: RedteamPluginObject[];
+  strategyObjs: RedteamStrategyObject[];
+  isUpdate?: boolean;
+}): string[] {
+  const author = getAuthor();
+  const userEmail = getUserEmail();
+  const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
+  return createHeaderComments({
+    title,
+    timestampLabel,
+    author,
+    cloudHost,
+    testCasesCount: redteamTests.length,
+    plugins,
+    strategies: strategyObjs,
+    isUpdate,
+  });
+}
+
+async function writeBurpOutput(
+  options: Partial<RedteamCliGenerateOptions>,
+  redteamTests: any[],
+  finalInjectVar: string,
+): Promise<Partial<UnifiedConfig>> {
+  const outputLines = redteamTests
+    .map((test) => {
+      const value = String(test.vars?.[finalInjectVar] ?? '');
+      if (options.burpEscapeJson) {
+        return encodeURIComponent(JSON.stringify(value).slice(1, -1));
+      }
+      return encodeURIComponent(value);
+    })
+    .filter((line) => line.length > 0)
+    .join('\n');
+  await fs.writeFile(options.output!, outputLines);
+  logger.info(
+    chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
+  );
+  return {};
+}
+
+async function writeOutputFile({
+  options,
+  configPath,
+  redteamTests,
+  purpose,
+  entities,
+  updatedRedteamConfig,
+  pluginSeverityOverridesId,
+  plugins,
+  strategyObjs,
+}: {
+  options: Partial<RedteamCliGenerateOptions>;
+  configPath?: string;
+  redteamTests: any[];
+  purpose: string;
+  entities: string[];
+  updatedRedteamConfig: ReturnType<typeof buildUpdatedRedteamConfig>;
+  pluginSeverityOverridesId?: string;
+  plugins: RedteamPluginObject[];
+  strategyObjs: RedteamStrategyObject[];
+}): Promise<Partial<UnifiedConfig>> {
+  const existingYaml = configPath
+    ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
+    : {};
+  const existingDefaultTest =
+    typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
+  const updatedYaml: Partial<UnifiedConfig> = {
+    ...existingYaml,
+    ...(options.description ? { description: options.description } : {}),
+    defaultTest: {
+      ...existingDefaultTest,
+      metadata: {
+        ...(existingDefaultTest?.metadata || {}),
+        purpose,
+        entities,
+      },
+    },
+    tests: redteamTests,
+    redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
+    metadata: {
+      ...(existingYaml.metadata || {}),
+      ...(configPath && redteamTests.length > 0
+        ? { configHash: await getConfigHash(configPath) }
+        : { configHash: 'force-regenerate' }),
+      ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
+    },
+  };
+  const headerComments = createGenerationHeaderComments({
+    title: 'REDTEAM CONFIGURATION',
+    timestampLabel: 'Generated:',
+    redteamTests,
+    plugins,
+    strategyObjs,
+  });
+
+  const ret = writePromptfooConfig(updatedYaml, options.output!, headerComments);
+  printBorder();
+  const relativeOutputPath = path.relative(process.cwd(), options.output!);
+  logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
+  if (!options.inRedteamRun) {
+    logger.info(
+      '\n' +
+        chalk.green(
+          `Run ${chalk.bold(
+            relativeOutputPath === 'redteam.yaml'
+              ? promptfooCommand('redteam eval')
+              : promptfooCommand(`redteam eval -c ${relativeOutputPath}`),
+          )} to run the red team!`,
+        ),
+    );
+  }
+  printBorder();
+  return ret;
+}
+
+async function updateExistingConfig({
+  options,
+  configPath,
+  redteamTests,
+  purpose,
+  entities,
+  updatedRedteamConfig,
+  plugins,
+  strategyObjs,
+}: {
+  options: Partial<RedteamCliGenerateOptions>;
+  configPath: string;
+  redteamTests: any[];
+  purpose: string;
+  entities: string[];
+  updatedRedteamConfig: ReturnType<typeof buildUpdatedRedteamConfig>;
+  plugins: RedteamPluginObject[];
+  strategyObjs: RedteamStrategyObject[];
+}): Promise<Partial<UnifiedConfig>> {
+  const existingConfig = yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>;
+  const existingTests = existingConfig.tests;
+  const testsArray = Array.isArray(existingTests)
+    ? existingTests
+    : existingTests
+      ? [existingTests]
+      : [];
+  const existingConfigDefaultTest =
+    typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
+  existingConfig.defaultTest = {
+    ...existingConfigDefaultTest,
+    metadata: {
+      ...(existingConfigDefaultTest?.metadata || {}),
+      purpose,
+      entities,
+    },
+  };
+  if (options.description) {
+    existingConfig.description = options.description;
+  }
+  existingConfig.tests = [...testsArray, ...redteamTests];
+  existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+  existingConfig.metadata = {
+    ...(existingConfig.metadata || {}),
+    configHash: await getConfigHash(configPath),
+  };
+  const headerComments = createGenerationHeaderComments({
+    title: 'REDTEAM CONFIGURATION UPDATE',
+    timestampLabel: 'Updated:',
+    redteamTests,
+    plugins,
+    strategyObjs,
+    isUpdate: true,
+  });
+  const ret = writePromptfooConfig(existingConfig, configPath, headerComments);
+  logger.info(
+    `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
+  );
+  const command = configPath.endsWith('promptfooconfig.yaml')
+    ? promptfooCommand('eval')
+    : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
+  logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
+  return ret;
+}
+
+function writeDefaultOutput({
+  options,
+  redteamTests,
+  plugins,
+  strategyObjs,
+}: {
+  options: Partial<RedteamCliGenerateOptions>;
+  redteamTests: any[];
+  plugins: RedteamPluginObject[];
+  strategyObjs: RedteamStrategyObject[];
+}): Partial<UnifiedConfig> {
+  const headerComments = createGenerationHeaderComments({
+    title: 'REDTEAM CONFIGURATION',
+    timestampLabel: 'Generated:',
+    redteamTests,
+    plugins,
+    strategyObjs,
+  });
+
+  return writePromptfooConfig(
+    {
+      ...(options.description ? { description: options.description } : {}),
+      tests: redteamTests,
+    },
+    'redteam.yaml',
+    headerComments,
+  );
+}
+
+async function writeGenerationResult({
+  options,
+  configPath,
+  generated,
+  prepared,
+  redteamConfig,
+  pluginSeverityOverridesId,
+}: {
+  options: Partial<RedteamCliGenerateOptions>;
+  configPath?: string;
+  generated: GeneratedRedteamTests;
+  prepared: PreparedGenerationConfig;
+  redteamConfig?: RedteamFileConfig;
+  pluginSeverityOverridesId?: string;
+}): Promise<Partial<UnifiedConfig>> {
+  const updatedRedteamConfig = buildUpdatedRedteamConfig({
+    purpose: generated.purpose,
+    entities: generated.entities,
+    strategyObjs: prepared.strategyObjs,
+    plugins: prepared.plugins,
+    // Keep the raw resolved sharing value rather than relying on parsed schema output.
+    // Some legacy configs intentionally omit it.
+    sharing: prepared.sharing,
+    contexts: redteamConfig?.contexts,
+  });
+
+  if (options.output?.endsWith('.burp')) {
+    return writeBurpOutput(options, generated.redteamTests, generated.finalInjectVar);
+  }
+  if (options.output) {
+    return writeOutputFile({
+      options,
+      configPath,
+      redteamTests: generated.redteamTests,
+      purpose: generated.purpose,
+      entities: generated.entities,
+      updatedRedteamConfig,
+      pluginSeverityOverridesId,
+      plugins: prepared.plugins,
+      strategyObjs: prepared.strategyObjs,
+    });
+  }
+  if (options.write && configPath) {
+    return updateExistingConfig({
+      options,
+      configPath,
+      redteamTests: generated.redteamTests,
+      purpose: generated.purpose,
+      entities: generated.entities,
+      updatedRedteamConfig,
+      plugins: prepared.plugins,
+      strategyObjs: prepared.strategyObjs,
+    });
+  }
+
+  return writeDefaultOutput({
+    options,
+    redteamTests: generated.redteamTests,
+    plugins: prepared.plugins,
+    strategyObjs: prepared.strategyObjs,
+  });
+}
+
+function recordGenerationCompletedTelemetry({
+  startTime,
+  testSuite,
+  generated,
+  plugins,
+  strategies,
+}: {
+  startTime: number;
+  testSuite: TestSuite;
+  generated: GeneratedRedteamTests;
+  plugins: RedteamPluginObject[];
+  strategies: (string | { id: string })[];
+}): void {
+  const duration = Math.round((Date.now() - startTime) / 1000);
+  const payload = {
+    duration,
+    numPrompts: testSuite.prompts.length,
+    numTestsExisting: (testSuite.tests || []).length,
+    numTestsGenerated: generated.redteamTests.length,
+    plugins: plugins.map((plugin) => plugin.id),
+    strategies: strategies.map((strategy) =>
+      typeof strategy === 'string' ? strategy : strategy.id,
+    ),
+    isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+  };
+
+  telemetry.record('command_used', {
+    name: 'generate redteam',
+    ...payload,
+  });
+  telemetry.record('redteam generate', {
+    phase: 'completed',
+    ...payload,
+  });
+}
+
+export async function doGenerateRedteam(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
+  setupEnv(options.envFile);
+  const cacheOverride = options.cache === false ? false : undefined;
+  if (cacheOverride === false) {
+    logger.info('Cache is disabled');
+  }
+
+  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+}
+
+async function doGenerateRedteamInternal(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
+  enforceProbeLimit();
+
+  const outputPath = options.output || 'redteam.yaml';
+  const configPath = await materializeCloudConfig(
+    options,
+    options.config || options.defaultConfigPath,
+  );
+  const existingGeneratedConfig = await maybeReuseExistingGeneratedConfig(
+    options,
+    outputPath,
+    configPath,
+  );
+  if (existingGeneratedConfig) {
+    return existingGeneratedConfig;
+  }
+
+  const context = await loadGenerationContext(options, configPath);
+  if (!context) {
+    return null;
+  }
+
+  await ensureRemoteGenerationEmail();
+  const startTime = Date.now();
+  recordGenerationStartTelemetry(context.testSuite, context.redteamConfig);
+
+  let plugins = buildConfiguredPlugins(options, context.redteamConfig);
+  invariant(plugins && Array.isArray(plugins) && plugins.length > 0, 'No plugins found');
+  plugins = applyPluginSeverityOverrides(plugins, context.pluginSeverityOverrides);
+  await resolvePolicyReferences(plugins);
+  const strategyObjs = buildStrategyObjects(options, context.redteamConfig);
+  logGenerationSelections(plugins, strategyObjs);
+  const prepared = await prepareGenerationConfig({
+    options,
+    redteamConfig: context.redteamConfig,
+    commandLineOptions: context.commandLineOptions,
+    resolvedConfig: context.resolvedConfig,
+    testSuite: context.testSuite,
+    plugins,
+    strategyObjs,
+  });
+  const generated =
+    context.redteamConfig?.contexts && context.redteamConfig.contexts.length > 0
+      ? await generateTestsForContexts({
+          contexts: context.redteamConfig.contexts,
+          prepared,
+          options,
+          testSuite: context.testSuite,
+        })
+      : await generateTestsForPurpose({
+          prepared,
+          options,
+          testSuite: context.testSuite,
+        });
+  const cleanupProvider = createGenerationCleanup(context.testSuite);
+
   try {
-    // Check for failed plugins - warn by default, throw with --strict
-    handleFailedPlugins(failedPlugins, options.strict ?? false);
-
-    if (redteamTests.length === 0) {
-      logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));
+    handleFailedPlugins(generated.failedPlugins, options.strict ?? false);
+    if (generated.redteamTests.length === 0) {
+      logger.warn(getNoTestCasesGeneratedMessage(prepared.strategyObjs));
       return null;
     }
 
-    const updatedRedteamConfig = {
-      purpose,
-      entities,
-      strategies: strategyObjs || [],
-      plugins: plugins || [],
-      sharing: config.sharing,
-      ...(contexts && contexts.length > 0 ? { contexts } : {}),
-    };
-
-    let ret: Partial<UnifiedConfig> | undefined;
-    if (options.output && options.output.endsWith('.burp')) {
-      // Write in Burp Intruder compatible format
-      const outputLines = redteamTests
-        .map((test) => {
-          const value = String(test.vars?.[finalInjectVar] ?? '');
-          if (options.burpEscapeJson) {
-            return encodeURIComponent(JSON.stringify(value).slice(1, -1));
-          }
-          return encodeURIComponent(value);
-        })
-        .filter((line) => line.length > 0)
-        .join('\n');
-      await fs.writeFile(options.output, outputLines);
-      logger.info(
-        chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
-      );
-      // No need to return anything, Burp outputs are only invoked via command line.
-      return {};
-    } else if (options.output) {
-      const existingYaml = configPath
-        ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
-        : {};
-      const existingDefaultTest =
-        typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
-      const updatedYaml: Partial<UnifiedConfig> = {
-        ...existingYaml,
-        ...(options.description ? { description: options.description } : {}),
-        defaultTest: {
-          ...existingDefaultTest,
-          metadata: {
-            ...(existingDefaultTest?.metadata || {}),
-            purpose,
-            entities,
-          },
-        },
-        tests: redteamTests,
-        redteam: { ...(existingYaml.redteam || {}), ...updatedRedteamConfig },
-        metadata: {
-          ...(existingYaml.metadata || {}),
-          ...(configPath && redteamTests.length > 0
-            ? { configHash: await getConfigHash(configPath) }
-            : { configHash: 'force-regenerate' }),
-          ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
-        },
-      };
-      const author = getAuthor();
-      const userEmail = getUserEmail();
-      const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
-      const headerComments = createHeaderComments({
-        title: 'REDTEAM CONFIGURATION',
-        timestampLabel: 'Generated:',
-        author,
-        cloudHost,
-        testCasesCount: redteamTests.length,
-        plugins,
-        strategies: strategyObjs,
-      });
-
-      ret = writePromptfooConfig(updatedYaml, options.output, headerComments);
-      printBorder();
-      const relativeOutputPath = path.relative(process.cwd(), options.output);
-      logger.info(`Wrote ${redteamTests.length} test cases to ${relativeOutputPath}`);
-
-      if (!options.inRedteamRun) {
-        logger.info(
-          '\n' +
-            chalk.green(
-              `Run ${chalk.bold(
-                relativeOutputPath === 'redteam.yaml'
-                  ? promptfooCommand('redteam eval')
-                  : promptfooCommand(`redteam eval -c ${relativeOutputPath}`),
-              )} to run the red team!`,
-            ),
-        );
-      }
-      printBorder();
-    } else if (options.write && configPath) {
-      const existingConfig = yaml.load(
-        await fs.readFile(configPath, 'utf8'),
-      ) as Partial<UnifiedConfig>;
-      const existingTests = existingConfig.tests;
-      let testsArray: any[] = [];
-      if (Array.isArray(existingTests)) {
-        testsArray = existingTests;
-      } else if (existingTests) {
-        testsArray = [existingTests];
-      }
-      const existingConfigDefaultTest =
-        typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
-      existingConfig.defaultTest = {
-        ...existingConfigDefaultTest,
-        metadata: {
-          ...(existingConfigDefaultTest?.metadata || {}),
-          purpose,
-          entities,
-        },
-      };
-      if (options.description) {
-        existingConfig.description = options.description;
-      }
-      existingConfig.tests = [...testsArray, ...redteamTests];
-      existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
-      // Add the config hash to metadata
-      existingConfig.metadata = {
-        ...(existingConfig.metadata || {}),
-        configHash: await getConfigHash(configPath),
-      };
-      const author = getAuthor();
-      const userEmail = getUserEmail();
-      const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
-      const headerComments = createHeaderComments({
-        title: 'REDTEAM CONFIGURATION UPDATE',
-        timestampLabel: 'Updated:',
-        author,
-        cloudHost,
-        testCasesCount: redteamTests.length,
-        plugins,
-        strategies: strategyObjs,
-        isUpdate: true,
-      });
-
-      ret = writePromptfooConfig(existingConfig, configPath, headerComments);
-      logger.info(
-        `\nWrote ${redteamTests.length} new test cases to ${path.relative(process.cwd(), configPath)}`,
-      );
-      const command = configPath.endsWith('promptfooconfig.yaml')
-        ? promptfooCommand('eval')
-        : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
-      logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
-    } else {
-      const author = getAuthor();
-      const userEmail = getUserEmail();
-      const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
-      const headerComments = createHeaderComments({
-        title: 'REDTEAM CONFIGURATION',
-        timestampLabel: 'Generated:',
-        author,
-        cloudHost,
-        testCasesCount: redteamTests.length,
-        plugins,
-        strategies: strategyObjs,
-      });
-
-      ret = writePromptfooConfig(
-        {
-          ...(options.description ? { description: options.description } : {}),
-          tests: redteamTests,
-        },
-        'redteam.yaml',
-        headerComments,
-      );
-    }
-
-    telemetry.record('command_used', {
-      duration: Math.round((Date.now() - startTime) / 1000),
-      name: 'generate redteam',
-      numPrompts: testSuite.prompts.length,
-      numTestsExisting: (testSuite.tests || []).length,
-      numTestsGenerated: redteamTests.length,
-      plugins: plugins.map((p) => p.id),
-      strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
-      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+    const ret = await writeGenerationResult({
+      options,
+      configPath: context.configPath,
+      generated,
+      prepared,
+      redteamConfig: context.redteamConfig,
+      pluginSeverityOverridesId: context.pluginSeverityOverridesId,
     });
-    telemetry.record('redteam generate', {
-      phase: 'completed',
-      duration: Math.round((Date.now() - startTime) / 1000),
-      numPrompts: testSuite.prompts.length,
-      numTestsExisting: (testSuite.tests || []).length,
-      numTestsGenerated: redteamTests.length,
-      plugins: plugins.map((p) => p.id),
-      strategies: strategies.map((s) => (typeof s === 'string' ? s : s.id)),
-      isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
+    recordGenerationCompletedTelemetry({
+      startTime,
+      testSuite: context.testSuite,
+      generated,
+      plugins: prepared.plugins,
+      strategies: prepared.strategyObjs,
     });
-
     return ret;
   } finally {
     await cleanupProvider();
+  }
+}
+
+async function hydrateCloudGenerateOptions(
+  opts: Partial<RedteamCliGenerateOptions>,
+): Promise<boolean> {
+  if (opts.config && isUuid(opts.config)) {
+    if (opts.target && !isUuid(opts.target)) {
+      throw new Error('Invalid target ID, it must be a valid UUID');
+    }
+
+    const configObj = await getConfigFromCloud(opts.config, opts.target);
+    if (
+      opts.target &&
+      isUuid(opts.target) &&
+      (!configObj.targets || configObj.targets.length === 0)
+    ) {
+      configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
+    }
+    opts.configFromCloud = configObj;
+    opts.config = undefined;
+    return true;
+  }
+
+  if (opts.target) {
+    logger.error(
+      `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}.`,
+    );
+    process.exitCode = 1;
+    return false;
+  }
+
+  return true;
+}
+
+function applyCliStateOverrides(opts: Partial<RedteamCliGenerateOptions>): void {
+  if (opts.remote) {
+    cliState.remote = true;
+  }
+  if (opts.maxConcurrency !== undefined) {
+    cliState.maxConcurrency = opts.maxConcurrency;
+  }
+  logger.debug(shouldGenerateRemote() ? 'Remote generation enabled' : 'Remote generation disabled');
+}
+
+function parseGenerateOverrides(
+  opts: Partial<RedteamCliGenerateOptions>,
+): Partial<RedteamFileConfig> | null {
+  if (!opts.plugins || opts.plugins.length === 0) {
+    return {};
+  }
+
+  const parsed = RedteamConfigSchema.safeParse({
+    plugins: opts.plugins,
+    strategies: opts.strategies,
+    numTests: opts.numTests,
+  });
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  logger.error('Invalid options:');
+  parsed.error.issues.forEach((err: z.ZodIssue) => {
+    logger.error(`  ${err.path.join('.')}: ${err.message}`);
+  });
+  process.exitCode = 1;
+  return null;
+}
+
+function logGenerateError(error: unknown): void {
+  if (error instanceof z.ZodError) {
+    logger.error('Invalid options:');
+    error.issues.forEach((err: z.ZodIssue) => {
+      logger.error(`  ${err.path.join('.')}: ${err.message}`);
+    });
+    return;
+  }
+  if (error instanceof ConfigResolutionError) {
+    logConfigResolutionError(error);
+    return;
+  }
+  if (error instanceof EmailValidationError || error instanceof ProbeLimitExceededError) {
+    return;
+  }
+
+  logger.error(
+    error instanceof Error && error.stack
+      ? error.stack
+      : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
+async function handleRedteamGenerateAction(
+  opts: Partial<RedteamCliGenerateOptions>,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+): Promise<void> {
+  if (!(await hydrateCloudGenerateOptions(opts))) {
+    return;
+  }
+
+  applyCliStateOverrides(opts);
+  try {
+    const overrides = parseGenerateOverrides(opts);
+    if (overrides === null) {
+      return;
+    }
+    if (!opts.write && !opts.output) {
+      logger.info('No output file specified, writing to redteam.yaml in the current directory');
+      opts.output = 'redteam.yaml';
+    }
+    const validatedOpts = RedteamGenerateOptionsSchema.parse({
+      ...opts,
+      ...overrides,
+      defaultConfig,
+      defaultConfigPath,
+    });
+    await doGenerateRedteam(validatedOpts);
+  } catch (error) {
+    logGenerateError(error);
+    process.exitCode = 1;
+  } finally {
+    cliState.maxConcurrency = undefined;
   }
 }
 
@@ -978,100 +1470,8 @@ export function redteamGenerateCommand(
       'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
       false,
     )
-    .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
-      // Handle cloud config with target
-      if (opts.config && isUuid(opts.config)) {
-        // If target is provided, it must be a valid UUID. This check is nested because the target flag is mutually inclusive with a config that's set to a
-        // Cloud-defined config UUID i.e. a cloud target cannot be used with a local config.
-        if (opts.target && !isUuid(opts.target)) {
-          throw new Error('Invalid target ID, it must be a valid UUID');
-        }
-        const configObj = await getConfigFromCloud(opts.config, opts.target);
-
-        // backwards compatible for old cloud servers
-        if (
-          opts.target &&
-          isUuid(opts.target) &&
-          (!configObj.targets || configObj.targets?.length === 0)
-        ) {
-          configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
-        }
-        opts.configFromCloud = configObj;
-        opts.config = undefined;
-      } else if (opts.target) {
-        logger.error(
-          `Target ID (-t) can only be used when -c is used with a cloud config UUID. To use a cloud target inside of a config set the id of the target to ${CLOUD_PROVIDER_PREFIX}${opts.target}.`,
-        );
-        process.exitCode = 1;
-        return;
-      }
-
-      if (opts.remote) {
-        cliState.remote = true;
-      }
-      if (opts.maxConcurrency !== undefined) {
-        cliState.maxConcurrency = opts.maxConcurrency;
-      }
-      if (shouldGenerateRemote()) {
-        logger.debug('Remote generation enabled');
-      } else {
-        logger.debug('Remote generation disabled');
-      }
-
-      try {
-        let overrides: Partial<RedteamFileConfig> = {};
-        if (opts.plugins && opts.plugins.length > 0) {
-          const parsed = RedteamConfigSchema.safeParse({
-            plugins: opts.plugins,
-            strategies: opts.strategies,
-            numTests: opts.numTests,
-          });
-          if (!parsed.success) {
-            logger.error('Invalid options:');
-            parsed.error.issues.forEach((err: z.ZodIssue) => {
-              logger.error(`  ${err.path.join('.')}: ${err.message}`);
-            });
-            process.exitCode = 1;
-            return;
-          }
-          overrides = parsed.data;
-        }
-        if (!opts.write && !opts.output) {
-          logger.info('No output file specified, writing to redteam.yaml in the current directory');
-          opts.output = 'redteam.yaml';
-        }
-        const validatedOpts = RedteamGenerateOptionsSchema.parse({
-          ...opts,
-          ...overrides,
-          defaultConfig,
-          defaultConfigPath,
-        });
-        await doGenerateRedteam(validatedOpts);
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          logger.error('Invalid options:');
-          error.issues.forEach((err: z.ZodIssue) => {
-            logger.error(`  ${err.path.join('.')}: ${err.message}`);
-          });
-        } else if (error instanceof ConfigResolutionError) {
-          logConfigResolutionError(error);
-        } else if (
-          !(error instanceof EmailValidationError) &&
-          !(error instanceof ProbeLimitExceededError)
-        ) {
-          // These expected failures are already logged by their helpers.
-          // Log the stack trace, which already includes the error message
-          logger.error(
-            error instanceof Error && error.stack
-              ? error.stack
-              : `An unexpected error occurred during generation: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-        process.exitCode = 1;
-        return;
-      } finally {
-        // Reset cliState.maxConcurrency to prevent stale state
-        cliState.maxConcurrency = undefined;
-      }
-    });
+    .action(
+      (opts: Partial<RedteamCliGenerateOptions>): Promise<void> =>
+        handleRedteamGenerateAction(opts, defaultConfig, defaultConfigPath),
+    );
 }
