@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Prompt caching and included web results with OpenAI Responses API
+prompts:
+  - |
+    Give me one concise update from the past week about {{topic}}.
+    Include a cited source.
+
+providers:
+  - id: openai:responses:gpt-5.5
+    config:
+      max_output_tokens: 300
+      prompt_cache_key: recent-topic-update
+      prompt_cache_retention: 24h
+      include:
+        - web_search_call.results
+      tools:
+        - type: web_search
+
+tests:
+  - vars:
+      topic: NASA missions
+    assert:
+      - type: icontains-any
+        value:
+          - NASA
+          - mission
