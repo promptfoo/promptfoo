@@ -638,8 +638,7 @@ describe('combineConfigs', () => {
         filePath: fs.PathOrFileDescriptor,
         _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
       ) => {
-        const normalizedPath =
-          typeof filePath === 'string' ? filePath.replaceAll('\\', '/') : '';
+        const normalizedPath = typeof filePath === 'string' ? filePath.replaceAll('\\', '/') : '';
 
         if (normalizedPath.endsWith('dir1/config1.json')) {
           return JSON.stringify({
