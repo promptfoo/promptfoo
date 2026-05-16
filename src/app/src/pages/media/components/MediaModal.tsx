@@ -170,6 +170,657 @@ const prefersReducedMotion =
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+function isInteractiveKeyboardTarget(target: HTMLElement): boolean {
+  return (
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA' ||
+    target.tagName === 'SELECT' ||
+    target.tagName === 'VIDEO' ||
+    target.tagName === 'AUDIO' ||
+    target.isContentEditable
+  );
+}
+
+function toggleMediaPlayback(
+  item: MediaItem,
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  audioRef: React.RefObject<HTMLAudioElement | null>,
+  setIsPlaying: React.Dispatch<React.SetStateAction<boolean>>,
+): void {
+  const mediaEl = item.kind === 'video' ? videoRef.current : audioRef.current;
+  if (!mediaEl) {
+    return;
+  }
+  if (mediaEl.paused) {
+    mediaEl.play();
+    setIsPlaying(true);
+  } else {
+    mediaEl.pause();
+    setIsPlaying(false);
+  }
+}
+
+function toggleMediaMute(
+  item: MediaItem,
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  audioRef: React.RefObject<HTMLAudioElement | null>,
+): void {
+  const mediaEl = item.kind === 'video' ? videoRef.current : audioRef.current;
+  if (mediaEl) {
+    mediaEl.muted = !mediaEl.muted;
+  }
+}
+
+function useMediaModalKeyboardHandler({
+  item,
+  videoRef,
+  audioRef,
+  handlePrevious,
+  handleNext,
+  handleDownload,
+  handleZoomIn,
+  handleZoomOut,
+  handleZoomReset,
+  setIsPlaying,
+}: {
+  item: MediaItem | null;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  handlePrevious: () => void;
+  handleNext: () => void;
+  handleDownload: () => void;
+  handleZoomIn: () => void;
+  handleZoomOut: () => void;
+  handleZoomReset: () => void;
+  setIsPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
+  return useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!item) {
+        return;
+      }
+
+      const target = event.target as HTMLElement;
+      const isFocusedOnMedia = target.tagName === 'VIDEO' || target.tagName === 'AUDIO';
+      if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !isFocusedOnMedia) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.key === 'ArrowLeft') {
+          handlePrevious();
+        } else {
+          handleNext();
+        }
+        return;
+      }
+
+      if (isInteractiveKeyboardTarget(target)) {
+        return;
+      }
+
+      const isFocusedOnButton = target.tagName === 'BUTTON';
+      if ((event.key === 'd' || event.key === 'D') && !event.ctrlKey && !event.metaKey) {
+        event.preventDefault();
+        handleDownload();
+        return;
+      }
+
+      if (
+        event.key === ' ' &&
+        !isFocusedOnButton &&
+        (item.kind === 'video' || item.kind === 'audio')
+      ) {
+        event.preventDefault();
+        toggleMediaPlayback(item, videoRef, audioRef, setIsPlaying);
+        return;
+      }
+
+      if ((event.key === '+' || event.key === '=') && item.kind === 'image') {
+        event.preventDefault();
+        handleZoomIn();
+        return;
+      }
+      if ((event.key === '-' || event.key === '_') && item.kind === 'image') {
+        event.preventDefault();
+        handleZoomOut();
+        return;
+      }
+      if (event.key === '0' && item.kind === 'image') {
+        event.preventDefault();
+        handleZoomReset();
+        return;
+      }
+      if (
+        (event.key === 'm' || event.key === 'M') &&
+        (item.kind === 'video' || item.kind === 'audio')
+      ) {
+        event.preventDefault();
+        toggleMediaMute(item, videoRef, audioRef);
+      }
+    },
+    [
+      item,
+      videoRef,
+      audioRef,
+      handlePrevious,
+      handleNext,
+      handleDownload,
+      handleZoomIn,
+      handleZoomOut,
+      handleZoomReset,
+      setIsPlaying,
+    ],
+  );
+}
+
+interface MediaPreviewProps {
+  item: MediaItem;
+  mediaUrl: string;
+  imageContainerRef: React.RefObject<HTMLDivElement | null>;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  zoomLevel: number;
+  panPosition: { x: number; y: number };
+  isDragging: boolean;
+  isPlaying: boolean;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  isInList: boolean;
+  currentIndex: number;
+  itemsLength: number;
+  handlePrevious: () => void;
+  handleNext: () => void;
+  handleZoomIn: () => void;
+  handleZoomOut: () => void;
+  handleZoomReset: () => void;
+  handleDownload: () => void;
+  handleMouseDown: (event: React.MouseEvent) => void;
+  handleMouseMove: (event: React.MouseEvent) => void;
+  handleMouseUp: () => void;
+  handleWheel: (event: React.WheelEvent) => void;
+  setIsPlaying: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+function MediaPreview({
+  item,
+  mediaUrl,
+  imageContainerRef,
+  videoRef,
+  audioRef,
+  zoomLevel,
+  panPosition,
+  isDragging,
+  isPlaying,
+  hasPrevious,
+  hasNext,
+  isInList,
+  currentIndex,
+  itemsLength,
+  handlePrevious,
+  handleNext,
+  handleZoomIn,
+  handleZoomOut,
+  handleZoomReset,
+  handleDownload,
+  handleMouseDown,
+  handleMouseMove,
+  handleMouseUp,
+  handleWheel,
+  setIsPlaying,
+}: MediaPreviewProps) {
+  return (
+    <div className="relative flex-1 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black min-w-0 min-h-[40vh] md:min-h-0 overflow-hidden">
+      <DialogClose className="absolute top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700">
+        <X className="h-5 w-5" />
+        <span className="sr-only">Close</span>
+      </DialogClose>
+
+      {item.kind === 'image' && (
+        <div
+          ref={imageContainerRef}
+          className={cn(
+            'relative w-full h-full flex items-center justify-center',
+            zoomLevel > MEDIA_MIN_ZOOM ? 'cursor-grab' : 'cursor-zoom-in',
+            isDragging && 'cursor-grabbing',
+          )}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
+          onClick={() => zoomLevel === MEDIA_MIN_ZOOM && handleZoomIn()}
+        >
+          <img
+            src={mediaUrl}
+            alt={item.context.evalDescription || 'Generated image'}
+            className="max-w-full max-h-full object-contain select-none"
+            style={{
+              transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
+              transition: isDragging ? 'none' : 'transform 0.2s ease-out',
+            }}
+            draggable={false}
+          />
+        </div>
+      )}
+
+      {item.kind === 'image' && (
+        <div className="absolute top-4 right-4 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-lg p-1">
+          <button
+            onClick={handleZoomOut}
+            disabled={zoomLevel <= MEDIA_MIN_ZOOM}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded transition-colors [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
+              zoomLevel <= MEDIA_MIN_ZOOM
+                ? 'text-gray-500 cursor-not-allowed'
+                : 'text-white hover:bg-white/20',
+            )}
+            aria-label="Zoom out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <span
+            className="text-white text-xs font-medium tabular-nums w-10 text-center"
+            aria-live="polite"
+          >
+            {Math.round(zoomLevel * 100)}%
+          </span>
+          <button
+            onClick={handleZoomIn}
+            disabled={zoomLevel >= MEDIA_MAX_ZOOM}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded transition-colors [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
+              zoomLevel >= MEDIA_MAX_ZOOM
+                ? 'text-gray-500 cursor-not-allowed'
+                : 'text-white hover:bg-white/20',
+            )}
+            aria-label="Zoom in"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          {zoomLevel !== MEDIA_MIN_ZOOM && (
+            <button
+              onClick={handleZoomReset}
+              className="ml-1 flex h-8 w-8 items-center justify-center rounded text-white transition-colors hover:bg-white/20 [@media(hover:none)]:h-11 [@media(hover:none)]:w-11"
+              aria-label="Reset zoom"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {item.kind === 'video' && (
+        <video
+          ref={videoRef}
+          src={mediaUrl}
+          controls
+          autoPlay={!prefersReducedMotion}
+          muted
+          className="max-w-full max-h-full"
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+        />
+      )}
+
+      {item.kind === 'audio' && (
+        <div className="flex flex-col items-center gap-6 p-8">
+          <AudioWaveform
+            hash={item.hash}
+            isPlaying={isPlaying}
+            barCount={12}
+            barWidth={8}
+            minBarHeight={16}
+            maxBarHeight={48}
+            showIcon
+            iconSize="h-16 w-16"
+          />
+          <audio
+            ref={audioRef}
+            src={mediaUrl}
+            controls
+            autoPlay
+            className="w-full max-w-md"
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+          />
+        </div>
+      )}
+
+      {item.kind === 'other' && (
+        <div className="flex flex-col items-center gap-4 p-8 text-white">
+          <FileIcon className="h-16 w-16 text-gray-400" />
+          <span className="text-sm text-gray-400">Preview not available</span>
+          <Button onClick={handleDownload} variant="secondary">
+            <Download className="h-4 w-4 mr-2" />
+            Download
+          </Button>
+        </div>
+      )}
+
+      {hasPrevious && (
+        <button
+          onClick={handlePrevious}
+          className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
+          aria-label="Previous"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+      )}
+      {hasNext && (
+        <button
+          onClick={handleNext}
+          className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
+          aria-label="Next"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      )}
+      {isInList && itemsLength > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white/90 text-sm font-medium tabular-nums">
+          {currentIndex + 1} / {itemsLength}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MediaDetailsPanelProps {
+  item: MediaItem;
+  evalCellUrl: string;
+  permalinkUrl: string;
+  expandedGraders: Set<number>;
+  setExpandedGraders: React.Dispatch<React.SetStateAction<Set<number>>>;
+  showDetails: boolean;
+  setShowDetails: React.Dispatch<React.SetStateAction<boolean>>;
+  handleDownload: () => void;
+}
+
+function MediaDetailsPanel({
+  item,
+  evalCellUrl,
+  permalinkUrl,
+  expandedGraders,
+  setExpandedGraders,
+  showDetails,
+  setShowDetails,
+  handleDownload,
+}: MediaDetailsPanelProps) {
+  const KindIcon = getKindIcon(item.kind);
+  const hasScore = item.context.score !== undefined;
+  const hasGraders = item.context.graderResults && item.context.graderResults.length > 0;
+
+  return (
+    <div
+      data-testid="media-modal-details-panel"
+      className="flex max-h-[50vh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-border bg-muted/50 md:max-h-none md:w-96 md:border-t-0 md:border-l lg:w-[420px]"
+    >
+      <div className="p-4 border-b border-border bg-card">
+        <div className="flex items-start gap-4">
+          {hasScore ? (
+            <ScoreRing score={item.context.score!} size={56} />
+          ) : (
+            <div
+              className={cn(
+                'w-14 h-14 rounded-full flex items-center justify-center',
+                item.context.pass === true && 'bg-emerald-100 dark:bg-emerald-900/30',
+                item.context.pass === false && 'bg-red-100 dark:bg-red-900/30',
+                item.context.pass === undefined && 'bg-muted',
+              )}
+            >
+              {item.context.pass === true && (
+                <CheckCircle className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+              )}
+              {item.context.pass === false && (
+                <XCircle className="h-7 w-7 text-red-600 dark:text-red-400" />
+              )}
+              {item.context.pass === undefined && (
+                <KindIcon className="h-7 w-7 text-muted-foreground" />
+              )}
+            </div>
+          )}
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              {item.context.pass === true && (
+                <span className="text-lg font-semibold text-emerald-700 dark:text-emerald-300">
+                  Passed
+                </span>
+              )}
+              {item.context.pass === false && (
+                <span className="text-lg font-semibold text-red-700 dark:text-red-300">Failed</span>
+              )}
+              {item.context.pass === undefined && (
+                <span className="text-lg font-semibold capitalize">{item.kind}</span>
+              )}
+            </div>
+
+            {item.context.provider && (
+              <p className="text-xs text-muted-foreground font-mono mt-1 truncate">
+                {item.context.provider}
+              </p>
+            )}
+
+            <div className="flex items-center gap-3 mt-2">
+              {item.context.latencyMs !== undefined && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
+                  <Clock className="h-3 w-3" />
+                  {formatLatency(item.context.latencyMs)}
+                </span>
+              )}
+              {item.context.cost !== undefined && item.context.cost > 0 && (
+                <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
+                  {formatCost(item.context.cost)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        {item.context.prompt && (
+          <div className="min-w-0">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Prompt
+              </h4>
+              <CopyButton
+                value={item.context.prompt}
+                className="h-5 w-5 shrink-0 -mr-0.5"
+                iconSize="h-3.5 w-3.5"
+              />
+            </div>
+            <div className="bg-card rounded-lg border border-border/50 p-3 max-h-36 overflow-y-auto shadow-sm">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                {item.context.prompt}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {item.context.variables && Object.keys(item.context.variables).length > 0 && (
+          <div className="min-w-0">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Variables
+            </h4>
+            <div className="bg-card rounded-lg border border-border/50 p-3 space-y-2 max-h-32 overflow-y-auto shadow-sm">
+              {Object.entries(item.context.variables).map(([key, value]) => (
+                <div key={key} className="text-sm min-w-0">
+                  <span className="text-muted-foreground font-medium">{key}:</span>
+                  <span className="ml-2 font-mono text-xs break-words whitespace-pre-wrap">
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hasGraders && (
+          <div>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+              Assertions
+            </h4>
+            <div className="space-y-2">
+              {item.context.graderResults!.map((grader, idx) => (
+                <GraderItem
+                  key={idx}
+                  grader={grader}
+                  isExpanded={expandedGraders.has(idx)}
+                  onToggle={() => {
+                    setExpandedGraders((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(idx)) {
+                        next.delete(idx);
+                      } else {
+                        next.add(idx);
+                      }
+                      return next;
+                    });
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <Link
+          to={evalCellUrl}
+          className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors group"
+        >
+          <ExternalLink className="h-4 w-4 shrink-0 group-hover:translate-x-0.5 transition-transform" />
+          <span className="truncate">View in {item.context.evalDescription || 'Eval'}</span>
+        </Link>
+
+        <div
+          data-testid="media-modal-mobile-actions"
+          className="flex items-center gap-2 pt-2 md:hidden"
+        >
+          <Button onClick={handleDownload} variant="outline" size="sm" className="h-11 gap-1.5">
+            <Download className="h-3.5 w-3.5" />
+            <span>Download</span>
+          </Button>
+          <CopyButton
+            value={permalinkUrl}
+            className="h-11 w-11 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+            iconSize="h-4 w-4"
+            aria-label="Copy permalink"
+            title="Copy permalink"
+          />
+        </div>
+
+        <div className="pt-2 border-t border-border/50">
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+          >
+            <ChevronDown
+              className={cn('h-4 w-4 transition-transform', showDetails && 'rotate-180')}
+            />
+            <span className="font-medium">{showDetails ? 'Hide' : 'Show'} technical details</span>
+          </button>
+
+          {showDetails && (
+            <div className="mt-3 space-y-2 text-xs bg-card rounded-lg border border-border/50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Cell</span>
+                <span className="font-mono">
+                  {item.context.testIdx === undefined ? '—' : `Row ${item.context.testIdx + 1}`}
+                  {item.context.promptIdx !== undefined && `, Col ${item.context.promptIdx + 1}`}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Size</span>
+                <span className="font-mono">{formatBytes(item.sizeBytes)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Created</span>
+                <span>{formatMediaDate(item.createdAt)}</span>
+              </div>
+              {item.context.location && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground shrink-0">Location</span>
+                  <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded truncate">
+                    {item.context.location}
+                  </code>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground shrink-0">Hash</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded truncate">
+                    {item.hash.slice(0, 16)}...
+                  </code>
+                  <CopyButton value={item.hash} className="h-4 w-4 shrink-0" iconSize="h-3 w-3" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        data-testid="media-modal-desktop-actions"
+        className="hidden shrink-0 items-center justify-between gap-4 border-t border-border bg-card px-4 py-3 md:flex"
+      >
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleDownload}
+            variant="outline"
+            size="sm"
+            aria-label="Download"
+            title="Download"
+            className="h-8 gap-1.5 [@media(hover:none)]:h-11"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Download</span>
+          </Button>
+          <CopyButton
+            value={permalinkUrl}
+            className="h-8 w-8 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground [@media(hover:none)]:h-11 [@media(hover:none)]:w-11"
+            iconSize="h-4 w-4"
+            aria-label="Copy permalink"
+            title="Copy permalink"
+          />
+        </div>
+        <div className="hidden lg:flex items-center gap-1.5">
+          <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+            ←
+          </kbd>
+          <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+            →
+          </kbd>
+          <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+            D
+          </kbd>
+          {(item.kind === 'video' || item.kind === 'audio') && (
+            <>
+              <kbd className="inline-flex items-center justify-center h-5 px-1.5 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+                Space
+              </kbd>
+              <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+                M
+              </kbd>
+            </>
+          )}
+          {item.kind === 'image' && (
+            <>
+              <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+                +
+              </kbd>
+              <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+                −
+              </kbd>
+              <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
+                0
+              </kbd>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -258,111 +909,18 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
     return baseUrl;
   }, [item]);
 
-  // Keyboard navigation handler - using callback instead of window listener
-  // to work properly with Radix Dialog's focus management
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (!item) {
-        return;
-      }
-
-      // Arrow keys navigate between items, but yield to native media seek controls
-      // when focus is on a video/audio element so users can seek with left/right arrows.
-      const activeTag = (e.target as HTMLElement).tagName;
-      const isFocusedOnMedia = activeTag === 'VIDEO' || activeTag === 'AUDIO';
-      if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !isFocusedOnMedia) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.key === 'ArrowLeft') {
-          handlePrevious();
-        } else {
-          handleNext();
-        }
-        return;
-      }
-
-      // For other shortcuts, skip if focus is in an interactive element
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.tagName === 'VIDEO' ||
-        target.tagName === 'AUDIO' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
-      // Space on a focused button should activate the button natively,
-      // not be hijacked by the play/pause shortcut.
-      const isFocusedOnButton = target.tagName === 'BUTTON';
-
-      switch (e.key) {
-        case 'd':
-        case 'D':
-          if (!e.ctrlKey && !e.metaKey) {
-            e.preventDefault();
-            handleDownload();
-          }
-          break;
-        case ' ':
-          if (!isFocusedOnButton && (item.kind === 'video' || item.kind === 'audio')) {
-            e.preventDefault();
-            const mediaEl = item.kind === 'video' ? videoRef.current : audioRef.current;
-            if (mediaEl) {
-              if (mediaEl.paused) {
-                mediaEl.play();
-                setIsPlaying(true);
-              } else {
-                mediaEl.pause();
-                setIsPlaying(false);
-              }
-            }
-          }
-          break;
-        case '+':
-        case '=':
-          if (item.kind === 'image') {
-            e.preventDefault();
-            handleZoomIn();
-          }
-          break;
-        case '-':
-        case '_':
-          if (item.kind === 'image') {
-            e.preventDefault();
-            handleZoomOut();
-          }
-          break;
-        case '0':
-          if (item.kind === 'image') {
-            e.preventDefault();
-            handleZoomReset();
-          }
-          break;
-        case 'm':
-        case 'M':
-          if (item.kind === 'video' || item.kind === 'audio') {
-            e.preventDefault();
-            const mediaEl = item.kind === 'video' ? videoRef.current : audioRef.current;
-            if (mediaEl) {
-              mediaEl.muted = !mediaEl.muted;
-            }
-          }
-          break;
-      }
-    },
-    [
-      item,
-      handlePrevious,
-      handleNext,
-      handleDownload,
-      handleZoomIn,
-      handleZoomOut,
-      handleZoomReset,
-    ],
-  );
+  const handleKeyDown = useMediaModalKeyboardHandler({
+    item,
+    videoRef,
+    audioRef,
+    handlePrevious,
+    handleNext,
+    handleDownload,
+    handleZoomIn,
+    handleZoomOut,
+    handleZoomReset,
+    setIsPlaying,
+  });
 
   // Reset state when viewing a different media item
   // biome-ignore lint/correctness/useExhaustiveDependencies: item?.hash is from props, we intentionally reset when viewing different item
@@ -456,10 +1014,6 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
     return null;
   }
 
-  const KindIcon = getKindIcon(item.kind);
-  const hasScore = item.context.score !== undefined;
-  const hasGraders = item.context.graderResults && item.context.graderResults.length > 0;
-
   return (
     <Dialog open={!!item} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
@@ -472,464 +1026,43 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           {item.context.evalDescription || item.hash.slice(0, 8)}
         </DialogTitle>
         <div className="flex h-full min-w-0 w-full flex-col md:flex-row">
-          {/* Media Preview */}
-          <div className="relative flex-1 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black min-w-0 min-h-[40vh] md:min-h-0 overflow-hidden">
-            {/* Close button - visible on dark background */}
-            <DialogClose className="absolute top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700">
-              <X className="h-5 w-5" />
-              <span className="sr-only">Close</span>
-            </DialogClose>
-
-            {item.kind === 'image' && (
-              <div
-                ref={imageContainerRef}
-                className={cn(
-                  'relative w-full h-full flex items-center justify-center',
-                  zoomLevel > MEDIA_MIN_ZOOM ? 'cursor-grab' : 'cursor-zoom-in',
-                  isDragging && 'cursor-grabbing',
-                )}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onWheel={handleWheel}
-                onClick={() => zoomLevel === MEDIA_MIN_ZOOM && handleZoomIn()}
-              >
-                <img
-                  src={mediaUrl}
-                  alt={item.context.evalDescription || 'Generated image'}
-                  className="max-w-full max-h-full object-contain select-none"
-                  style={{
-                    transform: `scale(${zoomLevel}) translate(${panPosition.x / zoomLevel}px, ${panPosition.y / zoomLevel}px)`,
-                    transition: isDragging ? 'none' : 'transform 0.2s ease-out',
-                  }}
-                  draggable={false}
-                />
-              </div>
-            )}
-
-            {/* Zoom controls for images */}
-            {item.kind === 'image' && (
-              <div className="absolute top-4 right-4 flex items-center gap-1 bg-black/60 backdrop-blur-sm rounded-lg p-1">
-                <button
-                  onClick={handleZoomOut}
-                  disabled={zoomLevel <= MEDIA_MIN_ZOOM}
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded transition-colors [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
-                    zoomLevel <= MEDIA_MIN_ZOOM
-                      ? 'text-gray-500 cursor-not-allowed'
-                      : 'text-white hover:bg-white/20',
-                  )}
-                  aria-label="Zoom out"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </button>
-                <span
-                  className="text-white text-xs font-medium tabular-nums w-10 text-center"
-                  aria-live="polite"
-                >
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-                <button
-                  onClick={handleZoomIn}
-                  disabled={zoomLevel >= MEDIA_MAX_ZOOM}
-                  className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded transition-colors [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
-                    zoomLevel >= MEDIA_MAX_ZOOM
-                      ? 'text-gray-500 cursor-not-allowed'
-                      : 'text-white hover:bg-white/20',
-                  )}
-                  aria-label="Zoom in"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </button>
-                {zoomLevel !== MEDIA_MIN_ZOOM && (
-                  <button
-                    onClick={handleZoomReset}
-                    className="ml-1 flex h-8 w-8 items-center justify-center rounded text-white transition-colors hover:bg-white/20 [@media(hover:none)]:h-11 [@media(hover:none)]:w-11"
-                    aria-label="Reset zoom"
-                  >
-                    <Minimize2 className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {item.kind === 'video' && (
-              <video
-                ref={videoRef}
-                src={mediaUrl}
-                controls
-                autoPlay={!prefersReducedMotion}
-                muted
-                className="max-w-full max-h-full"
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-              />
-            )}
-
-            {item.kind === 'audio' && (
-              <div className="flex flex-col items-center gap-6 p-8">
-                <AudioWaveform
-                  hash={item.hash}
-                  isPlaying={isPlaying}
-                  barCount={12}
-                  barWidth={8}
-                  minBarHeight={16}
-                  maxBarHeight={48}
-                  showIcon
-                  iconSize="h-16 w-16"
-                />
-                <audio
-                  ref={audioRef}
-                  src={mediaUrl}
-                  controls
-                  autoPlay
-                  className="w-full max-w-md"
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                />
-              </div>
-            )}
-
-            {item.kind === 'other' && (
-              <div className="flex flex-col items-center gap-4 p-8 text-white">
-                <FileIcon className="h-16 w-16 text-gray-400" />
-                <span className="text-sm text-gray-400">Preview not available</span>
-                <Button onClick={handleDownload} variant="secondary">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </Button>
-              </div>
-            )}
-
-            {/* Navigation Arrows */}
-            {hasPrevious && (
-              <button
-                onClick={handlePrevious}
-                className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
-                aria-label="Previous"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-            )}
-            {hasNext && (
-              <button
-                onClick={handleNext}
-                className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
-                aria-label="Next"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-            )}
-
-            {/* Navigation counter — only shown when the item is in the loaded list */}
-            {isInList && items.length > 1 && (
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-sm text-white/90 text-sm font-medium tabular-nums">
-                {currentIndex + 1} / {items.length}
-              </div>
-            )}
-          </div>
-
-          {/* Details Panel */}
-          <div
-            data-testid="media-modal-details-panel"
-            className="flex max-h-[50vh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-border bg-muted/50 md:max-h-none md:w-96 md:border-t-0 md:border-l lg:w-[420px]"
-          >
-            {/* Header with status and score */}
-            <div className="p-4 border-b border-border bg-card">
-              <div className="flex items-start gap-4">
-                {/* Score ring or status icon */}
-                {hasScore ? (
-                  <ScoreRing score={item.context.score!} size={56} />
-                ) : (
-                  <div
-                    className={cn(
-                      'w-14 h-14 rounded-full flex items-center justify-center',
-                      item.context.pass === true && 'bg-emerald-100 dark:bg-emerald-900/30',
-                      item.context.pass === false && 'bg-red-100 dark:bg-red-900/30',
-                      item.context.pass === undefined && 'bg-muted',
-                    )}
-                  >
-                    {item.context.pass === true && (
-                      <CheckCircle className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
-                    )}
-                    {item.context.pass === false && (
-                      <XCircle className="h-7 w-7 text-red-600 dark:text-red-400" />
-                    )}
-                    {item.context.pass === undefined && (
-                      <KindIcon className="h-7 w-7 text-muted-foreground" />
-                    )}
-                  </div>
-                )}
-
-                {/* Status text and metadata */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {item.context.pass === true && (
-                      <span className="text-lg font-semibold text-emerald-700 dark:text-emerald-300">
-                        Passed
-                      </span>
-                    )}
-                    {item.context.pass === false && (
-                      <span className="text-lg font-semibold text-red-700 dark:text-red-300">
-                        Failed
-                      </span>
-                    )}
-                    {item.context.pass === undefined && (
-                      <span className="text-lg font-semibold capitalize">{item.kind}</span>
-                    )}
-                  </div>
-
-                  {/* Provider chip */}
-                  {item.context.provider && (
-                    <p className="text-xs text-muted-foreground font-mono mt-1 truncate">
-                      {item.context.provider}
-                    </p>
-                  )}
-
-                  {/* Metrics row */}
-                  <div className="flex items-center gap-3 mt-2">
-                    {item.context.latencyMs !== undefined && (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
-                        <Clock className="h-3 w-3" />
-                        {formatLatency(item.context.latencyMs)}
-                      </span>
-                    )}
-                    {item.context.cost !== undefined && item.context.cost > 0 && (
-                      <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
-                        {formatCost(item.context.cost)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Scrollable content */}
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-              {/* Prompt Section */}
-              {item.context.prompt && (
-                <div className="min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Prompt
-                    </h4>
-                    <CopyButton
-                      value={item.context.prompt}
-                      className="h-5 w-5 shrink-0 -mr-0.5"
-                      iconSize="h-3.5 w-3.5"
-                    />
-                  </div>
-                  <div className="bg-card rounded-lg border border-border/50 p-3 max-h-36 overflow-y-auto shadow-sm">
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                      {item.context.prompt}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Variables Section */}
-              {item.context.variables && Object.keys(item.context.variables).length > 0 && (
-                <div className="min-w-0">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Variables
-                  </h4>
-                  <div className="bg-card rounded-lg border border-border/50 p-3 space-y-2 max-h-32 overflow-y-auto shadow-sm">
-                    {Object.entries(item.context.variables).map(([key, value]) => (
-                      <div key={key} className="text-sm min-w-0">
-                        <span className="text-muted-foreground font-medium">{key}:</span>
-                        <span className="ml-2 font-mono text-xs break-words whitespace-pre-wrap">
-                          {value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Graders Section */}
-              {hasGraders && (
-                <div>
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Assertions
-                  </h4>
-                  <div className="space-y-2">
-                    {item.context.graderResults!.map((grader, idx) => (
-                      <GraderItem
-                        key={idx}
-                        grader={grader}
-                        isExpanded={expandedGraders.has(idx)}
-                        onToggle={() => {
-                          setExpandedGraders((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(idx)) {
-                              next.delete(idx);
-                            } else {
-                              next.add(idx);
-                            }
-                            return next;
-                          });
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Eval Link */}
-              <Link
-                to={evalCellUrl}
-                className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors group"
-              >
-                <ExternalLink className="h-4 w-4 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-                <span className="truncate">View in {item.context.evalDescription || 'Eval'}</span>
-              </Link>
-
-              <div
-                data-testid="media-modal-mobile-actions"
-                className="flex items-center gap-2 pt-2 md:hidden"
-              >
-                <Button
-                  onClick={handleDownload}
-                  variant="outline"
-                  size="sm"
-                  className="h-11 gap-1.5"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download</span>
-                </Button>
-                <CopyButton
-                  value={permalinkUrl}
-                  className="h-11 w-11 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
-                  iconSize="h-4 w-4"
-                  aria-label="Copy permalink"
-                  title="Copy permalink"
-                />
-              </div>
-
-              {/* Details Toggle */}
-              <div className="pt-2 border-t border-border/50">
-                <button
-                  onClick={() => setShowDetails(!showDetails)}
-                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                >
-                  <ChevronDown
-                    className={cn('h-4 w-4 transition-transform', showDetails && 'rotate-180')}
-                  />
-                  <span className="font-medium">
-                    {showDetails ? 'Hide' : 'Show'} technical details
-                  </span>
-                </button>
-
-                {showDetails && (
-                  <div className="mt-3 space-y-2 text-xs bg-card rounded-lg border border-border/50 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Cell</span>
-                      <span className="font-mono">
-                        {item.context.testIdx === undefined
-                          ? '—'
-                          : `Row ${item.context.testIdx + 1}`}
-                        {item.context.promptIdx !== undefined &&
-                          `, Col ${item.context.promptIdx + 1}`}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Size</span>
-                      <span className="font-mono">{formatBytes(item.sizeBytes)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Created</span>
-                      <span>{formatMediaDate(item.createdAt)}</span>
-                    </div>
-                    {item.context.location && (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground shrink-0">Location</span>
-                        <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded truncate">
-                          {item.context.location}
-                        </code>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground shrink-0">Hash</span>
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <code className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded truncate">
-                          {item.hash.slice(0, 16)}...
-                        </code>
-                        <CopyButton
-                          value={item.hash}
-                          className="h-4 w-4 shrink-0"
-                          iconSize="h-3 w-3"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div
-              data-testid="media-modal-desktop-actions"
-              className="hidden shrink-0 items-center justify-between gap-4 border-t border-border bg-card px-4 py-3 md:flex"
-            >
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleDownload}
-                  variant="outline"
-                  size="sm"
-                  aria-label="Download"
-                  title="Download"
-                  className="h-8 gap-1.5 [@media(hover:none)]:h-11"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Download</span>
-                </Button>
-                <CopyButton
-                  value={permalinkUrl}
-                  className="h-8 w-8 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground [@media(hover:none)]:h-11 [@media(hover:none)]:w-11"
-                  iconSize="h-4 w-4"
-                  aria-label="Copy permalink"
-                  title="Copy permalink"
-                />
-              </div>
-              {/* Keyboard shortcuts */}
-              <div className="hidden lg:flex items-center gap-1.5">
-                <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                  ←
-                </kbd>
-                <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                  →
-                </kbd>
-                <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                  D
-                </kbd>
-                {(item.kind === 'video' || item.kind === 'audio') && (
-                  <>
-                    <kbd className="inline-flex items-center justify-center h-5 px-1.5 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                      Space
-                    </kbd>
-                    <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                      M
-                    </kbd>
-                  </>
-                )}
-                {item.kind === 'image' && (
-                  <>
-                    <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                      +
-                    </kbd>
-                    <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                      −
-                    </kbd>
-                    <kbd className="inline-flex items-center justify-center h-5 min-w-5 px-1 bg-muted/60 rounded text-[10px] font-mono text-muted-foreground border border-border/40">
-                      0
-                    </kbd>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+          <MediaPreview
+            item={item}
+            mediaUrl={mediaUrl}
+            imageContainerRef={imageContainerRef}
+            videoRef={videoRef}
+            audioRef={audioRef}
+            zoomLevel={zoomLevel}
+            panPosition={panPosition}
+            isDragging={isDragging}
+            isPlaying={isPlaying}
+            hasPrevious={hasPrevious}
+            hasNext={hasNext}
+            isInList={isInList}
+            currentIndex={currentIndex}
+            itemsLength={items.length}
+            handlePrevious={handlePrevious}
+            handleNext={handleNext}
+            handleZoomIn={handleZoomIn}
+            handleZoomOut={handleZoomOut}
+            handleZoomReset={handleZoomReset}
+            handleDownload={handleDownload}
+            handleMouseDown={handleMouseDown}
+            handleMouseMove={handleMouseMove}
+            handleMouseUp={handleMouseUp}
+            handleWheel={handleWheel}
+            setIsPlaying={setIsPlaying}
+          />
+          <MediaDetailsPanel
+            item={item}
+            evalCellUrl={evalCellUrl}
+            permalinkUrl={permalinkUrl}
+            expandedGraders={expandedGraders}
+            setExpandedGraders={setExpandedGraders}
+            showDetails={showDetails}
+            setShowDetails={setShowDetails}
+            handleDownload={handleDownload}
+          />
         </div>
       </DialogContent>
     </Dialog>
