@@ -99,10 +99,10 @@ export function registerGenerateDatasetTool(server: McpServer) {
 
         // Save to file if outputPath is provided
         if (outputPath) {
-          const fs = await import('fs');
+          const fs = await import('fs/promises');
           const yaml = await import('js-yaml');
           const yamlContent = yaml.dump({ tests: dataset });
-          fs.writeFileSync(outputPath, yamlContent);
+          await fs.writeFile(outputPath, yamlContent);
         }
 
         // Extract useful information from the result

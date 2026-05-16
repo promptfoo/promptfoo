@@ -1,5 +1,5 @@
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamPluginBase } from './base';
 
@@ -36,7 +36,7 @@ async function fetchDataset(
 ): Promise<CyberSecEvalTestCase[]> {
   try {
     const url = isMultilingual ? DATASET_URL_MULTILINGUAL : DATASET_URL;
-    const response = await fetchWithTimeout(url, {}, REQUEST_TIMEOUT_MS);
+    const response = await fetchWithTimeout(url, {}, getRequestTimeoutMs());
     if (!response.ok) {
       throw new Error(`[CyberSecEval] HTTP status: ${response.status} ${response.statusText}`);
     }

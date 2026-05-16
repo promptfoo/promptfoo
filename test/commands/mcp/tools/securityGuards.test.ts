@@ -19,6 +19,14 @@ vi.mock('../../../../src/util/config/default', () => ({
 }));
 
 vi.mock('../../../../src/util/config/load', () => ({
+  ConfigResolutionError: class ConfigResolutionError extends Error {
+    cliMessage: string;
+
+    constructor(cliMessage: string) {
+      super(cliMessage);
+      this.cliMessage = cliMessage;
+    }
+  },
   resolveConfigs: vi.fn().mockResolvedValue({
     config: {
       prompts: ['Hello {{name}}'],

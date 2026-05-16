@@ -17,6 +17,12 @@ providers:
       model: gpt-5.4-mini
       max_turns: 8
       otlp_endpoint: http://localhost:4318
+  - id: file://agent_provider.py:call_skill_api
+    label: skill-workflow
+    config:
+      model: gpt-5.4-mini
+      max_turns: 8
+      otlp_endpoint: http://localhost:4318
 
 tests:
   - description: Long-horizon booking change followed by a policy question
@@ -266,6 +272,42 @@ tests:
         value:
           type: command
           pattern: '*discount_policy.py*'
+          min: 1
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+  - description: Local shell skill reviews the discount policy fixture
+    providers:
+      - skill-workflow
+    vars:
+      task: Use the discount-review skill to inspect skill_fixture/repo and report the ticket id, severity, owner, primary file, helper command, and exact minimal fix.
+    metadata:
+      testCaseId: openai-agents-python-skill
+    assert:
+      - type: contains
+        value: TICKET-014
+      - type: contains
+        value: high
+      - type: contains
+        value: platform-integrations
+      - type: contains
+        value: skill_fixture/repo/src/discount_policy.py
+      - type: contains
+        value: analyze_discount_policy.py
+      - type: contains
+        value: return discount_percent >= 20
+      - type: not-contains
+        value: 'stderr:'
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*discount-review/SKILL.md*'
+          min: 1
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*analyze_discount_policy.py*'
           min: 1
       - type: trace-error-spans
         value:

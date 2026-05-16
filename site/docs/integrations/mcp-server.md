@@ -119,7 +119,7 @@ The AI will use these tools in sequence:
 
 1. `validate_promptfoo_config` - Check your configuration
 2. `list_evaluations` - Show recent runs
-3. `run_evaluation` - Execute with test case filtering
+3. `run_evaluation` - Execute with test case filtering, such as `{"start": 0, "end": 5}` for the first five zero-based test indices
 
 ### 2. Provider Comparison
 
