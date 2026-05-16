@@ -956,7 +956,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-4o-realtime-preview-2024-12-17',
+          modelName || configuredModel || 'gpt-realtime-1.5',
           providerOptions,
         );
       }
@@ -1290,6 +1290,15 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
+
+      // xAI does not expose a public embeddings API. Fail fast with a clear message
+      // rather than silently routing `xai:embedding:*` to a different sub-type.
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        throw new Error(
+          `xAI does not currently expose a public embeddings API; "${providerPath}" cannot be resolved. ` +
+            `Use openai:embedding:* or another embedding provider instead.`,
+        );
+      }
 
       // Handle xai:image:<model> format
       if (modelType === 'image') {

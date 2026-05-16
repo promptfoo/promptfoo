@@ -90,9 +90,9 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <div className="flex justify-between items-center pr-8">
+            <div className="flex flex-col items-start gap-3 pr-8 sm:flex-row sm:items-center sm:justify-between">
               <DialogTitle>Select Columns</DialogTitle>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={handleShowAll} variant="outline">
                   Show All
                 </Button>
