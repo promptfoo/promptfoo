@@ -75,6 +75,133 @@ export function escapeJsonVariables(vars: Record<string, any>): Record<string, a
   );
 }
 
+type SignatureAuthType = 'pem' | 'jks' | 'pfx';
+type SignatureAuthConfig = Record<string, any>;
+
+function detectCertificateTypeFromFilename(
+  filename: string | undefined,
+): SignatureAuthType | undefined {
+  if (!filename) {
+    return undefined;
+  }
+
+  const ext = filename.toLowerCase();
+  if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
+    return 'pfx';
+  }
+  if (ext.endsWith('.jks')) {
+    return 'jks';
+  }
+  if (ext.endsWith('.pem') || ext.endsWith('.key')) {
+    return 'pem';
+  }
+
+  return undefined;
+}
+
+function detectCertificateTypeFromLegacyFields(
+  signatureAuth: SignatureAuthConfig,
+): SignatureAuthType | undefined {
+  if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
+    return 'pem';
+  }
+  if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
+    return 'jks';
+  }
+  if (
+    signatureAuth.pfxPath ||
+    signatureAuth.pfxContent ||
+    (signatureAuth.certPath && signatureAuth.keyPath)
+  ) {
+    return 'pfx';
+  }
+
+  return undefined;
+}
+
+function detectSignatureAuthType(signatureAuth: SignatureAuthConfig): string | undefined {
+  return (
+    signatureAuth.type ||
+    detectCertificateTypeFromFilename(signatureAuth.certificateFilename) ||
+    detectCertificateTypeFromLegacyFields(signatureAuth)
+  );
+}
+
+function hasGenericCertificateFields(signatureAuth: SignatureAuthConfig): boolean {
+  return Boolean(
+    signatureAuth.certificateContent ||
+      signatureAuth.certificatePassword ||
+      signatureAuth.certificateFilename,
+  );
+}
+
+function mapGenericPfxFields(
+  processedAuth: SignatureAuthConfig,
+  signatureAuth: SignatureAuthConfig,
+): void {
+  if (signatureAuth.certificateContent && !processedAuth.pfxContent) {
+    processedAuth.pfxContent = signatureAuth.certificateContent;
+  }
+  if (signatureAuth.certificatePassword && !processedAuth.pfxPassword) {
+    processedAuth.pfxPassword = signatureAuth.certificatePassword;
+  }
+  if (signatureAuth.certificateFilename && !processedAuth.pfxPath) {
+    processedAuth.certificateFilename = signatureAuth.certificateFilename;
+  }
+}
+
+function mapGenericJksFields(
+  processedAuth: SignatureAuthConfig,
+  signatureAuth: SignatureAuthConfig,
+): void {
+  if (signatureAuth.certificateContent && !processedAuth.keystoreContent) {
+    processedAuth.keystoreContent = signatureAuth.certificateContent;
+  }
+  if (signatureAuth.certificatePassword && !processedAuth.keystorePassword) {
+    processedAuth.keystorePassword = signatureAuth.certificatePassword;
+  }
+  if (signatureAuth.certificateFilename && !processedAuth.keystorePath) {
+    processedAuth.certificateFilename = signatureAuth.certificateFilename;
+  }
+}
+
+function mapGenericPemFields(
+  processedAuth: SignatureAuthConfig,
+  signatureAuth: SignatureAuthConfig,
+): void {
+  if (signatureAuth.certificateContent && !processedAuth.privateKey) {
+    processedAuth.privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString(
+      'utf8',
+    );
+  }
+  if (signatureAuth.certificatePassword) {
+    processedAuth.certificatePassword = signatureAuth.certificatePassword;
+  }
+  if (signatureAuth.certificateFilename) {
+    processedAuth.certificateFilename = signatureAuth.certificateFilename;
+  }
+}
+
+function applyGenericCertificateFields(
+  processedAuth: SignatureAuthConfig,
+  signatureAuth: SignatureAuthConfig,
+  detectedType: string,
+): void {
+  switch (detectedType) {
+    case 'pfx':
+      mapGenericPfxFields(processedAuth, signatureAuth);
+      return;
+    case 'jks':
+      mapGenericJksFields(processedAuth, signatureAuth);
+      return;
+    case 'pem':
+      mapGenericPemFields(processedAuth, signatureAuth);
+      return;
+    default:
+      throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
+  }
+}
+
 /**
  * Maps promptfoo-cloud certificate fields to type-specific fields based on the certificate type.
  * This handles certificates stored in the database with generic field names.
@@ -87,45 +214,18 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
     return signatureAuth;
   }
 
-  // If generic certificate fields are present, map them to type-specific fields
-  const { certificateContent, certificatePassword, certificateFilename, type, ...rest } =
-    signatureAuth;
-
-  let detectedType = type;
-  if (!detectedType) {
-    // Try to detect from certificateFilename first
-    if (certificateFilename) {
-      const ext = certificateFilename.toLowerCase();
-      if (ext.endsWith('.pfx') || ext.endsWith('.p12')) {
-        detectedType = 'pfx';
-      } else if (ext.endsWith('.jks')) {
-        detectedType = 'jks';
-      } else if (ext.endsWith('.pem') || ext.endsWith('.key')) {
-        detectedType = 'pem';
-      }
-    }
-
-    // If still no type, try to detect from legacy fields
-    if (!detectedType) {
-      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
-        detectedType = 'pem';
-      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
-        detectedType = 'jks';
-      } else if (
-        signatureAuth.pfxPath ||
-        signatureAuth.pfxContent ||
-        (signatureAuth.certPath && signatureAuth.keyPath)
-      ) {
-        detectedType = 'pfx';
-      }
-    }
-  }
-
-  // Check if we have any generic fields to process
-  const hasGenericFields = certificateContent || certificatePassword || certificateFilename;
+  const {
+    certificateContent: _certificateContent,
+    certificatePassword: _certificatePassword,
+    certificateFilename: _certificateFilename,
+    type: _type,
+    ...rest
+  } = signatureAuth;
+  const detectedType = detectSignatureAuthType(signatureAuth);
+  const genericFieldsPresent = hasGenericCertificateFields(signatureAuth);
 
   // If no generic fields and no type needs to be detected, return as-is
-  if (!hasGenericFields && !detectedType) {
+  if (!genericFieldsPresent && !detectedType) {
     return signatureAuth;
   }
 
@@ -136,62 +236,12 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
     processedAuth.type = detectedType;
   }
 
-  // Only process if we have a determined type or generic fields
   if (detectedType) {
-    switch (detectedType) {
-      case 'pfx':
-        if (certificateContent && !processedAuth.pfxContent) {
-          processedAuth.pfxContent = certificateContent;
-        }
-        if (certificatePassword && !processedAuth.pfxPassword) {
-          processedAuth.pfxPassword = certificatePassword;
-        }
-        if (certificateFilename && !processedAuth.pfxPath) {
-          // Store filename for reference, though content takes precedence
-          processedAuth.certificateFilename = certificateFilename;
-        }
-        break;
-
-      case 'jks':
-        // Map generic fields to JKS-specific fields
-        if (certificateContent && !processedAuth.keystoreContent) {
-          processedAuth.keystoreContent = certificateContent;
-        }
-        if (certificatePassword && !processedAuth.keystorePassword) {
-          processedAuth.keystorePassword = certificatePassword;
-        }
-        if (certificateFilename && !processedAuth.keystorePath) {
-          processedAuth.certificateFilename = certificateFilename;
-        }
-        break;
-
-      case 'pem':
-        // Map generic fields to PEM-specific fields
-        if (certificateContent && !processedAuth.privateKey) {
-          // For PEM, the certificate content is the private key
-          processedAuth.privateKey = Buffer.from(certificateContent, 'base64').toString('utf8');
-        }
-        // PEM doesn't typically have a password, but store it if provided
-        if (certificatePassword) {
-          processedAuth.certificatePassword = certificatePassword;
-        }
-        if (certificateFilename) {
-          processedAuth.certificateFilename = certificateFilename;
-        }
-        break;
-
-      default:
-        // Unknown type - this is an error if we have generic fields that need mapping
-        if (hasGenericFields) {
-          throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
-        }
-        // Even without generic fields, an unknown type is invalid
-        throw new Error(`[Http Provider] Unknown certificate type: ${detectedType}`);
-    }
-  } else if (hasGenericFields) {
+    applyGenericCertificateFields(processedAuth, signatureAuth, detectedType);
+  } else if (genericFieldsPresent) {
     // We have generic fields but couldn't determine the type
     throw new Error(
-      `[Http Provider] Cannot determine certificate type from filename: ${certificateFilename || 'no filename provided'}`,
+      `[Http Provider] Cannot determine certificate type from filename: ${signatureAuth.certificateFilename || 'no filename provided'}`,
     );
   }
 
@@ -325,293 +375,312 @@ export async function generateSignature(
   signatureTimestamp: number,
 ): Promise<string> {
   try {
-    let privateKey: string;
-
-    // For backward compatibility, detect type from legacy fields if not explicitly set
-    let authType = signatureAuth.type;
-    if (!authType) {
-      if (signatureAuth.privateKeyPath || signatureAuth.privateKey) {
-        authType = 'pem';
-      } else if (signatureAuth.keystorePath || signatureAuth.keystoreContent) {
-        authType = 'jks';
-      } else if (
-        signatureAuth.pfxPath ||
-        signatureAuth.pfxContent ||
-        (signatureAuth.certPath && signatureAuth.keyPath)
-      ) {
-        authType = 'pfx';
-      }
-    }
-    switch (authType) {
-      case 'pem': {
-        if (signatureAuth.privateKeyPath) {
-          const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = await fs.readFile(resolvedPath, 'utf8');
-        } else if (signatureAuth.privateKey) {
-          privateKey = signatureAuth.privateKey;
-        } else if (signatureAuth.certificateContent) {
-          logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
-          privateKey = Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
-        } else {
-          throw new Error(
-            'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
-          );
-        }
-        break;
-      }
-      case 'jks': {
-        // Check for keystore password in config first, then fallback to environment variable
-        const keystorePassword =
-          signatureAuth.keystorePassword ||
-          signatureAuth.certificatePassword ||
-          getEnvString('PROMPTFOO_JKS_PASSWORD');
-
-        if (!keystorePassword) {
-          throw new Error(
-            'JKS keystore password is required. Provide it via config keystorePassword/certificatePassword or PROMPTFOO_JKS_PASSWORD environment variable',
-          );
-        }
-
-        // Use eval to avoid TypeScript static analysis of the dynamic import
-        const jksModule = await import('jks-js').catch(() => {
-          throw new Error(
-            'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
-          );
-        });
-
-        const jks = jksModule as any;
-        let keystoreData: Buffer;
-
-        if (signatureAuth.keystoreContent || signatureAuth.certificateContent) {
-          // Use base64 encoded content from database
-          const content = signatureAuth.keystoreContent || signatureAuth.certificateContent;
-          logger.debug(`[Signature Auth] Loading JKS from base64 content`);
-          keystoreData = Buffer.from(content, 'base64');
-        } else if (signatureAuth.keystorePath) {
-          // Use file path (existing behavior)
-          const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = await fs.readFile(resolvedPath);
-        } else {
-          throw new Error(
-            'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
-          );
-        }
-
-        const keystore = jks.toPem(keystoreData, keystorePassword);
-
-        const aliases = Object.keys(keystore);
-        if (aliases.length === 0) {
-          throw new Error('No certificates found in JKS file');
-        }
-
-        const targetAlias = signatureAuth.keyAlias || aliases[0];
-        const entry = keystore[targetAlias];
-
-        if (!entry) {
-          throw new Error(
-            `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
-          );
-        }
-
-        if (!entry.key) {
-          throw new Error('No private key found for the specified alias in JKS file');
-        }
-
-        privateKey = entry.key;
-        break;
-      }
-      case 'pfx': {
-        // Check for PFX-specific fields first, then fallback to generic fields
-        const hasPfxContent = signatureAuth.pfxContent || signatureAuth.certificateContent;
-        const hasPfxPath = signatureAuth.pfxPath;
-        const hasCertAndKey =
-          (signatureAuth.certPath && signatureAuth.keyPath) ||
-          (signatureAuth.certContent && signatureAuth.keyContent);
-
-        // Add detailed, safe debug logging for PFX configuration sources
-        logger.debug(
-          `[Signature Auth][PFX] Source detection: hasPfxContent=${Boolean(hasPfxContent)}, hasPfxPath=${Boolean(
-            hasPfxPath,
-          )}, hasCertAndKey=${Boolean(hasCertAndKey)}; filename=${
-            signatureAuth.certificateFilename || signatureAuth.pfxPath || 'n/a'
-          }`,
-        );
-
-        if (hasPfxPath || hasPfxContent) {
-          // Check for PFX password in config first, then fallback to environment variable
-          const pfxPassword =
-            signatureAuth.pfxPassword ||
-            signatureAuth.certificatePassword ||
-            getEnvString('PROMPTFOO_PFX_PASSWORD');
-
-          if (!pfxPassword) {
-            throw new Error(
-              'PFX certificate password is required. Provide it via config pfxPassword/certificatePassword or PROMPTFOO_PFX_PASSWORD environment variable',
-            );
-          }
-
-          try {
-            // Use eval to avoid TypeScript static analysis of the dynamic import
-            const pemModule = await import('pem').catch(() => {
-              throw new Error(
-                'PFX certificate support requires the "pem" package. Install it with: npm install pem',
-              );
-            });
-
-            const pem = pemModule.default as any;
-
-            let result: { key: string; cert: string };
-
-            if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
-              // Use base64 encoded content from database
-              const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
-              logger.debug(`[Signature Auth] Loading PFX from base64 content`);
-              const pfxBuffer = Buffer.from(content, 'base64');
-
-              logger.debug(
-                `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
-              );
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
-              });
-            } else {
-              // Use file path (existing behavior)
-              const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-              logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-              try {
-                const stat = await fs.stat(resolvedPath);
-                logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
-              } catch (e) {
-                logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
-              }
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(
-                  resolvedPath,
-                  { p12Password: pfxPassword },
-                  (err: any, data: any) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      resolve(data);
-                    }
-                  },
-                );
-              });
-            }
-
-            if (!result.key) {
-              logger.error('[Signature Auth][PFX] No private key extracted from PFX');
-              throw new Error('No private key found in PFX file');
-            }
-
-            privateKey = result.key;
-            logger.debug(
-              `[Signature Auth] Successfully extracted private key from PFX using pem library`,
-            );
-          } catch (err) {
-            if (err instanceof Error) {
-              if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
-                const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-                throw new Error(`PFX file not found: ${resolvedPath}`);
-              }
-              if (err.message.includes('invalid') || err.message.includes('decrypt')) {
-                throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
-              }
-            }
-            logger.error(`Error loading PFX certificate: ${String(err)}`);
-            throw new Error(
-              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
-            );
-          }
-        } else if (hasCertAndKey) {
-          try {
-            if (signatureAuth.keyContent) {
-              // Use base64 encoded content from database
-              logger.debug(`[Signature Auth] Loading private key from base64 content`);
-              privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
-              logger.debug(
-                `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
-              );
-            } else {
-              // Use file paths (existing behavior)
-              const resolvedCertPath = safeResolve(cliState.basePath || '', signatureAuth.certPath);
-              const resolvedKeyPath = safeResolve(cliState.basePath || '', signatureAuth.keyPath);
-              logger.debug(
-                `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
-              );
-
-              // Verify the cert path resolves; the cert contents aren't consumed
-              // here, only its presence is validated for early operator feedback.
-              if (!(await pathExists(resolvedCertPath))) {
-                throw new Error(`Certificate file not found: ${resolvedCertPath}`);
-              }
-              try {
-                // Read the key directly — readFile surfaces ENOENT with the path.
-                privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
-              } catch (err) {
-                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-                  throw new Error(`Key file not found: ${resolvedKeyPath}`);
-                }
-                throw err;
-              }
-              logger.debug(
-                `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
-              );
-            }
-            logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
-          } catch (err) {
-            logger.error(`Error loading certificate/key files: ${String(err)}`);
-            throw new Error(
-              `Failed to load certificate/key files. Make sure both files exist and are readable: ${String(err)}`,
-            );
-          }
-        } else {
-          throw new Error(
-            'PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent',
-          );
-        }
-        break;
-      }
-      default:
-        throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
-    }
-
-    const data = getNunjucksEngine()
-      .renderString(signatureAuth.signatureDataTemplate, {
-        signatureTimestamp,
-      })
-      .replace(/\\n/g, '\n');
-
-    // Pre-sign validation logging
-    logger.debug(
-      `[Signature Auth] Preparing to sign with algorithm=${signatureAuth.signatureAlgorithm}, dataLength=${data.length}, keyProvided=${Boolean(
-        privateKey,
-      )}`,
-    );
-
-    const sign = crypto.createSign(signatureAuth.signatureAlgorithm);
-    sign.update(data);
-    sign.end();
-    try {
-      const signature = sign.sign(privateKey);
-      return signature.toString('base64');
-    } catch (e) {
-      logger.error(
-        `[Signature Auth] Signing failed: ${String(e)}; keyLength=${privateKey?.length || 0}, algorithm=${signatureAuth.signatureAlgorithm}`,
-      );
-      throw e;
-    }
+    const authType = detectSignatureAuthType(signatureAuth);
+    const privateKey = await loadSignaturePrivateKey(signatureAuth, authType);
+    const data = renderSignatureData(signatureAuth, signatureTimestamp);
+    return signSignatureData(signatureAuth, data, privateKey);
   } catch (err) {
     logger.error(`Error generating signature: ${String(err)}`);
     throw new Error(`Failed to generate signature: ${String(err)}`);
+  }
+}
+
+async function loadSignaturePrivateKey(
+  signatureAuth: SignatureAuthConfig,
+  authType: string | undefined,
+): Promise<string> {
+  switch (authType) {
+    case 'pem':
+      return loadPemPrivateKey(signatureAuth);
+    case 'jks':
+      return loadJksPrivateKey(signatureAuth);
+    case 'pfx':
+      return loadPfxPrivateKey(signatureAuth);
+    default:
+      throw new Error(`Unsupported signature auth type: ${signatureAuth.type}`);
+  }
+}
+
+async function loadPemPrivateKey(signatureAuth: SignatureAuthConfig): Promise<string> {
+  if (signatureAuth.privateKeyPath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
+    return fs.readFile(resolvedPath, 'utf8');
+  }
+  if (signatureAuth.privateKey) {
+    return signatureAuth.privateKey;
+  }
+  if (signatureAuth.certificateContent) {
+    logger.debug(`[Signature Auth] Loading PEM from remote certificate content`);
+    return Buffer.from(signatureAuth.certificateContent, 'base64').toString('utf8');
+  }
+
+  throw new Error(
+    'PEM private key is required. Provide privateKey, privateKeyPath, or certificateContent',
+  );
+}
+
+async function loadJksPrivateKey(signatureAuth: SignatureAuthConfig): Promise<string> {
+  const keystorePassword =
+    signatureAuth.keystorePassword ||
+    signatureAuth.certificatePassword ||
+    getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+  if (!keystorePassword) {
+    throw new Error(
+      'JKS keystore password is required. Provide it via config keystorePassword/certificatePassword or PROMPTFOO_JKS_PASSWORD environment variable',
+    );
+  }
+
+  const jksModule = await import('jks-js').catch(() => {
+    throw new Error(
+      'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+    );
+  });
+  const jks = jksModule as any;
+  const keystoreData = await loadJksKeystoreData(signatureAuth);
+  const keystore = jks.toPem(keystoreData, keystorePassword);
+  const aliases = Object.keys(keystore);
+
+  if (aliases.length === 0) {
+    throw new Error('No certificates found in JKS file');
+  }
+
+  const targetAlias = signatureAuth.keyAlias || aliases[0];
+  const entry = keystore[targetAlias];
+  if (!entry) {
+    throw new Error(
+      `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+    );
+  }
+  if (!entry.key) {
+    throw new Error('No private key found for the specified alias in JKS file');
+  }
+
+  return entry.key;
+}
+
+async function loadJksKeystoreData(signatureAuth: SignatureAuthConfig): Promise<Buffer> {
+  if (signatureAuth.keystoreContent || signatureAuth.certificateContent) {
+    const content = signatureAuth.keystoreContent || signatureAuth.certificateContent;
+    logger.debug(`[Signature Auth] Loading JKS from base64 content`);
+    return Buffer.from(content, 'base64');
+  }
+  if (signatureAuth.keystorePath) {
+    const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
+    return fs.readFile(resolvedPath);
+  }
+
+  throw new Error(
+    'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
+  );
+}
+
+function hasPfxBundle(signatureAuth: SignatureAuthConfig): boolean {
+  return Boolean(
+    signatureAuth.pfxPath || signatureAuth.pfxContent || signatureAuth.certificateContent,
+  );
+}
+
+function hasSeparateCertAndKey(signatureAuth: SignatureAuthConfig): boolean {
+  return Boolean(
+    (signatureAuth.certPath && signatureAuth.keyPath) ||
+      (signatureAuth.certContent && signatureAuth.keyContent),
+  );
+}
+
+async function loadPfxPrivateKey(signatureAuth: SignatureAuthConfig): Promise<string> {
+  const hasBundle = hasPfxBundle(signatureAuth);
+  const hasCertAndKey = hasSeparateCertAndKey(signatureAuth);
+
+  logger.debug(
+    `[Signature Auth][PFX] Source detection: hasPfxContent=${Boolean(signatureAuth.pfxContent || signatureAuth.certificateContent)}, hasPfxPath=${Boolean(
+      signatureAuth.pfxPath,
+    )}, hasCertAndKey=${hasCertAndKey}; filename=${
+      signatureAuth.certificateFilename || signatureAuth.pfxPath || 'n/a'
+    }`,
+  );
+
+  if (hasBundle) {
+    return loadPfxBundlePrivateKey(signatureAuth);
+  }
+  if (hasCertAndKey) {
+    return loadSeparatePfxPrivateKey(signatureAuth);
+  }
+
+  throw new Error(
+    'PFX type requires either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent',
+  );
+}
+
+async function loadPfxBundlePrivateKey(signatureAuth: SignatureAuthConfig): Promise<string> {
+  const pfxPassword =
+    signatureAuth.pfxPassword ||
+    signatureAuth.certificatePassword ||
+    getEnvString('PROMPTFOO_PFX_PASSWORD');
+
+  if (!pfxPassword) {
+    throw new Error(
+      'PFX certificate password is required. Provide it via config pfxPassword/certificatePassword or PROMPTFOO_PFX_PASSWORD environment variable',
+    );
+  }
+
+  try {
+    const pemModule = await import('pem').catch(() => {
+      throw new Error(
+        'PFX certificate support requires the "pem" package. Install it with: npm install pem',
+      );
+    });
+    const pem = pemModule.default as any;
+    const result = await readPkcs12PrivateKey(pem, signatureAuth, pfxPassword);
+
+    if (!result.key) {
+      logger.error('[Signature Auth][PFX] No private key extracted from PFX');
+      throw new Error('No private key found in PFX file');
+    }
+
+    logger.debug(`[Signature Auth] Successfully extracted private key from PFX using pem library`);
+    return result.key;
+  } catch (err) {
+    throw normalizePfxBundleError(err, signatureAuth);
+  }
+}
+
+async function readPkcs12PrivateKey(
+  pem: any,
+  signatureAuth: SignatureAuthConfig,
+  pfxPassword: string,
+): Promise<{ key: string; cert: string }> {
+  if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
+    const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
+    logger.debug(`[Signature Auth] Loading PFX from base64 content`);
+    const pfxBuffer = Buffer.from(content, 'base64');
+    logger.debug(
+      `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
+    );
+    return readPkcs12(pem, pfxBuffer, pfxPassword);
+  }
+
+  const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+  logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
+  try {
+    const stat = await fs.stat(resolvedPath);
+    logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
+  } catch (err) {
+    logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(err)}`);
+  }
+  return readPkcs12(pem, resolvedPath, pfxPassword);
+}
+
+function readPkcs12(
+  pem: any,
+  source: Buffer | string,
+  pfxPassword: string,
+): Promise<{ key: string; cert: string }> {
+  return new Promise<{ key: string; cert: string }>((resolve, reject) => {
+    pem.readPkcs12(source, { p12Password: pfxPassword }, (err: any, data: any) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(data);
+    });
+  });
+}
+
+function normalizePfxBundleError(err: unknown, signatureAuth: SignatureAuthConfig): Error {
+  if (err instanceof Error) {
+    if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
+      const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+      return new Error(`PFX file not found: ${resolvedPath}`);
+    }
+    if (err.message.includes('invalid') || err.message.includes('decrypt')) {
+      return new Error(`Invalid PFX file format or wrong password: ${err.message}`);
+    }
+  }
+
+  logger.error(`Error loading PFX certificate: ${String(err)}`);
+  return new Error(
+    `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
+  );
+}
+
+async function loadSeparatePfxPrivateKey(signatureAuth: SignatureAuthConfig): Promise<string> {
+  try {
+    if (signatureAuth.keyContent) {
+      logger.debug(`[Signature Auth] Loading private key from base64 content`);
+      const privateKey = Buffer.from(signatureAuth.keyContent, 'base64').toString('utf8');
+      logger.debug(
+        `[Signature Auth][PFX] Decoded keyContent length: ${privateKey.length} characters`,
+      );
+      logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
+      return privateKey;
+    }
+
+    const privateKey = await loadSeparatePfxKeyFromPath(signatureAuth);
+    logger.debug(`[Signature Auth] Successfully loaded private key from separate key file`);
+    return privateKey;
+  } catch (err) {
+    logger.error(`Error loading certificate/key files: ${String(err)}`);
+    throw new Error(
+      `Failed to load certificate/key files. Make sure both files exist and are readable: ${String(err)}`,
+    );
+  }
+}
+
+async function loadSeparatePfxKeyFromPath(signatureAuth: SignatureAuthConfig): Promise<string> {
+  const resolvedCertPath = safeResolve(cliState.basePath || '', signatureAuth.certPath);
+  const resolvedKeyPath = safeResolve(cliState.basePath || '', signatureAuth.keyPath);
+  logger.debug(
+    `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
+  );
+
+  if (!(await pathExists(resolvedCertPath))) {
+    throw new Error(`Certificate file not found: ${resolvedCertPath}`);
+  }
+
+  try {
+    const privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+    logger.debug(`[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`);
+    return privateKey;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`Key file not found: ${resolvedKeyPath}`);
+    }
+    throw err;
+  }
+}
+
+function renderSignatureData(
+  signatureAuth: SignatureAuthConfig,
+  signatureTimestamp: number,
+): string {
+  return getNunjucksEngine()
+    .renderString(signatureAuth.signatureDataTemplate, { signatureTimestamp })
+    .replace(/\\n/g, '\n');
+}
+
+function signSignatureData(
+  signatureAuth: SignatureAuthConfig,
+  data: string,
+  privateKey: string,
+): string {
+  logger.debug(
+    `[Signature Auth] Preparing to sign with algorithm=${signatureAuth.signatureAlgorithm}, dataLength=${data.length}, keyProvided=${Boolean(
+      privateKey,
+    )}`,
+  );
+
+  const sign = crypto.createSign(signatureAuth.signatureAlgorithm);
+  sign.update(data);
+  sign.end();
+  try {
+    const signature = sign.sign(privateKey);
+    return signature.toString('base64');
+  } catch (err) {
+    logger.error(
+      `[Signature Auth] Signing failed: ${String(err)}; keyLength=${privateKey.length}, algorithm=${signatureAuth.signatureAlgorithm}`,
+    );
+    throw err;
   }
 }
 
@@ -1367,165 +1436,231 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
   const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+  const readResults = await loadTlsReadResults(tlsConfig, basePath, usingJks);
 
-  // Kick off all independent file reads in parallel. JKS and cert/key are
-  // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
-  type ReadResult = { resolved: string; contents: string | Buffer } | undefined;
-  const readUtf8 = async (p: string | undefined): Promise<ReadResult> => {
-    if (!p) {
-      return undefined;
-    }
-    const resolved = safeResolve(basePath, p);
-    return { resolved, contents: await fs.readFile(resolved, 'utf8') };
-  };
-  const readBuffer = async (p: string | undefined): Promise<ReadResult> => {
-    if (!p) {
-      return undefined;
-    }
-    const resolved = safeResolve(basePath, p);
-    return { resolved, contents: await fs.readFile(resolved) };
-  };
+  applyTlsCaOptions(tlsOptions, tlsConfig, readResults.ca);
+  if (usingJks) {
+    await applyJksTlsOptions(tlsOptions, tlsConfig, basePath);
+  } else {
+    applyClientCertificateTlsOptions(tlsOptions, tlsConfig, readResults.cert, readResults.key);
+  }
+  applyPfxTlsOptions(tlsOptions, tlsConfig, readResults.pfx);
+  applyTlsConnectionOptions(tlsOptions, tlsConfig);
 
-  const [caResult, certResult, keyResult, pfxResult] = await Promise.all([
-    tlsConfig.ca ? Promise.resolve(undefined) : readUtf8(tlsConfig.caPath),
-    !usingJks && !tlsConfig.cert ? readUtf8(tlsConfig.certPath) : Promise.resolve(undefined),
-    !usingJks && !tlsConfig.key ? readUtf8(tlsConfig.keyPath) : Promise.resolve(undefined),
-    tlsConfig.pfx ? Promise.resolve(undefined) : readBuffer(tlsConfig.pfxPath),
+  logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
+
+  // Create an undici Agent with the TLS options
+  return new Agent({
+    connect: tlsOptions,
+  });
+}
+
+type TlsReadResult = { resolved: string; contents: string | Buffer } | undefined;
+type TlsReadResults = {
+  ca: TlsReadResult;
+  cert: TlsReadResult;
+  key: TlsReadResult;
+  pfx: TlsReadResult;
+};
+
+async function readTlsPath(
+  basePath: string,
+  inputPath: string | undefined,
+  encoding?: BufferEncoding,
+): Promise<TlsReadResult> {
+  if (!inputPath) {
+    return undefined;
+  }
+
+  const resolved = safeResolve(basePath, inputPath);
+  return {
+    resolved,
+    contents: encoding ? await fs.readFile(resolved, encoding) : await fs.readFile(resolved),
+  };
+}
+
+async function loadTlsReadResults(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  basePath: string,
+  usingJks: boolean,
+): Promise<TlsReadResults> {
+  const [ca, cert, key, pfx] = await Promise.all([
+    tlsConfig.ca ? Promise.resolve(undefined) : readTlsPath(basePath, tlsConfig.caPath, 'utf8'),
+    !usingJks && !tlsConfig.cert
+      ? readTlsPath(basePath, tlsConfig.certPath, 'utf8')
+      : Promise.resolve(undefined),
+    !usingJks && !tlsConfig.key
+      ? readTlsPath(basePath, tlsConfig.keyPath, 'utf8')
+      : Promise.resolve(undefined),
+    tlsConfig.pfx ? Promise.resolve(undefined) : readTlsPath(basePath, tlsConfig.pfxPath),
   ]);
 
-  // Load CA certificates
+  return { ca, cert, key, pfx };
+}
+
+function applyTlsCaOptions(
+  tlsOptions: https.AgentOptions,
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  caResult: TlsReadResult,
+): void {
   if (tlsConfig.ca) {
     tlsOptions.ca = tlsConfig.ca;
-  } else if (caResult) {
+    return;
+  }
+  if (caResult) {
     tlsOptions.ca = caResult.contents;
     logger.debug(`[HTTP Provider] Loaded CA certificate from ${caResult.resolved}`);
   }
+}
 
-  // Handle JKS certificates for TLS (extract cert and key)
-  if (usingJks) {
-    try {
-      const jksModule = await import('jks-js').catch(() => {
-        throw new Error(
-          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
-        );
-      });
-      const jks = jksModule as any;
-
-      const keystorePassword =
-        (tlsConfig as any).keystorePassword ||
-        tlsConfig.passphrase ||
-        getEnvString('PROMPTFOO_JKS_PASSWORD');
-
-      if (!keystorePassword) {
-        throw new Error(
-          'JKS keystore password is required for TLS. Provide it via passphrase or PROMPTFOO_JKS_PASSWORD environment variable',
-        );
-      }
-
-      let keystoreData: Buffer;
-      if ((tlsConfig as any).jksContent) {
-        logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
-        keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
-      } else if ((tlsConfig as any).jksPath) {
-        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
-        logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = await fs.readFile(resolvedPath);
-      } else {
-        throw new Error('JKS content or path is required');
-      }
-
-      const keystore = jks.toPem(keystoreData, keystorePassword);
-      const aliases = Object.keys(keystore);
-
-      if (aliases.length === 0) {
-        throw new Error('No certificates found in JKS file');
-      }
-
-      const targetAlias = (tlsConfig as any).keyAlias || aliases[0];
-      const entry = keystore[targetAlias];
-
-      if (!entry) {
-        throw new Error(
-          `Alias '${targetAlias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
-        );
-      }
-
-      // Extract certificate and key from JKS entry
-      if (entry.cert) {
-        tlsOptions.cert = entry.cert;
-        logger.debug(
-          `[HTTP Provider] Extracted certificate from JKS for TLS (alias: ${targetAlias})`,
-        );
-      }
-
-      if (entry.key) {
-        tlsOptions.key = entry.key;
-        logger.debug(
-          `[HTTP Provider] Extracted private key from JKS for TLS (alias: ${targetAlias})`,
-        );
-      }
-
-      if (!tlsOptions.cert || !tlsOptions.key) {
-        throw new Error('Failed to extract both certificate and key from JKS file');
-      }
-    } catch (err) {
-      logger.error(`[HTTP Provider] Failed to load JKS certificate for TLS: ${String(err)}`);
-      throw new Error(`Failed to load JKS certificate: ${String(err)}`);
+async function applyJksTlsOptions(
+  tlsOptions: https.AgentOptions,
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  basePath: string,
+): Promise<void> {
+  try {
+    const entry = await loadTlsJksEntry(tlsConfig, basePath);
+    if (entry.cert) {
+      tlsOptions.cert = entry.cert;
+      logger.debug(
+        `[HTTP Provider] Extracted certificate from JKS for TLS (alias: ${entry.alias})`,
+      );
     }
-  } else {
-    // Load client certificate (non-JKS)
-    if (tlsConfig.cert) {
-      tlsOptions.cert = tlsConfig.cert;
-    } else if (certResult) {
-      tlsOptions.cert = certResult.contents;
-      logger.debug(`[HTTP Provider] Loaded client certificate from ${certResult.resolved}`);
+    if (entry.key) {
+      tlsOptions.key = entry.key;
+      logger.debug(
+        `[HTTP Provider] Extracted private key from JKS for TLS (alias: ${entry.alias})`,
+      );
     }
+    if (!tlsOptions.cert || !tlsOptions.key) {
+      throw new Error('Failed to extract both certificate and key from JKS file');
+    }
+  } catch (err) {
+    logger.error(`[HTTP Provider] Failed to load JKS certificate for TLS: ${String(err)}`);
+    throw new Error(`Failed to load JKS certificate: ${String(err)}`);
+  }
+}
 
-    // Load private key (non-JKS)
-    if (tlsConfig.key) {
-      tlsOptions.key = tlsConfig.key;
-    } else if (keyResult) {
-      tlsOptions.key = keyResult.contents;
-      logger.debug(`[HTTP Provider] Loaded private key from ${keyResult.resolved}`);
-    }
+async function loadTlsJksEntry(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  basePath: string,
+): Promise<{ alias: string; cert?: string; key?: string }> {
+  const jksModule = await import('jks-js').catch(() => {
+    throw new Error(
+      'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+    );
+  });
+  const keystorePassword = getTlsJksPassword(tlsConfig);
+  const keystoreData = await loadTlsJksData(tlsConfig, basePath);
+  const keystore = (jksModule as any).toPem(keystoreData, keystorePassword);
+  const aliases = Object.keys(keystore);
+
+  if (aliases.length === 0) {
+    throw new Error('No certificates found in JKS file');
   }
 
-  // Load PFX certificate
+  const alias = (tlsConfig as any).keyAlias || aliases[0];
+  const entry = keystore[alias];
+  if (!entry) {
+    throw new Error(
+      `Alias '${alias}' not found in JKS file. Available aliases: ${aliases.join(', ')}`,
+    );
+  }
+
+  return { alias, cert: entry.cert, key: entry.key };
+}
+
+function getTlsJksPassword(tlsConfig: z.infer<typeof TlsCertificateSchema>): string {
+  const keystorePassword =
+    (tlsConfig as any).keystorePassword ||
+    tlsConfig.passphrase ||
+    getEnvString('PROMPTFOO_JKS_PASSWORD');
+
+  if (!keystorePassword) {
+    throw new Error(
+      'JKS keystore password is required for TLS. Provide it via passphrase or PROMPTFOO_JKS_PASSWORD environment variable',
+    );
+  }
+  return keystorePassword;
+}
+
+async function loadTlsJksData(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  basePath: string,
+): Promise<Buffer> {
+  if ((tlsConfig as any).jksContent) {
+    logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
+    return Buffer.from((tlsConfig as any).jksContent, 'base64');
+  }
+  if ((tlsConfig as any).jksPath) {
+    const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
+    logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
+    return fs.readFile(resolvedPath);
+  }
+
+  throw new Error('JKS content or path is required');
+}
+
+function applyClientCertificateTlsOptions(
+  tlsOptions: https.AgentOptions,
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  certResult: TlsReadResult,
+  keyResult: TlsReadResult,
+): void {
+  if (tlsConfig.cert) {
+    tlsOptions.cert = tlsConfig.cert;
+  } else if (certResult) {
+    tlsOptions.cert = certResult.contents;
+    logger.debug(`[HTTP Provider] Loaded client certificate from ${certResult.resolved}`);
+  }
+
+  if (tlsConfig.key) {
+    tlsOptions.key = tlsConfig.key;
+  } else if (keyResult) {
+    tlsOptions.key = keyResult.contents;
+    logger.debug(`[HTTP Provider] Loaded private key from ${keyResult.resolved}`);
+  }
+}
+
+function applyPfxTlsOptions(
+  tlsOptions: https.AgentOptions,
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+  pfxResult: TlsReadResult,
+): void {
   if (tlsConfig.pfx) {
-    // Handle inline PFX content
-    if (typeof tlsConfig.pfx === 'string') {
-      // Check if it's base64-encoded (common for embedding binary data in config files)
-      if (isBase64(tlsConfig.pfx)) {
-        tlsOptions.pfx = Buffer.from(tlsConfig.pfx, 'base64');
-        logger.debug(`[HTTP Provider] Using base64-encoded inline PFX certificate`);
-      } else {
-        // Assume it's already in the correct format
-        tlsOptions.pfx = tlsConfig.pfx;
-        logger.debug(`[HTTP Provider] Using inline PFX certificate`);
-      }
-    } else {
-      // It's already a Buffer
-      tlsOptions.pfx = tlsConfig.pfx;
-      logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
-    }
-  } else if (pfxResult) {
+    tlsOptions.pfx = normalizeInlinePfx(tlsConfig.pfx);
+    return;
+  }
+  if (pfxResult) {
     tlsOptions.pfx = pfxResult.contents;
     logger.debug(`[HTTP Provider] Loaded PFX certificate from ${pfxResult.resolved}`);
   }
+}
 
-  // Set passphrase if provided
+function normalizeInlinePfx(pfx: string | Buffer): string | Buffer {
+  if (typeof pfx !== 'string') {
+    logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
+    return pfx;
+  }
+  if (isBase64(pfx)) {
+    logger.debug(`[HTTP Provider] Using base64-encoded inline PFX certificate`);
+    return Buffer.from(pfx, 'base64');
+  }
+  logger.debug(`[HTTP Provider] Using inline PFX certificate`);
+  return pfx;
+}
+
+function applyTlsConnectionOptions(
+  tlsOptions: https.AgentOptions,
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+): void {
   if (tlsConfig.passphrase) {
     tlsOptions.passphrase = tlsConfig.passphrase;
   }
-
-  // Set security options
   tlsOptions.rejectUnauthorized = tlsConfig.rejectUnauthorized !== false;
-
   if (tlsConfig.servername) {
     tlsOptions.servername = tlsConfig.servername;
   }
-
-  // Set cipher configuration
   if (tlsConfig.ciphers) {
     tlsOptions.ciphers = tlsConfig.ciphers;
   }
@@ -1538,13 +1673,6 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
   if (tlsConfig.maxVersion) {
     tlsOptions.maxVersion = tlsConfig.maxVersion as any;
   }
-
-  logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
-
-  // Create an undici Agent with the TLS options
-  return new Agent({
-    connect: tlsOptions,
-  });
 }
 
 export class HttpProvider implements ApiProvider {
