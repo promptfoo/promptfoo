@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
@@ -245,7 +245,7 @@ export class RubyProvider implements ApiProvider {
 
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     logger.debug(`Computing file hash for script ${absPath}`);
-    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
