@@ -69,5 +69,4 @@ The Debug Access plugin is closely related to several other security testing app
 - [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) - While Debug Access focuses on debugging interfaces, Tool Discovery attempts to uncover all tools and functions an AI system has access to.
 - [**Prompt Extraction**](/docs/red-team/plugins/prompt-extraction) - Tests if an AI system's system prompt can be extracted, which might be possible through debugging interfaces.
 - [**System Prompt Override**](/docs/red-team/plugins/system-prompt-override) - Tests if a user can override system instructions, which might be possible through debugging access.
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

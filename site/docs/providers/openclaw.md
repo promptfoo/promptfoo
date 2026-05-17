@@ -304,6 +304,12 @@ providers:
       backend_model: openai/gpt-5.4
 ```
 
+For billing, OpenClaw's visible `model` remains the agent target (`openclaw/<agent-id>`). Promptfoo
+can estimate OpenAI token spend only when `backend_model` or `model_override` names the actual
+OpenAI backend model, such as `openai/gpt-5.4` or `gpt-5.4`. If the backend model is selected only
+inside OpenClaw's own agent config, Promptfoo leaves `cost` unset because the gateway response does
+not expose enough information to price that request safely.
+
 ### WebSocket Agent
 
 Promptfoo uses an isolated session key per call unless you set `session_key` explicitly.

@@ -97,7 +97,7 @@ def call_api(prompt, options, context):
     );
 
     await Promise.all(providers.map((provider) => provider.initialize()));
-  });
+  }, TEST_TIMEOUT);
 
   afterAll(async () => {
     // Cleanup providers
@@ -129,7 +129,7 @@ def call_api(prompt, options, context):
     if (shutdownFailures.length > 0) {
       throw new Error(`PythonProvider shutdown failed: ${shutdownFailures.join('; ')}`);
     }
-  });
+  }, TEST_TIMEOUT);
 
   it(
     'should handle paths with colons (like C:\\ on Windows)',

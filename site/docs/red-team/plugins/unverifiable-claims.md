@@ -141,5 +141,4 @@ The grader checks whether the output:
 - [Hallucination](hallucination.md) - False but checkable claims
 - [Overreliance](overreliance.md) - Encouraging dependency on AI judgments
 - [Excessive Agency](excessive-agency.md) - Acting beyond intended capabilities
-
-For more on LLM vulnerabilities, see [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types).
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

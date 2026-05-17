@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import {
   callExtraction,
   fetchRemoteGeneration,
@@ -95,7 +95,7 @@ describe('fetchRemoteGeneration', () => {
           email: null,
         }),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'json',
     );
   });
@@ -127,7 +127,7 @@ describe('fetchRemoteGeneration', () => {
           email: null,
         }),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'json',
     );
   });
@@ -182,7 +182,7 @@ describe('fetchRemoteGeneration', () => {
     expect(fetchWithCache).toHaveBeenCalledWith(
       customUrl,
       expect.any(Object),
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'json',
     );
   });
