@@ -27,6 +27,55 @@ interface EvalOptions {
   fetchId: string | null;
 }
 
+function hydrateFiltersFromSearchParams({
+  searchParams,
+  addFilter,
+  showToast,
+}: {
+  searchParams: URLSearchParams;
+  addFilter: (filter: ResultsFilter) => void;
+  showToast: (message: string, variant: 'error') => void;
+}) {
+  const filtersParam = searchParams.get('filter');
+  if (!filtersParam) {
+    return true;
+  }
+
+  try {
+    const filters = JSON.parse(filtersParam) as ResultsFilter[];
+    filters.forEach(addFilter);
+    return true;
+  } catch {
+    showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+    return false;
+  }
+}
+
+function getEvalSocketConfig(apiBaseUrl?: string) {
+  let socketPath = '/socket.io';
+  let socketUrl = '';
+
+  if (apiBaseUrl) {
+    try {
+      const url = new URL(apiBaseUrl, window.location.origin);
+      const isSameOrigin = url.origin === window.location.origin;
+      if (isSameOrigin && url.pathname !== '/') {
+        socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+      }
+      socketUrl = isSameOrigin ? '' : apiBaseUrl;
+    } catch {
+      // Invalid URL, fall back to defaults.
+    }
+    return { socketPath, socketUrl };
+  }
+
+  const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+  if (basePath) {
+    socketPath = `${basePath}/socket.io`;
+  }
+  return { socketPath, socketUrl };
+}
+
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
@@ -180,20 +229,14 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     doResetFilters();
 
-    // Read search params
-    const filtersParam = _searchParams.get('filter');
-
-    if (filtersParam) {
-      let filters: ResultsFilter[] = [];
-      try {
-        filters = JSON.parse(filtersParam) as ResultsFilter[];
-      } catch {
-        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
-        return;
-      }
-      filters.forEach((filter: ResultsFilter) => {
-        doAddFilter(filter);
-      });
+    if (
+      !hydrateFiltersFromSearchParams({
+        searchParams: _searchParams,
+        addFilter: doAddFilter,
+        showToast,
+      })
+    ) {
+      return;
     }
 
     if (fetchId) {
@@ -211,33 +254,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     } else if (IS_RUNNING_LOCALLY) {
       logger.debug('[Eval] Using local server websocket', {});
 
-      // Determine socket path based on deployment configuration:
-      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
-      // - If apiBaseUrl has a path component on same origin, derive socket path from it
-      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
-      let socketPath = '/socket.io';
-      let socketUrl = '';
-
-      if (apiBaseUrl) {
-        try {
-          const url = new URL(apiBaseUrl, window.location.origin);
-          const isSameOrigin = url.origin === window.location.origin;
-          if (isSameOrigin && url.pathname !== '/') {
-            // Same origin with path prefix - derive socket path from API base
-            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
-          }
-          // For different origins, use default /socket.io and connect to that host
-          socketUrl = isSameOrigin ? '' : apiBaseUrl;
-        } catch {
-          // Invalid URL, fall back to defaults
-        }
-      } else {
-        // No apiBaseUrl - use build-time base path for same-origin deployment
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        if (basePath) {
-          socketPath = `${basePath}/socket.io`;
-        }
-      }
+      const { socketPath, socketUrl } = getEvalSocketConfig(apiBaseUrl);
 
       const socket = SocketIOClient(socketUrl, { path: socketPath });
 
