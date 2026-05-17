@@ -50,6 +50,7 @@ interface ModelAuditConfigState {
   setScanResults: (results: ScanResult | null) => void;
   setError: (error: string | null) => void;
   clearScanState: () => void;
+  startNewScan: () => void;
 
   // Actions - Installation status
   setInstallationStatus: (status: Partial<InstallationStatus>) => void;
@@ -155,6 +156,7 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       setScanResults: (scanResults) => set({ scanResults, error: null }),
       setError: (error) => set({ error }),
       clearScanState: () => set({ scanResults: null, error: null, isScanning: false }),
+      startNewScan: () => set({ paths: [], scanResults: null, error: null, isScanning: false }),
 
       // Actions - Installation status
       setInstallationStatus: (status) => {

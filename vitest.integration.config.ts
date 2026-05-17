@@ -29,7 +29,6 @@ export default defineConfig({
     pool: 'forks',
     // Vitest 4 exposes fork worker options at the top level.
     maxWorkers: maxForks,
-    minWorkers: 2,
     isolate: true,
     execArgv: [
       '--max-old-space-size=4096', // 4GB per worker for integration tests

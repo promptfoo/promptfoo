@@ -1,5 +1,7 @@
 import logger from '../../logger';
+import { loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
+import { createTransformResponse, type MCPTransformResponseContext } from './transforms';
 
 import type {
   ApiProvider,
@@ -21,6 +23,13 @@ export class MCPProvider implements ApiProvider {
   config: MCPConfig;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise: Promise<void>;
+  private transformResponse: Promise<
+    (
+      result: unknown,
+      content: string,
+      context: MCPTransformResponseContext,
+    ) => Promise<ProviderResponse>
+  >;
 
   constructor(options: MCPProviderOptions = {}) {
     this.config = options.config || { enabled: true };
@@ -28,6 +37,9 @@ export class MCPProvider implements ApiProvider {
 
     this.mcpClient = new MCPClient(this.config);
     this.initializationPromise = this.initialize();
+    this.transformResponse = loadTransformModule(
+      this.config.transformResponse || this.config.responseParser,
+    ).then(createTransformResponse);
 
     // Set id function if provided
     if (options.id) {
@@ -56,7 +68,7 @@ export class MCPProvider implements ApiProvider {
   }
 
   async callApi(
-    _prompt: string,
+    prompt: string,
     context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -67,7 +79,8 @@ export class MCPProvider implements ApiProvider {
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
       try {
-        toolCallData = JSON.parse(context?.vars.prompt as string);
+        const rawToolCall = context?.vars?.prompt ?? prompt;
+        toolCallData = JSON.parse(String(rawToolCall));
       } catch {
         return {
           error:
@@ -121,15 +134,11 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return {
-        output: result.content,
-        raw: result,
-        metadata: {
-          toolName,
-          toolArgs: finalArgs,
-          originalPayload: toolCallData,
-        },
-      };
+      return this.transformToolResult(result, {
+        toolName,
+        toolArgs: finalArgs,
+        originalPayload: toolCallData,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`MCP Provider error: ${errorMessage}`);
@@ -162,10 +171,10 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return {
-        output: result.content,
-        raw: result,
-      };
+      return this.transformToolResult(result, {
+        toolName,
+        toolArgs: args,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
@@ -179,6 +188,30 @@ export class MCPProvider implements ApiProvider {
     await this.initializationPromise;
 
     return this.mcpClient.getAllTools();
+  }
+
+  private async transformToolResult(
+    result: Awaited<ReturnType<MCPClient['callTool']>>,
+    context: MCPTransformResponseContext,
+  ): Promise<ProviderResponse> {
+    const transformedResponse = await (await this.transformResponse)(
+      result.raw ?? result,
+      result.content,
+      context,
+    );
+
+    return {
+      ...transformedResponse,
+      raw: transformedResponse.raw ?? result.raw ?? result,
+      metadata: {
+        ...transformedResponse.metadata,
+        toolName: context.toolName,
+        toolArgs: context.toolArgs,
+        ...(context.originalPayload === undefined
+          ? {}
+          : { originalPayload: context.originalPayload }),
+      },
+    };
   }
 
   // Get connected servers

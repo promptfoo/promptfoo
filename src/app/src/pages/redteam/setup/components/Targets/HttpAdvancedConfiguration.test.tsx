@@ -51,6 +51,22 @@ describe('HttpAdvancedConfiguration', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
+  it('adapts advanced tabs across narrow and wide layouts', () => {
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{ id: 'http-provider', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    expect(screen.getByRole('tablist')).toHaveClass(
+      'grid-cols-2',
+      'md:grid-cols-3',
+      'xl:inline-flex',
+      'xl:!h-10',
+    );
+  });
+
   describe('Token Estimation Accordion Initial State', () => {
     const testCases: Array<{
       description: string;

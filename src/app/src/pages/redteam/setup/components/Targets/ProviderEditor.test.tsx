@@ -69,27 +69,36 @@ describe('ProviderEditor', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the provider name TextField and update provider label via setProvider when disableNameField is false or not set in opts', async () => {
+  it('should link to provider documentation for integration details', () => {
+    renderWithProviders(<ProviderEditor provider={defaultHttpTarget()} setProvider={vi.fn()} />);
+
+    expect(screen.getByRole('link', { name: 'provider documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/',
+    );
+  });
+
+  it('should render the target name TextField and update provider label via setProvider when disableNameField is false or not set in opts', async () => {
     const user = userEvent.setup();
     const initialProvider: ProviderOptions = {
       ...defaultHttpTarget(),
-      label: 'Initial Provider Name',
+      label: 'Initial Target Name',
     };
     const setProvider = vi.fn();
 
     renderWithProviders(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
 
-    const textField = screen.getByRole('textbox', { name: /Provider Name/i });
+    const textField = screen.getByRole('textbox', { name: /Target Name/i });
     expect(textField).toBeInTheDocument();
 
     await user.click(textField);
     await user.keyboard('{Control>}a{/Control}');
-    await user.paste('New Provider Name');
+    await user.paste('New Target Name');
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     expect(setProvider).toHaveBeenCalledWith({
       ...initialProvider,
-      label: 'New Provider Name',
+      label: 'New Target Name',
     });
   });
 
