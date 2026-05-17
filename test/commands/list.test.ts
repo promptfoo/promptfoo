@@ -4,7 +4,6 @@ import { listCommand } from '../../src/commands/list';
 import logger from '../../src/logger';
 import Eval, { EvalQueries } from '../../src/models/eval';
 import { wrapTable } from '../../src/table';
-import { runInkList, shouldUseInkList } from '../../src/ui/list';
 import { sha256 } from '../../src/util/createHash';
 import { getPrompts, getTestCases } from '../../src/util/database';
 import { printBorder, setupEnv } from '../../src/util/index';
@@ -23,8 +22,6 @@ vi.mock('../../src/logger', () => ({
 vi.mock('../../src/models/eval', () => ({
   default: {
     getMany: vi.fn(),
-    getPaginated: vi.fn(),
-    getCount: vi.fn(),
   },
   EvalQueries: {
     getVarsFromEvals: vi.fn(),
@@ -33,11 +30,6 @@ vi.mock('../../src/models/eval', () => ({
 
 vi.mock('../../src/table', () => ({
   wrapTable: vi.fn(),
-}));
-
-vi.mock('../../src/ui/list', () => ({
-  runInkList: vi.fn(),
-  shouldUseInkList: vi.fn(),
 }));
 
 vi.mock('../../src/util/createHash', () => ({
@@ -58,8 +50,6 @@ describe('list command', () => {
   let program: Command;
   const evalModel = Eval as unknown as {
     getMany: Mock;
-    getPaginated: Mock;
-    getCount: Mock;
   };
   const evalQueries = EvalQueries as unknown as {
     getVarsFromEvals: Mock;
@@ -108,14 +98,10 @@ describe('list command', () => {
     program = new Command();
     listCommand(program);
     vi.mocked(wrapTable).mockReturnValue('mocked table');
-    vi.mocked(shouldUseInkList).mockReturnValue(false);
-    vi.mocked(runInkList).mockResolvedValue({ cancelled: true });
     vi.mocked(sha256).mockImplementation((input: string | Buffer) => `hash-${input}`);
     vi.mocked(getPrompts).mockResolvedValue([]);
     vi.mocked(getTestCases).mockResolvedValue([]);
     evalModel.getMany.mockResolvedValue([]);
-    evalModel.getPaginated.mockResolvedValue([]);
-    evalModel.getCount.mockResolvedValue(0);
     evalQueries.getVarsFromEvals.mockResolvedValue({});
   });
 
@@ -149,7 +135,7 @@ describe('list command', () => {
       expect(wrapTable).not.toHaveBeenCalled();
     });
 
-    it('renders table output in non-interactive mode', async () => {
+    it('renders table output', async () => {
       const olderEval = createEval({
         id: 'eval-old',
         createdAt: 1,
@@ -197,60 +183,6 @@ describe('list command', () => {
         expect.stringContaining('promptfoo show prompt <id>'),
       );
     });
-
-    it('uses interactive mode and respects pagination limit', async () => {
-      vi.mocked(shouldUseInkList).mockReturnValue(true);
-      const firstEval = createEval({
-        id: 'eval-1',
-        createdAt: 1,
-        description: 'Eval one',
-        providers: ['openai:gpt-4'],
-        prompts: [{ raw: 'Prompt one', metrics: { testPassCount: 1, testFailCount: 0 } }],
-      });
-      const secondEval = createEval({
-        id: 'eval-2',
-        createdAt: 2,
-        description: 'Eval two',
-        providers: ['openai:gpt-4'],
-        prompts: [{ raw: 'Prompt two', metrics: { testPassCount: 1, testFailCount: 0 } }],
-      });
-
-      evalModel.getCount.mockResolvedValue(200);
-      evalModel.getPaginated.mockResolvedValueOnce([firstEval]).mockResolvedValueOnce([secondEval]);
-      evalQueries.getVarsFromEvals.mockResolvedValue({
-        'eval-1': ['x'],
-        'eval-2': ['y'],
-      });
-
-      let capturedOptions: Parameters<typeof runInkList>[0] | undefined;
-      vi.mocked(runInkList).mockImplementation(async (options) => {
-        capturedOptions = options;
-        return { cancelled: true };
-      });
-
-      const evalsCmd = getListSubcommand('evals');
-      await evalsCmd?.parseAsync(['node', 'test', '-n', '60']);
-
-      expect(evalModel.getPaginated).toHaveBeenNthCalledWith(1, 0, 50);
-      expect(runInkList).toHaveBeenCalledWith(
-        expect.objectContaining({
-          resourceType: 'evals',
-          pageSize: 50,
-          totalCount: 200,
-          hasMore: true,
-        }),
-      );
-
-      if (!capturedOptions?.onLoadMore) {
-        throw new Error('Expected onLoadMore to be defined in interactive eval list options');
-      }
-      // onLoadMore(offset=50, limit=50) but maxLimit is 60 (-n 60),
-      // so effectiveLimit = Math.min(50, 60 - 50) = 10
-      const nextPage = await capturedOptions.onLoadMore(50, 50);
-      expect(evalModel.getPaginated).toHaveBeenNthCalledWith(2, 50, 10);
-      expect(nextPage).toHaveLength(1);
-      expect(nextPage[0]).toMatchObject({ id: 'eval-2' });
-    });
   });
 
   describe('prompts', () => {
@@ -284,7 +216,7 @@ describe('list command', () => {
       expect(logger.info).toHaveBeenNthCalledWith(2, 'prompt-b');
     });
 
-    it('renders prompts table output in non-interactive mode', async () => {
+    it('renders prompts table output', async () => {
       const prompts: PromptWithMetadata[] = [
         {
           id: 'abcdef123456',
@@ -347,9 +279,7 @@ describe('list command', () => {
       expect(wrapTable).not.toHaveBeenCalled();
     });
 
-    // testCount is dataset.prompts.length (number of prompts tested against this dataset)
-    it('builds dataset interactive items with bestPromptId from highest score', async () => {
-      vi.mocked(shouldUseInkList).mockReturnValue(true);
+    it('renders the best prompt from the highest-scoring dataset prompt', async () => {
       const datasets: TestCasesWithMetadata[] = [
         {
           id: 'dataset-1',
@@ -359,7 +289,7 @@ describe('list command', () => {
           recentEvalId: 'eval-10',
           prompts: [
             {
-              id: 'prompt-low',
+              id: 'low-001',
               evalId: 'eval-10',
               prompt: {
                 raw: 'Low',
@@ -381,7 +311,7 @@ describe('list command', () => {
               },
             },
             {
-              id: 'prompt-high',
+              id: 'high-001',
               evalId: 'eval-10',
               prompt: {
                 raw: 'High',
@@ -405,25 +335,22 @@ describe('list command', () => {
           ],
         },
       ];
+      const datasetId = datasets[0].id;
+      const bestPromptId = datasets[0].prompts[1].id;
       vi.mocked(getTestCases).mockResolvedValue(datasets);
 
       const datasetsCmd = getListSubcommand('datasets');
       await datasetsCmd?.parseAsync(['node', 'test']);
 
-      expect(runInkList).toHaveBeenCalledWith(
-        expect.objectContaining({
-          resourceType: 'datasets',
-          items: [
-            expect.objectContaining({
-              id: 'dataset-1',
-              bestPromptId: 'prompt-high',
-              testCount: 2,
-              evalCount: 3,
-              recentEvalId: 'eval-10',
-            }),
-          ],
-        }),
-      );
+      expect(wrapTable).toHaveBeenCalledTimes(1);
+      const [tableRows] = vi.mocked(wrapTable).mock.calls[0];
+      expect(tableRows[0]).toMatchObject({
+        'dataset id': datasetId.slice(0, 6),
+        'best prompt': bestPromptId.slice(0, 6),
+        evals: 3,
+        prompts: 2,
+        'recent eval': 'eval-10',
+      });
     });
   });
 

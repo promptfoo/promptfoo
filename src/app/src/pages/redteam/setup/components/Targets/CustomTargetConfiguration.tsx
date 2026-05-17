@@ -373,7 +373,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              Custom Targets documentation
+              Custom target documentation
             </a>{' '}
             for more information.
           </>

@@ -434,7 +434,10 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex w-full items-start gap-6" data-testid="plugins-tab-container">
+      <div
+        className="flex w-full flex-col gap-6 lg:flex-row lg:items-start"
+        data-testid="plugins-tab-container"
+      >
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section - collapsible */}
@@ -685,6 +688,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Configure ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className={cn(
                                 'size-8',
                                 hasConfigError ? 'text-destructive' : 'text-muted-foreground',
@@ -709,6 +715,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`View documentation for ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className="size-8"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -760,7 +769,7 @@ export default function PluginsTab({
 
         {/* Selected Plugins Sidebar */}
         <div
-          className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto"
+          className="w-full max-h-[60vh] overflow-y-auto lg:sticky lg:top-[72px] lg:w-80"
           data-testid="selected-plugins-sidebar"
         >
           <div className="rounded-lg border border-border bg-background p-4">
@@ -806,6 +815,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Configure ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className="size-6 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -817,6 +829,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Remove ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className="size-6"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -853,6 +868,9 @@ export default function PluginsTab({
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={`Remove ${
+                              displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                            }`}
                             className="ml-2 size-6"
                             onClick={() => handlePluginToggle(plugin)}
                           >
