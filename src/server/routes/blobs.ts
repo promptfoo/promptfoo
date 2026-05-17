@@ -56,6 +56,127 @@ function parseTimestamp(value: unknown): string {
   return new Date().toISOString();
 }
 
+type GraderResult = {
+  name: string;
+  pass: boolean;
+  score: number;
+  reason?: string;
+};
+
+type ComponentResult = {
+  pass: boolean;
+  score: number;
+  reason?: string;
+  assertion?: { type?: string };
+};
+
+type BlobLibraryItemRow = {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: unknown;
+  evalId: string;
+  testIdx: number | null;
+  promptIdx: number | null;
+  location: string | null;
+  kind: 'image' | 'video' | 'audio' | 'other' | null;
+  evalDescription: string | null;
+  provider: unknown;
+  success: boolean | null;
+  score: number | null;
+  prompt?: unknown;
+  gradingResult?: unknown;
+  testCase?: unknown;
+  latencyMs?: unknown;
+  cost?: unknown;
+};
+
+function getProviderId(provider: unknown): string | undefined {
+  if (typeof provider === 'string') {
+    return provider;
+  }
+  if (provider && typeof provider === 'object') {
+    const providerObj = provider as { id?: string; label?: string };
+    return providerObj.label || providerObj.id;
+  }
+  return undefined;
+}
+
+function getPromptText(row: BlobLibraryItemRow): string | undefined {
+  if (!row.prompt || typeof row.prompt !== 'object') {
+    return undefined;
+  }
+  return (row.prompt as { raw?: string }).raw;
+}
+
+function getVariables(row: BlobLibraryItemRow): Record<string, string> | undefined {
+  if (!row.testCase || typeof row.testCase !== 'object') {
+    return undefined;
+  }
+
+  const testCase = row.testCase as { vars?: Record<string, unknown> };
+  if (!testCase.vars || Object.keys(testCase.vars).length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(testCase.vars).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? value : JSON.stringify(value, null, 2),
+    ]),
+  );
+}
+
+function getGraderResults(row: BlobLibraryItemRow): GraderResult[] | undefined {
+  if (!row.gradingResult || typeof row.gradingResult !== 'object') {
+    return undefined;
+  }
+
+  const gradingResult = row.gradingResult as { componentResults?: ComponentResult[] };
+  if (!Array.isArray(gradingResult.componentResults)) {
+    return undefined;
+  }
+
+  return gradingResult.componentResults.map((component, index) => ({
+    name: component.assertion?.type || `Grader ${index + 1}`,
+    pass: component.pass,
+    score: component.score,
+    reason: component.reason,
+  }));
+}
+
+function getDetailContext(row: BlobLibraryItemRow) {
+  return {
+    prompt: getPromptText(row),
+    variables: getVariables(row),
+    graderResults: getGraderResults(row),
+    latencyMs: typeof row.latencyMs === 'number' ? row.latencyMs : undefined,
+    cost: typeof row.cost === 'number' ? row.cost : undefined,
+  };
+}
+
+function toMediaLibraryItem(row: BlobLibraryItemRow, isDetailRequest: boolean) {
+  return {
+    hash: row.hash,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    kind: row.kind || getKindFromMimeType(row.mimeType),
+    createdAt: parseTimestamp(row.createdAt),
+    url: `/api/blobs/${row.hash}`,
+    context: {
+      evalId: row.evalId,
+      evalDescription: row.evalDescription || undefined,
+      testIdx: row.testIdx ?? undefined,
+      promptIdx: row.promptIdx ?? undefined,
+      location: row.location || undefined,
+      provider: getProviderId(row.provider),
+      pass: row.success ?? undefined,
+      score: row.score ?? undefined,
+      ...(isDetailRequest && getDetailContext(row)),
+    },
+  };
+}
+
 /**
  * List all media items from blob storage with optional filtering
  * GET /api/blobs/library
@@ -249,90 +370,9 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
       .all();
 
     // Transform to response format
-    const responseItems = items.map((item) => {
-      const row = item as Record<string, unknown>;
-
-      // Extract provider ID from the JSON provider (object or legacy string format)
-      let providerId: string | undefined;
-      if (typeof item.provider === 'string') {
-        providerId = item.provider;
-      } else if (item.provider && typeof item.provider === 'object') {
-        const providerObj = item.provider as { id?: string; label?: string };
-        providerId = providerObj.label || providerObj.id;
-      }
-
-      // Detail-only fields: only processed when hash filter is active
-      let promptText: string | undefined;
-      let variables: Record<string, string> | undefined;
-      type ComponentResult = {
-        pass: boolean;
-        score: number;
-        reason?: string;
-        assertion?: { type?: string };
-      };
-      let graderResults:
-        | Array<{ name: string; pass: boolean; score: number; reason?: string }>
-        | undefined;
-
-      if (isDetailRequest) {
-        // Extract raw prompt text from the JSON prompt object
-        if (row.prompt && typeof row.prompt === 'object') {
-          const promptObj = row.prompt as { raw?: string; label?: string };
-          promptText = promptObj.raw;
-        }
-
-        // Extract variables from test case
-        if (row.testCase && typeof row.testCase === 'object') {
-          const testCaseObj = row.testCase as { vars?: Record<string, unknown> };
-          if (testCaseObj.vars && Object.keys(testCaseObj.vars).length > 0) {
-            variables = {};
-            for (const [key, value] of Object.entries(testCaseObj.vars)) {
-              variables[key] = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
-            }
-          }
-        }
-
-        // Extract grading results for display
-        if (row.gradingResult && typeof row.gradingResult === 'object') {
-          const gradingObj = row.gradingResult as { componentResults?: ComponentResult[] };
-          if (gradingObj.componentResults && Array.isArray(gradingObj.componentResults)) {
-            graderResults = gradingObj.componentResults.map((comp, idx) => ({
-              name: comp.assertion?.type || `Grader ${idx + 1}`,
-              pass: comp.pass,
-              score: comp.score,
-              reason: comp.reason,
-            }));
-          }
-        }
-      }
-
-      return {
-        hash: item.hash,
-        mimeType: item.mimeType,
-        sizeBytes: item.sizeBytes,
-        kind: item.kind || getKindFromMimeType(item.mimeType),
-        createdAt: parseTimestamp(item.createdAt),
-        url: `/api/blobs/${item.hash}`,
-        context: {
-          evalId: item.evalId,
-          evalDescription: item.evalDescription || undefined,
-          testIdx: item.testIdx ?? undefined,
-          promptIdx: item.promptIdx ?? undefined,
-          location: item.location || undefined,
-          provider: providerId,
-          pass: item.success ?? undefined,
-          score: item.score ?? undefined,
-          // Detail-only context fields (only present when fetching by hash)
-          ...(isDetailRequest && {
-            prompt: promptText,
-            variables,
-            graderResults,
-            latencyMs: (row.latencyMs as number) ?? undefined,
-            cost: (row.cost as number) ?? undefined,
-          }),
-        },
-      };
-    });
+    const responseItems = items.map((item) =>
+      toMediaLibraryItem(item as BlobLibraryItemRow, isDetailRequest),
+    );
 
     res.json(
       BlobsSchemas.Library.Response.parse({

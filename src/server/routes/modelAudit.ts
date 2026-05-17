@@ -10,7 +10,7 @@ import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
-import { ModelAuditSchemas } from '../../types/api/modelAudit';
+import { ModelAuditSchemas, type ScanRequest } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -36,6 +36,106 @@ interface SpawnCaptureOptions {
   /** Abort signal to terminate the child process (e.g. on client disconnect). */
   signal?: AbortSignal;
 }
+
+type NormalizedScanOptions = ScanRequest['options'] & {
+  maxSize?: string;
+};
+
+type SafeScanResponder = (statusCode: number, body: object) => void;
+
+type ScanErrorBody = {
+  error: string;
+  suggestion?: string;
+  type?: string;
+};
+
+type ScanCloseContext = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+  args: string[];
+  originalPaths: string[];
+  resolvedPaths: string[];
+  normalizedOptions: NormalizedScanOptions;
+  persist: boolean;
+  scannerVersion: string | null;
+  safeRespond: SafeScanResponder;
+};
+
+const SCAN_FAILURE_PATTERNS: Array<{
+  patterns: string[];
+  error: string;
+  type: string;
+  suggestion: string;
+}> = [
+  {
+    patterns: ['permission denied', 'access denied'],
+    error: 'Permission denied: Unable to access the specified files or directories',
+    type: 'permission_error',
+    suggestion: 'Check that the files exist and you have read permissions',
+  },
+  {
+    patterns: ['file not found', 'no such file'],
+    error: 'Files or directories not found',
+    type: 'file_not_found',
+    suggestion: 'Verify the file paths are correct and the files exist',
+  },
+  {
+    patterns: ['out of memory', 'memory'],
+    error: 'Insufficient memory to complete the scan',
+    type: 'memory_error',
+    suggestion: 'Try scanning smaller files or reducing the number of files scanned at once',
+  },
+  {
+    patterns: ['timeout', 'timed out'],
+    error: 'Scan operation timed out',
+    type: 'timeout_error',
+    suggestion: 'Try increasing the timeout value or scanning fewer files',
+  },
+  {
+    patterns: ['invalid', 'malformed'],
+    error: 'Invalid or malformed model files detected',
+    type: 'invalid_model',
+    suggestion: 'Ensure the files are valid model files and not corrupted',
+  },
+  {
+    patterns: ['unsupported'],
+    error: 'Unsupported model format or file type',
+    type: 'unsupported_format',
+    suggestion: 'Check the modelaudit documentation for supported file formats',
+  },
+  {
+    patterns: ['connection', 'network'],
+    error: 'Network or connection error during scan',
+    type: 'network_error',
+    suggestion: 'Check your internet connection if the scan requires downloading external resources',
+  },
+  {
+    patterns: ['disk space', 'no space'],
+    error: 'Insufficient disk space',
+    type: 'disk_space_error',
+    suggestion: 'Free up disk space and try again',
+  },
+  {
+    patterns: ['python version'],
+    error: 'Python version compatibility issue',
+    type: 'python_version_error',
+    suggestion: 'Check that you have a supported Python version installed',
+  },
+  {
+    patterns: ['no such option', 'unrecognized option'],
+    error: 'Invalid command line option provided to modelaudit',
+    type: 'invalid_option_error',
+    suggestion: 'Check that all command line options are supported by the current modelaudit version',
+  },
+  {
+    patterns: ['usage:', 'try'],
+    error: 'Invalid command syntax or arguments',
+    type: 'usage_error',
+    suggestion: 'Review the command arguments. The modelaudit usage help is shown in stderr.',
+  },
+];
 
 function spawnModelAuditCapture(
   args: string[],
@@ -86,6 +186,222 @@ function spawnModelAuditCapture(
       resolve({ code, signal: signal ?? null, stdout, stderr });
     });
   });
+}
+
+function includesAll(source: string, patterns: string[]): boolean {
+  return patterns.every((pattern) => source.includes(pattern));
+}
+
+function includesAny(source: string, patterns: string[]): boolean {
+  return patterns.some((pattern) => source.includes(pattern));
+}
+
+function getScanFailureResponse(stderr: string, code: number): ScanErrorBody {
+  const stderrLower = stderr.toLowerCase();
+  const failure = SCAN_FAILURE_PATTERNS.find(({ patterns, type }) =>
+    type === 'usage_error' ? includesAll(stderrLower, patterns) : includesAny(stderrLower, patterns),
+  );
+
+  if (!failure) {
+    return { error: `Model scan failed with exit code ${code}` };
+  }
+
+  return {
+    error: failure.error,
+    type: failure.type,
+    suggestion: failure.suggestion,
+  };
+}
+
+function getProcessTerminationResponse(
+  code: number | null,
+  signal: NodeJS.Signals | null,
+): ScanErrorBody | undefined {
+  if (signal !== null) {
+    return { error: `Model scan process terminated by signal ${signal}` };
+  }
+  if (code === null) {
+    return { error: 'Model scan process exited without an exit code' };
+  }
+  return undefined;
+}
+
+function parseScanOutput(
+  jsonOutput: string,
+  context: Pick<ScanCloseContext, 'args' | 'resolvedPaths' | 'stderr' | 'code'>,
+): ModelAuditScanResults | undefined {
+  try {
+    return parseCompleteModelAuditResults(JSON.parse(jsonOutput));
+  } catch (parseError) {
+    logger.error('Failed to parse model scan output', {
+      parseError,
+      output: jsonOutput.substring(0, 1000),
+      stderr: context.stderr || undefined,
+      command: 'modelaudit',
+      args: context.args,
+      paths: context.resolvedPaths,
+      exitCode: context.code,
+    });
+    return undefined;
+  }
+}
+
+function buildPersistedScanMetadataOptions(options: NormalizedScanOptions) {
+  return {
+    blacklist: options.blacklist,
+    timeout: options.timeout,
+    maxSize: options.maxSize,
+    verbose: options.verbose,
+    format: options.format,
+    strict: options.strict,
+    dryRun: options.dryRun,
+    cache: options.cache,
+    quiet: options.quiet,
+    progress: options.progress,
+    sbom: options.sbom,
+    output: options.output,
+    scanners: options.scanners,
+    excludeScanner: options.excludeScanner,
+  };
+}
+
+async function persistScanResults({
+  scanResults,
+  jsonOutput,
+  normalizedOptions,
+  resolvedPaths,
+  originalPaths,
+  scannerVersion,
+}: Pick<
+  ScanCloseContext,
+  'normalizedOptions' | 'resolvedPaths' | 'originalPaths' | 'scannerVersion'
+> & {
+  scanResults: ModelAuditScanResults;
+  jsonOutput: string;
+}): Promise<string | undefined> {
+  try {
+    const audit = await ModelAudit.create({
+      name: normalizedOptions.name || `API scan ${new Date().toISOString()}`,
+      author: normalizedOptions.author ?? undefined,
+      modelPath: resolvedPaths.join(', '),
+      results: {
+        ...scanResults,
+        rawOutput: jsonOutput,
+      },
+      metadata: {
+        paths: resolvedPaths,
+        originalPaths,
+        options: buildPersistedScanMetadataOptions(normalizedOptions),
+      },
+      scannerVersion: scannerVersion ?? undefined,
+      contentHash: scanResults.content_hash,
+    });
+    logger.info(`Model scan results saved to database with ID: ${audit.id}`);
+    return audit.id;
+  } catch (dbError) {
+    logger.error(`Failed to save scan results to database: ${dbError}`);
+    return undefined;
+  }
+}
+
+async function handleSuccessfulScan({
+  stdout,
+  stderr,
+  args,
+  resolvedPaths,
+  originalPaths,
+  code,
+  normalizedOptions,
+  persist,
+  scannerVersion,
+  safeRespond,
+}: ScanCloseContext): Promise<void> {
+  const jsonOutput = stdout.trim();
+  if (!jsonOutput) {
+    logger.error('No output from model scan', {
+      stderr: stderr || undefined,
+      command: 'modelaudit',
+      args,
+      paths: resolvedPaths,
+      exitCode: code,
+    });
+    safeRespond(500, {
+      error: 'No output received from model scan',
+      suggestion:
+        'The scan may have failed silently. Check that the model files are valid and accessible.',
+    });
+    return;
+  }
+
+  const scanResults = parseScanOutput(jsonOutput, { args, resolvedPaths, stderr, code });
+  if (!scanResults) {
+    safeRespond(500, {
+      error: 'Failed to parse scan results - invalid JSON output',
+      suggestion:
+        'The model scan may have produced invalid output. Check the raw output for error messages.',
+    });
+    return;
+  }
+
+  const auditId = persist
+    ? await persistScanResults({
+        scanResults,
+        jsonOutput,
+        normalizedOptions,
+        resolvedPaths,
+        originalPaths,
+        scannerVersion,
+      })
+    : undefined;
+
+  safeRespond(200, {
+    ...scanResults,
+    rawOutput: jsonOutput,
+    ...(auditId && { auditId }),
+    persisted: persist && !!auditId,
+  });
+}
+
+async function handleModelAuditClose(context: ScanCloseContext): Promise<void> {
+  try {
+    const terminationResponse = getProcessTerminationResponse(context.code, context.signal);
+    if (terminationResponse) {
+      logger.error('Model scan process did not complete normally', {
+        code: context.code,
+        signal: context.signal,
+        stderr: context.stderr || undefined,
+        command: 'modelaudit',
+        args: context.args,
+        paths: context.resolvedPaths,
+      });
+      context.safeRespond(500, terminationResponse);
+      return;
+    }
+
+    const exitCode = context.code;
+    if (exitCode === null) {
+      return;
+    }
+
+    if (exitCode !== 0 && exitCode !== 1) {
+      logger.error('Model scan failed', {
+        exitCode,
+        stderr: context.stderr || undefined,
+        command: 'modelaudit',
+        args: context.args,
+        paths: context.resolvedPaths,
+      });
+      context.safeRespond(500, getScanFailureResponse(context.stderr, exitCode));
+      return;
+    }
+
+    await handleSuccessfulScan(context);
+  } catch (error) {
+    logger.error('Error processing model scan results', { error });
+    context.safeRespond(500, {
+      error: 'Error processing scan results',
+    });
+  }
 }
 
 // Check if modelaudit is installed
@@ -387,227 +703,22 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       if (responded) {
         return;
       }
+
       stdout += stdoutDecoder.end();
       stderr += stderrDecoder.end();
-      const closeSignal = signal ?? null;
-
-      if (closeSignal !== null || code === null) {
-        logger.error('Model scan process did not complete normally', {
-          code,
-          signal: closeSignal,
-          stderr: stderr || undefined,
-          command: 'modelaudit',
-          args,
-          paths: resolvedPaths,
-        });
-        safeRespond(500, {
-          error:
-            closeSignal === null
-              ? 'Model scan process exited without an exit code'
-              : `Model scan process terminated by signal ${closeSignal}`,
-        });
-        return;
-      }
-      // ModelAudit returns exit code 1 when it finds issues, which is expected
-      if (code !== 0 && code !== 1) {
-        logger.error(`Model scan process exited with code ${code}`);
-
-        // Provide more detailed error information to the frontend
-        let errorMessage = `Model scan failed with exit code ${code}`;
-        let errorDetails = {};
-
-        // Parse stderr for common error patterns and provide helpful messages
-        if (stderr) {
-          const stderrLower = stderr.toLowerCase();
-
-          if (stderrLower.includes('permission denied') || stderrLower.includes('access denied')) {
-            errorMessage = 'Permission denied: Unable to access the specified files or directories';
-            errorDetails = {
-              type: 'permission_error',
-              suggestion: 'Check that the files exist and you have read permissions',
-            };
-          } else if (
-            stderrLower.includes('file not found') ||
-            stderrLower.includes('no such file')
-          ) {
-            errorMessage = 'Files or directories not found';
-            errorDetails = {
-              type: 'file_not_found',
-              suggestion: 'Verify the file paths are correct and the files exist',
-            };
-          } else if (stderrLower.includes('out of memory') || stderrLower.includes('memory')) {
-            errorMessage = 'Insufficient memory to complete the scan';
-            errorDetails = {
-              type: 'memory_error',
-              suggestion:
-                'Try scanning smaller files or reducing the number of files scanned at once',
-            };
-          } else if (stderrLower.includes('timeout') || stderrLower.includes('timed out')) {
-            errorMessage = 'Scan operation timed out';
-            errorDetails = {
-              type: 'timeout_error',
-              suggestion: 'Try increasing the timeout value or scanning fewer files',
-            };
-          } else if (stderrLower.includes('invalid') || stderrLower.includes('malformed')) {
-            errorMessage = 'Invalid or malformed model files detected';
-            errorDetails = {
-              type: 'invalid_model',
-              suggestion: 'Ensure the files are valid model files and not corrupted',
-            };
-          } else if (stderrLower.includes('unsupported')) {
-            errorMessage = 'Unsupported model format or file type';
-            errorDetails = {
-              type: 'unsupported_format',
-              suggestion: 'Check the modelaudit documentation for supported file formats',
-            };
-          } else if (stderrLower.includes('connection') || stderrLower.includes('network')) {
-            errorMessage = 'Network or connection error during scan';
-            errorDetails = {
-              type: 'network_error',
-              suggestion:
-                'Check your internet connection if the scan requires downloading external resources',
-            };
-          } else if (stderrLower.includes('disk space') || stderrLower.includes('no space')) {
-            errorMessage = 'Insufficient disk space';
-            errorDetails = {
-              type: 'disk_space_error',
-              suggestion: 'Free up disk space and try again',
-            };
-          } else if (stderrLower.includes('python') && stderrLower.includes('version')) {
-            errorMessage = 'Python version compatibility issue';
-            errorDetails = {
-              type: 'python_version_error',
-              suggestion: 'Check that you have a supported Python version installed',
-            };
-          } else if (
-            stderrLower.includes('no such option') ||
-            stderrLower.includes('unrecognized option')
-          ) {
-            errorMessage = 'Invalid command line option provided to modelaudit';
-            errorDetails = {
-              type: 'invalid_option_error',
-              suggestion:
-                'Check that all command line options are supported by the current modelaudit version',
-            };
-          } else if (stderrLower.includes('usage:') && stderrLower.includes('try')) {
-            errorMessage = 'Invalid command syntax or arguments';
-            errorDetails = {
-              type: 'usage_error',
-              suggestion:
-                'Review the command arguments. The modelaudit usage help is shown in stderr.',
-            };
-          }
-        }
-
-        logger.error('Model scan failed', {
-          exitCode: code,
-          stderr: stderr || undefined,
-          command: 'modelaudit',
-          args,
-          paths: resolvedPaths,
-        });
-        safeRespond(500, {
-          error: errorMessage,
-          ...errorDetails,
-        });
-        return;
-      }
-
-      try {
-        const jsonOutput = stdout.trim();
-        if (!jsonOutput) {
-          logger.error('No output from model scan', {
-            stderr: stderr || undefined,
-            command: 'modelaudit',
-            args,
-            paths: resolvedPaths,
-            exitCode: code,
-          });
-          safeRespond(500, {
-            error: 'No output received from model scan',
-            suggestion:
-              'The scan may have failed silently. Check that the model files are valid and accessible.',
-          });
-          return;
-        }
-
-        let scanResults: ModelAuditScanResults;
-        try {
-          scanResults = parseCompleteModelAuditResults(JSON.parse(jsonOutput));
-        } catch (parseError) {
-          logger.error('Failed to parse model scan output', {
-            parseError,
-            output: jsonOutput.substring(0, 1000),
-            stderr: stderr || undefined,
-            command: 'modelaudit',
-            args,
-            paths: resolvedPaths,
-            exitCode: code,
-          });
-          safeRespond(500, {
-            error: 'Failed to parse scan results - invalid JSON output',
-            suggestion:
-              'The model scan may have produced invalid output. Check the raw output for error messages.',
-          });
-          return;
-        }
-
-        // Persist to database by default
-        let auditId: string | undefined;
-        if (persist) {
-          try {
-            const audit = await ModelAudit.create({
-              name: normalizedOptions.name || `API scan ${new Date().toISOString()}`,
-              author: normalizedOptions.author ?? undefined,
-              modelPath: resolvedPaths.join(', '),
-              results: {
-                ...scanResults,
-                rawOutput: jsonOutput, // Include raw output in persisted results
-              },
-              metadata: {
-                paths: resolvedPaths,
-                originalPaths: paths,
-                options: {
-                  blacklist: normalizedOptions.blacklist,
-                  timeout: normalizedOptions.timeout,
-                  maxSize: normalizedOptions.maxSize,
-                  verbose: normalizedOptions.verbose,
-                  format: normalizedOptions.format,
-                  strict: normalizedOptions.strict,
-                  dryRun: normalizedOptions.dryRun,
-                  cache: normalizedOptions.cache,
-                  quiet: normalizedOptions.quiet,
-                  progress: normalizedOptions.progress,
-                  sbom: normalizedOptions.sbom,
-                  output: normalizedOptions.output,
-                  scanners: normalizedOptions.scanners,
-                  excludeScanner: normalizedOptions.excludeScanner,
-                },
-              },
-              scannerVersion: scannerVersion ?? undefined,
-              contentHash: scanResults.content_hash,
-            });
-            auditId = audit.id;
-            logger.info(`Model scan results saved to database with ID: ${auditId}`);
-          } catch (dbError) {
-            logger.error(`Failed to save scan results to database: ${dbError}`);
-            // Continue - we'll still return the results even if DB save failed
-          }
-        }
-
-        // Return the scan results along with audit ID if saved
-        safeRespond(200, {
-          ...scanResults,
-          rawOutput: jsonOutput, // Include the raw output from the scanner
-          ...(auditId && { auditId }),
-          persisted: persist && !!auditId,
-        });
-      } catch (error) {
-        logger.error('Error processing model scan results', { error });
-        safeRespond(500, {
-          error: 'Error processing scan results',
-        });
-      }
+      await handleModelAuditClose({
+        code,
+        signal: signal ?? null,
+        stdout,
+        stderr,
+        args,
+        originalPaths: paths,
+        resolvedPaths,
+        normalizedOptions,
+        persist,
+        scannerVersion,
+        safeRespond,
+      });
     });
   } catch (error) {
     sendError(res, 500, 'Failed to start model scan', error);
