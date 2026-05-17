@@ -3,7 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -228,7 +228,7 @@ export class OllamaCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
       );
     } catch (err) {
@@ -385,7 +385,7 @@ export class OllamaChatProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
       );
@@ -521,7 +521,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       );
     } catch (err) {
