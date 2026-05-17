@@ -100,7 +100,7 @@ const CustomMetrics = ({
             if (policy) {
               displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
               tooltipContent = (
-                <div className="space-y-2 max-w-[400px]">
+                <>
                   <p className="text-sm font-semibold">{policy.name}</p>
                   <p className="text-sm">{policy.text}</p>
                   {determinePolicyTypeFromId(policy.id) === 'reusable' && cloudConfig?.appUrl && (
@@ -116,7 +116,7 @@ const CustomMetrics = ({
                       </a>
                     </p>
                   )}
-                </div>
+                </>
               );
             }
           }
