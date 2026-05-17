@@ -2,7 +2,10 @@ import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
-import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
+import {
+  AIStudioChatProvider,
+  AIStudioEmbeddingProvider,
+} from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
@@ -1238,6 +1241,204 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it.each([
+      ['tool_choice', 'none' as const],
+      ['toolConfig', { functionCallingConfig: { mode: 'NONE' as const } }],
+      ['tool_config', { function_calling_config: { mode: 'none' as const } }],
+    ])('should disable function calling via %s', async (key, value) => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return {
+          renderString: vi.fn((str) => str),
+        } as any;
+      });
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  description: 'Get weather information',
+                  parameters: { type: 'OBJECT' as const, properties: {} },
+                },
+              ],
+            },
+            { googleSearch: {} },
+          ],
+          [key]: value,
+        } as any,
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+      const body = JSON.parse(callArgs![1]!.body as string);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      // googleSearch is preserved; functionDeclarations entry is dropped.
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return {
+          renderString: vi.fn((str) => str),
+        } as any;
+      });
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: [{ googleSearch: {} }, 'file://tools.js:getTools'] as any,
+        },
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        [{ googleSearch: {} }],
+        undefined,
+      );
+      const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+      const body = JSON.parse(callArgs![1]!.body as string);
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should preserve non-function tools loaded from data files when disabled', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return {
+          renderString: vi.fn((str) => str),
+        } as any;
+      });
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: 'file://tools.json' as any,
+        },
+      });
+
+      mockMaybeLoadToolsFromExternalFile.mockResolvedValueOnce([
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather information',
+              parameters: { type: 'OBJECT' as const, properties: {} },
+            },
+          ],
+        },
+        { googleSearch: {} },
+      ]);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://tools.json',
+        undefined,
+      );
+      const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+      const body = JSON.parse(callArgs![1]!.body as string);
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('honors prompt-level tool_choice override over base toolConfig', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return {
+          renderString: vi.fn((str) => str),
+        } as any;
+      });
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  description: 'Get weather information',
+                  parameters: { type: 'OBJECT' as const, properties: {} },
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi', {
+        prompt: { raw: 'hi', label: 'hi', config: { tool_choice: 'none' } },
+      } as any);
+
+      const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+      const body = JSON.parse(callArgs![1]!.body as string);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toBeUndefined();
+    });
+
     it('should handle Google Search as a tool', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
@@ -1930,5 +2131,135 @@ describe('AIStudioChatProvider', () => {
         expect(response.cost).toBeCloseTo(0.0000155, 10);
       });
     });
+  });
+});
+
+describe('AIStudioEmbeddingProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(cache.fetchWithCache).mockReset();
+    mockProcessEnv({ GOOGLE_API_KEY: 'test-key' });
+  });
+
+  function embeddingResponse(values: number[], promptTokenCount?: number) {
+    return {
+      data: {
+        embedding: { values, shape: [1, values.length] },
+        ...(promptTokenCount !== undefined && { usageMetadata: { promptTokenCount } }),
+      },
+      cached: false,
+    };
+  }
+
+  it('returns a google:embedding: prefixed id', () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+    expect(provider.toString()).toBe('[Google AI Studio Embedding Provider gemini-embedding-001]');
+  });
+
+  it('honors a caller-supplied custom id override', () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001', {
+      id: 'custom-embed',
+    });
+    expect(provider.id()).toBe('custom-embed');
+  });
+
+  it('POSTs to the :embedContent endpoint and returns the values array', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2, 0.3], 7) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    expect(cache.fetchWithCache).toHaveBeenCalledOnce();
+    const [url, init] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(url).toContain('/v1beta/models/gemini-embedding-001:embedContent');
+    const body = JSON.parse((init as any).body);
+    expect(body).toEqual({ content: { parts: [{ text: 'hello world' }] } });
+    expect((init as any).headers['x-goog-api-key']).toBe('test-key');
+
+    expect(response.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(response.tokenUsage).toEqual({ total: 7, numRequests: 1 });
+  });
+
+  it('forwards taskType, outputDimensionality, and title from config', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1], 1) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001', {
+      config: {
+        taskType: 'RETRIEVAL_DOCUMENT',
+        outputDimensionality: 256,
+        title: 'My Doc',
+      } as any,
+    });
+    await provider.callEmbeddingApi('x');
+
+    const body = JSON.parse((vi.mocked(cache.fetchWithCache).mock.calls[0][1] as any).body);
+    expect(body).toMatchObject({
+      content: { parts: [{ text: 'x' }] },
+      taskType: 'RETRIEVAL_DOCUMENT',
+      outputDimensionality: 256,
+      title: 'My Doc',
+    });
+  });
+
+  it('returns a clear error when no API key is configured', async () => {
+    mockProcessEnv({
+      GOOGLE_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+    });
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+    expect(response.error).toContain('Google API key is not set');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-string embedding inputs before making a request', async () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi(123 as any);
+
+    expect(response.error).toContain('Invalid input type for embedding API');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('surfaces fetch failures as API call errors', async () => {
+    vi.mocked(cache.fetchWithCache).mockRejectedValue(new Error('network down'));
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+
+    expect(response.embedding).toBeUndefined();
+    expect(response.error).toContain('API call error: Error: network down');
+  });
+
+  it('surfaces a descriptive error when the response has no values', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { error: { message: 'bad' } },
+      cached: false,
+    } as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+    expect(response.embedding).toBeUndefined();
+    expect(response.error).toContain('No embedding found');
+  });
+
+  it('marks responses as cached and records numRequests: 0', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      ...(embeddingResponse([0.1, 0.2], 3) as any),
+      cached: true,
+    });
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+
+    expect(response.cached).toBe(true);
+    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 0 });
+  });
+
+  it('does not support text inference via callApi', async () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain('embedding provider');
   });
 });

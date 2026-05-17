@@ -167,6 +167,26 @@ describe('OpenAI Provider', () => {
       expect(result.metadata?.choices).toBeUndefined();
     });
 
+    it('preserves HttpRateLimitError as a structured error with metadata.rateLimitKind', async () => {
+      // Closes the regression where the chat catch block stringified
+      // HttpRateLimitError into "API call error: HttpRateLimitError: ..."
+      // and dropped `kind`, causing the scheduler to retry quota errors.
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      const quota = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+      mockFetchWithCache.mockRejectedValueOnce(quota);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result.metadata?.http?.status).toBe(429);
+    });
+
     it('should include HTTP metadata in error response', async () => {
       const mockResponse = {
         data: { error: { message: 'Rate limit exceeded' } },
@@ -223,6 +243,7 @@ describe('OpenAI Provider', () => {
       expect(result2.output).toBe('Test output 2');
       // Cached responses don't count as new requests, so numRequests is not included
       expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.cost).toBe(0);
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -1589,6 +1610,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should identify GPT-5 models correctly including prefixed names', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
+      const gpt55Provider = new OpenAiChatCompletionProvider('gpt-5.5');
       const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
       const gpt54NanoProvider = new OpenAiChatCompletionProvider('gpt-5.4-nano');
       const gpt5MiniProvider = new OpenAiChatCompletionProvider('gpt-5-mini');
@@ -1596,6 +1618,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Prefixed model names (used by GitHub Models)
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt55Provider = new OpenAiChatCompletionProvider('openai/gpt-5.5');
       const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
       const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
       const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
@@ -1606,11 +1629,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const gpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
 
       expect(gpt5Provider['isGPT5Model']()).toBe(true);
+      expect(gpt55Provider['isGPT5Model']()).toBe(true);
       expect(gpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(gpt5MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt5NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt55Provider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isGPT5Model']()).toBe(true);
@@ -1625,6 +1650,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
       const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt55Provider = new OpenAiChatCompletionProvider('openai/gpt-5.5');
       const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
       const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
       const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
@@ -1636,6 +1662,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedO3Provider['isReasoningModel']()).toBe(true);
       expect(prefixedO4Provider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt5Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt55Provider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt54MiniProvider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isReasoningModel']()).toBe(true);
@@ -1868,6 +1895,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const body = JSON.parse(call[1].body);
       expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should forward prompt cache options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          prompt_cache_key: 'shared-prefix',
+          prompt_cache_retention: 'in_memory',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_retention).toBe('in_memory');
     });
 
     it('should not share config between provider instances', () => {

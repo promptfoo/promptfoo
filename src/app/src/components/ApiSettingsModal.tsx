@@ -94,7 +94,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>API and Sharing Settings</DialogTitle>
+          <DialogTitle className="pr-8">API and Sharing Settings</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -113,7 +113,7 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
                   {isChecking ? <Spinner size="sm" /> : <RefreshCw className="size-4" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Check connection</TooltipContent>
+              <TooltipContent side="bottom">Check connection</TooltipContent>
             </Tooltip>
           </div>
 

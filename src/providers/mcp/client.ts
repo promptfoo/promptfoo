@@ -1,4 +1,7 @@
+import path from 'path';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import cliState from '../../cliState';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
@@ -157,11 +160,14 @@ export class MCPClient {
             ? 'python'
             : 'python3'
           : process.execPath;
+        const serverPath = cliState.basePath
+          ? path.resolve(cliState.basePath, server.path)
+          : server.path;
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         transport = new StdioClientTransport({
           command,
-          args: [server.path],
+          args: [serverPath],
           env: process.env as Record<string, string>,
         });
         await client.connect(transport, requestOptions);
@@ -452,6 +458,7 @@ export class MCPClient {
 
             return {
               content,
+              raw: result,
             };
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
