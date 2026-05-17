@@ -238,6 +238,34 @@ describe('redteamPluginSchema', () => {
 });
 
 describe('redteamConfigSchema', () => {
+  it('should accept context-specific maxConcurrency', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        contexts: [
+          {
+            id: 'limited-user',
+            purpose: 'Authenticated user context',
+            maxConcurrency: 1,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('should reject invalid context-specific maxConcurrency', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        contexts: [
+          {
+            id: 'limited-user',
+            purpose: 'Authenticated user context',
+            maxConcurrency: 0,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should accept a valid configuration with all fields', () => {
     const input = {
       purpose: 'You are a travel agent',

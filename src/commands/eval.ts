@@ -451,6 +451,17 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
+    const redteamMaxConcurrency = config.redteam?.maxConcurrency;
+    const redteamEvalMaxConcurrency =
+      typeof redteamMaxConcurrency === 'number' &&
+      Number.isInteger(redteamMaxConcurrency) &&
+      redteamMaxConcurrency > 0
+        ? redteamMaxConcurrency
+        : undefined;
+    if (redteamEvalMaxConcurrency !== undefined) {
+      maxConcurrency = Math.min(maxConcurrency, redteamEvalMaxConcurrency);
+    }
+
     if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
@@ -476,8 +487,8 @@ export async function doEval(
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
-    } else if (explicitMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = explicitMaxConcurrency;
+    } else if (explicitMaxConcurrency !== undefined || redteamEvalMaxConcurrency !== undefined) {
+      cliState.maxConcurrency = maxConcurrency;
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);

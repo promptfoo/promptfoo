@@ -68,6 +68,11 @@ export const RedteamContextSchema = z.object({
   purpose: z
     .string()
     .describe('Purpose/context for this context - used for generation and grading'),
+  maxConcurrency: z
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum number of concurrent eval test cases for this context'),
   vars: z
     .record(z.string(), z.string())
     .optional()

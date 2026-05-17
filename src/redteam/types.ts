@@ -230,6 +230,7 @@ export interface PluginActionParams {
 export interface RedteamContext {
   id: string;
   purpose: string;
+  maxConcurrency?: number;
   vars?: Record<string, string>;
 }
 

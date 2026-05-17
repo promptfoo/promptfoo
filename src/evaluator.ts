@@ -124,6 +124,32 @@ const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
 
+class Semaphore {
+  private activeCount = 0;
+  private queue: Array<() => void> = [];
+
+  constructor(private readonly maxConcurrency: number) {}
+
+  async acquire(): Promise<() => void> {
+    if (this.activeCount >= this.maxConcurrency) {
+      await new Promise<void>((resolve) => {
+        this.queue.push(resolve);
+      });
+    }
+
+    this.activeCount += 1;
+    let released = false;
+    return () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      this.activeCount -= 1;
+      this.queue.shift()?.();
+    };
+  }
+}
+
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
   if (cached !== undefined) {
@@ -2568,6 +2594,38 @@ function adjustConcurrencyForSerialFeatures({
   return { concurrency, usesConversationVar };
 }
 
+function getContextConcurrencyLimits(testSuite: TestSuite): Map<string, number> {
+  const limits = new Map<string, number>();
+  for (const context of testSuite.redteam?.contexts || []) {
+    const maxConcurrency = context.maxConcurrency;
+    if (
+      typeof maxConcurrency === 'number' &&
+      Number.isInteger(maxConcurrency) &&
+      maxConcurrency > 0
+    ) {
+      limits.set(context.id, maxConcurrency);
+    }
+  }
+  return limits;
+}
+
+function getRedteamEvalMaxConcurrency(testSuite: TestSuite): number | undefined {
+  const maxConcurrency = testSuite.redteam?.maxConcurrency;
+  return typeof maxConcurrency === 'number' &&
+    Number.isInteger(maxConcurrency) &&
+    maxConcurrency > 0
+    ? maxConcurrency
+    : undefined;
+}
+
+function getEvalStepContextConcurrencyLimit(
+  evalStep: RunEvalOptions,
+  contextConcurrencyLimits: Map<string, number>,
+) {
+  const contextId = evalStep.test.metadata?.contextId;
+  return typeof contextId === 'string' ? contextConcurrencyLimits.get(contextId) : undefined;
+}
+
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
   onRowsReady?: () => void;
@@ -3589,6 +3647,51 @@ class Evaluator {
   }) {
     let lastPromptsFlush = 0;
     const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+    const contextConcurrencyLimits = getContextConcurrencyLimits(processingContext.testSuite);
+
+    if (contextConcurrencyLimits.size > 0) {
+      const globalSemaphore = new Semaphore(processingContext.concurrency);
+      const contextSemaphores = new Map<string, Semaphore>();
+      const getContextSemaphore = (contextId: string, maxConcurrency: number) => {
+        if (!contextSemaphores.has(contextId)) {
+          contextSemaphores.set(contextId, new Semaphore(maxConcurrency));
+        }
+        return contextSemaphores.get(contextId)!;
+      };
+
+      await Promise.all(
+        concurrentRunEvalOptions.map(async (evalStep) => {
+          checkAbort();
+          const contextId = evalStep.test.metadata?.contextId;
+          const contextLimit = getEvalStepContextConcurrencyLimit(
+            evalStep,
+            contextConcurrencyLimits,
+          );
+          const releaseContext =
+            typeof contextId === 'string' && contextLimit !== undefined
+              ? await getContextSemaphore(contextId, contextLimit).acquire()
+              : undefined;
+          const releaseGlobal = await globalSemaphore.acquire();
+
+          try {
+            checkAbort();
+            const idx = evalStepIndexMap.get(evalStep)!;
+            await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
+            processedIndices.add(idx);
+            const now = Date.now();
+            if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+              lastPromptsFlush = now;
+              await this.evalRecord.addPrompts(prompts);
+            }
+          } finally {
+            releaseGlobal();
+            releaseContext?.();
+          }
+        }),
+      );
+      return;
+    }
+
     await async.forEachOfLimit(
       concurrentRunEvalOptions,
       processingContext.concurrency,
@@ -4279,6 +4382,10 @@ class Evaluator {
 
     const varNames = await prepareTestVariables(tests, testSuite);
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+    const redteamMaxConcurrency = getRedteamEvalMaxConcurrency(testSuite);
+    if (redteamMaxConcurrency !== undefined) {
+      concurrency = Math.min(concurrency, redteamMaxConcurrency);
+    }
     const runEvalOptions = await buildRunEvalOptions({
       concurrency,
       conversations: this.conversations,
