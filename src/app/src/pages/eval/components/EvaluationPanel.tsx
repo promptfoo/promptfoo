@@ -233,6 +233,28 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   return { value: '-' };
 }
 
+function getGraderOutputs(result: GradingResult): Array<{ key: string; value: string }> {
+  const graderOutputs = result.metadata?.graderOutputs;
+  if (!graderOutputs || typeof graderOutputs !== 'object' || Array.isArray(graderOutputs)) {
+    return [];
+  }
+
+  return Object.entries(graderOutputs)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .map(([key, value]) => [key, value.trim()] as const)
+    .filter(([, value]) => value.length > 0)
+    .map(([key, value]) => ({ key, value }));
+}
+
+function formatGraderOutputLabel(key: string, totalOutputs: number): string {
+  if (totalOutputs === 1 && key === 'final') {
+    return 'Grader output';
+  }
+
+  const formattedKey = key.replace(/[-_]+/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  return totalOutputs === 1 ? `Grader output (${formattedKey})` : formattedKey;
+}
+
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
   const [expandedValues, setExpandedValues] = useState<{ [key: string]: boolean }>({});
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
@@ -287,6 +309,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
             const hasChildren = getChildResults(result).length > 0;
             const assertionType = getAssertionType(result);
             const metric = getMetric(result);
+            const graderOutputs = getGraderOutputs(result);
             const indentationStyle = { paddingLeft: depth * ASSERTION_ROW_INDENT_PX };
 
             return (
@@ -362,7 +385,20 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                   onMouseEnter={() => setHoveredAssertion(reasonKey)}
                   onMouseLeave={() => setHoveredAssertion(null)}
                 >
-                  <span className="break-words">{result.reason}</span>
+                  <div className="space-y-2">
+                    <span className="block break-words">{result.reason}</span>
+                    {graderOutputs.map(({ key, value }) => (
+                      <div
+                        key={key}
+                        className="rounded-md border border-border bg-muted/30 p-2 text-xs"
+                      >
+                        <div className="mb-1 font-medium">
+                          {formatGraderOutputLabel(key, graderOutputs.length)}
+                        </div>
+                        <pre className="m-0 whitespace-pre-wrap break-words font-sans">{value}</pre>
+                      </div>
+                    ))}
+                  </div>
                   {result.reason &&
                     (hoveredAssertion === reasonKey || copiedAssertions[reasonKey]) && (
                       <Button

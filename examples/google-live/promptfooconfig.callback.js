@@ -6,10 +6,13 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      // Using gemini-2.5-flash-native-audio for Live API (supports both text and audio)
-      id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025',
+      // Using Gemini 3.1 Flash Live Preview
+      id: 'google:live:gemini-3.1-flash-live-preview',
       config: {
-        generationConfig: { response_modalities: ['text'] },
+        generationConfig: {
+          response_modalities: ['audio'],
+          outputAudioTranscription: {},
+        },
         timeoutMs: 10000,
         tools: [
           {
