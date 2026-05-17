@@ -128,15 +128,15 @@ export default function DefaultTestVariables() {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between">
-        <div className="mr-4 flex-1">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex-1 sm:mr-4">
           <h3 className="mb-1 font-medium">Test Variables</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Set default variables that will be available across all test cases. Useful for
             parameterizing endpoints, API keys, language codes, etc.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={addVariable} className="shrink-0">
+        <Button variant="outline" size="sm" onClick={addVariable} className="shrink-0 self-start">
           <Plus className="mr-2 size-4" />
           Add Variable
         </Button>
@@ -145,8 +145,8 @@ export default function DefaultTestVariables() {
       {variables.length > 0 ? (
         <div className="flex flex-col gap-4">
           {variables.map((variable) => (
-            <div key={variable.id} className="flex items-start gap-3">
-              <div className="min-w-[200px]">
+            <div key={variable.id} className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <div className="w-full sm:min-w-[200px] sm:w-auto">
                 <Label className="sr-only">Variable name</Label>
                 <Input
                   placeholder="Variable name"
@@ -156,7 +156,7 @@ export default function DefaultTestVariables() {
                 />
                 {variable.nameError && <HelperText error>{variable.nameError}</HelperText>}
               </div>
-              <div className="grow">
+              <div className="w-full sm:grow">
                 <Label className="sr-only">Value</Label>
                 <Input
                   placeholder="Value"
@@ -169,7 +169,7 @@ export default function DefaultTestVariables() {
                 size="icon"
                 onClick={() => removeVariable(variable.id)}
                 aria-label={`Delete variable ${variable.name}`}
-                className="mt-0.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="self-end text-destructive hover:bg-destructive/10 hover:text-destructive sm:mt-0.5 sm:self-auto"
               >
                 <Trash2 className="size-4" />
               </Button>

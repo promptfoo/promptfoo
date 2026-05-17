@@ -400,7 +400,7 @@ providers:
       plugins:
         - type: local
           path: ./my-plugin
-      append_allowed_tools: ['Skill', 'Read']
+      skills: all
 ```
 
 :::note
@@ -469,7 +469,7 @@ providers:
       skills: all # Or: ['code-review', 'test-generator']
 ```
 
-If you don't set `skills`, you must add `'Skill'` to allowed tools manually for the model to invoke them:
+For SDK versions before 0.2.120, omit `skills` and add `'Skill'` manually instead:
 
 ```yaml
 providers:
@@ -549,7 +549,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project'] # Only team-shared skills, exclude personal
-      append_allowed_tools: ['Skill', 'Read', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Bash']
       permission_mode: 'acceptEdits'
 ```
 
@@ -563,7 +564,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Write', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Write', 'Bash']
       permission_mode: 'acceptEdits'
 
 prompts:
