@@ -13,12 +13,12 @@ prompts:
 targets:
   # Providers are red team targets. To talk directly to your application, use a custom provider.
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
-  - openrouter:meta-llama/llama-3.1-8b-instruct
+  - openrouter:qwen/qwen3-32b
 
 redteam:
   # Override the provider for the red team attack generation
   # See https://promptfoo.dev/docs/red-team/configuration/#providers
-  provider: openrouter:meta-llama/llama-3.1-405b-instruct
+  provider: openrouter:meta-llama/llama-3.3-70b-instruct
 
   # Default number of inputs to generate for each plugin.
   # The total number of tests will be (numTests * plugins.length * (1 + strategies.length))
@@ -70,4 +70,3 @@ redteam:
   strategies:
     - jailbreak # Attempts to bypass security measures through iterative prompt refinement
     - prompt-injection # Malicious inputs designed to manipulate the model's behavior
-

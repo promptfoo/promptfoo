@@ -6,7 +6,7 @@ import {
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
 import { Input } from '@app/components/ui/input';
-import { Download } from 'lucide-react';
+import { Download, Search } from 'lucide-react';
 import { DataTableColumnToggle } from './data-table-column-toggle';
 import { DataTableFilter } from './data-table-filter';
 
@@ -14,21 +14,32 @@ import type { DataTableToolbarProps } from './types';
 
 export function DataTableToolbar<TData>({
   table,
+  columnFilters,
+  columnVisibility,
+  setColumnVisibility,
   globalFilter,
   setGlobalFilter,
   showColumnToggle = true,
   showFilter = true,
+  showGlobalFilter = true,
   showExport = true,
+  globalFilterLabel,
   onExportCSV,
   onExportJSON,
   toolbarActions,
 }: DataTableToolbarProps<TData>) {
   return (
-    <div className="flex items-center justify-between gap-2 p-2 border-b border-border">
-      <div className="flex items-center gap-2">
-        {showColumnToggle && <DataTableColumnToggle table={table} />}
+    <div className="flex flex-col gap-2 border-b border-border p-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        {showColumnToggle && (
+          <DataTableColumnToggle
+            table={table}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
+          />
+        )}
 
-        {showFilter && <DataTableFilter table={table} />}
+        {showFilter && <DataTableFilter table={table} columnFilters={columnFilters} />}
 
         {showExport && (onExportCSV || onExportJSON) && (
           <DropdownMenu modal={false}>
@@ -50,12 +61,19 @@ export function DataTableToolbar<TData>({
         {toolbarActions}
       </div>
 
-      <Input
-        placeholder="Search..."
-        value={globalFilter ?? ''}
-        onChange={(e) => setGlobalFilter(e.target.value)}
-        className="max-w-sm rounded-lg bg-background"
-      />
+      {showGlobalFilter && (
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            type="search"
+            aria-label={globalFilterLabel}
+            placeholder="Search..."
+            value={globalFilter ?? ''}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8 rounded-lg"
+          />
+        </div>
+      )}
     </div>
   );
 }

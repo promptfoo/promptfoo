@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup OpenAPI-derived HTTP smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: https
+    label: provider-setup-openapi-invoice-chat
+    config:
+      url: '{{env.OPENAPI_INVOICE_API_BASE_URL}}/v1/invoices/{{invoice_id | urlencode}}/chat'
+      method: POST
+      stateful: false
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.OPENAPI_INVOICE_API_TOKEN}}'
+      body:
+        user_id: '{{user_id}}'
+        message: '{{prompt}}'
+      transformResponse: json.output
+
+tests:
+  - description: OpenAPI-derived endpoint returns invoice answer
+    vars:
+      user_id: qa-openapi
+      invoice_id: inv-openapi
+      message: Say exactly PONG for this invoice.
+    assert:
+      - type: contains
+        value: PONG
+      - type: contains
+        value: inv-openapi

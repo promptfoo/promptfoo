@@ -16,8 +16,8 @@ providers:
       max_tokens: 1024
       temperature: 0.7
 
-  # Anthropic Claude Sonnet 4.5
-  - id: azure:chat:claude-sonnet-4-5-20250929
+  # Anthropic Claude Sonnet 4.6
+  - id: azure:chat:claude-sonnet-4-6
     label: claude-sonnet
     config:
       apiHost: 'your-deployment.services.ai.azure.com'

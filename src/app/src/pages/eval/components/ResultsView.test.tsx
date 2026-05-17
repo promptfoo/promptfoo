@@ -1,9 +1,10 @@
+import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
@@ -175,6 +176,77 @@ const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
 
+async function expectChartsUnavailable(...reasonTexts: string[]) {
+  const showChartsButton = screen.getByRole('button', { name: 'Show Charts' });
+  expect(showChartsButton).toBeInTheDocument();
+  expect(screen.queryByText('Hide Charts')).toBeNull();
+  expect(screen.queryByTestId('results-charts')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Why no charts?' })).toBeNull();
+  expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
+  expect(
+    screen.queryByText(
+      'We can show charts when the results include comparable prompts and chartable scores.',
+    ),
+  ).toBeNull();
+
+  for (const reasonText of reasonTexts) {
+    expect(screen.queryByText(reasonText)).toBeNull();
+  }
+
+  await userEvent.click(showChartsButton);
+
+  const hideChartsButtonAfterOpen = screen.getByRole('button', { name: 'Hide Charts' });
+  expect(hideChartsButtonAfterOpen).toBeInTheDocument();
+  expect(screen.queryByTestId('results-charts')).toBeNull();
+  expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      'We can show charts when the results include comparable prompts and chartable scores.',
+    ),
+  ).toBeInTheDocument();
+
+  for (const reasonText of reasonTexts) {
+    expect(screen.getByText(reasonText)).toBeInTheDocument();
+  }
+
+  await userEvent.click(hideChartsButtonAfterOpen);
+
+  const showChartsButtonAfterClose = screen.getByRole('button', { name: 'Show Charts' });
+  expect(showChartsButtonAfterClose).toBeInTheDocument();
+  expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
+  for (const reasonText of reasonTexts) {
+    expect(screen.queryByText(reasonText)).toBeNull();
+  }
+
+  return {
+    showChartsButton,
+    hideChartsButtonAfterOpen,
+    showChartsButtonAfterClose,
+  };
+}
+
+function createCopyEvalResponse(): Response {
+  return new Response(JSON.stringify({ id: 'new-eval-id', distinctTestCount: 1234 }), {
+    status: 200,
+    statusText: 'OK',
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+beforeEach(() => {
+  mockUseFilterMode.mockReturnValue({
+    filterMode: 'all',
+    setFilterMode: vi.fn(),
+  });
+  vi.mocked(callApi).mockReset();
+  vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+  mockWindowOpen();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -311,52 +383,63 @@ describe('ResultsView Share Button', () => {
       expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
     });
   });
+
+  it('hides eval actions while config is loading', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: null,
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByText('Eval actions')).not.toBeInTheDocument();
+  });
 });
 describe('ResultsView Copy Eval', () => {
   const mockOnRecentEvalSelected = vi.fn();
-  const mockCallApi = vi.mocked(callApi);
-  const mockWindowOpen = vi.spyOn(window, 'open');
+  let mockedWindowOpen: ReturnType<typeof mockWindowOpen>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockWindowOpen.mockImplementation(() => null);
-
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
-      status: 200,
-      statusText: 'OK',
-      headers: new Headers(),
-      redirected: false,
-      type: 'basic',
-      url: 'http://example.com',
-      bodyUsed: false,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-      blob: () => Promise.resolve(new Blob()),
-      formData: () => Promise.resolve(new FormData()),
-      text: () => Promise.resolve(''),
-      body: null,
-      bytes: () => Promise.resolve(new Uint8Array()),
-      clone: () => ({
-        ok: true,
-        json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
-        status: 200,
-        statusText: 'OK',
-        headers: new Headers(),
-        redirected: false,
-        type: 'basic',
-        url: 'http://example.com',
-        bodyUsed: false,
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-        blob: () => Promise.resolve(new Blob()),
-        formData: () => Promise.resolve(new FormData()),
-        text: () => Promise.resolve(''),
-        body: null,
-        bytes: () => Promise.resolve(new Uint8Array()),
-        clone: () => ({ ...mockCallApi.mock.results[0].value }),
-      }),
-    });
+    mockedWindowOpen = mockWindowOpen();
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -436,7 +519,7 @@ describe('ResultsView Copy Eval', () => {
     await userEvent.click(createCopyButton);
 
     await waitFor(() => {
-      expect(mockWindowOpen).toHaveBeenCalledWith(`/eval/${newEvalId}`, '_blank');
+      expect(mockedWindowOpen).toHaveBeenCalledWith(`/eval/${newEvalId}`, '_blank');
     });
 
     await waitFor(() => {
@@ -452,6 +535,7 @@ describe('ResultsView Copy Menu Item', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900);
 
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
@@ -539,6 +623,11 @@ describe('ResultsView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockUseFilterMode.mockReturnValue({
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
     vi.mocked(useResultsViewSettingsStore).mockReturnValue({
       setInComparisonMode: vi.fn(),
       columnStates: {},
@@ -608,6 +697,59 @@ describe('ResultsView', () => {
     );
 
     expect(screen.getByText('Results Table')).toBeInTheDocument();
+  });
+
+  it('renders the results table in a flex column so the pagination footer can sit at the viewport bottom', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      highlightedResultsCount: 0,
+      userRatedResultsCount: 0,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.getByTestId('results-table').parentElement).toHaveClass(
+      'flex',
+      'flex-col',
+      'flex-1',
+      'min-h-0',
+    );
   });
 });
 describe('ResultsView Plugin Filter - Not Equals', () => {
@@ -694,7 +836,7 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
   });
 });
 
-describe('ResultsView', () => {
+describe('ResultsView Charts', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -853,7 +995,7 @@ describe('ResultsView', () => {
 
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
-  it('does not render ResultsCharts when table data is in a loading state', () => {
+  it('does not render ResultsCharts when table data is in a loading state', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -891,10 +1033,10 @@ describe('ResultsView', () => {
       />,
     );
 
-    expect(screen.queryByTestId('results-charts')).toBeNull();
+    await expectChartsUnavailable();
   });
 
-  it('should not render charts when there are multiple prompts and valid scores, but all scores are the same, even after clicking show charts', async () => {
+  it('shows an unavailable reason on demand when scores are all the same binary edge value', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -960,9 +1102,9 @@ describe('ResultsView', () => {
       />,
     );
 
-    expect(screen.queryByText('Show Charts')).toBeNull();
-
-    expect(screen.queryByTestId('results-charts')).toBeNull();
+    await expectChartsUnavailable(
+      'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+    );
   });
 });
 describe('ResultsView Chart Rendering', () => {
@@ -1013,7 +1155,7 @@ describe('ResultsView Chart Rendering', () => {
       setFilterMode: vi.fn(),
     });
   });
-  it('should not render ResultsCharts if there is only one prompt', async () => {
+  it('shows an unavailable reason on demand if there is only one prompt', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1057,14 +1199,10 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
-
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    await expectChartsUnavailable('Charts require at least two prompts to compare side by side.');
   });
 
-  it('should not render ResultsCharts if all scores are binary edge values (all 1s)', async () => {
+  it('shows an unavailable reason on demand if all scores are binary edge values (all 1s)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1100,6 +1238,8 @@ describe('ResultsView Chart Rendering', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
 
@@ -1113,14 +1253,12 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
-
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    await expectChartsUnavailable(
+      'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+    );
   });
 
-  it('should not render ResultsCharts if all scores are binary edge values (all 0s)', async () => {
+  it('shows an unavailable reason on demand if all scores are binary edge values (all 0s)', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1156,6 +1294,8 @@ describe('ResultsView Chart Rendering', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
 
@@ -1169,11 +1309,9 @@ describe('ResultsView Chart Rendering', () => {
       );
     });
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
-
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+    await expectChartsUnavailable(
+      'All scores are the same binary edge value (0 or 1), so there is no meaningful distribution to visualize.',
+    );
   });
 
   it('should render ResultsCharts if all scores are uniform but not binary edge values', async () => {
@@ -1232,7 +1370,213 @@ describe('ResultsView Chart Rendering', () => {
     expect(showChartsButton).toBeInTheDocument();
   });
 
-  it('should not render ResultsCharts if there are no valid scores', async () => {
+  it('recomputes the default chart visibility when navigating between evals', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    let tableStoreValue = {
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Initial Prompt',
+              provider: 'openai:gpt-4',
+              raw: 'Initial prompt',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }] }],
+      },
+      config: {
+        description: 'Initial Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'eval-ineligible',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { rerender } = renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="eval-ineligible"
+      />,
+    );
+
+    await expectChartsUnavailable();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Prompt 1',
+            },
+            {
+              label: 'Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Eligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      evalId: 'eval-eligible',
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-eligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+  });
+
+  it('hides the charts panel when navigating from an eligible eval to an ineligible eval', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    let tableStoreValue = {
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Prompt 1',
+            },
+            {
+              label: 'Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Eligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'eval-eligible',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { rerender } = renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="eval-eligible"
+      />,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      evalId: 'eval-ineligible',
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-ineligible"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Hide Charts')).toBeInTheDocument();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Only Prompt',
+              provider: 'openai:gpt-4',
+              raw: 'Only Prompt',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [{ outputs: [{ score: 0.8 }] }],
+      },
+      config: {
+        description: 'Ineligible Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+    };
+
+    rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="eval-ineligible"
+        />
+      </MemoryRouter>,
+    );
+
+    await expectChartsUnavailable();
+  });
+
+  it('shows an unavailable reason on demand if there are no valid scores', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
       table: {
@@ -1281,11 +1625,70 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    const showChartsButton = screen.queryByText('Show Charts');
-    expect(showChartsButton).toBeNull();
+    await expectChartsUnavailable('Charts require at least one valid numeric score.');
+  });
 
-    const resultsCharts = screen.queryByTestId('results-charts');
-    expect(resultsCharts).toBeNull();
+  it('hides chart controls entirely for redteam evals', () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [
+          { outputs: [{ score: 0.4 }, { score: 0.8 }] },
+          { outputs: [{ score: 0.5 }, { score: 0.9 }] },
+        ],
+      },
+      config: {
+        description: 'Redteam Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+        redteam: {
+          plugins: [],
+        },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByText('Show Charts')).toBeNull();
+    expect(screen.queryByText('Hide Charts')).toBeNull();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+    expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   });
 });
 
@@ -1458,7 +1861,7 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
     expect(screen.getByText('Item Count: 15000')).toBeInTheDocument();
   });
 });
-describe('ResultsView', () => {
+describe('ResultsView Copy Eval handling', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -1797,7 +2200,7 @@ describe('ResultsView User-Rated Badge', () => {
   });
 });
 
-describe('ResultsView', () => {
+describe('ResultsView FilterModeSelector', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -1882,7 +2285,7 @@ describe('ResultsView', () => {
     expect(filterModeSelector).toHaveTextContent('Filter Mode Selector: user-rated');
   });
 });
-describe('ResultsView', () => {
+describe('ResultsView User-Rated Badge display', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -2412,6 +2815,8 @@ describe('ResultsView Browser History', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
   });

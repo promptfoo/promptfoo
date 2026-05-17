@@ -1,10 +1,5 @@
 import { z } from 'zod';
-
-/**
- * Timestamp schema: SQLite CURRENT_TIMESTAMP stores text ("2025-12-29 04:21:47"),
- * but Drizzle declares the column as integer. Accept both for safety.
- */
-const TimestampSchema = z.union([z.string(), z.number()]);
+import { TimestampSchema } from './common';
 
 /** Base config fields shared across list and detail responses. */
 const BaseConfigSummarySchema = z.object({

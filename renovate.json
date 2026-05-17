@@ -1,8 +1,9 @@
 {
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["local>promptfoo/renovate-config"],
   "rebaseWhen": "behind-base-branch",
   "separateMajorMinor": true,
-  "rangeStrategy": "bump",
+  "rangeStrategy": "auto",
   "postUpdateOptions": [],
   "constraints": {
     "npm": ">= 11"
@@ -28,9 +29,21 @@
       "enabled": false
     },
     {
+      "description": "Group example directory updates as a fallback so package-specific groups still win",
+      "matchFileNames": ["examples/**/package.json"],
+      "groupName": "Example dependencies",
+      "schedule": ["before 6am on the first day of the month"]
+    },
+    {
       "description": "Group @inquirer packages together",
       "matchPackagePatterns": ["^@inquirer/"],
       "groupName": "@inquirer packages"
+    },
+    {
+      "description": "Disable Chevrotain major updates while Node 20 is supported",
+      "matchPackageNames": ["chevrotain", "/^@chevrotain\\//"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     },
     {
       "description": "Group Anthropic packages together across all dependency types",
@@ -214,19 +227,18 @@
       "groupName": "undici"
     },
     {
+      "description": "Keep dedent in sync across all workspaces",
+      "matchPackageNames": ["dedent"],
+      "groupName": "dedent"
+    },
+    {
       "description": "Group all @types packages together",
       "matchPackagePatterns": ["^@types/"],
       "groupName": "Type definitions",
       "schedule": ["before 6am on Monday"]
     },
     {
-      "description": "Group example directory updates to reduce noise",
-      "matchFileNames": ["examples/**/package.json"],
-      "groupName": "Example dependencies",
-      "schedule": ["before 6am on the first day of the month"]
-    },
-    {
-      "description": "LLM provider packages: frequent updates, minimal stabilization",
+      "description": "LLM provider packages: frequent updates with a one-week stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
@@ -244,50 +256,56 @@
       ],
       "schedule": ["every weekday"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "0 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Runtime npm deps: wait 5 days before updates",
+      "description": "Runtime npm deps: wait 7 days before updates",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["dependencies"],
-      "minimumReleaseAge": "5 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Dev npm deps: wait 2 days before updates",
+      "description": "Dev npm deps: wait 7 days before updates",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["devDependencies"],
-      "minimumReleaseAge": "2 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Optional npm deps: wait 2 days before updates (same as devDependencies)",
+      "description": "Optional npm deps: wait 7 days before updates (same as devDependencies)",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["optionalDependencies"],
-      "minimumReleaseAge": "2 days"
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "npm overrides/resolutions: wait 7 days to match .npmrc min-release-age floor",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["overrides", "pnpm.overrides", "resolutions"],
+      "minimumReleaseAge": "7 days"
     },
 
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "AWS SDK packages: weekly updates to reduce noise",
       "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Biome: weekly updates",
       "matchPackageNames": ["@biomejs/biome"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "framer-motion: monthly updates (animation library, low urgency)",
@@ -296,8 +314,15 @@
       "minimumReleaseAge": "7 days"
     },
     {
+      "description": "satori: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["satori"],
+      "schedule": ["before 6am on the first day of the month"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
       "description": "Vercel AI SDK: monthly updates to reduce noise from frequent patch releases",
       "matchPackageNames": ["ai"],
+      "groupName": "Vercel AI SDK",
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days"
@@ -319,6 +344,20 @@
     {
       "description": "undici: monthly updates to reduce noise",
       "matchPackageNames": ["undici"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "postcss: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["postcss"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "fast-xml-parser: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["fast-xml-parser"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days"

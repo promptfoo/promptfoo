@@ -6,6 +6,7 @@ export const EmailStatusEnum = z.enum([
   'ok',
   'exceeded_limit',
   'show_usage_warning',
+  'email_verification_required',
   'no_email',
   'risky_email',
   'disposable_email',
@@ -43,7 +44,24 @@ export const UpdateUserResponseSchema = z.object({
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;
 export type UpdateUserResponse = z.infer<typeof UpdateUserResponseSchema>;
 
+// PUT /api/user/email/clear
+
+export const ClearUserEmailResponseSchema = UpdateUserResponseSchema;
+
+export type ClearUserEmailResponse = z.infer<typeof ClearUserEmailResponseSchema>;
+
 // GET /api/user/email-status
+
+const EmailStatusValidateQueryParamSchema = z
+  .unknown()
+  .optional()
+  .transform((value) => value === true || value === 'true');
+
+export const GetEmailStatusQuerySchema = z.object({
+  validate: EmailStatusValidateQueryParamSchema,
+});
+
+export type GetEmailStatusQuery = z.infer<typeof GetEmailStatusQuerySchema>;
 
 export const GetEmailStatusResponseSchema = z.object({
   hasEmail: z.boolean(),
@@ -114,7 +132,11 @@ export const UserSchemas = {
     Request: UpdateUserRequestSchema,
     Response: UpdateUserResponseSchema,
   },
+  ClearEmail: {
+    Response: ClearUserEmailResponseSchema,
+  },
   EmailStatus: {
+    Query: GetEmailStatusQuerySchema,
     Response: GetEmailStatusResponseSchema,
   },
   Login: {

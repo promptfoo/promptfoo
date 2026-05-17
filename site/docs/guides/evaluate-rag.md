@@ -27,7 +27,7 @@ There are several criteria used to evaluate RAG applications:
 
 This guide shows how to use promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started).
 
-You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
+You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag-full) on GitHub.
 
 ## Evaluating document retrieval
 
@@ -57,7 +57,31 @@ def call_api(query, options, context):
     return result
 ```
 
-In practice, your retrieval logic is probably more complicated than the above (e.g. query transformations and fanout). Substitute `retrieval.py` with a script of your own that prepares the query and talks to your database.
+In practice, your retrieval logic is probably more complicated than the above (e.g. query transformations and fanout). Substitute `retrieve.py` with a script of your own that prepares the query and talks to your database.
+
+### How Promptfoo runs Python retrieval scripts
+
+The `file://retrieve.py` provider is still run from the normal Node-based Promptfoo CLI. When `promptfoo eval` reaches that provider, it starts a Python worker, imports `retrieve.py`, and calls `call_api(prompt, options, context)` for each test case. The first argument is the rendered prompt, which is the `{{ query }}` value in this example. You do not need a separate Promptfoo Python package or server.
+
+You do need Python 3 and any libraries your retrieval script imports. If the script uses LangChain, Chroma, a database client, or your own package, install those dependencies into the Python environment that Promptfoo will use:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+npx promptfoo@latest eval
+```
+
+If you do not want to activate the virtual environment before running Promptfoo, point the provider at the environment's Python executable:
+
+```yaml
+providers:
+  - id: file://retrieve.py
+    config:
+      pythonExecutable: ./.venv/bin/python
+```
+
+You can also set `PROMPTFOO_PYTHON=/path/to/python` as a global default when the provider does not specify `pythonExecutable`. See the [Python provider docs](/docs/providers/python#environment-configuration) for more options.
 
 ### Configuration
 
@@ -265,8 +289,8 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 providers:
   - openai:gpt-5-mini
   - openai:gpt-5
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - ollama:chat:llama3.3
+  - anthropic:claude-sonnet-4-6
+  - ollama:chat:llama4:scout
 ```
 
 Let's also add a heuristic that prefers shorter outputs. Using the `defaultTest` directive, we apply this to all RAG tests:
@@ -282,7 +306,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-5-mini, openai:gpt-5 ollama:chat:llama3.3]
+providers: [openai:gpt-5-mini, openai:gpt-5, ollama:chat:llama4:scout]
 defaultTest:
   assert:
     - type: python
@@ -310,7 +334,7 @@ tests:
         value: eligible employees can take up to 4 months of leave
 ```
 
-The output shows that GPT-4 performs the best and Llama-2 performs the worst, based on the test cases that we set up:
+The output shows how each model performs on your test cases, making it easy to spot differences:
 
 ![rag eval compare models](/img/docs/rag-eval-compare-models.png)
 
@@ -337,7 +361,7 @@ tests:
 
 By following this approach and setting up tests on [assertions & metrics](/docs/configuration/expected-outputs), you can ensure that the quality of your RAG pipeline is improving, and prevent regressions.
 
-See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub for a fully functioning end-to-end example.
+See the [RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag-full) on GitHub for a fully functioning end-to-end example.
 
 ### Context evaluation approaches
 

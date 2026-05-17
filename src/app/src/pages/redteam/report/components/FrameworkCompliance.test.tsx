@@ -76,6 +76,17 @@ describe('FrameworkCompliance', () => {
     expect(mockFrameworkCard.mock.calls.length).toBeGreaterThan(0);
   });
 
+  it('stacks heading controls on narrow screens', () => {
+    renderFrameworkCompliance();
+
+    expect(screen.getByTestId('framework-compliance-header')).toHaveClass(
+      'flex-col',
+      'items-start',
+      'sm:flex-row',
+      'sm:justify-between',
+    );
+  });
+
   it('should show 0% attack success rate and 0 failed tests when all plugins are compliant', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
@@ -201,9 +212,9 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, 0.9, undefined);
 
-    // Should render FrameworkCards for all frameworks (8 total)
+    // Should render FrameworkCards for all frameworks (9 total)
     const frameworkCardCalls = mockFrameworkCard.mock.calls;
-    expect(frameworkCardCalls.length).toBe(8); // All FRAMEWORK_COMPLIANCE_IDS
+    expect(frameworkCardCalls.length).toBe(9); // All FRAMEWORK_COMPLIANCE_IDS
   });
 
   it('should pass frameworksToShow to CSVExporter', () => {

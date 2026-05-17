@@ -1,5 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { categoryDescriptions } from '@promptfoo/redteam/constants';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategories from './RiskCategories';
 import { useReportStore } from './store';
@@ -67,6 +69,37 @@ describe('RiskCategories', () => {
     expect(screen.getByText('Security & Access Control')).toBeInTheDocument();
   });
 
+  it('keeps category rows compact on narrow screens', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    const categoryButton = screen.getByRole('button', { name: /Security & Access Control/i });
+    const description = screen.getByText(categoryDescriptions['Security & Access Control']);
+
+    expect(categoryButton).toHaveClass('gap-2', 'sm:gap-4');
+    expect(description).toHaveClass('hidden', 'sm:block');
+  });
+
+  it('stacks the heading summary on narrow screens', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    expect(screen.getByText('Risk Categories').parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
+  });
+
   it('should display correct pass rate for categories', () => {
     const mockProps = createMockProps({
       categoryStats: {
@@ -97,7 +130,8 @@ describe('RiskCategories', () => {
     expect(screen.getByText('RBAC Implementation')).toBeInTheDocument();
   });
 
-  it('should open drawer when a plugin is clicked', () => {
+  it('should open drawer when a plugin is clicked', async () => {
+    const user = userEvent.setup();
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
@@ -108,7 +142,7 @@ describe('RiskCategories', () => {
 
     // Click on a plugin (already expanded by default)
     const pluginButton = screen.getByRole('button', { name: /SQL Injection/i });
-    fireEvent.click(pluginButton);
+    await user.click(pluginButton);
 
     // Should show the drawer
     expect(screen.getByTestId('mock-drawer')).toBeInTheDocument();
@@ -189,7 +223,8 @@ describe('RiskCategories', () => {
     expect(screen.queryByText('RBAC')).not.toBeInTheDocument();
   });
 
-  it('should pass correct data to drawer when plugin is clicked', () => {
+  it('should pass correct data to drawer when plugin is clicked', async () => {
+    const user = userEvent.setup();
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
@@ -204,8 +239,7 @@ describe('RiskCategories', () => {
 
     renderWithProviders(<RiskCategories {...mockProps} />);
 
-    // Click plugin (already expanded by default)
-    fireEvent.click(screen.getByRole('button', { name: /SQL Injection/i }));
+    await user.click(screen.getByRole('button', { name: /SQL Injection/i }));
 
     // Drawer should be opened with the correct category
     const drawer = screen.getByTestId('mock-drawer');
@@ -230,7 +264,8 @@ describe('RiskCategories', () => {
     expect(screen.getByText('Trust & Safety')).toBeInTheDocument();
   });
 
-  it('should collapse category when clicked', () => {
+  it('should collapse category when clicked', async () => {
+    const user = userEvent.setup();
     const mockProps = createMockProps({
       categoryStats: {
         'sql-injection': { pass: 8, total: 10 },
@@ -245,8 +280,7 @@ describe('RiskCategories', () => {
     const pluginRow = screen.getByText('SQL Injection').closest('button');
     expect(pluginRow).toBeVisible();
 
-    // Click to collapse - the CollapsibleContent should get data-state="closed"
-    fireEvent.click(categoryButton);
+    await user.click(categoryButton);
 
     // The content element should have data-state="closed" and be hidden via CSS
     // (forceMount keeps it in DOM for print support, but CSS hides it)

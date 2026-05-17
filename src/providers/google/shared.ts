@@ -16,7 +16,21 @@ export interface GoogleModel {
   id: string;
   cost?: GoogleModelCost;
   tieredCost?: GoogleModelTieredCost;
+  /** Override pricing for Vertex AI when it differs from AI Studio. */
+  vertexCost?: GoogleModelCost;
 }
+
+const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6 };
+const GEMINI_3_PRO_TIERED_COST = {
+  threshold: 200_000,
+  above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
+};
+
+const GEMINI_2_5_PRO_COST = { input: 1.25 / 1e6, output: 10.0 / 1e6 };
+const GEMINI_2_5_PRO_TIERED_COST = {
+  threshold: 200_000,
+  above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
+};
 
 /**
  * Google AI Studio models with pricing data.
@@ -26,13 +40,14 @@ export interface GoogleModel {
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
   // Gemini 3.1 models (Preview)
+  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'].map((id) => ({
+    id,
+    cost: GEMINI_3_PRO_COST,
+    tieredCost: GEMINI_3_PRO_TIERED_COST,
+  })),
   {
-    id: 'gemini-3.1-pro-preview',
-    cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
-    tieredCost: {
-      threshold: 200_000,
-      above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
-    },
+    id: 'gemini-3.1-flash-lite-preview',
+    cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
   },
 
   // Gemini 3.0 models (Preview)
@@ -42,71 +57,37 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
   {
     id: 'gemini-3-pro-preview',
-    cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
-    tieredCost: {
-      threshold: 200_000,
-      above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
-    },
+    cost: GEMINI_3_PRO_COST,
+    tieredCost: GEMINI_3_PRO_TIERED_COST,
   },
 
   // Gemini 2.5 models
-  {
-    id: 'gemini-2.5-pro',
-    cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
-    tieredCost: {
-      threshold: 200_000,
-      above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
-    },
-  },
-  ...[
-    'gemini-2.5-pro-preview-05-06',
-    'gemini-2.5-pro-preview-06-05',
-    'gemini-2.5-computer-use-preview-10-2025',
-  ].map((id) => ({
+  ...['gemini-2.5-pro', 'gemini-2.5-computer-use-preview-10-2025'].map((id) => ({
     id,
-    cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
-    tieredCost: {
-      threshold: 200_000,
-      above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
-    },
+    cost: GEMINI_2_5_PRO_COST,
+    tieredCost: GEMINI_2_5_PRO_TIERED_COST,
   })),
-  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash-preview-05-20'].map(
-    (id) => ({
-      id,
-      cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-    }),
-  ),
-  ...['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite-preview-09-2025'].map((id) => ({
+  // gemini-flash-latest is a Google-maintained alias that resolves server-side to the
+  // current Flash snapshot. Pricing tracks the Flash tier ($0.30/$2.50 per 1M tokens).
+  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-flash-latest'].map((id) => ({
+    id,
+    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+  })),
+  ...['gemini-2.5-flash-lite', 'gemini-flash-lite-latest'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
   })),
-  {
-    id: 'gemini-2.5-flash-preview-09-2025',
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-  },
 
   // Gemini 2.0 models
-  ...['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp'].map((id) => ({
+  ...['gemini-2.0-flash', 'gemini-2.0-flash-001'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
+    vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
   })),
-  ...[
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-flash-lite-001',
-    'gemini-2.0-flash-lite-preview-02-05',
-  ].map((id) => ({
+  ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
     id,
     cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
   })),
-  {
-    id: 'gemini-2.0-flash-thinking-exp',
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
-  },
-  {
-    id: 'gemini-2.0-pro',
-    cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
-  },
-
   // Gemini 1.5 models
   {
     id: 'gemini-1.5-pro',
@@ -177,6 +158,18 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
   },
 
+  // Gemini Robotics
+  {
+    id: 'gemini-robotics-er-1.6-preview',
+    cost: { input: 1.0 / 1e6, output: 5.0 / 1e6 },
+  },
+
+  // Gemini Embedding
+  {
+    id: 'gemini-embedding-001',
+    cost: { input: 0.15 / 1e6, output: 0 },
+  },
+
   // Models without pricing (no cost field) - legacy PaLM, Gemma, MedLM, etc.
   { id: 'aqa' },
   { id: 'chat-bison' },
@@ -193,6 +186,8 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   { id: 'codechat-bison@002' },
   { id: 'gemini-ultra' },
   { id: 'gemma' },
+  { id: 'gemma-4-31b-it' },
+  { id: 'gemma-4-26b-a4b-it' },
   { id: 'codegemma' },
   { id: 'paligemma' },
   { id: 'medlm-medium' },
