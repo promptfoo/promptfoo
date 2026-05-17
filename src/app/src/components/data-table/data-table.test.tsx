@@ -219,6 +219,44 @@ describe('DataTable', () => {
     expect(screen.getByText('Identity').closest('th')).toHaveAttribute('colspan', '2');
   });
 
+  it('lists hideable grouped leaf columns with explicit toggle labels', async () => {
+    const user = userEvent.setup();
+    const groupedColumns: ColumnDef<TestRow>[] = [
+      {
+        id: 'identity_group',
+        header: () => <span>Identity</span>,
+        columns: [
+          {
+            accessorKey: 'id',
+            header: 'ID',
+            meta: {
+              columnToggleLabel: 'Identity - ID',
+            },
+          },
+          {
+            accessorKey: 'name',
+            header: 'Name',
+            meta: {
+              columnToggleLabel: 'Identity - Name',
+            },
+          },
+        ],
+      },
+    ];
+
+    render(<DataTable columns={groupedColumns} data={[{ id: '1', name: 'Grouped row' }]} />);
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+
+    expect(
+      await screen.findByRole('menuitemcheckbox', { name: 'Identity - ID' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Identity - Name' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: 'identity_group' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('should sort rows when a sortable column header is clicked', async () => {
     const user = userEvent.setup();
     const sortableRows: TestRow[] = [

@@ -96,6 +96,19 @@ function getPromptHeaderTitle(prompt: PromptHeader, index: number): string {
   return promptLabel ? `${providerLabel} - ${promptLabel}` : providerLabel;
 }
 
+function getPromptMetricToggleLabel(
+  prompt: PromptHeader,
+  index: number,
+  metricLabel: string,
+): string {
+  const providerLabel = formatProviderLabel(prompt, index);
+  const promptLabel = `Prompt ${index + 1}`;
+
+  return providerLabel === promptLabel
+    ? `${promptLabel} - ${metricLabel}`
+    : `${promptLabel} - ${providerLabel} - ${metricLabel}`;
+}
+
 function PromptMetricGroupHeader({ prompt, index }: { prompt: PromptHeader; index: number }) {
   const providerLabel = formatProviderLabel(prompt, index);
 
@@ -259,6 +272,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             enableColumnFilter: false,
             meta: {
               align: 'right',
+              columnToggleLabel: getPromptMetricToggleLabel(prompt, idx, 'Pass'),
             },
             cell: ({ row }) => {
               const metricScore = row.original[columnId] as MetricScore;
@@ -273,6 +287,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             enableColumnFilter: false,
             meta: {
               align: 'right',
+              columnToggleLabel: getPromptMetricToggleLabel(prompt, idx, 'Score'),
             },
             cell: ({ row }) => {
               const metricScore = row.original[columnId] as MetricScore;
@@ -293,6 +308,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             enableColumnFilter: false,
             meta: {
               align: 'right',
+              columnToggleLabel: getPromptMetricToggleLabel(prompt, idx, 'Count'),
             },
             cell: ({ row }) => {
               const metricScore = row.original[columnId] as MetricScore;
@@ -317,6 +333,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             enableColumnFilter: false,
             meta: {
               align: 'right',
+              columnToggleLabel: 'Summary - Avg. Pass',
             },
             cell: ({ row }) => renderPercentageValue(getAveragePassRate(row.original)),
           },
@@ -328,6 +345,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
             enableColumnFilter: false,
             meta: {
               align: 'right',
+              columnToggleLabel: 'Summary - Spread',
             },
             cell: ({ row }) => {
               const spread = getPassRateSpread(row.original);

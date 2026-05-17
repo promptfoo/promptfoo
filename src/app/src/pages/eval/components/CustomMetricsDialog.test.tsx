@@ -143,6 +143,7 @@ describe('MetricsTable', () => {
   });
 
   it('should render summary metrics when multiple prompt columns are present', async () => {
+    const user = userEvent.setup();
     vi.mocked(useTableStore).mockReturnValue({
       table: {
         head: {
@@ -150,7 +151,7 @@ describe('MetricsTable', () => {
             {
               raw: 'Prompt A',
               label: 'Prompt A',
-              provider: 'Provider A',
+              provider: 'Shared Provider',
               metrics: {
                 namedScores: {
                   accuracy: 80,
@@ -172,7 +173,7 @@ describe('MetricsTable', () => {
             {
               raw: 'Prompt B',
               label: 'Prompt B',
-              provider: 'Provider B',
+              provider: 'Shared Provider',
               metrics: {
                 namedScores: {
                   accuracy: 60,
@@ -214,13 +215,29 @@ describe('MetricsTable', () => {
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
-    expect(await screen.findByText('Provider A')).toBeInTheDocument();
-    expect(screen.getByText('Provider B')).toBeInTheDocument();
+    expect(await screen.findAllByText('Shared Provider')).toHaveLength(2);
     expect(screen.getByText('Summary')).toBeInTheDocument();
     expect(screen.getByText('Avg. Pass')).toBeInTheDocument();
     expect(screen.getByText('Spread')).toBeInTheDocument();
     expect(screen.getByText('70.00%')).toBeInTheDocument();
     expect(screen.getByText('20.00 pts')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+    expect(
+      await screen.findByRole('menuitemcheckbox', {
+        name: 'Prompt 1 - Shared Provider - Pass',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: 'Prompt 2 - Shared Provider - Count' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitemcheckbox', { name: 'Summary - Avg. Pass' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menuitemcheckbox', { name: 'prompt_0_group' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Pass' })).not.toBeInTheDocument();
   });
 
   it('should return null when promptMetricNames is empty', () => {
