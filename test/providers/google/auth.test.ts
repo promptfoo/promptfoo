@@ -173,6 +173,20 @@ describe('GoogleAuthManager', () => {
       expect(result.source).toBe('none');
     });
 
+    it('should not use GEMINI_API_KEY in vertex mode', () => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'GEMINI_API_KEY') {
+          return 'gemini-key';
+        }
+        return defaultValue as string;
+      });
+
+      const result = GoogleAuthManager.getApiKey({}, undefined, true);
+
+      expect(result.apiKey).toBeUndefined();
+      expect(result.source).toBe('none');
+    });
+
     it('should log debug when both GOOGLE_API_KEY and GEMINI_API_KEY are set (SDK aligned)', () => {
       vi.mocked(getEnvString).mockImplementation((key: string, defaultValue?: string) => {
         if (key === 'GOOGLE_API_KEY') {
