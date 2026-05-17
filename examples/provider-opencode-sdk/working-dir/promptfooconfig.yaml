@@ -9,7 +9,7 @@ providers:
     config:
       provider_id: openai
       model: gpt-4o-mini
-      working_dir: examples/provider-opencode-sdk/basic
+      working_dir: ../basic
 
 tests:
   - vars: {}

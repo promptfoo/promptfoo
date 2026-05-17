@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
@@ -47,7 +47,7 @@ export class WebhookProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       ));
     } catch (err) {

@@ -50,9 +50,9 @@ describe('GroqProvider', () => {
       expect(provider['isReasoningModel']()).toBe(false);
     });
 
-    it('should identify deepseek-r1 as reasoning model', () => {
+    it('should not identify retired deepseek-r1 as reasoning model', () => {
       const provider = new GroqProvider('deepseek-r1-distill-llama-70b', {});
-      expect(provider['isReasoningModel']()).toBe(true);
+      expect(provider['isReasoningModel']()).toBe(false);
     });
 
     it('should identify gpt-oss as reasoning model', () => {
@@ -74,11 +74,6 @@ describe('GroqProvider', () => {
   describe('temperature support', () => {
     it('should support temperature for regular models', () => {
       const provider = new GroqProvider('mixtral-8x7b-32768', {});
-      expect(provider['supportsTemperature']()).toBe(true);
-    });
-
-    it('should support temperature for deepseek-r1 models', () => {
-      const provider = new GroqProvider('deepseek-r1-distill-llama-70b', {});
       expect(provider['supportsTemperature']()).toBe(true);
     });
 
