@@ -97,6 +97,109 @@ export abstract class RedteamPluginBase {
    */
   protected abstract getAssertions(prompt: string): Assertion[];
 
+  private async buildGenerationTemplate(
+    currentBatchSize: number,
+    retryInstructions: string | undefined,
+    templateGetter: () => Promise<string>,
+  ): Promise<string> {
+    const nunjucks = getNunjucksEngine();
+    const renderedTemplate = nunjucks.renderString(await templateGetter(), {
+      purpose: this.purpose,
+      n: currentBatchSize,
+      examples: this.config.examples,
+      outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
+      hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
+    });
+
+    return [RedteamPluginBase.appendModifiers(renderedTemplate, this.config), retryInstructions]
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  private async callGenerationProvider(finalTemplate: string, delayMs: number): Promise<string | null> {
+    const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
+    if (delayMs > 0) {
+      logger.debug(`Delaying for ${delayMs}ms`);
+      await sleep(delayMs);
+    }
+
+    if (error) {
+      logger.error(
+        `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
+      );
+      return null;
+    }
+
+    if (typeof generatedPrompts !== 'string') {
+      logger.error(
+        `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
+      );
+      return null;
+    }
+
+    return generatedPrompts;
+  }
+
+  private throwIfRefused(generatedPrompts: string): void {
+    const hasValidPromptMarkers =
+      /prompt\s*:/i.test(generatedPrompts) ||
+      generatedPrompts.includes('PromptBlock:') ||
+      /<Prompt>/i.test(generatedPrompts);
+    if (hasValidPromptMarkers || !isBasicRefusal(generatedPrompts)) {
+      return;
+    }
+
+    let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
+    const context: Record<string, string> = {};
+    if (this.purpose) {
+      context.purpose = this.purpose;
+    }
+    if (this.config.examples) {
+      context.examples = this.config.examples.join(', ');
+    }
+    if (Object.keys(context).length > 0) {
+      message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
+    }
+    throw new Error(message);
+  }
+
+  private filterGeneratedPrompts(
+    parsedPrompts: ({ __prompt: string } | Record<string, string>)[],
+  ): {
+    acceptedPrompts: ({ __prompt: string } | Record<string, string>)[];
+    retryInstructions?: string;
+  } {
+    const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
+    const rejectedPromptLengths: number[] = [];
+    let rejectedPromptLimit: number | undefined;
+
+    for (const prompt of parsedPrompts) {
+      const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
+      const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
+      if (violation) {
+        rejectedPromptLengths.push(violation.length);
+        rejectedPromptLimit = violation.limit;
+      } else {
+        acceptedPrompts.push(prompt);
+      }
+    }
+
+    if (rejectedPromptLengths.length === 0) {
+      return { acceptedPrompts };
+    }
+
+    return {
+      acceptedPrompts,
+      retryInstructions: dedent`
+        Your previous response included ${rejectedPromptLengths.length} generated prompt${
+          rejectedPromptLengths.length === 1 ? '' : 's'
+        } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
+        The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
+        Generate replacement prompts only, and keep every user message within the character limit.
+      `.trim(),
+    };
+  }
+
   /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
@@ -134,101 +237,25 @@ export abstract class RedteamPluginBase {
       const currentBatchSize = Math.min(remainingCount, batchSize);
 
       logger.debug(`Generating batch of ${currentBatchSize} prompts`);
-      const nunjucks = getNunjucksEngine();
-      const renderedTemplate = nunjucks.renderString(await templateGetter(), {
-        purpose: this.purpose,
-        n: currentBatchSize,
-        examples: this.config.examples,
-        outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
-        hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
-      });
-
-      const finalTemplate = [
-        RedteamPluginBase.appendModifiers(renderedTemplate, this.config),
+      const finalTemplate = await this.buildGenerationTemplate(
+        currentBatchSize,
         retryInstructions,
-      ]
-        .filter(Boolean)
-        .join('\n\n');
-      const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
-      if (delayMs > 0) {
-        logger.debug(`Delaying for ${delayMs}ms`);
-        await sleep(delayMs);
-      }
-
-      if (error) {
-        logger.error(
-          `Error from API provider, skipping generation for ${this.constructor.name}: ${error}`,
-        );
+        templateGetter,
+      );
+      const generatedPrompts = await this.callGenerationProvider(finalTemplate, delayMs);
+      if (!generatedPrompts) {
         return [];
       }
 
-      if (typeof generatedPrompts !== 'string') {
-        logger.error(
-          `Malformed response from API provider: Expected generatedPrompts to be a string, got ${typeof generatedPrompts}: ${JSON.stringify(generatedPrompts)}`,
-        );
-        return [];
-      }
-
-      // Handle inference refusals. Result is thrown rather than returning an empty array in order to
-      // catch and show a explanatory error message.
-      // Skip the refusal check if the output contains valid prompt markers (e.g., "Prompt:", "PromptBlock:", "<Prompt>"),
-      // since generated test prompts may contain refusal-like language (e.g., "as an AI") as part of their content.
-      const hasValidPromptMarkers =
-        /prompt\s*:/i.test(generatedPrompts) ||
-        generatedPrompts.includes('PromptBlock:') ||
-        /<Prompt>/i.test(generatedPrompts);
-      if (!hasValidPromptMarkers && isBasicRefusal(generatedPrompts)) {
-        let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
-        // We don't know exactly why the prompt was refused, but we can provide hints to the user based on the values which were
-        // included in the context window during inference.
-        const context: Record<string, string> = {};
-        if (this.purpose) {
-          context.purpose = this.purpose;
-        }
-        if (this.config.examples) {
-          context.examples = this.config.examples.join(', ');
-        }
-
-        if (context) {
-          message += ` User-configured values were included in inference and may have been deemed harmful: ${JSON.stringify(context)}. Check these and retry.`;
-        }
-
-        throw new Error(message);
-      }
+      this.throwIfRefused(generatedPrompts);
 
       // Use formatter to parse output
       const formatter = getPromptOutputFormatter(this.config);
       const parsedPrompts = formatter.parse(generatedPrompts, this.config);
-      const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
-      const rejectedPromptLengths: number[] = [];
-      let rejectedPromptLimit: number | undefined;
+      const filteredPrompts = this.filterGeneratedPrompts(parsedPrompts);
+      retryInstructions = filteredPrompts.retryInstructions;
 
-      for (const prompt of parsedPrompts) {
-        const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
-        // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
-        // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
-        const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
-        if (violation) {
-          rejectedPromptLengths.push(violation.length);
-          rejectedPromptLimit = violation.limit;
-        } else {
-          acceptedPrompts.push(prompt);
-        }
-      }
-
-      if (rejectedPromptLengths.length > 0) {
-        retryInstructions = dedent`
-          Your previous response included ${rejectedPromptLengths.length} generated prompt${
-            rejectedPromptLengths.length === 1 ? '' : 's'
-          } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
-          Generate replacement prompts only, and keep every user message within the character limit.
-        `.trim();
-      } else {
-        retryInstructions = undefined;
-      }
-
-      return acceptedPrompts as { __prompt: string }[] | Record<string, string>[];
+      return filteredPrompts.acceptedPrompts as { __prompt: string }[] | Record<string, string>[];
     };
 
     const allPrompts = await retryWithDeduplication(
