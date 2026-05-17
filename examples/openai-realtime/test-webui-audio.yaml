@@ -9,7 +9,6 @@ providers:
       modalities: ['text', 'audio']
       voice: 'cedar'
       instructions: 'Please respond with audio.'
-      temperature: 0.7
       maintainContext: false
 
 tests:
