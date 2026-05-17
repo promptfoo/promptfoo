@@ -1,8 +1,6 @@
 // Import Prism for syntax highlighting in provider configurations
+import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
-import 'prismjs'; // Core Prism library must be imported first
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
 
 import { useEffect, useState } from 'react';
 
@@ -106,7 +104,7 @@ export default function AddProviderDialog({
         `}
       </style>
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
               {initialProvider
@@ -122,7 +120,11 @@ export default function AddProviderDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4 min-h-[400px]">
+          <div
+            key={step}
+            data-testid="add-provider-dialog-scroll-body"
+            className="min-h-0 flex-1 overflow-y-auto py-4"
+          >
             {step === 'select' ? (
               <div className="w-full">
                 <ProviderTypeSelector
@@ -149,7 +151,7 @@ export default function AddProviderDialog({
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter data-testid="add-provider-dialog-footer" className="shrink-0">
             <Button variant="outline" onClick={handleBack}>
               {step === 'configure' ? 'Back' : 'Cancel'}
             </Button>

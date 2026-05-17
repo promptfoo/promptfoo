@@ -101,19 +101,19 @@ export default function ProviderEditor({
 
   return (
     <div className="flex flex-col gap-6">
-      {!disableTitle && <h2 className="mb-6 text-2xl font-bold">Select Red Team Provider</h2>}
+      {!disableTitle && <h2 className="mb-6 text-2xl font-bold">Select Red Team Target</h2>}
 
       <p className="text-base">
         {description ||
           'A target is the specific LLM or endpoint you want to evaluate in your red teaming process.'}{' '}
-        For more information on available targets and how to configure them, please visit our{' '}
+        For connection details and supported integrations, see the{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/"
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary hover:underline"
         >
-          documentation
+          provider documentation
         </a>
         .
       </p>
@@ -121,7 +121,7 @@ export default function ProviderEditor({
       {!disableNameField && (
         <div className="mb-4 mt-4">
           <Label htmlFor="provider-name" className="mb-2 block">
-            Provider Name <span className="text-destructive">*</span>
+            Target Name <span className="text-destructive">*</span>
           </Label>
           <Input
             id="provider-name"

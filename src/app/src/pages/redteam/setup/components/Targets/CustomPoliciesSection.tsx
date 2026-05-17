@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
@@ -434,7 +435,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage = 'Failed to generate policies';
+      let errorMessage: string;
 
       if (error instanceof Error) {
         // Handle network errors
@@ -640,6 +641,7 @@ export const CustomPoliciesSection = () => {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label={`Edit policy ${row.index + 1}`}
                   className="size-8"
                   onClick={() => handleEditPolicy(row.original)}
                 >
@@ -723,15 +725,13 @@ export const CustomPoliciesSection = () => {
   return (
     <div className="flex flex-col gap-4" ref={containerRef}>
       <div
-        className="grid gap-4"
-        style={{
-          gridTemplateColumns: showSuggestionsSidebar ? '1fr 380px' : '1fr',
-          height: 600,
-          minHeight: 400,
-        }}
+        className={cn(
+          'grid min-h-[400px] gap-4 lg:h-[600px]',
+          showSuggestionsSidebar && 'grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]',
+        )}
       >
         {/* Main table area */}
-        <div className="min-w-0" style={{ height: '100%' }}>
+        <div className="min-w-0 min-h-[400px] lg:h-full">
           <DataTable
             data={rows}
             columns={columns}
@@ -741,7 +741,6 @@ export const CustomPoliciesSection = () => {
             getRowId={(row) => row.id}
             toolbarActions={toolbarActions}
             showToolbar
-            showPagination={false}
             emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </div>

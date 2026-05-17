@@ -30,7 +30,9 @@ Mistral is particularly valuable for:
 
 :::tip Why Choose Mistral?
 
-Mistral Medium 3 offers GPT-4 class performance at $0.40/$2.00 per million tokens (input/output), representing significant cost savings compared to OpenAI's $2.50/$10.00 pricing for similar capabilities.
+Mistral's current catalog spans low-cost small models, native reasoning models, and
+frontier multimodal models such as Mistral Large 3 at $0.50/$1.50 per million tokens
+(input/output).
 
 :::
 
@@ -60,11 +62,17 @@ providers:
       max_tokens: 4000 # Response length limit
 
       # Advanced options
-      safe_prompt: true # Content filtering
       random_seed: 42 # Deterministic outputs
       frequency_penalty: 0.1 # Reduce repetition
       presence_penalty: 0.1 # Encourage diversity
+      stop: ['END'] # Optional stop sequence(s)
+      n: 1 # Number of completions
+      reasoning_effort: high # high | none on adjustable reasoning models
+      prompt_mode: reasoning # reasoning | null on native reasoning models
 ```
+
+`safe_prompt` is still accepted for compatibility, but Mistral now recommends inline
+`guardrails` instead.
 
 ### JSON Mode
 
@@ -120,7 +128,22 @@ providers:
     config:
       temperature: 0.7
       top_p: 0.95
-      max_tokens: 40960 # Full context for reasoning
+      max_tokens: 40960
+
+  # Adjustable reasoning on general-purpose models
+  - id: mistral:mistral-medium-3.5
+    config:
+      reasoning_effort: high
+      response_format:
+        type: json_schema
+        json_schema:
+          name: answer
+          schema:
+            type: object
+            properties:
+              answer:
+                type: string
+            required: [answer]
 
   # Code generation with FIM support
   - id: mistral:codestral-latest
@@ -129,12 +152,22 @@ providers:
       max_tokens: 8000
       stop: ['```'] # Stop at code block end
 
-  # Multimodal configuration
-  - id: mistral:pixtral-12b
+  # Current multimodal configuration
+  - id: mistral:mistral-large-2512
     config:
       temperature: 0.5
       max_tokens: 2000
-      # Image processing options handled automatically
+
+  # Recommended inline guardrails
+  - id: mistral:mistral-small-latest
+    config:
+      guardrails:
+        - block_on_error: true
+          moderation_llm_v2:
+            custom_category_thresholds:
+              sexual: 0.1
+            ignore_other_categories: false
+            action: block
 ````
 
 ### Environment Variables Reference
@@ -151,28 +184,24 @@ You can specify which Mistral model to use in your configuration. The following 
 
 ### Chat Models
 
-#### Premier Models
+#### Current Models
 
-| Model                     | Context | Input Price | Output Price | Best For                                  |
-| ------------------------- | ------- | ----------- | ------------ | ----------------------------------------- |
-| `mistral-large-latest`    | 128k    | $2.00/1M    | $6.00/1M     | Complex reasoning, enterprise tasks       |
-| `mistral-medium-latest`   | 128k    | $0.40/1M    | $2.00/1M     | Balanced performance and cost             |
-| `codestral-latest`        | 256k    | $0.30/1M    | $0.90/1M     | Code generation, 80+ languages            |
-| `magistral-medium-latest` | 40k     | $2.00/1M    | $5.00/1M     | Advanced reasoning, step-by-step thinking |
-
-#### Free Models
-
-| Model                    | Context | Input Price | Output Price | Best For                      |
-| ------------------------ | ------- | ----------- | ------------ | ----------------------------- |
-| `mistral-small-latest`   | 128k    | $0.10/1M    | $0.30/1M     | General tasks, cost-effective |
-| `magistral-small-latest` | 40k     | $0.50/1M    | $1.50/1M     | Reasoning on a budget         |
-| `open-mistral-nemo`      | 128k    | $0.15/1M    | $0.15/1M     | Multilingual, research        |
-| `pixtral-12b`            | 128k    | $0.15/1M    | $0.15/1M     | Vision + text, multimodal     |
+| Model                     | Context | Input Price | Output Price | Best For                               |
+| ------------------------- | ------- | ----------- | ------------ | -------------------------------------- |
+| `mistral-medium-3.5`      | 256k    | $1.50/1M    | $7.50/1M     | Agentic and coding-heavy workloads     |
+| `mistral-large-latest`    | 256k    | $0.50/1M    | $1.50/1M     | General-purpose multimodal tasks       |
+| `mistral-medium-latest`   | 128k    | $0.40/1M    | $2.00/1M     | Balanced multimodal workloads          |
+| `mistral-small-latest`    | 128k    | $0.10/1M    | $0.30/1M     | Cost-sensitive general tasks           |
+| `mistral-small-2603`      | 256k    | $0.15/1M    | $0.60/1M     | Hybrid instruct, reasoning, and coding |
+| `codestral-latest`        | 128k    | $0.30/1M    | $0.90/1M     | Code generation and FIM                |
+| `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning                       |
+| `open-mistral-nemo-2407`  | 128k    | $0.15/1M    | $0.15/1M     | Multilingual and research workloads    |
+| `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Compact multimodal deployments         |
 
 #### Legacy Models (Deprecated)
 
 1. `open-mistral-7b`, `mistral-tiny`, `mistral-tiny-2312`
-2. `open-mistral-nemo`, `open-mistral-nemo-2407`, `mistral-tiny-2407`, `mistral-tiny-latest`
+2. `mistral-tiny-2407`, `mistral-tiny-latest`
 3. `mistral-small-2402`
 4. `mistral-medium-2312`, `mistral-medium`
 5. `mistral-large-2402`
@@ -181,6 +210,7 @@ You can specify which Mistral model to use in your configuration. The following 
 8. `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest`
 9. `open-mixtral-8x7b`, `mistral-small`, `mistral-small-2312`
 10. `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`
+11. `magistral-small-latest`, `magistral-small-2509` - deprecated after April 30, 2026
 
 ### Embedding Model
 
@@ -192,14 +222,16 @@ Here's an example config that compares different Mistral models:
 providers:
   - mistral:mistral-medium-latest
   - mistral:mistral-small-latest
-  - mistral:open-mistral-nemo
+  - mistral:open-mistral-nemo-2407
   - mistral:magistral-medium-latest
-  - mistral:magistral-small-latest
 ```
 
 ## Reasoning Models
 
-Mistral's **Magistral** models are specialized reasoning models announced in June 2025. These models excel at multi-step logic, transparent reasoning, and complex problem-solving across multiple languages.
+Mistral's **Magistral** models are specialized native reasoning models. `magistral-medium-latest`
+currently points to the 2509 generation, which uses tokenized thinking chunks and a 128k
+context window. Mistral's public model card marks `magistral-small-2509` for deprecation
+after April 30, 2026.
 
 ### Key Features of Magistral Models
 
@@ -210,8 +242,7 @@ Mistral's **Magistral** models are specialized reasoning models announced in Jun
 
 ### Magistral Model Variants
 
-- **Magistral Small** (`magistral-small-2506`): 24B parameter open-source version under Apache 2.0 license
-- **Magistral Medium** (`magistral-medium-2506`): More powerful enterprise version with enhanced reasoning capabilities
+- **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`)
 
 ### Usage Recommendations
 
@@ -226,17 +257,20 @@ providers:
       max_tokens: 40960 # Recommended for reasoning tasks
 ```
 
+`n` requests multiple completions where the target model supports them. Mistral notes
+that `mistral-large-2512` does not currently support `n > 1`.
+
 ## Multimodal Capabilities
 
 Mistral offers vision-capable models that can process both text and images:
 
 ### Image Understanding
 
-Use `pixtral-12b` for multimodal tasks:
+Use a current multimodal chat model such as `mistral-large-2512`:
 
 ```yaml
 providers:
-  - id: mistral:pixtral-12b
+  - id: mistral:mistral-large-2512
     config:
       temperature: 0.7
       max_tokens: 1000
@@ -354,7 +388,7 @@ description: 'Compare reasoning capabilities across Mistral models'
 
 providers:
   - mistral:magistral-medium-latest
-  - mistral:magistral-small-latest
+  - mistral:mistral-medium-3.5
   - mistral:mistral-large-latest
   - mistral:mistral-small-latest
 
@@ -418,7 +452,7 @@ tests:
 description: 'Analyze documents with text and images'
 
 providers:
-  - id: mistral:pixtral-12b
+  - id: mistral:mistral-large-2512
     config:
       temperature: 0.5
       max_tokens: 2000
@@ -477,7 +511,7 @@ export MISTRAL_API_HOST="api.mistral.ai"
 | **Cost-sensitive apps**    | `mistral-small-latest`    | Best price/performance ratio |
 | **Complex reasoning**      | `magistral-medium-latest` | Step-by-step thinking        |
 | **Code generation**        | `codestral-latest`        | Specialized for programming  |
-| **Vision tasks**           | `pixtral-12b`             | Multimodal capabilities      |
+| **Vision tasks**           | `mistral-large-2512`      | Current multimodal model     |
 | **High-volume production** | `mistral-medium-latest`   | Balanced cost and quality    |
 
 ### Context Window Optimization

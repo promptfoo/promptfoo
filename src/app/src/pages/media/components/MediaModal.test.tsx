@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { mockMatchMedia } from '@app/tests/browserMocks';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -32,21 +33,6 @@ vi.mock('@app/utils/media', () => ({
 vi.mock('./AudioWaveform', () => ({
   AudioWaveform: () => <div data-testid="audio-waveform" />,
 }));
-
-// Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(prefers-reduced-motion: reduce)' ? false : query === '(hover: hover)',
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
 
 // Wrapper with router context (required for Link components)
 const Wrapper = ({ children }: { children: ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
@@ -88,6 +74,10 @@ const createMockItems = (count: number): MediaItem[] =>
 describe('MediaModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMatchMedia({
+      matches: (query) =>
+        query === '(prefers-reduced-motion: reduce)' ? false : query === '(hover: hover)',
+    });
   });
 
   describe('rendering', () => {
@@ -104,6 +94,17 @@ describe('MediaModal', () => {
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 
       expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('keeps the modal layout shrinkable on narrow screens', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(screen.getByRole('dialog').lastElementChild).toHaveClass('min-w-0', 'w-full');
+      expect(screen.getByTestId('media-modal-details-panel')).toHaveClass(
+        'min-h-0',
+        'overflow-hidden',
+      );
     });
 
     it('renders image preview for image kind', () => {
@@ -126,6 +127,40 @@ describe('MediaModal', () => {
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 
       expect(screen.getByText('Preview not available')).toBeInTheDocument();
+    });
+
+    it('keeps the compact footer download button named', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(
+        within(screen.getByTestId('media-modal-desktop-actions')).getByRole('button', {
+          name: 'Download',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('keeps the compact modal actions touch-sized', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      const mobileActions = screen.getByTestId('media-modal-mobile-actions');
+      const desktopActions = screen.getByTestId('media-modal-desktop-actions');
+
+      expect(screen.getByRole('button', { name: 'Close' })).toHaveClass('h-11', 'w-11');
+      expect(within(mobileActions).getByRole('button', { name: 'Download' })).toHaveClass('h-11');
+      expect(within(mobileActions).getByRole('button', { name: 'Copy permalink' })).toHaveClass(
+        'h-11',
+        'w-11',
+      );
+      expect(within(desktopActions).getByRole('button', { name: 'Download' })).toHaveClass(
+        '[@media(hover:none)]:h-11',
+      );
+      expect(within(desktopActions).getByRole('button', { name: 'Copy permalink' })).toHaveClass(
+        '[@media(hover:none)]:h-11',
+        '[@media(hover:none)]:w-11',
+      );
+      expect(desktopActions).toHaveClass('hidden', 'md:flex', 'shrink-0');
     });
   });
 

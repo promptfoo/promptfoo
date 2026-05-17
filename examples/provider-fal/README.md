@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-fal
+cd provider-fal
 ```
 
 Demonstrates how to evaluate and compare image generation models using promptfoo.
@@ -55,6 +56,7 @@ Edit `promptfooconfig.yaml` to:
 - Add your own prompts
 - Adjust model parameters
 - Add assertions to test output quality
+- Route SDK requests through a proxy with `config.client.proxyUrl` when your environment requires it
 
 ## Documentation
 

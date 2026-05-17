@@ -1,4 +1,4 @@
-# Test Codebase for Agentic SDK Comparison
+# compare-agentic-sdks/test-codebase (Test Codebase for Agentic SDK Comparison)
 
 This is an intentionally vulnerable codebase designed to test AI coding assistants' ability to:
 

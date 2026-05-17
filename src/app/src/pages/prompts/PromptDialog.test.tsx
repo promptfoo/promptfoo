@@ -1,4 +1,6 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
@@ -131,13 +133,18 @@ const mockSelectedPromptThreeEvals: ServerPromptWithMetadata = {
 };
 
 describe('PromptDialog', () => {
+  const clickElement = (element: Element) => {
+    act(() => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  };
+
   beforeEach(() => {
-    vi.useFakeTimers();
+    useTestTimers();
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   it('should render the dialog with prompt details, prompt text, and eval history when openDialog is true and a valid selectedPrompt is provided', () => {
@@ -189,14 +196,78 @@ describe('PromptDialog', () => {
     expect(row).toHaveTextContent('-');
   });
 
+  it('stacks long titles above the prompt id badge on narrow screens', () => {
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={vi.fn()}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: new RegExp(mockSelectedPrompt.prompt.label) }),
+    ).toHaveClass('flex-col', 'items-start', 'text-left', 'sm:flex-row', 'sm:items-center');
+  });
+
+  it('keeps actions visible while long prompt content scrolls independently', () => {
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={vi.fn()}
+          selectedPrompt={mockSelectedPromptThreeEvals}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByTestId('prompt-dialog-scroll-body');
+    const historyTable = screen.getByRole('table');
+    const footer = screen.getByTestId('prompt-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(historyTable).toHaveClass('min-w-[720px]');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
+  it('keeps eval history rows distinct when repeated eval ids are present', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const duplicateEvalPrompt: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      evals: [mockSelectedPrompt.evals[0], mockSelectedPrompt.evals[0]],
+    };
+
+    try {
+      render(
+        <MemoryRouter>
+          <PromptDialog
+            openDialog={true}
+            handleClose={vi.fn()}
+            selectedPrompt={duplicateEvalPrompt}
+            showDatasetColumn={true}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getAllByText(mockSelectedPrompt.evals[0].id)).toHaveLength(2);
+      expect(consoleErrorSpy.mock.calls.flat().join(' ')).not.toContain(
+        'Encountered two children with the same key',
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: writeTextMock,
-      },
-    });
+    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
 
     render(
       <MemoryRouter>
@@ -212,7 +283,7 @@ describe('PromptDialog', () => {
     // CopyButton has aria-label="Copy"
     const copyButton = screen.getByRole('button', { name: 'Copy' });
 
-    fireEvent.click(copyButton);
+    clickElement(copyButton);
 
     expect(writeTextMock).toHaveBeenCalledWith(mockSelectedPromptNoEvals.prompt.raw);
 
@@ -220,7 +291,7 @@ describe('PromptDialog', () => {
     // The button itself changes its icon to show copy success
   });
 
-  it('should call handleClose when the close button is clicked', () => {
+  it('should call handleClose when the close button is clicked', async () => {
     const handleClose = vi.fn();
 
     render(
@@ -238,7 +309,7 @@ describe('PromptDialog', () => {
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
     expect(footerCloseButton).toBeDefined();
-    fireEvent.click(footerCloseButton!);
+    clickElement(footerCloseButton!);
 
     expect(handleClose).toHaveBeenCalled();
   });
@@ -460,7 +531,7 @@ describe('PromptDialog', () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const mockWriteText = vi.fn().mockRejectedValue(new Error('Failed to copy'));
-    Object.assign(navigator, { clipboard: { writeText: mockWriteText } });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     render(
       <MemoryRouter>
@@ -475,7 +546,7 @@ describe('PromptDialog', () => {
 
     // CopyButton has aria-label="Copy"
     const copyButton = screen.getByRole('button', { name: 'Copy' });
-    fireEvent.click(copyButton);
+    clickElement(copyButton);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);

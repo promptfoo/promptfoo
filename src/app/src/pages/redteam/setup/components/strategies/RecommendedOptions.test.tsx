@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecommendedOptions } from './RecommendedOptions';
 import { PRESET_IDS, STRATEGY_PRESETS } from './types';
@@ -41,17 +42,19 @@ describe('RecommendedOptions', () => {
     STRATEGY_PRESETS[PRESET_IDS.MEDIUM].options!.multiTurn = originalPreset;
   });
 
-  it('should call onStatefulChange with the correct boolean value when a radio button is selected in the stateful options', () => {
+  it('should call onStatefulChange with the correct boolean value when a radio button is selected in the stateful options', async () => {
+    const user = userEvent.setup();
     render(<RecommendedOptions {...defaultProps} isMultiTurnEnabled={true} />);
 
     const yesRadioButton = screen.getByLabelText(/Yes – Promptfoo should only send/);
 
-    fireEvent.click(yesRadioButton);
+    await user.click(yesRadioButton);
 
     expect(mockOnStatefulChange).toHaveBeenCalledWith(true);
   });
 
-  it('should call onStatefulChange with false when "No" radio button is selected, even if initial value is true', () => {
+  it('should call onStatefulChange with false when "No" radio button is selected, even if initial value is true', async () => {
+    const user = userEvent.setup();
     render(
       <RecommendedOptions
         {...{
@@ -64,7 +67,7 @@ describe('RecommendedOptions', () => {
 
     const noRadioButton = screen.getByLabelText(/No – Promptfoo should resend/);
 
-    fireEvent.click(noRadioButton);
+    await user.click(noRadioButton);
 
     expect(mockOnStatefulChange).toHaveBeenCalledWith(false);
   });

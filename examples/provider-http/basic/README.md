@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-http/basic
+cd provider-http/basic
 ```
 
 This example demonstrates how to configure and use HTTP providers with promptfoo to integrate with external API endpoints.

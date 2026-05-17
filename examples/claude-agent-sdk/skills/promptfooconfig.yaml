@@ -6,18 +6,20 @@ providers:
     config:
       working_dir: ./sample-project
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Grep', 'Glob']
+      # `skills` (SDK 0.2.120+) auto-allows the Skill tool and filters which
+      # discovered skills are loaded. Use `all` to enable every discovered skill,
+      # or a name list (e.g. ['code-review']) to scope the test deterministically.
+      skills: ['code-review']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
 
 prompts:
   - 'Review the authentication module for security issues'
 
 tests:
   - assert:
-      # Verify the code-review skill was invoked via tool calls
-      - type: javascript
-        value: |
-          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
-          return toolCalls.some(t => t.name === 'Skill');
+      # Verify the code-review skill was invoked
+      - type: skill-used
+        value: code-review
       # Verify security issues were identified (MD5 is insecure for passwords)
       - type: icontains
         value: 'md5'

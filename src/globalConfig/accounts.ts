@@ -14,10 +14,50 @@ import {
   UserEmailStatus,
 } from '../types/email';
 import { fetchWithTimeout } from '../util/fetch/index';
-import { CloudConfig } from './cloud';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
+
+const CI_PLACEHOLDER_EMAIL = 'ci-placeholder@promptfoo.dev';
+
+export type AuthMethod = 'api-key' | 'email' | 'none';
+
+export interface UserAuthInfo {
+  email: string | null;
+  isLoggedIntoCloud: boolean;
+  authMethod: AuthMethod;
+}
+
+export type EmailValidationFailureReason =
+  | 'prompt_cancelled'
+  | 'exceeded_limit'
+  | 'email_verification_required';
+
+export class EmailValidationError extends Error {
+  constructor(
+    public readonly reason: EmailValidationFailureReason,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'EmailValidationError';
+  }
+}
+
+function failEmailValidation(reason: EmailValidationFailureReason, message: string): never {
+  throw new EmailValidationError(reason, message);
+}
+
+export function getUserAuthInfo(): UserAuthInfo {
+  const globalConfig = readGlobalConfig();
+  const email = globalConfig?.account?.email || null;
+  const isLoggedIntoCloud = !!(globalConfig?.cloud?.apiKey || process.env.PROMPTFOO_API_KEY);
+
+  return {
+    email,
+    isLoggedIntoCloud,
+    authMethod: isLoggedIntoCloud ? 'api-key' : email ? 'email' : 'none',
+  };
+}
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
@@ -78,16 +118,24 @@ export function setUserEmailValidated(validated: boolean) {
   writeGlobalConfigPartial(config);
 }
 
-export function getAuthor(): string | null {
-  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+export function getAuthor(override?: string | null): string | null {
+  const userEmail = getUserEmail();
+  const envAuthor = getEnvString('PROMPTFOO_AUTHOR');
+  if (isLoggedIntoCloud() && userEmail) {
+    if (override && override !== userEmail) {
+      // Don't log the full emails — the rest of the codebase treats them as PII.
+      logger.debug('[Author] Ignoring author override because cloud identity takes precedence');
+    }
+    return userEmail;
+  }
+  return override || userEmail || envAuthor || null;
 }
 
 export function isLoggedIntoCloud(): boolean {
   // Check if user has authenticated with Promptfoo Cloud
   // This supports both interactive (email-based) and non-interactive (API key) authentication
   // CI environments can authenticate via API keys, so we no longer exclude CI
-  const cloudConfig = new CloudConfig();
-  return cloudConfig.isEnabled();
+  return getUserAuthInfo().isLoggedIntoCloud;
 }
 
 /**
@@ -95,23 +143,7 @@ export function isLoggedIntoCloud(): boolean {
  * @returns 'api-key' | 'email' | 'none'
  */
 export function getAuthMethod(): 'api-key' | 'email' | 'none' {
-  const cloudConfig = new CloudConfig();
-  const hasApiKey = cloudConfig.isEnabled();
-  const hasEmail = !!getUserEmail();
-
-  if (hasApiKey && hasEmail) {
-    // Both present - API key is the actual auth mechanism
-    return 'api-key';
-  }
-  if (hasApiKey) {
-    return 'api-key';
-  }
-  if (hasEmail) {
-    // Email without API key - not fully authenticated
-    // (this shouldn't happen in normal flow but handle it)
-    return 'email';
-  }
-  return 'none';
+  return getUserAuthInfo().authMethod;
 }
 
 interface EmailStatusResult {
@@ -129,13 +161,24 @@ export async function checkEmailStatus(options?: {
   validate?: boolean;
 }): Promise<EmailStatusResult> {
   const { default: telemetry } = await import('../telemetry');
-  const userEmail = isCI() ? 'ci-placeholder@promptfoo.dev' : getUserEmail();
+  const ciMode = isCI();
+  const userEmail = ciMode ? CI_PLACEHOLDER_EMAIL : getUserEmail();
 
   if (!userEmail) {
     return {
       status: NO_EMAIL_STATUS,
       hasEmail: false,
       message: 'Redteam evals require email verification. Please enter your work email:',
+    };
+  }
+
+  if (ciMode) {
+    // CI uses a synthetic placeholder to avoid interactive prompts. Treat it as
+    // already validated so test runs do not depend on live account state.
+    return {
+      status: EmailValidationStatus.OK,
+      hasEmail: true,
+      email: userEmail,
     };
   }
 
@@ -212,10 +255,11 @@ export async function checkEmailStatus(options?: {
 
 export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation: boolean }> {
   const { default: telemetry } = await import('../telemetry');
+  const ciMode = isCI();
   const existingEmail = getUserEmail();
-  let email = isCI() ? 'ci-placeholder@promptfoo.dev' : existingEmail;
-  const existingEmailNeedsValidation = !isCI() && getUserEmailNeedsValidation();
-  const existingEmailValidated = isCI() || getUserEmailValidated();
+  let email = ciMode ? CI_PLACEHOLDER_EMAIL : existingEmail;
+  const existingEmailNeedsValidation = !ciMode && getUserEmailNeedsValidation();
+  const existingEmailValidated = ciMode || getUserEmailValidated();
 
   let emailNeedsValidation = existingEmailNeedsValidation && !existingEmailValidated;
 
@@ -246,8 +290,7 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     } catch (error) {
       const err = error as Error;
       if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
-        // exit cleanly on interrupt
-        process.exit(1);
+        failEmailValidation('prompt_cancelled', 'Email prompt cancelled.');
       }
       // Unknown error: rethrow
       logger.error(`failed to prompt for email: ${err}`);
@@ -265,10 +308,19 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
   return { emailNeedsValidation };
 }
 
+/**
+ * Checks account email status and throws `EmailValidationError` for recoverable
+ * validation failures that callers should handle at their process boundary.
+ */
 export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
 }): Promise<EmailOkStatus | BadEmailResult> {
   const result = await checkEmailStatus(options);
+  // In CI, checkEmailStatus already returns OK for the placeholder email.
+  // This guard ensures we never accidentally exit in CI even if the above logic changes.
+  if (isCI()) {
+    return EMAIL_OK_STATUS;
+  }
   if (
     result.status === EmailValidationStatus.RISKY_EMAIL ||
     result.status === EmailValidationStatus.DISPOSABLE_EMAIL
@@ -279,13 +331,11 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   }
 
   if (result.status === EmailValidationStatus.EXCEEDED_LIMIT) {
-    logger.error(
-      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
-    );
-    process.exit(1);
-  }
-
-  if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+    const message =
+      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.';
+    logger.error(message);
+    failEmailValidation('exceeded_limit', message);
+  } else if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
     setUserEmailNeedsValidation(true);
     setUserEmailValidated(false);
     const message =
@@ -295,10 +345,8 @@ export async function checkEmailStatusAndMaybeExit(options?: {
       status: result.status,
       hasEmail: result.hasEmail,
     });
-    process.exit(1);
-  }
-
-  if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
+    failEmailValidation('email_verification_required', message);
+  } else if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(chalk.yellow(border));
     logger.warn(chalk.yellow(result.message));

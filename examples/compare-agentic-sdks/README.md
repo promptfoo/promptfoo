@@ -23,6 +23,8 @@ Four providers analyze an intentionally vulnerable Python codebase:
 
 ## Vulnerabilities Planted
 
+The vulnerable code lives in the [test-codebase](./test-codebase/) directory.
+
 **`user_service.py`:**
 
 - MD5 password hashing

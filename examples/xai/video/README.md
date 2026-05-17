@@ -1,4 +1,11 @@
-# xAI Grok Imagine Video Generation Example
+# xai/video (xAI Grok Video Generation)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example xai/video
+cd xai/video
+```
 
 This example demonstrates video generation using xAI's Grok Imagine API.
 
@@ -52,6 +59,22 @@ providers:
 prompts:
   - 'Make the colors more vibrant'
 ```
+
+### Reference-to-Video
+
+Guide the generated video with up to seven reference images:
+
+```yaml
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      reference_images:
+        - url: 'https://example.com/person.jpg'
+        - url: 'https://example.com/shirt.jpg'
+      duration: 10
+```
+
+`reference_images` cannot be combined with `image` or `video`, and reference-guided videos are limited to 10 seconds.
 
 ## See Also
 

@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-model-armor
+cd provider-model-armor
 ```
 
 Model Armor is a managed service that screens LLM prompts and responses for:

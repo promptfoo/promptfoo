@@ -1,4 +1,4 @@
-# provider-databricks
+# provider-databricks (Databricks Provider)
 
 Test Databricks Foundation Model APIs with promptfoo.
 
@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-databricks
+cd provider-databricks
 ```
 
 ## Prerequisites
