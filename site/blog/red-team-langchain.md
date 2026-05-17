@@ -141,7 +141,7 @@ Plugins are organized into categories:
 - **Access Control**: Tests for RBAC and authorization issues
 - **Business Logic**: Tests for competitor mentions, excessive agency, etc.
 
-You can also create [custom policies](/docs/red-team/plugins/custom) or upload your own [promptfoo plugins](/docs/red-team/plugins/intent/) to test specific business requirements or regulatory compliance.
+You can also create [custom policies](/docs/red-team/plugins/policy/) or upload your own [promptfoo plugins](/docs/red-team/plugins/custom/) to test specific business requirements or regulatory compliance.
 
 ### What are Strategies?
 

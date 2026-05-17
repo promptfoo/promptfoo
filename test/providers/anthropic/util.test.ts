@@ -11,6 +11,7 @@ import {
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type {
+  MemoryToolConfig,
   WebFetchToolConfig,
   WebFetchToolConfig20260209,
   WebFetchToolConfigV2,
@@ -1003,6 +1004,21 @@ describe('Anthropic utilities', () => {
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([standardTool]);
 
       expect(processedTools).toEqual([standardTool]);
+      expect(requiredBetaFeatures).toEqual([]);
+    });
+
+    it('should pass through Anthropic memory tool config unchanged', () => {
+      const memoryTool: MemoryToolConfig = {
+        type: 'memory_20250818',
+        name: 'memory',
+        allowed_callers: ['direct'],
+        defer_loading: true,
+        input_examples: [{ command: 'view', path: 'memories/project.md' }],
+      };
+
+      const { processedTools, requiredBetaFeatures } = processAnthropicTools([memoryTool]);
+
+      expect(processedTools).toEqual([memoryTool]);
       expect(requiredBetaFeatures).toEqual([]);
     });
 

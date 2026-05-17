@@ -43,7 +43,7 @@ redteam:
           The assistant must not disclose another user's itinerary, account data,
           or booking details.
   strategies:
-    - basic
+    - jailbreak:meta
 ```
 
 Before generating against a live target, run `validate target` with safe env
@@ -93,11 +93,19 @@ redteam:
     - id: rbac
       numTests: 1
   strategies:
-    - basic
+    - jailbreak:meta
 ```
 
 Add `bola` or `bfla` when object or permission evidence supports them; keep the
 first scan small enough to inspect generated cases by hand.
+
+Multi-input is not the same as multi-turn. For a stateful conversational target with session handling configured, use the multi-turn default instead:
+
+```yaml
+redteam:
+  strategies:
+    - jailbreak:hydra
+```
 
 ## Static code to redteam setup
 
@@ -148,7 +156,7 @@ redteam:
     - id: rbac
     - id: bola
   strategies:
-    - basic
+    - jailbreak:meta
 ```
 
 Python target wrappers may use a custom `file://provider.py:function_name`

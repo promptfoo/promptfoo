@@ -11,8 +11,7 @@ providers:
       plugins:
         - type: local
           path: ./sample-plugin
-      append_allowed_tools:
-        - Skill
+      skills: all
       persist_session: false
 
 tests:
