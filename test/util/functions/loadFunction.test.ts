@@ -233,6 +233,27 @@ describe('loadFunction', () => {
       await result('test input');
       expect(runPython).toHaveBeenCalledWith(TEST_PY_PATH, 'func', ['test input']);
     });
+
+    it('should keep cached Python functions isolated by default function name', async () => {
+      const result1 = await loadFunction({
+        filePath: 'function.py',
+        defaultFunctionName: 'first',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.py',
+        defaultFunctionName: 'second',
+        useCache: true,
+      });
+
+      expect(result1).not.toBe(result2);
+
+      await result1('first input');
+      await result2('second input');
+
+      expect(runPython).toHaveBeenNthCalledWith(1, TEST_PY_PATH, 'first', ['first input']);
+      expect(runPython).toHaveBeenNthCalledWith(2, TEST_PY_PATH, 'second', ['second input']);
+    });
   });
 
   describe('Error handling', () => {
