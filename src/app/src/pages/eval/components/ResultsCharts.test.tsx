@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
@@ -102,7 +103,8 @@ describe('ResultsCharts', () => {
     expect(container.querySelectorAll('canvas').length).toBeGreaterThan(0);
   });
 
-  it('exposes chart regions, text summaries, and a keyboard-reachable scatter comparison control', () => {
+  it('exposes chart regions, text summaries, and a keyboard-reachable scatter comparison control', async () => {
+    const user = userEvent.setup();
     const mockTable = {
       head: {
         prompts: [
@@ -154,7 +156,7 @@ describe('ResultsCharts', () => {
       screen.getByText(/Comparing test-provider-1 with test-provider-2 across 2 paired scores\./),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Compare prompt outputs' }));
+    await user.click(screen.getByRole('button', { name: 'Compare prompt outputs' }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByLabelText('X-axis prompt')).toBeInTheDocument();
