@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Anthropic memory tool'
+
+prompts:
+  - 'Return exactly: MEMORY_TOOL_AVAILABLE'
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      temperature: 0
+      max_tokens: 64
+      tools:
+        - type: memory_20250818
+          name: memory
+          allowed_callers:
+            - direct
+      tool_choice:
+        type: none
+
+tests:
+  - assert:
+      - type: contains
+        value: MEMORY_TOOL_AVAILABLE

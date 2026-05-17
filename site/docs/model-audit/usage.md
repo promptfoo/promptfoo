@@ -211,6 +211,7 @@ promptfoo scan-model models/ --exclude-scanner weight_distribution
 # Strict mode with additional output options
 promptfoo scan-model models/ \
   --strict \
+  --no-write \
   --format sarif \
   --output security-scan.sarif
 ```
@@ -271,7 +272,7 @@ jobs:
           pip install modelaudit[all]
 
       - name: Scan models
-        run: promptfoo scan-model models/ --format sarif --output model-scan.sarif
+        run: promptfoo scan-model models/ --no-write --format sarif --output model-scan.sarif
 
       - name: Upload SARIF to GitHub Advanced Security
         uses: github/codeql-action/upload-sarif@v3
@@ -369,6 +370,10 @@ When using `--format json`, ModelAudit outputs structured results:
   "scanner_names": ["pickle"],
   "start_time": 1750168822.481906,
   "bytes_scanned": 74,
+  "checks": [],
+  "total_checks": 0,
+  "passed_checks": 0,
+  "failed_checks": 0,
   "issues": [
     {
       "message": "Found REDUCE opcode - potential __reduce__ method execution",
@@ -415,10 +420,10 @@ ModelAudit supports SARIF (Static Analysis Results Interchange Format) 2.1.0 out
 promptfoo scan-model model.pkl --format sarif
 
 # Save SARIF to file
-promptfoo scan-model model.pkl --format sarif --output results.sarif
+promptfoo scan-model model.pkl --no-write --format sarif --output results.sarif
 
 # Scan multiple models with SARIF output
-promptfoo scan-model models/ --format sarif --output scan-results.sarif
+promptfoo scan-model models/ --no-write --format sarif --output scan-results.sarif
 ```
 
 ### SARIF Structure
@@ -496,7 +501,7 @@ SARIF output enables integration with:
 ```yaml
 # .github/workflows/security.yml
 - name: Scan models
-  run: promptfoo scan-model models/ --format sarif --output model-scan.sarif
+  run: promptfoo scan-model models/ --no-write --format sarif --output model-scan.sarif
 
 - name: Upload SARIF to GitHub
   uses: github/codeql-action/upload-sarif@v3
@@ -510,7 +515,7 @@ SARIF output enables integration with:
 ```yaml
 # azure-pipelines.yml
 - script: |
-    promptfoo scan-model models/ --format sarif --output $(Build.ArtifactStagingDirectory)/model-scan.sarif
+    promptfoo scan-model models/ --no-write --format sarif --output $(Build.ArtifactStagingDirectory)/model-scan.sarif
   displayName: 'Scan models'
 
 - task: PublishSecurityAnalysisLogs@3
@@ -525,7 +530,7 @@ SARIF output enables integration with:
 
 ```bash
 # Generate SARIF for local viewing
-promptfoo scan-model . --format sarif --output scan.sarif
+promptfoo scan-model . --no-write --format sarif --output scan.sarif
 
 # Open in VS Code with SARIF Viewer extension
 code scan.sarif
