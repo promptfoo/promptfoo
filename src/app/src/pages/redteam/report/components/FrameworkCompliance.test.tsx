@@ -76,6 +76,17 @@ describe('FrameworkCompliance', () => {
     expect(mockFrameworkCard.mock.calls.length).toBeGreaterThan(0);
   });
 
+  it('stacks heading controls on narrow screens', () => {
+    renderFrameworkCompliance();
+
+    expect(screen.getByTestId('framework-compliance-header')).toHaveClass(
+      'flex-col',
+      'items-start',
+      'sm:flex-row',
+      'sm:justify-between',
+    );
+  });
+
   it('should show 0% attack success rate and 0 failed tests when all plugins are compliant', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },

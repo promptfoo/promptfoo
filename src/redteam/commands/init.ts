@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
@@ -30,6 +30,7 @@ import {
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
+import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
@@ -652,16 +653,25 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose generate', { value: readyToGenerate });
 
     if (readyToGenerate) {
-      await doGenerateRedteam({
-        purpose,
-        plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-        cache: false,
-        write: false,
-        output: 'redteam.yaml',
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-        numTests,
-      });
+      try {
+        await doGenerateRedteam({
+          purpose,
+          plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+          cache: false,
+          write: false,
+          output: 'redteam.yaml',
+          defaultConfig: {},
+          defaultConfigPath: configPath,
+          numTests,
+        });
+      } catch (error) {
+        if (error instanceof ProbeLimitExceededError) {
+          // doGenerateRedteam already logged the user-facing quota message.
+          process.exitCode = 1;
+          return;
+        }
+        throw error;
+      }
     } else {
       logger.info(
         '\n' +
@@ -706,7 +716,7 @@ export function initCommand(program: Command) {
             await redteamInit(directory);
           }
         } catch (err) {
-          if (err instanceof ExitPromptError) {
+          if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
             logger.info(
               '\n' +
                 chalk.blue(
@@ -719,7 +729,8 @@ export function initCommand(program: Command) {
                 chalk.green('https://www.promptfoo.dev/contact/'),
             );
             await recordOnboardingStep('early exit');
-            process.exit(130);
+            process.exitCode = 130;
+            return;
           } else {
             throw err;
           }

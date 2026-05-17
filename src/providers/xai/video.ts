@@ -23,6 +23,7 @@ import {
   storeCacheMapping,
   storeVideoContent,
 } from '../video';
+import { getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -58,12 +59,16 @@ export interface XaiVideoStatusPending {
  * Note: The API returns the video object directly, not a status field
  */
 export interface XaiVideoStatusCompleted {
+  status?: 'done';
   video: {
     url: string;
     duration: number;
     respect_moderation?: boolean;
   };
   model: string;
+  usage?: {
+    cost_in_usd_ticks?: number;
+  };
 }
 
 /**
@@ -84,6 +89,8 @@ export interface XaiVideoOptions {
   apiKey?: string;
   /** Custom API base URL */
   apiBaseUrl?: string;
+  /** Region for regional endpoints, such as `eu-west-1` */
+  region?: string;
   /** Custom headers */
   headers?: Record<string, string>;
   /** Video duration in seconds (1-15, default: 8) */
@@ -94,6 +101,8 @@ export interface XaiVideoOptions {
   resolution?: XaiVideoResolution;
   /** Image URL for image-to-video generation */
   image?: { url: string };
+  /** Reference image URLs for reference-to-video generation */
+  reference_images?: { url: string }[];
   /** Video URL for video editing */
   video?: { url: string };
   /** Polling interval in ms (default: 10000) */
@@ -130,6 +139,8 @@ const DEFAULT_ASPECT_RATIO: XaiVideoAspectRatio = '16:9';
 const DEFAULT_RESOLUTION: XaiVideoResolution = '720p';
 const MIN_DURATION = 1;
 const MAX_DURATION = 15;
+const MAX_REFERENCE_IMAGE_DURATION = 10;
+const MAX_REFERENCE_IMAGES = 7;
 
 /**
  * Cost per second for Grok Imagine video generation
@@ -203,10 +214,21 @@ export class XAIVideoProvider implements ApiProvider {
   }
 
   /**
-   * Get API base URL
+   * Get API base URL.
+   * Precedence: apiBaseUrl > XAI_API_BASE_URL env > region > default.
    */
   getApiUrl(): string {
-    return this.config?.apiBaseUrl || DEFAULT_API_BASE_URL;
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
+    if (envApiBaseUrl) {
+      return envApiBaseUrl;
+    }
+    if (this.config.region) {
+      return `https://${this.config.region}.api.x.ai/v1`;
+    }
+    return DEFAULT_API_BASE_URL;
   }
 
   /**
@@ -255,6 +277,11 @@ export class XAIVideoProvider implements ApiProvider {
       body.image = { url: config.image.url };
     }
 
+    // Reference-to-video
+    if (config.reference_images?.length) {
+      body.reference_images = config.reference_images.map(({ url }) => ({ url }));
+    }
+
     // Video editing
     if (config.video?.url) {
       body.video = { url: config.video.url };
@@ -283,6 +310,39 @@ export class XAIVideoProvider implements ApiProvider {
     }
   }
 
+  private validateReferenceImages(
+    prompt: string,
+    config: XaiVideoOptions,
+    duration: number,
+    isEdit: boolean,
+  ): string | undefined {
+    if (!config.reference_images?.length) {
+      return undefined;
+    }
+
+    if (config.image?.url) {
+      return 'reference_images cannot be combined with image input. Use one video generation mode per request.';
+    }
+
+    if (isEdit) {
+      return 'reference_images cannot be combined with video edits. Use one video generation mode per request.';
+    }
+
+    if (!prompt.trim()) {
+      return 'reference_images require a non-empty prompt.';
+    }
+
+    if (config.reference_images.length > MAX_REFERENCE_IMAGES) {
+      return `Invalid reference_images count "${config.reference_images.length}". Must be between 1 and ${MAX_REFERENCE_IMAGES}.`;
+    }
+
+    if (duration > MAX_REFERENCE_IMAGE_DURATION) {
+      return `Invalid duration "${duration}" for reference_images. Must be between ${MIN_DURATION} and ${MAX_REFERENCE_IMAGE_DURATION} seconds.`;
+    }
+
+    return undefined;
+  }
+
   /**
    * Poll for video job completion
    *
@@ -295,7 +355,7 @@ export class XAIVideoProvider implements ApiProvider {
     requestId: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
-  ): Promise<{ videoUrl?: string; videoDuration?: number; error?: string }> {
+  ): Promise<{ videoUrl?: string; videoDuration?: number; reportedCost?: number; error?: string }> {
     const startTime = Date.now();
     const url = `${this.getApiUrl()}/videos/${requestId}`;
 
@@ -318,7 +378,11 @@ export class XAIVideoProvider implements ApiProvider {
         // Check if completed (has video object)
         if ('video' in data && data.video?.url) {
           logger.debug(`[${PROVIDER_NAME}] Job ${requestId} completed with video URL`);
-          return { videoUrl: data.video.url, videoDuration: data.video.duration };
+          return {
+            videoUrl: data.video.url,
+            videoDuration: data.video.duration,
+            reportedCost: getXAICostInUsd(data.usage),
+          };
         }
 
         // Check if failed
@@ -410,6 +474,12 @@ export class XAIVideoProvider implements ApiProvider {
     const resolution = config.resolution || DEFAULT_RESOLUTION;
     const evalId = context?.evaluationId;
     const isEdit = !!config.video?.url;
+    const hasReferenceImages = Boolean(config.reference_images?.length);
+
+    const referenceImageError = this.validateReferenceImages(prompt, config, duration, isEdit);
+    if (referenceImageError) {
+      return { error: referenceImageError };
+    }
 
     // Validate parameters (only for generation, not edits)
     if (!isEdit) {
@@ -436,7 +506,11 @@ export class XAIVideoProvider implements ApiProvider {
       model: this.modelName,
       size: `${aspectRatio}:${resolution}`,
       seconds: duration,
-      inputReference: config.image?.url || null,
+      inputReference: config.image?.url
+        ? `image:${config.image.url}`
+        : config.reference_images?.length
+          ? `reference_images:${config.reference_images.map(({ url }) => url).join('|')}`
+          : null,
     });
 
     // Check cache (skip for edits)
@@ -470,6 +544,7 @@ export class XAIVideoProvider implements ApiProvider {
             aspectRatio,
             resolution,
             duration,
+            hasReferenceImages,
           },
         };
       }
@@ -499,6 +574,7 @@ export class XAIVideoProvider implements ApiProvider {
     const {
       videoUrl: completedVideoUrl,
       videoDuration,
+      reportedCost,
       error: pollError,
     } = await this.pollVideoStatus(requestId, pollIntervalMs, maxPollTimeMs);
 
@@ -526,7 +602,7 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost = calculateVideoCost(actualDuration, false);
+    const cost = reportedCost ?? calculateVideoCost(actualDuration, false);
 
     // Store cache mapping (skip for edits)
     if (!isEdit) {
@@ -561,6 +637,7 @@ export class XAIVideoProvider implements ApiProvider {
         duration: actualDuration,
         storageKey,
         isEdit,
+        hasReferenceImages,
       },
     };
   }
