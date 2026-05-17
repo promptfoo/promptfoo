@@ -1,6 +1,6 @@
 import type { HttpProviderConfig } from '@promptfoo/providers/http';
 import type { PluginConfig, RedteamPlugin, RedteamStrategy } from '@promptfoo/redteam/types';
-import type { ProviderOptions as CoreProviderOptions, TestCase } from '@promptfoo/types';
+import type { ProviderOptions as CoreProviderOptions, Inputs, TestCase } from '@promptfoo/types';
 
 /**
  * UI-specific TLS configuration properties for tracking input methods.
@@ -88,8 +88,7 @@ export interface ProviderOptions {
   label?: string;
   delay?: number;
   // Multi-variable inputs for test case generation
-  // Keys are variable names, values are descriptions of what each variable should contain
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   config: {
     // biome-ignore lint/suspicious/noExplicitAny: Custom provider config can have anything
     [key: string]: any;
