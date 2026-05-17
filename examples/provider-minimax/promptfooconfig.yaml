@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare MiniMax chat models on concise factual answering
+prompts:
+  - 'Answer in one sentence: {{question}}'
+providers:
+  - id: minimax:MiniMax-M2.7
+    config:
+      temperature: 0.7
+      max_tokens: 256
+  - id: minimax:MiniMax-M2.7-highspeed
+    config:
+      temperature: 0.7
+      max_tokens: 256
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris

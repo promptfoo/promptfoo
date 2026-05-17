@@ -67,6 +67,7 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
+import { createMiniMaxProvider } from './minimax';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
@@ -822,6 +823,19 @@ export const providerMap: ProviderFactory[] = [
         return new LocalAiEmbeddingProvider(modelName, providerOptions);
       }
       return new LocalAiChatProvider(modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('minimax:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createMiniMaxProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {

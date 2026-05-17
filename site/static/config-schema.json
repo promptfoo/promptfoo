@@ -359,6 +359,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MINIMAX_API_KEY": {
+          "type": "string"
+        },
         "MODELSLAB_API_KEY": {
           "type": "string"
         },
@@ -1782,6 +1785,9 @@
                       "type": "string"
                     },
                     "MISTRAL_API_KEY": {
+                      "type": "string"
+                    },
+                    "MINIMAX_API_KEY": {
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {
