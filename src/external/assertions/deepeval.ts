@@ -1,7 +1,7 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 
-import { callProviderWithContext, getAndCheckProvider } from '../../matchers';
+import { callProviderWithContext, getAndCheckProvider } from '../../matchers/providers';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';

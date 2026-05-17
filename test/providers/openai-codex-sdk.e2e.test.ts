@@ -1,3 +1,5 @@
+import { mockProcessEnv } from '../util/utils';
+
 /**
  * End-to-End tests for OpenAI Codex SDK Provider
  * These tests use the real @openai/codex-sdk package (must be installed)
@@ -21,7 +23,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 vi.unmock('@openai/codex-sdk');
 vi.unmock('../../src/esm');
@@ -40,21 +42,21 @@ const originalCodexApiKey = process.env.CODEX_API_KEY;
 // vitest.setup.ts installs a dummy OPENAI_API_KEY for unit tests. Ignore that value for E2E runs,
 // and only restore a real key when one is explicitly provided.
 if (e2eApiKey) {
-  process.env.OPENAI_API_KEY = e2eApiKey;
-  process.env.CODEX_API_KEY = e2eApiKey;
+  mockProcessEnv({ OPENAI_API_KEY: e2eApiKey });
+  mockProcessEnv({ CODEX_API_KEY: e2eApiKey });
 }
 
 afterAll(() => {
   if (originalOpenAiApiKey === undefined) {
-    delete process.env.OPENAI_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
   } else {
-    process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey });
   }
 
   if (originalCodexApiKey === undefined) {
-    delete process.env.CODEX_API_KEY;
+    mockProcessEnv({ CODEX_API_KEY: undefined });
   } else {
-    process.env.CODEX_API_KEY = originalCodexApiKey;
+    mockProcessEnv({ CODEX_API_KEY: originalCodexApiKey });
   }
 });
 
@@ -69,19 +71,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
 
   // Skip all tests if no API key or SDK not installed
   const describeOrSkip = hasApiKey && hasSdk ? describe : describe.skip;
-
-  beforeAll(() => {
-    if (!hasSdk) {
-      console.warn('Skipping E2E tests: @openai/codex-sdk not installed');
-    } else if (hasApiKey) {
-      console.info(`Running E2E tests with model: ${DEFAULT_E2E_MODEL}`);
-      console.info('(Set CODEX_E2E_MODEL to use a different model)');
-    } else {
-      console.warn(
-        'Skipping E2E tests: No real CODEX_API_KEY, CODEX_E2E_API_KEY, or OPENAI_API_KEY found',
-      );
-    }
-  });
 
   describeOrSkip('Real SDK Integration', () => {
     it(
@@ -106,9 +95,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
         expect(response.tokenUsage).toBeDefined();
         expect(response.tokenUsage?.total).toBeGreaterThan(0);
         expect(response.sessionId).toBeTruthy();
-
-        console.log('Generated code:', response.output);
-        console.log('Token usage:', response.tokenUsage);
       },
       testTimeout,
     );
@@ -148,8 +134,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
         expect(parsed.function_name).toBeTruthy();
         expect(Array.isArray(parsed.parameters)).toBe(true);
         expect(parsed.return_type).toBeTruthy();
-
-        console.log('Structured output:', parsed);
       },
       testTimeout,
     );
@@ -179,8 +163,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
         // Thread IDs should match (same thread reused)
         expect(sessionId1).toBe(sessionId2);
 
-        console.log('Thread reused:', sessionId1);
-
         await provider.cleanup();
       },
       testTimeout * 2,
@@ -193,7 +175,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
 
         // Skip if examples dir doesn't exist
         if (!fs.existsSync(examplesDir)) {
-          console.warn('Skipping: examples directory not found');
           return;
         }
 
@@ -209,8 +190,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
 
         expect(response.error).toBeUndefined();
         expect(response.output).toBeTruthy();
-
-        console.log('Working directory response:', response.output);
       },
       testTimeout,
     );
@@ -232,8 +211,6 @@ describe('OpenAICodexSDKProvider E2E', () => {
         expect(response.error).toBeUndefined();
         expect(response.output).toBeTruthy();
         expect(response.output).toContain('Paris');
-
-        console.log('Streaming response:', response.output);
       },
       testTimeout,
     );
@@ -286,9 +263,6 @@ Do not add extra words, punctuation, or explanation.
               }),
             ]),
           );
-
-          console.log('Skill response:', response.output);
-          console.log('Skill calls:', response.metadata?.skillCalls);
         } finally {
           fs.rmSync(tempDir, { recursive: true, force: true });
         }
@@ -313,15 +287,15 @@ Do not add extra words, punctuation, or explanation.
         // (different config values create different cache keys/threads)
         const response1 = await provider.callApi('Test 1', {
           vars: {},
-          prompt: { config: { sandbox_mode: 'off' } } as any,
+          prompt: { config: { sandbox_mode: 'read-only' } } as any,
         });
         const response2 = await provider.callApi('Test 2', {
           vars: {},
-          prompt: { config: { sandbox_mode: 'host_only' } } as any,
+          prompt: { config: { sandbox_mode: 'workspace-write' } } as any,
         });
         const response3 = await provider.callApi('Test 3', {
           vars: {},
-          prompt: { config: { sandbox_mode: 'network' } } as any,
+          prompt: { config: { sandbox_mode: 'danger-full-access' } } as any,
         });
 
         expect(response1.error).toBeUndefined();
@@ -331,8 +305,6 @@ Do not add extra words, punctuation, or explanation.
         // Pool should only have 2 threads (oldest evicted)
         const threadCount = (provider as any).threads.size;
         expect(threadCount).toBeLessThanOrEqual(2);
-
-        console.log('Thread pool size:', threadCount);
 
         await provider.cleanup();
       },
@@ -367,7 +339,9 @@ Do not add extra words, punctuation, or explanation.
           },
         });
 
-        await expect(provider.callApi('Test')).rejects.toThrow(/Git repository/);
+        const response = await provider.callApi('Test');
+
+        expect(response.error).toMatch(/is not inside a Git repository/);
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
       }

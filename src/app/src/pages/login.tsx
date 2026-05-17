@@ -113,7 +113,7 @@ export default function LoginPage() {
     }
   }, [isLoading, email, handleRedirect]);
 
-  if (isLoading || (!isLoading && email)) {
+  if (isLoading || email) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
@@ -148,7 +148,7 @@ export default function LoginPage() {
                     href="https://promptfoo.app/welcome"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                    className="text-primary underline underline-offset-2 hover:no-underline"
                   >
                     Generate your token here
                   </a>

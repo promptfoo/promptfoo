@@ -173,7 +173,7 @@ const RiskCategoryDrawer = ({
       <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
         <SheetContent
           side="right"
-          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+          className="w-full overflow-y-auto sm:w-[500px] sm:max-w-[500px]"
           aria-describedby={undefined}
         >
           <SheetTitle className="sr-only">{displayName}</SheetTitle>
@@ -203,9 +203,19 @@ const RiskCategoryDrawer = ({
         <div className="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/30 hover:shadow-sm">
           {/* Header */}
           <CollapsibleTrigger asChild>
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               className="flex w-full flex-col gap-1 p-3 text-left cursor-pointer hover:bg-muted/50"
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) {
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.currentTarget.click();
+                }
+              }}
             >
               <div className="flex w-full items-center gap-3">
                 <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform [[data-state=closed]_&]:-rotate-90" />
@@ -222,6 +232,8 @@ const RiskCategoryDrawer = ({
                 <div className="flex items-center gap-2 shrink-0">
                   {hasSuggestions && (
                     <button
+                      type="button"
+                      aria-label="View suggestions"
                       className="rounded-md p-1 hover:bg-muted"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -256,7 +268,7 @@ const RiskCategoryDrawer = ({
                   </p>
                 </div>
               )}
-            </button>
+            </div>
           </CollapsibleTrigger>
 
           {/* Collapsible content */}
@@ -277,7 +289,7 @@ const RiskCategoryDrawer = ({
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <SheetContent
         side="right"
-        className="w-[750px] overflow-y-auto sm:max-w-[750px]"
+        className="w-full overflow-y-auto sm:w-[750px] sm:max-w-[750px]"
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">{displayName}</SheetTitle>
@@ -340,7 +352,7 @@ const RiskCategoryDrawer = ({
             }
             className="mt-4"
           >
-            <TabsList className="w-full">
+            <TabsList className="grid !h-auto w-full grid-cols-1 gap-1 sm:grid-cols-3 sm:!h-10 sm:gap-0">
               <TabsTrigger value="flagged" className="flex-1">
                 Failed Tests ({failures.length})
               </TabsTrigger>

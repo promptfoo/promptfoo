@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -13,6 +14,7 @@ import {
   generateCacheKey,
   getCachedResponse,
   initializeAgenticCache,
+  resolveAgenticWorkingDir,
 } from './agentic-utils';
 
 import type { EnvOverrides } from '../types/env';
@@ -105,12 +107,49 @@ export interface OpenCodePermissionConfig {
   bash?: OpenCodePermissionValue;
   /** File editing permission */
   edit?: OpenCodePermissionValue;
+  /** File read permission */
+  read?: OpenCodePermissionValue;
+  /** File glob permission */
+  glob?: OpenCodePermissionValue;
+  /** File grep permission */
+  grep?: OpenCodePermissionValue;
+  /** File list permission */
+  list?: OpenCodePermissionValue;
+  /** Subtask execution permission */
+  task?: OpenCodePermissionValue;
+  /** LSP code intelligence permission */
+  lsp?: OpenCodePermissionValue;
+  /** SKILL.md loading permission */
+  skill?: OpenCodePermissionValue;
   /** Web fetching permission */
   webfetch?: OpenCodePermissionValue;
+  /** Web search permission */
+  websearch?: OpenCodePermissionValue;
+  /** Codebase search permission */
+  codesearch?: OpenCodePermissionValue;
+  /** Todo list write permission */
+  todowrite?: OpenCodePermissionValue;
+  /** Interactive question permission */
+  question?: OpenCodePermissionValue;
   /** Prevents infinite agent loops (added in v1.1.1) */
   doom_loop?: OpenCodePermissionValue;
   /** Access to directories outside the working directory (added in v1.1.1) */
   external_directory?: OpenCodePermissionValue;
+  /** Forward-compatible escape hatch for tools added upstream */
+  [key: string]: OpenCodePermissionValue | undefined;
+}
+
+/**
+ * Single permission rule passed to OpenCode v2 `session.create`.
+ *
+ * The v2 SDK types permission as `PermissionRuleset = Array<PermissionRule>`,
+ * so promptfoo converts the user-facing `OpenCodePermissionConfig` object
+ * shape into this rule-array shape before calling the server.
+ */
+export interface OpenCodePermissionRule {
+  permission: string;
+  pattern: string;
+  action: 'ask' | 'allow' | 'deny';
 }
 
 /**
@@ -301,6 +340,17 @@ export interface OpenCodeSDKConfig {
   session_id?: string;
 
   /**
+   * Parent session ID for forked sessions (v2 only).
+   * When set, the new session is created as a child fork of the given parent,
+   * inheriting its compacted history. Ignored on the v1 SDK and when
+   * `session_id` is provided (resumed sessions never fork on create).
+   *
+   * Tied to the upstream fix in opencode 1.14.30 that keeps compacted history
+   * intact for forked sessions.
+   */
+  parent_session_id?: string;
+
+  /**
    * Keep sessions alive between calls
    */
   persist_sessions?: boolean;
@@ -331,7 +381,9 @@ export interface OpenCodeSDKConfig {
   log_level?: 'debug' | 'info' | 'warn' | 'error' | 'off';
 
   /**
-   * Enable streaming responses via SSE
+   * Reserved for future SSE-based streaming support.
+   * Currently a no-op for the OpenCode SDK provider; setting it logs a warning.
+   * Use the `openai:codex-sdk` provider if you need streaming today.
    * @default false
    */
   enable_streaming?: boolean;
@@ -361,6 +413,7 @@ interface OpenCodeClient {
       parameters: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     delete: (parameters: Record<string, unknown>) => Promise<unknown>;
+    abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
   };
 }
 
@@ -417,10 +470,20 @@ interface OpenCodeSessionContext {
   ephemeralSession?: OpenCodeSessionHandle;
 }
 
+type OpenCodeTokenCache =
+  | number
+  | {
+      read?: number;
+      write?: number;
+    };
+
 interface OpenCodeAssistantMessage {
   tokens?: {
+    total?: number;
     input?: number;
     output?: number;
+    reasoning?: number;
+    cache?: OpenCodeTokenCache;
   };
   cost?: number;
   structured?: unknown;
@@ -507,13 +570,58 @@ function resolveEsmPackage(
 }
 
 function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | undefined {
-  if (!result) {
+  if (result === undefined || result === null) {
     return undefined;
   }
-  if (typeof result === 'object' && result !== null && 'data' in result) {
+  if (typeof result === 'object' && 'data' in result) {
     return result.data as T | undefined;
   }
   return result as T;
+}
+
+function getOpenCodeCacheDetails(cache: OpenCodeTokenCache | undefined): {
+  read: number;
+  write: number;
+} {
+  if (typeof cache === 'number') {
+    return { read: cache, write: 0 };
+  }
+  if (!cache || typeof cache !== 'object') {
+    return { read: 0, write: 0 };
+  }
+  return {
+    read: cache.read ?? 0,
+    write: cache.write ?? 0,
+  };
+}
+
+function buildOpenCodeTokenUsage(
+  tokens: OpenCodeAssistantMessage['tokens'],
+): ProviderResponse['tokenUsage'] {
+  if (!tokens) {
+    return undefined;
+  }
+
+  const prompt = tokens.input ?? 0;
+  const completion = tokens.output ?? 0;
+  const cache = getOpenCodeCacheDetails(tokens.cache);
+  const completionDetails: NonNullable<ProviderResponse['tokenUsage']>['completionDetails'] = {};
+
+  if (typeof tokens.reasoning === 'number') {
+    completionDetails.reasoning = tokens.reasoning;
+  }
+  if (tokens.cache !== undefined) {
+    completionDetails.cacheReadInputTokens = cache.read;
+    completionDetails.cacheCreationInputTokens = cache.write;
+  }
+
+  return {
+    prompt,
+    completion,
+    total: tokens.total ?? prompt + completion,
+    ...(tokens.cache === undefined ? {} : { cached: cache.read }),
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
+  };
 }
 
 function getSessionPath(sessionId: string): OpenCodeSessionPath {
@@ -521,6 +629,41 @@ function getSessionPath(sessionId: string): OpenCodeSessionPath {
     id: sessionId,
     sessionID: sessionId,
   };
+}
+
+/**
+ * Convert the user-facing object-shaped permission config into the
+ * rule-array shape required by the v2 `session.create.permission` API.
+ *
+ * - `{ bash: 'allow' }` → `[{ permission: 'bash', pattern: '*', action: 'allow' }]`
+ * - `{ bash: { 'git *': 'allow', '*': 'ask' } }` → two rules with the
+ *   corresponding glob pattern preserved per entry.
+ *
+ * Returns `undefined` when the config has no usable entries so callers can
+ * omit the field entirely.
+ */
+export function convertPermissionConfigToRuleset(
+  config: OpenCodePermissionConfig | undefined,
+): OpenCodePermissionRule[] | undefined {
+  if (!config) {
+    return undefined;
+  }
+  const rules: OpenCodePermissionRule[] = [];
+  for (const [tool, value] of Object.entries(config)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value === 'string') {
+      rules.push({ permission: tool, pattern: '*', action: value });
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      for (const [pattern, action] of Object.entries(value)) {
+        rules.push({ permission: tool, pattern, action });
+      }
+    }
+  }
+  return rules.length > 0 ? rules : undefined;
 }
 
 function tryParseJson(value: string): string | undefined {
@@ -605,6 +748,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private server?: OpenCodeServer;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
+  private streamingWarningEmitted = false;
 
   constructor(
     options: {
@@ -742,19 +886,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return Object.keys(query).length > 0 ? query : undefined;
   }
 
-  private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
-    return generateCacheKey('opencode:sdk:session', {
-      baseUrl: config.baseUrl,
-      workingDir: config.working_dir ? workingDir : undefined,
-      workspace: config.workspace,
+  // Shared by buildSessionKey and the response cache key so they cannot drift.
+  // Includes anything that changes which conversation history or model behavior
+  // the server applies for a prompt.
+  private historyAffectingInputs(config: OpenCodeSDKConfig): Record<string, unknown> {
+    return {
       provider_id: config.provider_id,
       model: config.model,
       tools: this.buildToolsConfig(config),
       permission: config.permission,
       agent: config.agent,
       custom_agent: config.custom_agent,
+      workspace: config.workspace,
       format: config.format,
       variant: config.variant,
+      session_id: config.session_id,
+      parent_session_id: config.parent_session_id,
+    };
+  }
+
+  private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
+    return generateCacheKey('opencode:sdk:session', {
+      ...this.historyAffectingInputs(config),
+      baseUrl: config.baseUrl,
+      workingDir: config.working_dir ? workingDir : undefined,
       mcp: config.mcp,
     });
   }
@@ -895,6 +1050,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
     await this.client.session.delete(this.buildDeleteSessionParameters(session));
   }
 
+  private buildAbortSessionParameters(
+    sessionId: string,
+    sessionQuery: OpenCodeSessionQuery | undefined,
+  ): Record<string, unknown> {
+    // session.abort is v2-only. v1 has no equivalent endpoint.
+    return {
+      sessionID: sessionId,
+      ...sessionQuery,
+    };
+  }
+
   /**
    * Add a session to the cache with LRU eviction
    */
@@ -936,9 +1102,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.warnOnIgnoredBaseUrlConfig(config);
 
     if (config.working_dir) {
-      const workingDir = path.isAbsolute(config.working_dir)
-        ? config.working_dir
-        : path.resolve(process.cwd(), config.working_dir);
+      const workingDir =
+        resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
 
       let stats: fs.Stats;
       try {
@@ -1119,12 +1284,26 @@ export class OpenCodeSDKProvider implements ApiProvider {
       throw new Error('OpenCode SDK module is not loaded');
     }
 
-    const createBody: { title?: string; permission?: OpenCodePermissionConfig } = {
+    const createBody: {
+      title?: string;
+      permission?: OpenCodePermissionRule[];
+      parentID?: string;
+    } = {
       title: `promptfoo-${Date.now()}`,
     };
-    // v2 accepts permission rules when the session is created, not on each prompt.
+    // v2 typed contract expects `PermissionRuleset = Array<PermissionRule>`
+    // at `session.create`; convert the user-facing object shape into rules.
     if (config.permission && this.opencodeModule.apiVersion === 'v2') {
-      createBody.permission = config.permission;
+      const ruleset = convertPermissionConfigToRuleset(config.permission);
+      if (ruleset) {
+        createBody.permission = ruleset;
+      }
+    }
+
+    // parentID is only honored by the v2 session.create body. v1 has no fork
+    // primitive, so silently dropping it there keeps configs portable.
+    if (config.parent_session_id && this.opencodeModule.apiVersion === 'v2') {
+      createBody.parentID = config.parent_session_id;
     }
 
     if (this.opencodeModule.apiVersion === 'v2') {
@@ -1194,14 +1373,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     return {
       output,
-      tokenUsage: tokens
-        ? {
-            prompt: tokens.input ?? 0,
-            completion: tokens.output ?? 0,
-            total: (tokens.input ?? 0) + (tokens.output ?? 0),
-          }
-        : undefined,
-      cost: assistantMessage?.cost ?? 0,
+      tokenUsage: buildOpenCodeTokenUsage(tokens),
+      ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
     };
@@ -1251,6 +1424,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
 
+    if (config.enable_streaming && !this.streamingWarningEmitted) {
+      this.streamingWarningEmitted = true;
+      logger.warn(
+        '[OpenCode SDK] enable_streaming is currently a no-op for this provider; the prompt will run to completion before returning.',
+      );
+    }
+
     const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
     const cacheResult = await initializeAgenticCache(
       {
@@ -1262,15 +1442,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       },
       {
         prompt,
-        provider_id: config.provider_id,
-        model: config.model,
-        tools: this.buildToolsConfig(config),
-        permission: config.permission,
-        agent: config.agent,
-        custom_agent: config.custom_agent,
-        workspace: config.workspace,
-        format: config.format,
-        variant: config.variant,
+        ...this.historyAffectingInputs(config),
       },
     );
 
@@ -1284,6 +1456,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     let ephemeralSession: OpenCodeSessionHandle | undefined;
+    let abortListener: (() => void) | undefined;
 
     try {
       await this.ensureClient(config);
@@ -1304,8 +1477,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
         throw new Error('OpenCode SDK client is not initialized');
       }
 
+      // If the caller's abortSignal fires mid-prompt, ask the server to stop
+      // rather than letting it run to completion while we discard the result.
+      // session.abort is only on v2; v1 has no abort primitive, so we still
+      // honor cancellation locally via the response check below.
+      const abortSignal = callOptions?.abortSignal;
+      if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
+        const abortParams = this.buildAbortSessionParameters(
+          session.sessionId,
+          session.sessionQuery,
+        );
+        abortListener = () => {
+          client.session.abort?.(abortParams).catch((err) => {
+            logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
+          });
+        };
+        abortSignal.addEventListener('abort', abortListener, { once: true });
+      }
+
       const response = await client.session.prompt(promptOptions);
       logger.debug(`OpenCode SDK response received`);
+
+      if (abortSignal?.aborted) {
+        return { error: 'OpenCode SDK call aborted' };
+      }
 
       const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
 
@@ -1316,6 +1511,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } catch (error) {
       return this.handleCallError(error, callOptions);
     } finally {
+      if (abortListener && callOptions?.abortSignal) {
+        callOptions.abortSignal.removeEventListener('abort', abortListener);
+      }
       if (ephemeralSession) {
         try {
           await this.deleteSession(ephemeralSession);
@@ -1326,7 +1524,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       // Clean up temp directory
       if (isTempDir && workingDir) {
-        fs.rmSync(workingDir, { recursive: true, force: true });
+        await fsPromises.rm(workingDir, { recursive: true, force: true });
       }
     }
   }

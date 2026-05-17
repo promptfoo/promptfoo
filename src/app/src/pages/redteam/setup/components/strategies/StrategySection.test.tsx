@@ -1,8 +1,30 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 
 import type { StrategyCardData } from './types';
+
+type StrategyItemMockProps = {
+  strategy: StrategyCardData;
+  isSelected: boolean;
+  onConfigClick: (strategyId: StrategyCardData['id']) => void;
+};
+
+vi.mock('./StrategyItem', () => ({
+  StrategyItem: vi
+    .fn()
+    .mockImplementation(({ strategy, isSelected, onConfigClick }: StrategyItemMockProps) => (
+      <div>
+        {isSelected && strategy.id === 'multilingual' && (
+          <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
+            Settings
+          </button>
+        )}
+        {strategy.name}
+      </div>
+    )),
+}));
 
 describe('StrategySection', () => {
   const mockOnToggle = vi.fn();
@@ -34,6 +56,12 @@ describe('StrategySection', () => {
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();
+      expect(screen.getByText('Test Section').parentElement?.parentElement).toHaveClass(
+        'flex-col',
+        'items-start',
+        'sm:flex-row',
+        'sm:items-center',
+      );
     });
 
     it('renders section description when provided', () => {
@@ -103,7 +131,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      expect(screen.getByText('Reset')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /reset/i })).toBeInTheDocument();
     });
 
     it('disables Reset button when no strategies are selected', () => {
@@ -120,7 +148,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
+      const resetButton = screen.getByRole('button', { name: /reset/i });
       expect(resetButton).toBeDisabled();
     });
 
@@ -138,11 +166,13 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
+      const resetButton = screen.getByRole('button', { name: /reset/i });
       expect(resetButton).not.toBeDisabled();
     });
 
-    it('calls onSelectNone with selected strategy IDs when Reset is clicked', () => {
+    it('calls onSelectNone with selected strategy IDs when Reset is clicked', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
           isStrategyDisabled={() => false}
@@ -156,13 +186,15 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
 
-    it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', () => {
+    it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
           isStrategyDisabled={() => false}
@@ -175,15 +207,17 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnToggle).toHaveBeenCalledTimes(2);
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
       expect(mockOnToggle).toHaveBeenCalledWith('multilingual');
     });
 
-    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', () => {
+    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
           isStrategyDisabled={() => false}
@@ -197,8 +231,8 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
@@ -217,7 +251,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.queryByText('Reset');
+      const resetButton = screen.queryByRole('button', { name: /reset/i });
 
       expect(resetButton).toBeNull();
       expect(mockOnSelectNone).not.toHaveBeenCalled();
@@ -305,22 +339,6 @@ describe('StrategySection', () => {
   });
 
   describe('Configurable strategies', () => {
-    beforeEach(() => {
-      vi.mock('./StrategyItem', () => ({
-        StrategyItem: vi.fn().mockImplementation(({ strategy, isSelected, onConfigClick }) => (
-          <div>
-            {isSelected && strategy.id === 'multilingual' && (
-              <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
-                Settings
-              </button>
-            )}
-            {strategy.name}
-          </div>
-        )),
-        CONFIGURABLE_STRATEGIES: ['multilingual'],
-      }));
-    });
-
     it('renders config button when strategy is selected and configurable', () => {
       const configurableStrategyId = 'multilingual';
       const configurableStrategy: StrategyCardData = {
@@ -341,7 +359,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const configButton = screen.getByLabelText('settings');
+      const configButton = screen.getByRole('button', { name: /settings/i });
       expect(configButton).toBeInTheDocument();
     });
   });

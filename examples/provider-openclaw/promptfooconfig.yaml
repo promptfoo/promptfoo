@@ -24,6 +24,11 @@ tests:
 # Responses API (disabled by default upstream; enable gateway.http.endpoints.responses.enabled=true):
 #  - openclaw:responses:main
 #
+# Embeddings API:
+#  - id: openclaw:embedding:main
+#    config:
+#      backend_model: openai/text-embedding-3-small
+#
 # WebSocket Agent (native WS RPC protocol):
 #  - id: openclaw:agent:main
 #    config:

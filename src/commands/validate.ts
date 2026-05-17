@@ -7,7 +7,11 @@ import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { isUuid } from '../util/uuid';
@@ -16,6 +20,9 @@ import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
 import type { ApiProvider } from '../types/providers';
+
+const VALIDATE_FAILURE_PREFIX = 'Failed to validate configuration: ';
+const LOAD_FAILURE_PREFIX = 'Failed to load configuration: ';
 
 interface ValidateOptions {
   config?: string[];
@@ -435,7 +442,11 @@ ${z.prettifyError(configParse.error)}`,
     }
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {
-    logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
+    if (err instanceof ConfigResolutionError) {
+      logConfigResolutionError(err, VALIDATE_FAILURE_PREFIX);
+    } else {
+      logger.error(`${VALIDATE_FAILURE_PREFIX}${err instanceof Error ? err.message : err}`);
+    }
     process.exitCode = 1;
   }
 }
@@ -470,11 +481,13 @@ export async function doValidateTarget(
       );
       await runProviderTests(undefined, config as UnifiedConfig);
     } catch (err) {
-      logger.error(
-        chalk.red(
-          `Failed to load configuration: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+      if (err instanceof ConfigResolutionError) {
+        logConfigResolutionError(err, LOAD_FAILURE_PREFIX);
+      } else {
+        logger.error(
+          chalk.red(`${LOAD_FAILURE_PREFIX}${err instanceof Error ? err.message : String(err)}`),
+        );
+      }
       process.exitCode = 1;
     }
   } else if (opts.target) {

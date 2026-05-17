@@ -1,12 +1,32 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { calculateOpenAIUsageCost } from './billing';
 import { getTokenUsage } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type { ProviderEmbeddingResponse } from '../../types/index';
+import type { OpenAiSharedOptions } from './types';
+
+type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
+  passthrough?: object;
+};
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  declare config: OpenAiEmbeddingOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiEmbeddingOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+  }
+
+  protected getBillingModelName(): string {
+    return this.modelName;
+  }
+
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
@@ -25,6 +45,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     const body = {
       input: text,
       model: this.modelName,
+      ...(this.config.passthrough || {}),
     };
 
     let data: any;
@@ -34,19 +55,20 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     let cached = false;
     let latencyMs: number | undefined;
     try {
+      const apiKey = this.getApiKey();
       const response = await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         false,
         this.config.maxRetries,
@@ -78,6 +100,9 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         embedding,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
+        cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
+          cachedResponse: cached,
+        }),
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);

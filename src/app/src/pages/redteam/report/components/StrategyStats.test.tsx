@@ -1,6 +1,6 @@
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyStats from './StrategyStats';
@@ -104,8 +104,9 @@ describe('StrategyStats', () => {
   });
 
   const openStrategyDrawer = async (strategyId: string) => {
+    const user = userEvent.setup();
     const button = screen.getByLabelText(`View details for ${strategyId} attack method`);
-    fireEvent.click(button);
+    await user.click(button);
     // Wait for the sheet/dialog to appear by looking for key content elements
     // The drawer shows strategy stats and a title
     await waitFor(() => {
@@ -154,7 +155,23 @@ describe('StrategyStats', () => {
       expect(totalAttemptsValue).toBeInTheDocument();
     });
 
-    it('should display the correct total attempts, flagged attempts, and success rate for the selected strategy in the drawer', async () => {
+    it('keeps the strategy cards within the mobile content width', () => {
+      const { container } = render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      expect(container.querySelector('.grid')).toHaveClass(
+        'grid-cols-1',
+        'sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]',
+      );
+    });
+
+    it('should display the correct total attempts, flagged attempts, and attack success rate for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -170,10 +187,47 @@ describe('StrategyStats', () => {
       // Check for the stats in the drawer - use more specific queries
       expect(screen.getByText('Total Attempts')).toBeInTheDocument();
       expect(screen.getByText('Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('Success Rate')).toBeInTheDocument();
+      expect(screen.getAllByText('Attack Success Rate').length).toBeGreaterThan(0);
       const percentages80 = screen.getAllByText('80.00%');
       expect(percentages80.length).toBeGreaterThan(0);
     });
+
+    it('keeps the strategy drawer full width on mobile while preserving the desktop width', async () => {
+      render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      const drawer = await openStrategyDrawer('prompt-injection');
+
+      expect(drawer).toHaveClass('w-full', 'sm:w-[750px]', 'sm:max-w-[750px]');
+      expect(drawer).not.toHaveClass('w-[750px]');
+    });
+
+    it('lets the drawer tabs wrap cleanly on narrow screens', async () => {
+      render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      await openStrategyDrawer('prompt-injection');
+
+      const flaggedTab = screen.getByRole('tab', { name: /Flagged Attempts/ });
+      const successfulTab = screen.getByRole('tab', { name: /Successful Attacks/ });
+
+      expect(flaggedTab.parentElement).toHaveClass('h-auto');
+      expect(flaggedTab).toHaveClass('whitespace-normal', 'text-xs', 'sm:text-sm');
+      expect(successfulTab).toHaveClass('whitespace-normal', 'text-xs', 'sm:text-sm');
+    });
+
     it('should display a table of plugin performance for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
@@ -189,11 +243,15 @@ describe('StrategyStats', () => {
 
       const table = await screen.findByRole('table');
       expect(table).toBeInTheDocument();
+      expect(table.parentElement).toHaveClass('overflow-hidden');
 
       expect(screen.getByText('Plugin')).toBeInTheDocument();
-      expect(screen.getByText('Attack Success Rate')).toBeInTheDocument();
-      expect(screen.getByText('# Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('# Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('Attack Success Rate')).toBeInTheDocument();
+      expect(within(table).getByText('# Flagged Attempts')).toHaveClass('hidden', 'sm:table-cell');
+      expect(within(table).getByText('# Attempts')).toHaveClass('hidden', 'sm:table-cell');
+      const mobileCountSummaries = within(table).getAllByText('4 flagged / 5 attempts');
+      expect(mobileCountSummaries).toHaveLength(2);
+      mobileCountSummaries.forEach((summary) => expect(summary).toHaveClass('sm:hidden'));
 
       const pluginAStats = {
         plugin: 'plugin-A',
@@ -233,6 +291,7 @@ describe('StrategyStats', () => {
     });
 
     it('should handle keyboard navigation with Enter or Space key', async () => {
+      const user = userEvent.setup();
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -246,8 +305,7 @@ describe('StrategyStats', () => {
         'View details for prompt-injection attack method',
       );
       promptInjectionButton.focus();
-
-      fireEvent.keyDown(promptInjectionButton, { key: 'Enter', code: 'Enter' });
+      await user.keyboard('{Enter}');
 
       // Wait for the sheet/dialog to appear
       await waitFor(() => {
@@ -472,6 +530,7 @@ describe('StrategyStats', () => {
   });
 
   it('should handle a strategy with statistics but no examples in failuresByPlugin or passesByPlugin', async () => {
+    const user = userEvent.setup();
     const strategyStatsWithNoExamples = {
       'no-examples': { pass: 3, total: 7, failCount: 4 },
     };
@@ -486,7 +545,7 @@ describe('StrategyStats', () => {
     );
 
     const noExamplesButton = screen.getByLabelText('View details for no-examples attack method');
-    fireEvent.click(noExamplesButton);
+    await user.click(noExamplesButton);
 
     // Wait for the sheet/dialog to appear
     await waitFor(() => {

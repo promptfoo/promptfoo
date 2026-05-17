@@ -28,4 +28,22 @@ describe('CodeEditor', () => {
     );
     expect(screen.getByTestId('editor')).toHaveTextContent('unwrapped');
   });
+
+  it('unwraps Vite-shaped nested default exports', async () => {
+    const MockEditor = ({ value }: { value: string }) => <div data-testid="editor">{value}</div>;
+
+    vi.doMock('react-simple-code-editor', () => ({
+      default: {
+        default: {
+          default: MockEditor,
+        },
+      },
+    }));
+
+    const { default: CodeEditor } = await import('./code-editor');
+    render(
+      <CodeEditor value="vite-wrapped" onValueChange={vi.fn()} highlight={(v) => v} padding={0} />,
+    );
+    expect(screen.getByTestId('editor')).toHaveTextContent('vite-wrapped');
+  });
 });

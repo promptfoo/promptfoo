@@ -121,17 +121,17 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider             | Models                                                                                                                                                                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Anthropic Claude** | `claude-opus-4-6-20260205` (Claude Opus 4.6), `claude-sonnet-4-6` (Claude Sonnet 4.6), `claude-opus-4-5-20251101` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` |
-| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                |
-| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                        |
-| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                             |
-| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                        |
-| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                        |
-| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                       |
-| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                    |
-| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                           |
+| Provider             | Models                                                                                                                                                                                                                                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                        |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                     |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                               |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                            |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                   |
 
 For the complete list of 200+ models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
@@ -697,23 +697,24 @@ These properties can be set under the provider `config` key:
 
 ### OpenAI Configuration
 
-| Name                  | Description                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                   |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models** |
-| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                           |
-| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                               |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                              |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                             |
-| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                         |
-| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                            |
-| best_of               | Generates multiple outputs and returns the best                                                                             |
-| functions             | Array of functions available for the model to call                                                                          |
-| function_call         | Controls how the model calls functions                                                                                      |
-| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                   |
-| stop                  | Array of sequences where the model will stop generating                                                                     |
-| passthrough           | Additional parameters to send with the request                                                                              |
+| Name                  | Description                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
+| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
+| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
+| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
+| best_of               | Generates multiple outputs and returns the best                                                                                                 |
+| functions             | Array of functions available for the model to call                                                                                              |
+| function_call         | Controls how the model calls functions                                                                                                          |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                       |
+| stop                  | Array of sequences where the model will stop generating                                                                                         |
+| passthrough           | Additional parameters to send with the request                                                                                                  |
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
@@ -735,7 +736,7 @@ providers:
       isReasoningModel: true
       # Use max_completion_tokens instead of max_tokens
       max_completion_tokens: 25000
-      # Optional: Set reasoning effort (default is 'medium')
+      # Optional: Set reasoning effort (default is 'medium' unless omitDefaults is true)
       reasoning_effort: 'medium'
 
 # For completion endpoints
@@ -845,28 +846,50 @@ See the [Azure OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/
 
 ## Using Claude Models
 
-Azure AI Foundry provides access to Anthropic Claude models. These models use the standard Azure chat endpoint:
+Azure AI Foundry exposes Claude through two endpoint families. Pick the one that matches how you want to manage the model.
+
+### Option 1 (recommended): Anthropic Messages endpoint
+
+Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic Opus 4.7 `temperature` suppression, and consistent pricing across Anthropic/Bedrock/Vertex:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: azure:chat:claude-opus-4-6-20260205
+  - id: anthropic:messages:claude-opus-4-7
+    config:
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+```
+
+Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseUrl` to the `https://…/anthropic` prefix shown above.
+
+### Option 2: Azure OpenAI-compatible chat endpoint
+
+The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:claude-opus-4-7
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 4096
-      temperature: 0.7
 ```
 
-Available Claude models on Azure:
+Opus 4.7 deployments automatically omit `temperature` from the request body on this path too.
 
-| Model                        | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `claude-opus-4-6-20260205`   | Claude Opus 4.6 - Most capable model     |
-| `claude-sonnet-4-6`          | Claude Sonnet 4.6 - Balanced performance |
-| `claude-opus-4-5-20251101`   | Claude Opus 4.5                          |
-| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced performance |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                        |
-| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast, efficient       |
+Available Claude deployments on Azure AI Foundry:
+
+| Model                        | Description       |
+| ---------------------------- | ----------------- |
+| `claude-opus-4-7`            | Claude Opus 4.7   |
+| `claude-opus-4-6-20260205`   | Claude Opus 4.6   |
+| `claude-sonnet-4-6`          | Claude Sonnet 4.6 |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5   |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-haiku-4-5-20251001`  | Claude Haiku 4.5  |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku  |
 
 ### Claude Configuration Example
 
@@ -874,13 +897,13 @@ Available Claude models on Azure:
 description: Azure Claude evaluation
 
 providers:
-  - id: azure:chat:claude-sonnet-4-5-20250929
-    label: claude-sonnet
+  - id: anthropic:messages:claude-opus-4-7
+    label: claude-opus-4-7
     config:
-      apiHost: 'your-deployment.services.ai.azure.com'
-      apiVersion: '2025-04-01-preview'
-      max_tokens: 4096
-      temperature: 0.7
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+      effort: xhigh
 
 prompts:
   - 'Explain {{concept}} in simple terms.'
@@ -1068,13 +1091,13 @@ Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the 
 
 ### Key Differences from Standard Azure Assistants
 
-| Feature             | Azure Assistant                              | Azure Foundry Agent                                                             |
-| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime      |
-| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)   |
-| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                 |
-| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                        |
-| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent: { name, type: "agent_reference" } } })` |
+| Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
+| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime                |
+| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)             |
+| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                           |
+| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                                  |
+| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent_reference: { name, type: "agent_reference" } } })` |
 
 ### Setup
 
@@ -1256,7 +1279,8 @@ tests:
 The Azure Foundry Agent provider includes comprehensive error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
-- **Rate Limit Handling**: Identifies rate limit errors for proper retry handling
+- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
+- **Hard-Quota Fail-Fast**: Billing and contract-level codes (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `access_terminated`, `quota_exceeded`) skip retries entirely — retrying these only amplifies load against an exhausted account. The error message is `Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.` If the server also sets a small `Retry-After` (≤ 1h), the error is treated as a recoverable rate limit instead, since billing servers do not hint at recovery time.
 - **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
 - **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`
 

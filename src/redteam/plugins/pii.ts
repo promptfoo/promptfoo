@@ -3,12 +3,13 @@ import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   extractAllPromptsFromTags,
+  extractMaterializedVariablesFromJsonWithMetadata,
   extractPromptFromTags,
-  extractVariablesFromJson,
 } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 import type { PII_PLUGINS } from '../constants';
 
 const PLUGIN_ID = 'promptfoo:redteam:pii';
@@ -17,12 +18,21 @@ const PLUGIN_ID = 'promptfoo:redteam:pii';
  * Extract content from <Prompt> tags and parse JSON if inputs are defined.
  * Returns the processed prompt and any additional vars extracted from JSON.
  */
-function processPromptForInputs(
+async function processPromptForInputs(
   prompt: string,
-  inputs: Record<string, string> | undefined,
-): { processedPrompt: string; additionalVars: Record<string, string> } {
+  inputs: Inputs | undefined,
+  provider: PluginActionParams['provider'],
+  purpose: string,
+  pluginId: string,
+  materializationIndex: number,
+): Promise<{
+  additionalMetadata?: Record<string, unknown>;
+  additionalVars: Record<string, string>;
+  processedPrompt: string;
+}> {
   let processedPrompt = prompt.trim();
   const additionalVars: Record<string, string> = {};
+  let additionalMetadata: Record<string, unknown> | undefined;
 
   // Extract content from <Prompt> tags if present
   const extractedPrompt = extractPromptFromTags(processedPrompt);
@@ -34,14 +44,25 @@ function processPromptForInputs(
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(processedPrompt);
-      Object.assign(additionalVars, extractVariablesFromJson(parsed, inputs));
+      const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
+        parsed,
+        inputs,
+        {
+          materializationIndex,
+          pluginId,
+          provider,
+          purpose,
+        },
+      );
+      Object.assign(additionalVars, materializedVars.vars);
+      additionalMetadata = materializedVars.metadata;
     } catch {
       // If parsing fails, processedPrompt is plain text - keep it as is
       logger.debug('[PII] Could not parse prompt as JSON for multi-input mode');
     }
   }
 
-  return { processedPrompt, additionalVars };
+  return { processedPrompt, additionalVars, additionalMetadata };
 }
 
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
@@ -209,7 +230,7 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
-  const inputs = config?.inputs as Record<string, string> | undefined;
+  const inputs = config?.inputs as Inputs | undefined;
   const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
 
   let prompts: string[];
@@ -227,24 +248,40 @@ export async function getPiiLeakTestsForCategory(
       .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
   }
 
-  return prompts.map((prompt) => {
-    const { processedPrompt, additionalVars } = processPromptForInputs(prompt, inputs);
+  return Promise.all(
+    prompts.map(async (prompt, materializationIndex) => {
+      const { processedPrompt, additionalVars, additionalMetadata } = await processPromptForInputs(
+        prompt,
+        inputs,
+        provider,
+        purpose,
+        categoryKey,
+        materializationIndex,
+      );
 
-    const vars: Record<string, string> = {
-      [injectVar]: processedPrompt,
-      ...additionalVars,
-    };
+      const vars: Record<string, string> = {
+        [injectVar]: processedPrompt,
+        ...additionalVars,
+      };
 
-    return {
-      vars,
-      assert: [
-        {
-          type: PLUGIN_ID,
-          metric: 'PIILeak',
-        },
-      ],
-    };
-  });
+      return {
+        vars,
+        assert: [
+          {
+            type: PLUGIN_ID,
+            metric: 'PIILeak',
+          },
+        ],
+        ...(additionalMetadata
+          ? {
+              metadata: {
+                inputMaterialization: additionalMetadata,
+              },
+            }
+          : {}),
+      };
+    }),
+  );
 }
 
 export class PiiGrader extends RedteamGraderBase {

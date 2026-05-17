@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
@@ -8,21 +8,20 @@ import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
+import { matchesClassification } from '../matchers/classification';
+import { matchesSelectBest } from '../matchers/comparison';
+import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
-  matchesClassification,
-  matchesClosedQa,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesFactuality,
-  matchesLlmRubric,
-  matchesModeration,
-  matchesSelectBest,
-  matchesSimilarity,
-} from '../matchers';
+} from '../matchers/rag';
+import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -163,6 +162,10 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
+  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+    return true;
+  }
+
   return typeof assertion.value === 'string'
     ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
     : false;
@@ -195,7 +198,7 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   let latestTrace: TraceData | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    latestTrace = await traceStore.getTrace(traceId);
+    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
 
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {
@@ -359,6 +362,44 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+/**
+ * Execute a single assertion against provider output.
+ *
+ * This is a core API for programmatic assertion execution. Use this when:
+ * - Running assertions independently outside of the main evaluate() flow
+ * - Implementing custom evaluation pipelines
+ * - Testing specific provider outputs
+ * - Building custom grading systems
+ *
+ * @param params Configuration for assertion execution
+ * @param params.prompt The prompt that was sent to the provider (optional, for context)
+ * @param params.provider The API provider instance (optional, for context in assertions)
+ * @param params.assertion The assertion to run (e.g., `{ type: 'contains', value: 'expected' }`)
+ * @param params.test The test case context containing variables and configuration
+ * @param params.vars Template variables from the test (overrides test.vars if provided)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.latencyMs Provider response latency in milliseconds (optional)
+ * @param params.traceId Distributed trace ID for debugging (optional)
+ * @param params.traceData Trace spans with timing information (optional)
+ *
+ * @returns GradingResult with pass/fail status, score, and reason
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: '4' },
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`Pass: ${result.pass}, Score: ${result.score}`);
+ * ```
+ *
+ * @see runAssertions for batch assertion execution
+ * @see evaluate for full evaluation pipeline
+ */
 export async function runAssertion({
   prompt,
   provider,
@@ -569,6 +610,11 @@ export async function runAssertion({
       }
     : undefined;
 
+  const finalTest = getFinalTest(
+    vars === undefined ? test : { ...test, vars: resolvedVars },
+    assertion,
+  );
+
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
@@ -584,7 +630,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     renderedValue,
-    test: getFinalTest(test, assertion),
+    test: finalTest,
     valueFromScript,
   };
 
@@ -622,6 +668,53 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
+/**
+ * Execute multiple assertions in batch against provider output.
+ *
+ * This function runs all assertions defined in a test case and returns aggregated results.
+ * It handles:
+ * - Multiple assertion types (contains, regex, LLM-graded, etc.)
+ * - Nested assertion-sets with logical operators
+ * - Custom scoring functions
+ * - Combined pass/fail and scoring logic
+ *
+ * @param params Configuration for batch assertion execution
+ * @param params.assertScoringFunction Custom scoring function (optional)
+ * @param params.latencyMs Provider response latency in milliseconds
+ * @param params.prompt The prompt that was sent to the provider (optional)
+ * @param params.provider The API provider instance (optional)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.test The test case with assertions to run
+ * @param params.vars Template variables (overrides test.vars if provided)
+ * @param params.traceId Distributed trace ID (optional)
+ *
+ * @returns GradingResult aggregating all assertion results. The returned result
+ *          includes `componentResults` and `namedScores` rather than a nested
+ *          `results` array.
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertions({
+ *   assertions: [
+ *     { type: 'contains', value: '4' },
+ *     { type: 'regex', value: '^The answer is' }
+ *   ],
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`All passed: ${result.pass}`);
+ * console.log(`Average score: ${result.score}`);
+ * result.componentResults.forEach((r) => {
+ *   console.log(`  ${r.assertion?.type}: ${r.pass ? '✓' : '✗'} (${r.score})`);
+ * });
+ * ```
+ *
+ * @see runAssertion for single assertion execution
+ * @see evaluate for full evaluation pipeline
+ */
 export async function runAssertions({
   assertScoringFunction,
   latencyMs,
@@ -691,36 +784,38 @@ export async function runAssertions({
     }
   }
 
-  await async.forEachOfLimit(
-    asserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
+  // Serialize when the grouping queue is active: concurrent dispatch can
+  // reorder provider enqueues and split same-judge groups.
+  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
+    ? 1
+    : ASSERTIONS_MAX_CONCURRENCY;
 
-      const result = await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertion,
-        test,
-        vars,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-        traceData: preloadedTraceData,
-      });
+  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
 
-      assertResult.addResult({
-        index,
-        result,
-        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-        weight: assertion.weight,
-      });
-    },
-  );
+    const result = await runAssertion({
+      prompt,
+      provider,
+      providerResponse,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+    });
+
+    assertResult.addResult({
+      index,
+      result,
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      weight: assertion.weight,
+    });
+  });
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -763,7 +858,7 @@ export async function runCompareAssertion(
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(fs.readFileSync(filePath, 'utf-8')) as Assertion[];
+    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }
