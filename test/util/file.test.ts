@@ -13,6 +13,7 @@ import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
+  pathExists,
   readFilters,
   readOutput,
 } from '../../src/util/file';
@@ -38,6 +39,14 @@ vi.mock('fs', async () => {
     readdirSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
+  };
+});
+
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actual,
+    access: vi.fn(actual.access),
   };
 });
 
@@ -1820,6 +1829,50 @@ describe('file utilities', () => {
         isPathPattern: false,
         filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
       });
+    });
+  });
+
+  describe('pathExists', () => {
+    let tmpRoot: string;
+
+    beforeEach(async () => {
+      const fsp = await import('fs/promises');
+      tmpRoot = await fsp.mkdtemp(path.join((await import('os')).tmpdir(), 'pf-pathExists-'));
+    });
+
+    afterEach(async () => {
+      const fsp = await import('fs/promises');
+      await fsp.rm(tmpRoot, { recursive: true, force: true });
+    });
+
+    it('returns true for an existing file', async () => {
+      const fsp = await import('fs/promises');
+      const target = path.join(tmpRoot, 'present.txt');
+      await fsp.writeFile(target, 'hi');
+      await expect(pathExists(target)).resolves.toBe(true);
+    });
+
+    it('returns true for an existing directory', async () => {
+      await expect(pathExists(tmpRoot)).resolves.toBe(true);
+    });
+
+    it('returns false for a missing path', async () => {
+      await expect(pathExists(path.join(tmpRoot, 'missing.txt'))).resolves.toBe(false);
+    });
+
+    it('returns false when an intermediate component is not a directory (ENOTDIR)', async () => {
+      const fsp = await import('fs/promises');
+      const file = path.join(tmpRoot, 'a.txt');
+      await fsp.writeFile(file, 'x');
+      await expect(pathExists(path.join(file, 'nested'))).resolves.toBe(false);
+    });
+
+    it('rethrows access errors other than missing paths', async () => {
+      const fsp = await import('fs/promises');
+      const accessError = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      vi.mocked(fsp.access).mockRejectedValueOnce(accessError);
+
+      await expect(pathExists(path.join(tmpRoot, 'locked.txt'))).rejects.toBe(accessError);
     });
   });
 });

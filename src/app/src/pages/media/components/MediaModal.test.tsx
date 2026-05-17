@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { mockMatchMedia } from '@app/tests/browserMocks';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -96,6 +96,17 @@ describe('MediaModal', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
+    it('keeps the modal layout shrinkable on narrow screens', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(screen.getByRole('dialog').lastElementChild).toHaveClass('min-w-0', 'w-full');
+      expect(screen.getByTestId('media-modal-details-panel')).toHaveClass(
+        'min-h-0',
+        'overflow-hidden',
+      );
+    });
+
     it('renders image preview for image kind', () => {
       const item = createMockItem({ kind: 'image' });
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
@@ -116,6 +127,40 @@ describe('MediaModal', () => {
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 
       expect(screen.getByText('Preview not available')).toBeInTheDocument();
+    });
+
+    it('keeps the compact footer download button named', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(
+        within(screen.getByTestId('media-modal-desktop-actions')).getByRole('button', {
+          name: 'Download',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('keeps the compact modal actions touch-sized', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      const mobileActions = screen.getByTestId('media-modal-mobile-actions');
+      const desktopActions = screen.getByTestId('media-modal-desktop-actions');
+
+      expect(screen.getByRole('button', { name: 'Close' })).toHaveClass('h-11', 'w-11');
+      expect(within(mobileActions).getByRole('button', { name: 'Download' })).toHaveClass('h-11');
+      expect(within(mobileActions).getByRole('button', { name: 'Copy permalink' })).toHaveClass(
+        'h-11',
+        'w-11',
+      );
+      expect(within(desktopActions).getByRole('button', { name: 'Download' })).toHaveClass(
+        '[@media(hover:none)]:h-11',
+      );
+      expect(within(desktopActions).getByRole('button', { name: 'Copy permalink' })).toHaveClass(
+        '[@media(hover:none)]:h-11',
+        '[@media(hover:none)]:w-11',
+      );
+      expect(desktopActions).toHaveClass('hidden', 'md:flex', 'shrink-0');
     });
   });
 
