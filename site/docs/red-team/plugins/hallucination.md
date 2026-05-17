@@ -5,7 +5,7 @@ description: Red team LLM hallucination vulnerabilities by testing fabrication t
 
 # Hallucination Plugin
 
-Use the Hallucination plugin to test whether a model fabricates specifics when a prompt sounds ordinary but asks for information that is unlikely, unverifiable, or false. It targets overconfident answers, not every factual mistake.
+Use the Hallucination plugin to test whether a model produces materially misleading false, unsupported, or fabricated claims when a prompt sounds ordinary but asks for information that is unlikely, unverifiable, or false.
 
 ## Purpose
 

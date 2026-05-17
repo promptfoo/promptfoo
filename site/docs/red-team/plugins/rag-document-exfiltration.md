@@ -59,6 +59,6 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Document exfiltration testing matters when retrieval quality and disclosure limits pull in opposite directions. This plugin checks whether the system summarizes or answers within scope instead of dumping the underlying source material.
+Document exfiltration testing matters when retrieval quality and disclosure limits pull in opposite directions. This plugin checks whether the system stays within authorized disclosure limits instead of revealing sensitive document content, whether verbatim or summarized.
 
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
