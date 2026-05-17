@@ -17,7 +17,7 @@ Install the OpenAI Codex SDK:
 npm install @openai/codex-sdk
 ```
 
-**Requirements**: Node.js 20.20+ or 22.22+
+**Requirements**: Node.js `^20.20.0` or `>=22.22.0`
 
 Authenticate with Codex using one of these options:
 
