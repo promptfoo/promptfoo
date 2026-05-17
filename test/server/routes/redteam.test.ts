@@ -11,9 +11,10 @@ vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
 
 // Import after mocking
+import logger from '../../../src/logger';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import {
   extractGeneratedPrompt,
@@ -27,15 +28,20 @@ const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError)
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
+const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+const debugSpy = vi.spyOn(logger, 'debug');
 
 describe('Redteam Routes', () => {
-  describe('POST /redteam/generate-test', () => {
-    let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof createApp>;
 
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  describe('POST /redteam/generate-test', () => {
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
 
       // Default mock implementations
       mockedGetPluginConfigurationError.mockReturnValue(null);
@@ -76,6 +82,36 @@ describe('Redteam Routes', () => {
         expect(response.status).toBe(200);
         // Should have called the plugin factory action (not excluded)
         expect(mockPluginFactory.action).toHaveBeenCalled();
+        expect(response.body.prompt).toBe('generated test prompt');
+      });
+
+      it('should default missing application purpose for generated tests', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'aegis',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {},
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockPluginFactory.action).toHaveBeenCalledWith(
+          expect.objectContaining({ purpose: 'general AI assistant' }),
+        );
         expect(response.body.prompt).toBe('generated test prompt');
       });
 
@@ -317,6 +353,48 @@ describe('Redteam Routes', () => {
         expect(mockPluginFactory.action).toHaveBeenCalled();
         expect(response.body.prompt).toBe('generated test prompt');
       });
+
+      it('should preserve HarmBench category filters when generating preview tests', async () => {
+        const mockPluginFactory = {
+          key: 'harmbench',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test case' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmbench',
+              config: {
+                categories: ['misinformation'],
+                functionalCategories: ['contextual'],
+              },
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockPluginFactory.action).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              categories: ['misinformation'],
+              functionalCategories: ['contextual'],
+              language: 'en',
+              __nonce: expect.any(Number),
+            }),
+          }),
+        );
+        expect(response.body.prompt).toBe('generated test prompt');
+      });
     });
 
     afterEach(() => {
@@ -400,11 +478,8 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/run', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
     });
 
@@ -519,11 +594,9 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/:taskId', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
+      debugSpy.mockClear();
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
     });
 
@@ -546,6 +619,45 @@ describe('Redteam Routes', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ data: 'test', task: 'my-task' }),
+        }),
+      );
+    });
+
+    it('should not proxy task bodies when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Requires remote generation be enabled.',
+      });
+      expect(mockedGetRemoteGenerationUrl).not.toHaveBeenCalled();
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should log task metadata without stringifying the body', async () => {
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ result: 'success' }),
+      } as any);
+
+      const response = await request(app).post('/api/redteam/my-task').send({
+        data: 'test',
+        secret: 'value',
+      });
+
+      expect(response.status).toBe(200);
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Received my-task task request',
+        expect.objectContaining({
+          method: 'POST',
+          url: '/my-task',
+          body: expect.objectContaining({
+            data: 'test',
+            secret: '[REDACTED]',
+          }),
         }),
       );
     });
@@ -585,11 +697,8 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/cancel', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -605,11 +714,8 @@ describe('Redteam Routes', () => {
   });
 
   describe('GET /redteam/status', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {

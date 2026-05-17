@@ -239,10 +239,8 @@ export default function ChecksSection({
               { id: 'severity', desc: true },
               { id: 'status', desc: true },
             ]}
-            initialPageSize={25}
             emptyMessage={showPassed ? 'No checks to display' : 'All checks passed'}
             showToolbar={false}
-            showPagination
           />
         </>
       )}

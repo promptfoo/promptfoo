@@ -17,6 +17,7 @@ vi.mock('../../../src/commands/modelScan', () => ({
 // Import after mocking
 import { checkModelAuditInstalled } from '../../../src/commands/modelScan';
 import { getDb } from '../../../src/database/index';
+import { modelAuditsTable } from '../../../src/database/tables';
 import { runDbMigrations } from '../../../src/migrate';
 import ModelAudit from '../../../src/models/modelAudit';
 import {
@@ -26,6 +27,7 @@ import {
   GetScanResponseSchema,
   ListScannersResponseSchema,
   ListScansResponseSchema,
+  ModelAuditSchemas,
 } from '../../../src/types/api/modelAudit';
 
 const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
@@ -35,12 +37,11 @@ describe('Model Audit Routes', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    app = createApp();
     // Reset mock implementations to ensure test isolation when tests run in random order.
     // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
-    app = createApp();
   });
 
   describe('GET /api/model-audit/scanners', () => {
@@ -92,6 +93,61 @@ describe('Model Audit Routes', () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('ModelAudit is not installed');
       expect(mockedSpawn).not.toHaveBeenCalled();
+    });
+
+    it('should return 500 when scanner listing exits non-zero', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 2,
+            stderrData: 'scanner lookup failed',
+          }),
+        ),
+      );
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Failed to list ModelAudit scanners');
+    });
+
+    it('should return 500 when scanner listing terminates via signal', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            customEventHandlers: {
+              close: (callback) => setImmediate(() => callback(null, 'SIGTERM')),
+            },
+          }),
+        ),
+      );
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Failed to list ModelAudit scanners');
+    });
+
+    it('should return 500 when scanner output is invalid JSON', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: 'not json',
+          }),
+        ),
+      );
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Failed to list ModelAudit scanners');
     });
   });
 
@@ -173,6 +229,49 @@ describe('Model Audit Routes', () => {
       expect(response.body).toHaveProperty('total_checks', 5);
     });
 
+    it('should accept timeout 0 from the UI and apply the route default', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-zero-timeout.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { timeout: 0 } });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('total_checks', 1);
+        expect(mockedSpawn).toHaveBeenCalledWith(
+          'modelaudit',
+          expect.arrayContaining(['--timeout', '3600']),
+          expect.any(Object),
+        );
+      } finally {
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
     it('should pass and persist scanner selection options', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 
@@ -244,6 +343,323 @@ describe('Model Audit Routes', () => {
         );
       } finally {
         createSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should normalize maxFileSize to maxSize and reject removed maxTotalSize', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-size-alias.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+
+      try {
+        const aliasResponse = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { maxFileSize: '500MB', persist: false } });
+
+        expect(aliasResponse.status).toBe(200);
+        expect(mockedSpawn).toHaveBeenCalledWith(
+          'modelaudit',
+          expect.arrayContaining(['--max-size', '500MB']),
+          expect.any(Object),
+        );
+
+        const removedAliasResponse = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { maxTotalSize: '2GB' } });
+
+        expect(removedAliasResponse.status).toBe(400);
+        expect(removedAliasResponse.body.error).toContain('maxTotalSize is no longer supported');
+      } finally {
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should reject incomplete scanner JSON instead of persisting it as a clean scan', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-incomplete-json.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: JSON.stringify({}),
+          }),
+        ),
+      );
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(response.body.error).toContain('Failed to parse scan results');
+      } finally {
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should fail closed when the scanner process terminates via signal', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-signal.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            stdoutData: JSON.stringify({
+              total_checks: 1,
+              passed_checks: 1,
+              failed_checks: 0,
+              has_errors: false,
+              issues: [],
+              checks: [],
+            }),
+            customEventHandlers: {
+              close: (callback) => setImmediate(() => callback(null, 'SIGTERM')),
+            },
+          }),
+        ),
+      );
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(response.body.error).toContain('terminated by signal SIGTERM');
+      } finally {
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should preserve multibyte UTF-8 when scanner JSON arrives across chunks', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-utf8.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+      const output = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 0,
+        failed_checks: 1,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: true,
+        issues: [{ severity: 'critical', message: 'cafe\u0301' }],
+        checks: [{ name: 'pickle', status: 'failed', message: 'cafe\u0301' }],
+      });
+      const bytes = Buffer.from(output);
+      const accentOffset = bytes.indexOf(Buffer.from('\u0301')) + 1;
+      const splitUtf8Child = {
+        stdout: {
+          on: vi.fn().mockImplementation(function (event: string, callback: any) {
+            if (event === 'data') {
+              callback(bytes.subarray(0, accentOffset));
+              callback(bytes.subarray(accentOffset));
+            }
+            return splitUtf8Child.stdout;
+          }),
+        },
+        stderr: {
+          on: vi.fn().mockImplementation(function () {
+            return splitUtf8Child.stderr;
+          }),
+        },
+        killed: false,
+        kill: vi.fn(),
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'close') {
+            callback(1, null);
+          }
+          return splitUtf8Child;
+        }),
+      };
+      mockedSpawn.mockReturnValue(asMockChildProcess(splitUtf8Child as any));
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(200);
+        expect(response.body.issues[0].message).toBe('cafe\u0301');
+        expect(response.body.checks[0].message).toBe('cafe\u0301');
+      } finally {
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should persist scanner version and content hash for API-created scans', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-provenance.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+      const createSpy = vi.spyOn(ModelAudit, 'create').mockResolvedValue({
+        id: 'scan-provenance',
+      } as Awaited<ReturnType<typeof ModelAudit.create>>);
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: JSON.stringify({
+              total_checks: 1,
+              passed_checks: 1,
+              failed_checks: 0,
+              files_scanned: 1,
+              bytes_scanned: 9,
+              has_errors: false,
+              issues: [],
+              checks: [],
+              content_hash: 'sha256:abc123',
+            }),
+          }),
+        ),
+      );
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath] });
+
+        expect(response.status).toBe(200);
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scannerVersion: '0.2.30',
+            contentHash: 'sha256:abc123',
+          }),
+        );
+      } finally {
+        createSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should not double-respond when both error and close events fire after a parse-throw', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-double-respond.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      // Race `error` then `close` so both fire and both call into safeRespond.
+      // Under the pre-fix code, parse threw *before* `responded = true` was
+      // set, so the close emitter could re-enter safeRespond and write a
+      // second body.
+      const errorThenClose = {
+        on: vi.fn().mockImplementation(function (
+          this: object,
+          event: string,
+          callback: (...args: unknown[]) => void,
+        ) {
+          if (event === 'error') {
+            setImmediate(() => callback(new Error('boom')));
+          } else if (event === 'close') {
+            // Fire close immediately after error so both safeRespond paths race.
+            setImmediate(() => setImmediate(() => callback(1)));
+          }
+          return this;
+        }),
+      };
+
+      const mockProc = createMockChildProcess({ exitCode: 1 });
+      mockProc.on = errorThenClose.on as never;
+      mockedSpawn.mockReturnValue(asMockChildProcess(mockProc));
+
+      // Force the error-branch parse to throw on the first call. Under the
+      // post-fix code `responded` flips to `true` before parse runs, so the
+      // close emitter that fires next observes `responded === true` and
+      // returns without entering parse a second time.
+      const errorParseSpy = vi
+        .spyOn(ModelAuditSchemas.Scan.ErrorResponse, 'parse')
+        .mockImplementationOnce(() => {
+          throw new Error('forced error-branch parse failure');
+        });
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .timeout({ deadline: 1000 })
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(typeof response.body.error).toBe('string');
+        // `safeRespond` calls `Scan.ErrorResponse.parse` exactly once per
+        // *entered* invocation. If `responded` were not flipped before parse,
+        // the close emitter would re-enter and trigger a second parse call —
+        // so this single-call assertion is the proxy for "exactly one body
+        // was written to the response stream".
+        expect(errorParseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        errorParseSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should fall back to a 500 response when scan success DTO parsing fails', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-response-parse.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+      const parseSpy = vi
+        .spyOn(ModelAuditSchemas.Scan.Response, 'parse')
+        .mockImplementationOnce(() => {
+          throw new Error('bad scan response DTO');
+        });
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .timeout({ deadline: 1000 })
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ error: 'Error processing scan results' });
+        expect(parseSpy).toHaveBeenCalled();
+      } finally {
+        parseSpy.mockRestore();
         fs.unlinkSync(testFilePath);
       }
     });
@@ -357,10 +773,9 @@ describe('Model Audit Routes - DB-backed', () => {
   });
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    app = createApp();
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
-    app = createApp();
     // Clean up model_audits table
     const db = getDb();
     db.run('DELETE FROM model_audits');
@@ -370,8 +785,15 @@ describe('Model Audit Routes - DB-backed', () => {
     vi.resetAllMocks();
   });
 
-  async function createTestAudit(overrides: Partial<Parameters<typeof ModelAudit.create>[0]> = {}) {
-    return ModelAudit.create({
+  async function createTestAudit(
+    overrides: Partial<Parameters<typeof ModelAudit.create>[0]> & {
+      createdAt?: number;
+      updatedAt?: number;
+      id?: string;
+    } = {},
+  ) {
+    const { createdAt, updatedAt, id, ...createOverrides } = overrides;
+    const baseData = {
       name: 'Test Scan',
       modelPath: '/path/to/model.pkl',
       results: {
@@ -382,8 +804,26 @@ describe('Model Audit Routes - DB-backed', () => {
         issues: [],
         checks: [],
       },
-      ...overrides,
-    });
+      ...createOverrides,
+    };
+
+    if (createdAt !== undefined || updatedAt !== undefined || id !== undefined) {
+      const audit = new ModelAudit({
+        ...baseData,
+        id,
+        createdAt,
+        updatedAt,
+        checks: baseData.results.checks || null,
+        issues: baseData.results.issues || null,
+        totalChecks: baseData.results.total_checks || null,
+        passedChecks: baseData.results.passed_checks || null,
+        failedChecks: baseData.results.failed_checks || null,
+      });
+      await audit.save();
+      return audit;
+    }
+
+    return ModelAudit.create(baseData);
   }
 
   describe('POST /api/model-audit/check-path', () => {
@@ -519,6 +959,110 @@ describe('Model Audit Routes - DB-backed', () => {
       expect(response.body.scans[1].name).toBe('Zebra');
     });
 
+    it('should use scan id as a stable tie-breaker for non-unique sort fields', async () => {
+      const db = getDb();
+      const scanResults = {
+        total_checks: 5,
+        passed_checks: 5,
+        failed_checks: 0,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      };
+      db.insert(modelAuditsTable)
+        .values([
+          {
+            id: 'scan-b',
+            createdAt: 1,
+            updatedAt: 1,
+            name: 'Same name',
+            modelPath: '/path/b.pkl',
+            results: scanResults,
+            hasErrors: false,
+            totalChecks: 5,
+            passedChecks: 5,
+            failedChecks: 0,
+          },
+          {
+            id: 'scan-a',
+            createdAt: 2,
+            updatedAt: 2,
+            name: 'Same name',
+            modelPath: '/path/a.pkl',
+            results: scanResults,
+            hasErrors: false,
+            totalChecks: 5,
+            passedChecks: 5,
+            failedChecks: 0,
+          },
+        ])
+        .run();
+
+      const ascResponse = await request(app).get('/api/model-audit/scans?sort=name&order=asc');
+      const descResponse = await request(app).get('/api/model-audit/scans?sort=name&order=desc');
+
+      expect(ascResponse.status).toBe(200);
+      expect(ascResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
+        'scan-a',
+        'scan-b',
+      ]);
+      expect(descResponse.status).toBe(200);
+      expect(descResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
+        'scan-b',
+        'scan-a',
+      ]);
+    });
+
+    it('should sort by id ascending', async () => {
+      await createTestAudit({ name: 'Second scan' });
+      await createTestAudit({ name: 'First scan' });
+
+      const response = await request(app).get('/api/model-audit/scans?sort=id&order=asc');
+
+      expect(response.status).toBe(200);
+      expect(response.body.scans).toHaveLength(2);
+      expect(response.body.scans.map((scan: { id: string }) => scan.id)).toEqual(
+        [...response.body.scans.map((scan: { id: string }) => scan.id)].sort(),
+      );
+    });
+
+    it('should sort by status and check counts', async () => {
+      await createTestAudit({
+        name: 'Clean scan',
+        results: {
+          total_checks: 10,
+          passed_checks: 10,
+          failed_checks: 0,
+          has_errors: false,
+          issues: [],
+          checks: [],
+        },
+      });
+      await createTestAudit({
+        name: 'Issues scan',
+        results: {
+          total_checks: 3,
+          passed_checks: 1,
+          failed_checks: 2,
+          has_errors: true,
+          issues: [{ severity: 'error', message: 'Issue found' }],
+          checks: [],
+        },
+      });
+
+      const statusResponse = await request(app).get(
+        '/api/model-audit/scans?sort=hasErrors&order=desc',
+      );
+      const checksResponse = await request(app).get(
+        '/api/model-audit/scans?sort=totalChecks&order=asc',
+      );
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.scans[0].name).toBe('Issues scan');
+      expect(checksResponse.status).toBe(200);
+      expect(checksResponse.body.scans[0].name).toBe('Issues scan');
+    });
+
     it('should return 400 for invalid sort field', async () => {
       const response = await request(app).get('/api/model-audit/scans?sort=hackerField');
 
@@ -571,9 +1115,17 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should return the latest scan', async () => {
-      await createTestAudit({ name: 'Older Scan' });
-      // Small delay to ensure different timestamps
-      const latest = await createTestAudit({ name: 'Newer Scan' });
+      const olderCreatedAt = Date.UTC(2026, 3, 20, 20, 13, 29);
+      await createTestAudit({
+        name: 'Older Scan',
+        createdAt: olderCreatedAt,
+        updatedAt: olderCreatedAt,
+      });
+      const latest = await createTestAudit({
+        name: 'Newer Scan',
+        createdAt: olderCreatedAt + 1000,
+        updatedAt: olderCreatedAt + 1000,
+      });
 
       const response = await request(app).get('/api/model-audit/scans/latest');
 
@@ -603,6 +1155,29 @@ describe('Model Audit Routes - DB-backed', () => {
 
       expect(response.status).toBe(404);
       expect(response.body).toHaveProperty('error', 'Model scan not found');
+    });
+
+    it('should expose stored provenance fields in scan responses', async () => {
+      const audit = await createTestAudit({
+        modelId: 'owner/model',
+        revisionSha: 'abc123',
+        contentHash: 'sha256:def456',
+        modelSource: 'huggingface',
+        sourceLastModified: 1_714_176_000_000,
+        scannerVersion: '0.2.30',
+      });
+
+      const response = await request(app).get(`/api/model-audit/scans/${audit.id}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        modelId: 'owner/model',
+        revisionSha: 'abc123',
+        contentHash: 'sha256:def456',
+        modelSource: 'huggingface',
+        sourceLastModified: 1_714_176_000_000,
+        scannerVersion: '0.2.30',
+      });
     });
   });
 

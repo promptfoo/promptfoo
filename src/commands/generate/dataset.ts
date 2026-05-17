@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
@@ -71,9 +71,9 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   if (options.output) {
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.csv')) {
-      fs.writeFileSync(options.output, serializeObjectArrayAsCSV(results));
+      await fs.writeFile(options.output, serializeObjectArrayAsCSV(results));
     } else if (options.output.endsWith('.yaml')) {
-      fs.writeFileSync(options.output, yamlString);
+      await fs.writeFile(options.output, yamlString);
     } else {
       throw new Error(`Unsupported output file type: ${options.output}`);
     }
@@ -89,7 +89,9 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
 
   printBorder();
   if (options.write && configPath) {
-    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    const existingConfig = yaml.load(
+      await fs.readFile(configPath, 'utf8'),
+    ) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
     const existingTests = existingConfig.tests;
     let testsArray: any[] = [];
@@ -99,7 +101,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       testsArray = [existingTests];
     }
     existingConfig.tests = [...testsArray, ...configAddition.tests];
-    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    await fs.writeFile(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
     const runCommand = promptfooCommand('eval');
     logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated tests`));
