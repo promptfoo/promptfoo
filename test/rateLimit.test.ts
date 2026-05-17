@@ -1,6 +1,6 @@
-import { fetchWithRetries } from '../src/fetch';
-
-const mockedFetch = jest.spyOn(global, 'fetch');
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithRetries } from '../src/util/fetch/index';
+import { mockGlobal } from './util/utils';
 
 const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}) => {
   const responseText = JSON.stringify(response);
@@ -18,36 +18,40 @@ const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}
 };
 
 const mockedSetTimeout = (reqTimeout: number) =>
-  jest.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, ms?: number) => {
+  vi.spyOn(global, 'setTimeout').mockImplementation((cb: () => void, ms?: number) => {
     if (ms !== reqTimeout) {
       cb();
     }
     return 0 as any;
   });
 
+// Create a mock function that will be used for fetch
+const mockFetch = vi.fn();
+
 describe('fetchWithRetries', () => {
+  let restoreFetch: (() => void) | undefined;
+
   beforeEach(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
+    restoreFetch = mockGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
-    mockedFetch.mockReset();
-    jest.useRealTimers();
-  });
-
-  afterAll(() => {
-    jest.clearAllMocks();
+    mockFetch.mockReset();
+    vi.useRealTimers();
+    restoreFetch?.();
+    restoreFetch = undefined;
   });
 
   it('should fetch data', async () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
+    mockFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, 1000);
 
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     await expect(result.json()).resolves.toEqual(response);
   });
 
@@ -60,7 +64,7 @@ describe('fetchWithRetries', () => {
 
     const setTimeoutMock = mockedSetTimeout(timeout);
 
-    mockedFetch
+    mockFetch
       .mockResolvedValueOnce(
         mockedFetchResponse(false, response, {
           'X-RateLimit-Remaining': '0',
@@ -72,9 +76,14 @@ describe('fetchWithRetries', () => {
     const result = await fetchWithRetries(url, {}, timeout);
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Base wait = `(reset_seconds * 1000) - now + 1000` from
+    // computeRateLimitWaitMs. parseInt on the seconds value truncates the
+    // sub-second portion, so the base sits in [rateLimitReset, rateLimitReset+1000].
+    // handleRateLimit then adds 0–999ms of jitter, so the captured wait
+    // spans approximately [rateLimitReset, rateLimitReset+2000).
     expect(waitTime).toBeGreaterThan(rateLimitReset);
-    expect(waitTime).toBeLessThanOrEqual(rateLimitReset + 1000);
+    expect(waitTime).toBeLessThan(rateLimitReset + 2000);
     await expect(result.json()).resolves.toEqual(response);
   });
 
@@ -86,7 +95,7 @@ describe('fetchWithRetries', () => {
 
     const setTimeoutMock = mockedSetTimeout(timeout);
 
-    mockedFetch
+    mockFetch
       .mockResolvedValueOnce(
         mockedFetchResponse(false, response, { 'Retry-After': String(retryAfter) }),
       )
@@ -95,8 +104,10 @@ describe('fetchWithRetries', () => {
     const result = await fetchWithRetries(url, {}, timeout);
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(waitTime).toBe(retryAfter * 1000);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Base wait = Retry-After seconds; handleRateLimit adds 0–999ms jitter.
+    expect(waitTime).toBeGreaterThanOrEqual(retryAfter * 1000);
+    expect(waitTime).toBeLessThan(retryAfter * 1000 + 1000);
     await expect(result.json()).resolves.toEqual(response);
   });
 
@@ -107,15 +118,17 @@ describe('fetchWithRetries', () => {
 
     const setTimeoutMock = mockedSetTimeout(timeout);
 
-    mockedFetch
+    mockFetch
       .mockResolvedValueOnce(mockedFetchResponse(false, response))
       .mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, timeout);
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
-    expect(waitTime).toBe(60_000);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Default base = 60s; handleRateLimit adds 0–999ms jitter.
+    expect(waitTime).toBeGreaterThanOrEqual(60_000);
+    expect(waitTime).toBeLessThan(61_000);
     await expect(result.json()).resolves.toEqual(response);
   });
 });

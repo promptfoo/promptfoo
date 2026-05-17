@@ -1,9 +1,37 @@
 ---
 sidebar_position: 60
-description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, native builds, and network/proxy setup in your LLM testing pipeline
 ---
 
 # Troubleshooting
+
+## Log Files and Debugging
+
+Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
+
+- **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
+- **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
+### Live Debug Toggle
+
+During `promptfoo redteam run`, you can toggle debug logging on and off in real-time without restarting:
+
+- **Press `v`** at any time to toggle verbose/debug output
+- Works only in interactive terminal mode (not in CI or when output is piped)
+- Useful for investigating issues mid-run without overwhelming log output
+
+When you start a scan, you'll see:
+
+```
+  Tip: Press v to toggle debug output
+```
+
+Press `v` to enable debug logs and see detailed request metadata, provider response summaries, and grading status. Sensitive payloads, credentials, and raw response bodies may be redacted or summarized. Press `v` again to return to clean output.
+
+:::tip
+This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
+:::
 
 ## Out of memory error
 
@@ -113,7 +141,7 @@ prompts:
 
 ## Node.js version mismatch error
 
-When running `npx promptfoo@latest`, you might encounter this error:
+You might encounter this error after switching Node.js versions:
 
 ```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
@@ -123,17 +151,53 @@ NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
 the module (for instance, using `npm rebuild` or `npm install`).
 ```
 
-This happens because promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
+This happens because promptfoo uses native code modules such as `better-sqlite3`,
+which must be compiled for the active Node.js version.
 
 ### Solution: Remove npx cache and reinstall
 
-To fix this issue, run this single command:
+Use the repair path that matches how you run promptfoo.
+
+**Project checkout**
+
+If you are running promptfoo from a local checkout, switch to the Node.js version
+you intend to use, then rebuild the native dependency:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+If the project includes an `.nvmrc`, run `nvm use` first so the active Node.js version
+matches the project before rebuilding.
+
+**Global npm install**
+
+If you installed promptfoo globally with npm, reinstall it under the active Node.js
+version:
+
+```bash
+npm install -g promptfoo@latest
+```
+
+**npx**
+
+If the error happens with `npx promptfoo@latest`, remove the cached npx install and
+run the command again. With newer npm versions, remove only the matching cache entry:
+
+```bash
+npm cache npx ls
+npm cache npx rm <key>
+npx -y promptfoo@latest
+```
+
+Use the key shown next to `promptfoo@latest` in `npm cache npx ls`. If your npm
+version does not support `npm cache npx`, remove the older npx cache directory instead:
 
 ```bash
 rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 ```
 
-This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
+This forces a fresh install for the current Node.js version.
 
 ## Native build failures
 
@@ -151,11 +215,46 @@ npm install --build-from-source
 npm rebuild
 ```
 
+## Network and proxy issues
+
+If you're behind a corporate proxy or firewall and having trouble connecting to LLM APIs:
+
+### Configure proxy settings
+
+Set standard proxy environment variables before running promptfoo:
+
+```bash
+# Set proxy for HTTPS requests (most common)
+export HTTPS_PROXY=http://proxy.company.com:8080
+
+# With authentication if needed
+export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
+```
+
+### Custom CA certificates
+
+For environments with custom certificate authorities:
+
+```bash
+export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+```
+
+### Verify your configuration
+
+Run `promptfoo debug` to see detected proxy settings and verify your network configuration is correct.
+
+See the [FAQ](/docs/faq/#how-do-i-configure-promptfoo-for-corporate-networks-or-proxies) for complete proxy and SSL configuration details.
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
-If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+For default text-only model grading and synthesis, you can also install `@openai/codex-sdk`, sign in through the Codex CLI, and let Promptfoo use `openai:codex-sdk` automatically when no higher-priority API credentials are set. This does not cover embedding or moderation providers.
+
+If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `similar` or `moderation` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) or configure an embedding/moderation provider explicitly.
 
 Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 
@@ -171,6 +270,75 @@ defaultTest:
         id: azureopenai:embeddings:text-embedding-ada-002-deployment
         config:
           apiHost: xxx.openai.azure.com
+```
+
+## Python/JavaScript tool files require function name
+
+If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.
+
+### Solution
+
+Python and JavaScript tool files must specify a function name using the `file://path:function_name` format:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      # Correct - specifies function name
+      tools: file://./tools.py:get_tools
+      # or for JavaScript/TypeScript
+      tools: file://./tools.js:getTools
+```
+
+The function must return a tool definitions array (can be synchronous or asynchronous):
+
+```python title="tools.py"
+def get_tools():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        }
+    ]
+```
+
+```javascript title="tools.js"
+function getTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_current_weather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+}
+
+module.exports = { getTools };
 ```
 
 ## How to triage stuck evals
@@ -240,6 +408,69 @@ def call_api(prompt, options, context):
     # Your code...
 ```
 
+### Python Installation and Path Issues
+
+If you encounter errors like `spawn py -3 ENOENT` or `Python 3 not found`, promptfoo cannot locate your Python installation. Here's how to resolve this:
+
+#### Setting a Custom Python Path
+
+Use the `PROMPTFOO_PYTHON` environment variable to specify your Python executable:
+
+```bash
+# Windows (if Python is installed at a custom location)
+export PROMPTFOO_PYTHON=C:\Python\3_11\python.exe
+
+# macOS/Linux
+export PROMPTFOO_PYTHON=/usr/local/bin/python3
+
+# Then run your evaluation
+npx promptfoo eval
+```
+
+#### Per-Provider Python Configuration
+
+You can also set the Python path for specific providers in your config:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      pythonExecutable: /path/to/specific/python
+```
+
+#### Windows-Specific Issues
+
+On Windows, promptfoo tries to detect Python in this order:
+
+1. Provider-specific `pythonExecutable` config (if set)
+2. `PROMPTFOO_PYTHON` environment variable (if set)
+3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
+4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
+5. Common fallback commands: `python`, `python3`, `py -3`, `py`
+
+If you don't have the Python launcher (`py.exe`) installed but have Python directly, make sure the `python` command works from your command line. If not, either:
+
+- Add your Python installation directory to your PATH
+- Set `PROMPTFOO_PYTHON` to the full path of your `python.exe`
+
+**Common Windows Python locations:**
+
+- Microsoft Store: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps\python.exe`
+- Direct installer: `C:\Python3X\python.exe` (where X is the version)
+- Anaconda: `C:\Users\YourName\anaconda3\python.exe`
+
+#### Testing Your Python Configuration
+
+To verify your Python is correctly configured:
+
+```bash
+# Test that promptfoo can find your Python
+python -c "import sys; print(sys.executable)"
+
+# If this works but promptfoo still has issues, set PROMPTFOO_PYTHON:
+export PROMPTFOO_PYTHON=$(python -c "import sys; print(sys.executable)")
+```
+
 ### Handling errors
 
 If you encounter errors in your Python script, the error message and stack trace will be displayed in the promptfoo output. Make sure to check this information for clues about what might be going wrong in your code.
@@ -269,11 +500,15 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
-`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
-is created next to where you run your command.
+Promptfoo logs errors and debug logs to `~/.promptfoo/logs` by default.
 
-Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
-location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+To inspect them from the CLI:
 
-Increase verbosity by running commands with `LOG_LEVEL=debug`.
+```bash
+promptfoo logs --list
+promptfoo logs <filename>
+```
+
+Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+
+For each run an error log and a debug log will be created.

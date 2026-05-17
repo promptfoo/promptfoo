@@ -6,13 +6,14 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-responses
+cd openai-responses
 ```
 
 ## Examples
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with different models and configurations.
+Basic example showing how to use the Responses API with GPT-5.5, the GPT-5.4 family (`gpt-5.4-mini`, `gpt-5.4-nano`), and a GPT-4.1 comparison model.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
@@ -49,6 +50,27 @@ Key differences from regular function calling:
 
 Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
 
+### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
+
+Example demonstrating GPT-5.1's key features including:
+
+- **`none` reasoning mode**: No reasoning tokens for fastest responses
+- **Verbosity control**: Adjustable output length (`low`, `medium`, `high`)
+- **Reasoning effort levels**: Compare `none`, `medium`, and `high` reasoning modes
+- **Coding tasks**: Optimized for coding and problem-solving workflows
+
+### GPT-5.2 (`promptfooconfig.gpt-5.2.yaml`)
+
+Example comparing GPT-5.2 with different reasoning effort levels:
+
+- **none**: No reasoning tokens for fastest responses
+- **medium**: Balanced reasoning for most tasks
+- **high**: Maximum reasoning for complex problem-solving
+
+### GPT-5.5 (`promptfooconfig.gpt-5.5.yaml`)
+
+Example comparing GPT-5.5 standard and pro models with different Responses API reasoning settings.
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -56,6 +78,11 @@ Example demonstrating image input capabilities with vision models.
 ### Web Search (`promptfooconfig.web-search.yaml`)
 
 Example showing web search capabilities.
+
+### Prompt Caching (`promptfooconfig.prompt-cache.yaml`)
+
+Example combining `prompt_cache_key`, `prompt_cache_retention`, and included
+`web_search_call.results` payloads in a Responses request.
 
 ### Codex Models (`promptfooconfig.codex.yaml`)
 
@@ -94,6 +121,19 @@ npx promptfoo eval -c promptfooconfig.function-callback.yaml
 
 # Reasoning models example
 npx promptfoo eval -c promptfooconfig.reasoning.yaml
+
+# GPT-5.1 example
+npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
+
+# GPT-5.2 example
+npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
+
+# GPT-5.5 example
+npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
+
+# Prompt caching example
+npx promptfoo eval -c promptfooconfig.prompt-cache.yaml
+
 ```
 
 ## Prerequisites

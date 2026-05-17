@@ -7,6 +7,39 @@ prompts:
     Please solve this step by step, showing your reasoning process.
 
 providers:
+  - id: google:gemma-4-31b-it
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+
+  - id: google:gemma-4-26b-a4b-it
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+
+  - id: google:gemini-3.1-pro-preview
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: HIGH # Improved reasoning and performance
+
+  - id: google:gemini-3-flash-preview
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        thinkingConfig:
+          thinkingLevel: HIGH # Frontier Flash reasoning with preview features
+
+  - id: google:gemini-3.1-flash-lite-preview
+    config:
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 2048
+        # Current low-latency preview model
+
   - id: google:gemini-2.5-pro
     config:
       generationConfig:
@@ -30,10 +63,6 @@ providers:
         maxOutputTokens: 1024
         thinkingConfig:
           thinkingBudget: 512 # Most cost-efficient and fastest 2.5 model
-
-  - google:gemini-2.0-flash-exp
-
-  - google:gemini-2.0-flash-thinking-exp
 
   - id: google:gemini-2.5-pro
     config:
@@ -97,7 +126,7 @@ defaultTest:
       text:
         id: google:gemini-2.5-flash
       embedding:
-        id: google:embedding:text-embedding-004
+        id: google:embedding:gemini-embedding-001
 tests:
   - vars:
       puzzle: 'If a train travels at 60 mph for 2.5 hours, then at 40 mph for 1.5 hours, what is the average speed for the entire journey?'
@@ -107,5 +136,3 @@ tests:
       - type: llm-rubric
         value: |
           The answer should be 52.5 mph.
-      - type: similar
-        value: 52.5 mph

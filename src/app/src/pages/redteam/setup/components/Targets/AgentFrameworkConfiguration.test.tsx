@@ -1,9 +1,8 @@
-import React from 'react';
-
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -14,13 +13,9 @@ vi.mock('../../../hooks/useTelemetry', () => ({
   }),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
-
 describe('AgentFrameworkConfiguration', () => {
-  it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', () => {
+  it('should call updateCustomTarget with the correct field and value when the Provider ID input is changed by the user', async () => {
+    const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -29,7 +24,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
     const newPath = 'file:///path/to/my_agent.py';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -40,7 +35,9 @@ describe('AgentFrameworkConfiguration', () => {
     const providerIdInput = screen.getByRole('textbox', {
       name: /Provider ID \(Python file path\)/i,
     });
-    fireEvent.change(providerIdInput, { target: { value: newPath } });
+    await user.click(providerIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newPath);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newPath);
@@ -54,7 +51,7 @@ describe('AgentFrameworkConfiguration', () => {
     };
     const invalidAgentType = 'invalid-agent-type';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -68,6 +65,7 @@ describe('AgentFrameworkConfiguration', () => {
   });
 
   it('should handle clipboard API unavailability gracefully', async () => {
+    const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -76,13 +74,9 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
 
     const writeTextMock = vi.fn().mockRejectedValue(new Error('Clipboard API not available'));
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: writeTextMock,
-      },
-    });
+    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -91,15 +85,41 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const generateButton = screen.getByRole('button', { name: /Generate Template File/i });
-    fireEvent.click(generateButton);
+    await user.click(generateButton);
 
     const copyButton = await screen.findByRole('button', { name: /Copy Template/i });
-    fireEvent.click(copyButton);
+    await user.click(copyButton);
 
     expect(writeTextMock).toHaveBeenCalledTimes(1);
   });
 
-  it('should call updateCustomTarget even with an invalid Provider ID format', () => {
+  it('keeps template actions visible while the modal body scrolls independently', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <AgentFrameworkConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        agentType="langchain"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Generate Template File/i }));
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen
+      .getByText('Next Steps:')
+      .closest('div[class*="relative"]')?.parentElement;
+    const footer = screen.getByRole('button', {
+      name: /Download agent_template.py/i,
+    }).parentElement;
+
+    expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
+  it('should call updateCustomTarget even with an invalid Provider ID format', async () => {
+    const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -108,7 +128,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
     const invalidPath = '/path/to/my_agent.py';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -119,13 +139,16 @@ describe('AgentFrameworkConfiguration', () => {
     const providerIdInput = screen.getByRole('textbox', {
       name: /Provider ID \(Python file path\)/i,
     });
-    fireEvent.change(providerIdInput, { target: { value: invalidPath } });
+    await user.click(providerIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(invalidPath);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);
   });
 
-  it('should call updateCustomTarget with the provided invalid file path when the Provider ID input is changed', () => {
+  it('should call updateCustomTarget with the provided invalid file path when the Provider ID input is changed', async () => {
+    const user = userEvent.setup();
     const mockUpdateCustomTarget = vi.fn();
     const selectedTarget: ProviderOptions = {
       id: '',
@@ -134,7 +157,7 @@ describe('AgentFrameworkConfiguration', () => {
     const agentType = 'langchain';
     const invalidPath = 'file:///path/to/nonexistent_file.py';
 
-    renderWithTheme(
+    renderWithProviders(
       <AgentFrameworkConfiguration
         selectedTarget={selectedTarget}
         updateCustomTarget={mockUpdateCustomTarget}
@@ -145,7 +168,9 @@ describe('AgentFrameworkConfiguration', () => {
     const providerIdInput = screen.getByRole('textbox', {
       name: /Provider ID \(Python file path\)/i,
     });
-    fireEvent.change(providerIdInput, { target: { value: invalidPath } });
+    await user.click(providerIdInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(invalidPath);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);

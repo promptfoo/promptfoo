@@ -89,7 +89,7 @@ BoN achieves impressive attack success rates across different models and modalit
 - Vision: 56% on GPT-4 Vision
 - Audio: 72% on GPT-4 Audio
 
-The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested.
+The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested. This illustrates why [ASR comparisons must account for attempt budget](/blog/asr-not-portable-metric): a 1% per-attempt method becomes 98% with 392 tries.
 
 ## Key Features
 
@@ -104,5 +104,4 @@ The attack success rate follows a power-law scaling with the number of samples, 
 - [Iterative Jailbreaks](iterative.md)
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Best of N configuration example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-bestOfN-strategy)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

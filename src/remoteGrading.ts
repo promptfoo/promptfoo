@@ -1,10 +1,10 @@
 import { fetchWithCache } from './cache';
 import { getUserEmail } from './globalConfig/accounts';
 import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { getRequestTimeoutMs } from './providers/shared';
 import { getRemoteGenerationUrl } from './redteam/remoteGeneration';
 
-import type { GradingResult } from './types';
+import type { GradingResult } from './types/index';
 
 type RemoteGradingPayload = {
   task: string;
@@ -27,7 +27,7 @@ export async function doRemoteGrading(
         },
         body,
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
     logger.debug(

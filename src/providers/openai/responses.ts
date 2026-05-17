@@ -1,25 +1,49 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { ResponsesProcessor } from '../responses/index';
+import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import { formatOpenAiError, getTokenUsage } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+
+// OpenAI SDK has APIError class for exceptions, but not a type for error responses
+// in the JSON body. This interface represents the structure when the API returns
+// an error object in the response body (not as an exception).
+interface OpenAIErrorResponse {
+  error: {
+    message: string;
+    type?: string;
+    code?: string;
+  };
+}
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
+  private processor: ResponsesProcessor;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
     'gpt-4o-2024-11-20',
     'gpt-4o-2024-05-13',
+    'gpt-4o-2024-07-18',
+    'gpt-4o-mini',
+    'gpt-4o-mini-2024-07-18',
     'gpt-4.1',
     'gpt-4.1-2025-04-14',
     'gpt-4.1-mini',
@@ -29,11 +53,53 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5 models
     'gpt-5',
     'gpt-5-2025-08-07',
+    'gpt-5-chat',
     'gpt-5-chat-latest',
     'gpt-5-nano',
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
     'gpt-5-mini-2025-08-07',
+    'gpt-5-pro',
+    'gpt-5-pro-2025-10-06',
+    // GPT-5.1 models
+    'gpt-5.1',
+    'gpt-5.1-2025-11-13',
+    'gpt-5.1-mini',
+    'gpt-5.1-nano',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-chat-latest',
+    // GPT-5.2 models
+    'gpt-5.2',
+    'gpt-5.2-2025-12-11',
+    'gpt-5.2-chat-latest',
+    'gpt-5.2-codex',
+    'gpt-5.2-pro',
+    'gpt-5.2-pro-2025-12-11',
+    // GPT-5.3 models
+    'gpt-5.3-chat-latest',
+    'gpt-5.3-codex',
+    'gpt-5.3-codex-spark',
+    // GPT-5.5 models
+    'gpt-5.5',
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
+    // GPT-5.4 models
+    'gpt-5.4',
+    'gpt-5.4-2026-03-05',
+    'gpt-5.4-mini',
+    'gpt-5.4-mini-2026-03-17',
+    'gpt-5.4-nano',
+    'gpt-5.4-nano-2026-03-17',
+    'gpt-5.4-pro',
+    'gpt-5.4-pro-2026-03-05',
+    // Computer use model
+    'computer-use-preview',
+    'computer-use-preview-2025-03-11',
+    // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
+    // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
+    // Reasoning models
     'o1',
     'o1-2024-12-17',
     'o1-preview',
@@ -52,6 +118,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o3-mini-2025-01-31',
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     'codex-mini-latest',
+    'gpt-5-codex',
     // Deep research models
     'o3-deep-research',
     'o3-deep-research-2025-06-26',
@@ -66,7 +133,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
+
+    // Initialize the shared response processor
+    this.processor = new ResponsesProcessor({
+      modelName: this.modelName,
+      providerType: 'openai',
+      functionCallbackHandler: this.functionCallbackHandler,
+      costCalculator: () => undefined,
+    });
+  }
+
+  protected isGPT5Model(): boolean {
+    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
+    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
   }
 
   protected isReasoningModel(): boolean {
@@ -74,8 +154,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
+      this.modelName.includes('/o1') ||
+      this.modelName.includes('/o3') ||
+      this.modelName.includes('/o4') ||
       this.modelName === 'codex-mini-latest' ||
-      this.modelName.startsWith('gpt-5')
+      this.isGPT5Model()
     );
   }
 
@@ -85,10 +168,83 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
+  }
+
+  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+    return data.usage;
+  }
+
+  protected applyBilling(
+    result: ProviderResponse,
+    data: any,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): ProviderResponse {
+    const serviceTier =
+      (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
+    const billingModelName = this.getBillingModelName(config);
+    const responseCost = calculateOpenAIUsageCost(
+      billingModelName,
+      config,
+      this.getBillingUsage(data, config),
+      {
+        cachedResponse: cached,
+        serviceTier,
+      },
+    );
+    const observableToolCost = cached
+      ? 0
+      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+
+    return {
+      ...result,
+      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
+    };
+  }
+
+  private isAzureOpenAiEndpoint(value: string | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const hostname = new URL(endpoint).hostname.toLowerCase();
+      return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
+    } catch {
+      return false;
+    }
+  }
+
+  private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+    const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
+      (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
+    );
+    const isAzureResponsesDeploymentWithReasoningConfig =
+      hasAzureCustomDeploymentHost &&
+      (config.reasoning !== undefined || config.reasoning_effort !== undefined);
+    const isAzureResponsesDeploymentWithVerbosityConfig =
+      hasAzureCustomDeploymentHost && config.verbosity !== undefined;
+    // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
+    // should promote a custom deployment to "reasoning model" status, otherwise
+    // max_output_tokens defaults change unexpectedly.
+    const isReasoningModel =
+      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
+    const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
+
+    return {
+      isAzureResponsesDeploymentWithReasoningConfig,
+      isReasoningModel,
+      isGPT5Model,
+    };
+  }
+
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ) {
     const config = {
       ...this.config,
@@ -107,26 +263,50 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const isReasoningModel = this.isReasoningModel();
+    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, isGPT5Model } =
+      this.getDeploymentCapabilities(config);
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel
-        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
-        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
-      : undefined;
-    const reasoningEffort = isReasoningModel
+    const renderedReasoning = renderVarsInObject(
+      config.reasoning,
+      context?.vars,
+    ) as typeof config.reasoning;
+    const renderedReasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
+    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
+    const hasAzureReasoningEffort =
+      isAzureResponsesDeploymentWithReasoningConfig &&
+      effectiveReasoningEffort !== undefined &&
+      effectiveReasoningEffort !== 'none';
+
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature =
+      this.supportsTemperature() && !hasAzureReasoningEffort
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
+    const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
 
     const instructions = config.instructions;
 
-    // Load response_format from external file if needed, similar to chat provider
-    const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
-      : undefined;
+    // Load response_format from external file if needed (handles nested schema loading)
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
 
     let textFormat;
     if (responseFormat) {
@@ -139,13 +319,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
         // IMPORTANT: json_object format requires the word 'json' in the input prompt
       } else if (responseFormat.type === 'json_schema') {
-        const schema = maybeLoadFromExternalFile(
-          renderVarsInObject(
-            responseFormat.schema || responseFormat.json_schema?.schema,
-            context?.vars,
-          ),
-        );
-
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
+        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
 
@@ -164,21 +339,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for GPT-5 models if configured
+    if (isGPT5Model && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
+    // Load tools from external file if needed
+    // Store in variable so we can include in both body and returned config
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+
     const body = {
       model: this.modelName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ...((!reasoningEffort || reasoningEffort === 'none') &&
+      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
+      ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
+      ...(config.include === undefined ? {} : { include: config.include }),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
@@ -191,31 +377,42 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
     };
 
-    // Handle reasoning_effort and reasoning parameters for o-series models
-    if (
-      config.reasoning_effort &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5'))
-    ) {
-      body.reasoning_effort = config.reasoning_effort;
+    // Handle reasoning parameters for o-series and gpt-5 models
+    // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
+    // Merge with existing body.reasoning (from reasoning_effort) so that
+    // config.reasoning extra fields (e.g. summary) don't silently drop effort.
+    if (renderedReasoning && isReasoningModel) {
+      body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
-    if (
-      config.reasoning &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5'))
-    ) {
-      body.reasoning = config.reasoning;
+    // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
     }
 
-    return { body, config: { ...config, response_format: responseFormat } };
+    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
+    // The responses API uses max_output_tokens, never max_tokens.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
+    }
+
+    return {
+      body,
+      config: {
+        ...config,
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
+        response_format: responseFormat,
+      },
+    };
   }
 
   async callApi(
@@ -223,13 +420,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+    if (this.requiresApiKey() && !this.getApiKey()) {
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');
@@ -254,32 +449,63 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       }
     }
 
-    logger.debug(`Calling OpenAI Responses API: ${JSON.stringify(body)}`);
-
-    // Calculate timeout for deep research models
-    let timeout = REQUEST_TIMEOUT_MS;
-    if (isDeepResearchModel) {
-      // For deep research models, use PROMPTFOO_EVAL_TIMEOUT_MS if set,
-      // otherwise default to 10 minutes (600,000ms)
+    // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
+    let timeout = getRequestTimeoutMs();
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
+    const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
+    if (isLongRunningModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-      if (evalTimeout > 0) {
-        timeout = evalTimeout;
-      } else {
-        timeout = 600_000; // 10 minutes default for deep research
-      }
-      logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.modelName}`);
+      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
-    let data, status, statusText;
+    // The OpenAI SDK doesn't export a type for the /responses endpoint (it's a newer API).
+    // This interface matches the actual response structure from that endpoint.
+    interface OpenAIResponsesResponse {
+      output?: Array<{
+        content?: Array<{
+          type: string;
+          text?: string;
+          thinking?: { reasoning_text?: string };
+          refusal?: string;
+        }>;
+        tool_calls?: Array<{
+          id: string;
+          type: string;
+          function: { name: string; arguments: string };
+        }>;
+      }>;
+      usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+      };
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    }
+
+    let data: OpenAIResponsesResponse;
+    let status: number;
+    let statusText: string;
     let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenAIResponsesResponse>(
         `${this.getApiUrl()}/responses`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...config.headers,
           },
@@ -288,212 +514,85 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         timeout,
         'json',
         context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       ));
 
       if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
+          };
+        }
+
         return {
-          error: `API error: ${status} ${statusText}\n${
-            typeof data === 'string' ? data : JSON.stringify(data)
-          }`,
+          error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
+      await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
-    logger.debug(`\tOpenAI Responses API response: ${JSON.stringify(data)}`);
-    if (data.error) {
-      await data.deleteFromCache?.();
+    if (data.error?.message) {
+      await deleteFromCache?.();
       return {
-        error: formatOpenAiError(data),
+        error: formatOpenAiError(data as OpenAIErrorResponse),
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
-    try {
-      // Find the assistant message in the output
-      const output = data.output;
+    // Use shared processor for consistent behavior with Azure
+    const result = await this.processor.processResponseOutput(data, config, cached);
+    const billedResult = this.applyBilling(result, data, config, cached);
 
-      // Log the structure for debugging deep research responses
-      if (this.modelName.includes('deep-research')) {
-        logger.debug(`Deep research response structure: ${JSON.stringify(data, null, 2)}`);
-      }
-
-      if (!output || !Array.isArray(output) || output.length === 0) {
-        return {
-          error: `Invalid response format: Missing output array`,
-        };
-      }
-
-      let result = '';
-      let refusal = '';
-      let isRefusal = false;
-
-      // Process all output items
-      for (const item of output) {
-        if (!item || typeof item !== 'object') {
-          logger.warn(`Skipping invalid output item: ${JSON.stringify(item)}`);
-          continue;
-        }
-
-        if (item.type === 'function_call') {
-          // Skip completed status messages that are just status updates without meaningful arguments
-          if (item.status === 'completed' && (!item.arguments || item.arguments === '{}')) {
-            continue;
-          }
-
-          result = await this.functionCallbackHandler.processCalls(
-            item,
-            config.functionToolCallbacks,
-          );
-        } else if (item.type === 'message' && item.role === 'assistant') {
-          if (item.content) {
-            for (const contentItem of item.content) {
-              if (!contentItem || typeof contentItem !== 'object') {
-                logger.warn(`Skipping invalid content item: ${JSON.stringify(contentItem)}`);
-                continue;
-              }
-
-              if (contentItem.type === 'output_text') {
-                result += contentItem.text;
-                // Preserve annotations for deep research citations
-                if (contentItem.annotations && contentItem.annotations.length > 0) {
-                  if (!data.annotations) {
-                    data.annotations = [];
-                  }
-                  data.annotations.push(...contentItem.annotations);
-                }
-              } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-                result = await this.functionCallbackHandler.processCalls(
-                  contentItem,
-                  config.functionToolCallbacks,
-                );
-              } else if (contentItem.type === 'refusal') {
-                refusal = contentItem.refusal;
-                isRefusal = true;
-              }
-            }
-          } else if (item.refusal) {
-            refusal = item.refusal;
-            isRefusal = true;
-          }
-        } else if (item.type === 'tool_result') {
-          result = JSON.stringify(item);
-        } else if (item.type === 'reasoning' && item.summary && item.summary.length > 0) {
-          // Handle reasoning output from deep research models
-          if (result) {
-            result += '\n';
-          }
-          result += `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}\n`;
-        } else if (item.type === 'web_search_call') {
-          // Handle web search calls from deep research models
-          if (result) {
-            result += '\n';
-          }
-          const action = item.action;
-          if (action) {
-            if (action.type === 'search') {
-              result += `Web Search: "${action.query}"`;
-            } else if (action.type === 'open_page') {
-              result += `Opening page: ${action.url}`;
-            } else if (action.type === 'find_in_page') {
-              result += `Finding in page: "${action.query}"`;
-            } else {
-              result += `Web action: ${action.type}`;
-            }
-          } else {
-            result += `Web Search Call (status: ${item.status || 'unknown'})`;
-          }
-          if (item.status === 'failed' && item.error) {
-            result += ` (Error: ${item.error})`;
-          }
-        } else if (item.type === 'code_interpreter_call') {
-          // Handle code interpreter calls from deep research models
-          if (result) {
-            result += '\n';
-          }
-          result += `Code Interpreter: ${item.code || 'Running code...'}`;
-          if (item.status === 'failed' && item.error) {
-            result += ` (Error: ${item.error})`;
-          }
-        } else if (item.type === 'mcp_list_tools') {
-          // MCP tools list - include in result for debugging/visibility
-          if (result) {
-            result += '\n';
-          }
-          result += `MCP Tools from ${item.server_label}: ${JSON.stringify(item.tools, null, 2)}`;
-        } else if (item.type === 'mcp_call') {
-          // MCP tool call result
-          if (item.error) {
-            if (result) {
-              result += '\n';
-            }
-            result += `MCP Tool Error (${item.name}): ${item.error}`;
-          } else {
-            if (result) {
-              result += '\n';
-            }
-            result += `MCP Tool Result (${item.name}): ${item.output}`;
-          }
-        } else if (item.type === 'mcp_approval_request') {
-          // MCP approval request - include in result for user to see
-          if (result) {
-            result += '\n';
-          }
-          result += `MCP Approval Required for ${item.server_label}.${item.name}: ${item.arguments}`;
-        }
-      }
-
-      if (isRefusal) {
-        return {
-          output: refusal,
-          tokenUsage: getTokenUsage(data, cached),
-          isRefusal: true,
-          cached,
-          cost: calculateOpenAICost(
-            this.modelName,
-            config,
-            data.usage?.input_tokens,
-            data.usage?.output_tokens,
-            0,
-            0,
-          ),
-          raw: data,
-        };
-      }
-
-      if (config.response_format?.type === 'json_schema' && typeof result === 'string') {
-        try {
-          result = JSON.parse(result);
-        } catch (error) {
-          logger.error(`Failed to parse JSON output: ${error}`);
-        }
-      }
-
-      const tokenUsage = getTokenUsage(data, cached);
-
-      return {
-        output: result,
-        tokenUsage,
-        cached,
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          data.usage?.input_tokens,
-          data.usage?.output_tokens,
-          0,
-          0,
-        ),
-        raw: data,
-      };
-    } catch (err) {
-      await data?.deleteFromCache?.();
-      return {
-        error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
-      };
-    }
+    // Merge HTTP metadata with any existing metadata from the processor
+    return {
+      ...billedResult,
+      metadata: {
+        ...billedResult.metadata,
+        http: {
+          status,
+          statusText,
+          headers: responseHeaders ?? {},
+        },
+      },
+    };
   }
 }

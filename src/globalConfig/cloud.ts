@@ -1,10 +1,13 @@
-import chalk from 'chalk';
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../fetch';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
-export const API_HOST = getEnvString('API_HOST', 'https://api.promptfoo.app');
+export const CLOUD_API_HOST = 'https://api.promptfoo.app';
+
+export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
+
+// Free customers created before this date are grandfathered into auto-share.
+export const SHARING_CUTOFF_DATE = new Date('2026-03-09T00:00:00Z');
 
 interface CloudUser {
   id: string;
@@ -21,28 +24,79 @@ interface CloudOrganization {
   updatedAt: Date;
 }
 
+interface CloudTeam {
+  id: string;
+  name: string;
+  slug: string;
+  organizationId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface CloudApp {
   url: string;
+}
+
+interface CloudTokenValidation {
+  user: CloudUser;
+  organization: CloudOrganization;
+  app: CloudApp;
+  hasActiveLicense?: boolean;
 }
 
 export class CloudConfig {
   private config: {
     appUrl: string;
-    apiHost: string;
+    apiHost?: string;
     apiKey?: string;
+    sharing?: boolean;
+    currentOrganizationId?: string;
+    currentTeamId?: string;
+    teams?: {
+      [organizationId: string]: {
+        currentTeamId?: string;
+        cache?: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          lastFetched: string;
+        }>;
+      };
+    };
   };
 
   constructor() {
     const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost || API_HOST,
+      apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      sharing: savedConfig.sharing,
+      currentOrganizationId: savedConfig.currentOrganizationId,
+      currentTeamId: savedConfig.currentTeamId,
+      teams: savedConfig.teams,
     };
   }
 
+  /**
+   * Returns the API key from config file or PROMPTFOO_API_KEY environment variable.
+   * Config file takes precedence over environment variable.
+   */
+  private resolveApiKey(): string | undefined {
+    return this.config.apiKey || process.env.PROMPTFOO_API_KEY;
+  }
+
+  /**
+   * Returns the API host from config file, PROMPTFOO_CLOUD_API_URL environment variable,
+   * or defaults to the standard cloud API host.
+   * Config file takes precedence over environment variable.
+   */
+  private resolveApiHost(): string {
+    return this.config.apiHost || process.env.PROMPTFOO_CLOUD_API_URL || API_HOST;
+  }
+
   isEnabled(): boolean {
-    return !!this.config.apiKey;
+    return !!this.resolveApiKey();
   }
 
   setApiHost(apiHost: string): void {
@@ -56,11 +110,11 @@ export class CloudConfig {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey;
+    return this.resolveApiKey();
   }
 
   getApiHost(): string {
-    return this.config.apiHost;
+    return this.resolveApiHost();
   }
 
   setAppUrl(appUrl: string): void {
@@ -72,8 +126,23 @@ export class CloudConfig {
     return this.config.appUrl;
   }
 
+  getSharing(): boolean | undefined {
+    return this.config.sharing;
+  }
+
+  /**
+   * Sets the sharing preference. Note: this value is only updated at authentication time
+   * (via `validateAndSetApiToken`) and may become stale if the user's license status
+   * changes between re-authentications.
+   */
+  setSharing(sharing: boolean): void {
+    this.config.sharing = sharing;
+    this.saveConfig();
+  }
+
   delete(): void {
     writeGlobalConfigPartial({ cloud: {} });
+    this.reload();
   }
 
   private saveConfig(): void {
@@ -85,16 +154,35 @@ export class CloudConfig {
     const savedConfig = readGlobalConfig()?.cloud || {};
     this.config = {
       appUrl: savedConfig.appUrl || 'https://www.promptfoo.app',
-      apiHost: savedConfig.apiHost || API_HOST,
+      apiHost: savedConfig.apiHost,
       apiKey: savedConfig.apiKey,
+      sharing: savedConfig.sharing,
+      currentOrganizationId: savedConfig.currentOrganizationId,
+      currentTeamId: savedConfig.currentTeamId,
+      teams: savedConfig.teams,
     };
   }
 
-  async validateAndSetApiToken(
+  saveValidatedApiToken(
     token: string,
     apiHost: string,
-  ): Promise<{ user: CloudUser; organization: CloudOrganization; app: CloudApp }> {
+    user: CloudUser,
+    app: CloudApp,
+    hasActiveLicense?: boolean,
+  ): void {
+    this.setApiKey(token);
+    this.setApiHost(apiHost);
+    this.setAppUrl(app.url);
+    if (typeof hasActiveLicense === 'boolean') {
+      const createdAt = user?.createdAt ? new Date(user.createdAt) : null;
+      const isGrandfathered = createdAt != null && createdAt < SHARING_CUTOFF_DATE;
+      this.setSharing(hasActiveLicense || isGrandfathered);
+    }
+  }
+
+  async validateApiToken(token: string, apiHost: string): Promise<CloudTokenValidation> {
     try {
+      const { fetchWithProxy } = await import('../util/fetch');
       const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -109,30 +197,111 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app } = await response.json();
-      this.setApiKey(token);
-      this.setApiHost(apiHost);
-      this.setAppUrl(app.url);
-
-      logger.info(chalk.green.bold('Successfully logged in'));
-      logger.info(chalk.dim('Logged in as:'));
-      logger.info(`User: ${chalk.cyan(user.email)}`);
-      logger.info(`Organization: ${chalk.cyan(organization.name)}`);
-      logger.info(`Access the app at ${chalk.cyan(app.url)}`);
+      const { user, organization, app, hasActiveLicense } = await response.json();
 
       return {
         user,
         organization,
         app,
+        ...(typeof hasActiveLicense === 'boolean' ? { hasActiveLicense } : {}),
       };
-    } catch (error) {
+    } catch (err) {
+      const error = err as Error & { cause?: string };
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[Cloud] Failed to validate API token with host ${apiHost}: ${errorMessage}`);
-      if ((error as any).cause) {
-        logger.error(`Cause: ${(error as any).cause}`);
+      if (error.cause) {
+        logger.error(`Cause: ${error.cause}`);
       }
       throw error;
     }
+  }
+
+  async validateAndSetApiToken(
+    token: string,
+    apiHost: string,
+  ): Promise<CloudTokenValidation & { hasActiveLicense: boolean }> {
+    const { user, organization, app, hasActiveLicense } = await this.validateApiToken(
+      token,
+      apiHost,
+    );
+    this.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
+
+    return {
+      user,
+      organization,
+      app,
+      hasActiveLicense: typeof hasActiveLicense === 'boolean' ? hasActiveLicense : false,
+    };
+  }
+
+  getCurrentOrganizationId(): string | undefined {
+    return this.config.currentOrganizationId;
+  }
+
+  setCurrentOrganization(organizationId: string): void {
+    this.config.currentOrganizationId = organizationId;
+    this.saveConfig();
+  }
+
+  getCurrentTeamId(organizationId?: string): string | undefined {
+    if (organizationId) {
+      return this.config.teams?.[organizationId]?.currentTeamId;
+    }
+    return this.config.currentTeamId;
+  }
+
+  setCurrentTeamId(teamId: string, organizationId?: string): void {
+    if (organizationId) {
+      if (!this.config.teams) {
+        this.config.teams = {};
+      }
+      if (!this.config.teams[organizationId]) {
+        this.config.teams[organizationId] = {};
+      }
+      this.config.teams[organizationId].currentTeamId = teamId;
+    } else {
+      this.config.currentTeamId = teamId;
+    }
+    this.saveConfig();
+  }
+
+  clearCurrentTeamId(organizationId?: string): void {
+    if (organizationId) {
+      if (this.config.teams?.[organizationId]) {
+        delete this.config.teams[organizationId].currentTeamId;
+      }
+    } else {
+      delete this.config.currentTeamId;
+    }
+    this.saveConfig();
+  }
+
+  cacheTeams(teams: CloudTeam[], organizationId?: string): void {
+    if (organizationId) {
+      if (!this.config.teams) {
+        this.config.teams = {};
+      }
+      if (!this.config.teams[organizationId]) {
+        this.config.teams[organizationId] = {};
+      }
+
+      this.config.teams[organizationId].cache = teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        lastFetched: new Date().toISOString(),
+      }));
+    }
+    this.saveConfig();
+  }
+
+  getCachedTeams(
+    organizationId?: string,
+  ): Array<{ id: string; name: string; slug: string }> | undefined {
+    if (organizationId) {
+      return this.config.teams?.[organizationId]?.cache;
+    }
+    return undefined;
   }
 }
 

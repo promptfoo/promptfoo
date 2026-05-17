@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - What is the capital of the {{country}}?
+
+providers:
+  - cloudflare-ai:chat:@cf/openai/gpt-oss-120b
+  - cloudflare-ai:chat:@cf/meta/llama-4-scout-17b-16e-instruct
+
+tests:
+  - vars:
+      country: United States
+    assert:
+      - type: icontains
+        value: Washington, D.C.
+  - vars:
+      country: England
+    assert:
+      - type: icontains
+        value: London

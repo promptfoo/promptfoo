@@ -1,0 +1,22 @@
+{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "math_response",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "number",
+          "description": "The numerical answer to the problem"
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Step-by-step explanation of the solution"
+        }
+      },
+      "required": ["answer", "explanation"],
+      "additionalProperties": false
+    }
+  }
+}

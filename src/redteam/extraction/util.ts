@@ -5,11 +5,11 @@ import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
-import type { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
@@ -55,7 +55,7 @@ export async function fetchRemoteGeneration(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'json',
     );
 

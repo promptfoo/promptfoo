@@ -1,33 +1,55 @@
 import { type ChildProcess, spawn } from 'child_process';
 import path from 'path';
 
-import axios from 'axios';
 import WebSocket from 'ws';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { geminiFormatAndSystemInstructions, loadFile } from './util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import {
+  geminiFormatAndSystemInstructions,
+  getGoogleAccessToken,
+  loadCredentials,
+  mergeGoogleCompletionOptions,
+  normalizeTools,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
+  stripExecutableToolFileReferences,
+} from './util';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderOptions,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
-const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
-  if (contents[contentIndex].role != 'user') {
+const formatContentMessage = (
+  contents: GeminiFormat,
+  contentIndex: number,
+  useRealtimeTextInput = false,
+) => {
+  if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
-  if (contents[contentIndex].parts.length != 1) {
+  if (contents[contentIndex].parts.length !== 1) {
     throw new Error('Unexpected number of parts in user input.');
   }
   const userMessage = contents[contentIndex].parts[0].text;
+
+  if (useRealtimeTextInput) {
+    return {
+      realtime_input: {
+        text: userMessage,
+      },
+    };
+  }
 
   const contentMessage = {
     client_content: {
@@ -41,6 +63,46 @@ const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
     },
   };
   return contentMessage;
+};
+
+/**
+ * Helper function to fetch JSON with error handling
+ */
+export const fetchJson = async <T = unknown>(url: string, options?: RequestInit): Promise<T> => {
+  const response = await fetchWithProxy(url, options);
+  if (!response.ok) {
+    throw new Error(`HTTP error - status: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+};
+
+/**
+ * Helper function to try GET with query params, fallback to POST with JSON body
+ */
+export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): Promise<T> => {
+  try {
+    // Try GET first with query params
+    const urlWithParams = new URL(url);
+    if (data) {
+      const params = (typeof data === 'string' ? JSON.parse(data) : data) as Record<
+        string,
+        unknown
+      >;
+      Object.entries(params).forEach(([key, value]) => {
+        urlWithParams.searchParams.append(key, String(value));
+      });
+    }
+    return await fetchJson<T>(urlWithParams.href);
+  } catch {
+    // Fall back to POST
+    return fetchJson<T>(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: data ? JSON.stringify(typeof data === 'string' ? JSON.parse(data) : data) : null,
+    });
+  }
 };
 
 export class GoogleLiveProvider implements ApiProvider {
@@ -92,39 +154,72 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('GOOGLE_API_KEY');
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
+  }
+
+  /**
+   * Gets an OAuth2 access token from Google credentials for the Generative Language API.
+   * Returns undefined if credentials are not available or if there's an error.
+   *
+   * Supports authentication via:
+   * - Service account JSON (via config.credentials or GOOGLE_APPLICATION_CREDENTIALS)
+   * - Application Default Credentials (via `gcloud auth application-default login`)
+   */
+  private async getAccessToken(): Promise<string | undefined> {
+    const credentials = loadCredentials(this.config.credentials);
+    return getGoogleAccessToken(credentials);
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    if (!this.getApiKey()) {
+    // Try OAuth2 first (required for WebSocket Live API - API keys are not supported)
+    // Fall back to API key only if OAuth2 is not available
+    const accessToken = await this.getAccessToken();
+    const apiKey = this.getApiKey();
+
+    if (!accessToken && !apiKey) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google authentication is not configured. The Live API requires OAuth2 authentication.\n\n' +
+          'Either:\n' +
+          '1. Set up Application Default Credentials:\n' +
+          '   gcloud auth application-default login --client-id-file=client_secret.json ' +
+          '--scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"\n' +
+          '2. Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or\n' +
+          '3. Add `credentials` to the provider config with service account JSON\n\n' +
+          'Note: GOOGLE_API_KEY is NOT supported for the Live API WebSocket endpoint.\n' +
+          'For OAuth2 setup instructions, see: https://ai.google.dev/gemini-api/docs/oauth\n' +
+          'These options require the google-auth-library package to be installed.',
       );
     }
+
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
-      this.config.systemInstruction,
-      { useAssistantRole: this.config.useAssistantRole },
+      config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
     let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
-    if (this.config.functionToolStatefulApi?.file) {
+    if (!toolsDisabled && config.functionToolStatefulApi?.file) {
       try {
         // Use the validatePythonPath function to get the correct Python executable
         const pythonPath = await validatePythonPath(
-          this.config.functionToolStatefulApi.pythonExecutable ||
+          config.functionToolStatefulApi.pythonExecutable ||
             getEnvString('PROMPTFOO_PYTHON') ||
             'python3',
-          !!this.config.functionToolStatefulApi.pythonExecutable ||
-            !!getEnvString('PROMPTFOO_PYTHON'),
+          !!config.functionToolStatefulApi.pythonExecutable || !!getEnvString('PROMPTFOO_PYTHON'),
         );
         logger.debug(`Spawning API with Python executable: ${pythonPath}`);
-        statefulApi = spawn(pythonPath, [this.config.functionToolStatefulApi.file]);
+        statefulApi = spawn(pythonPath, [config.functionToolStatefulApi.file]);
 
         // Add error handling for the Python process
         statefulApi.on('error', (err) => {
@@ -147,8 +242,27 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
+    // Load tools before creating WebSocket Promise. Disabled mode removes executable
+    // Python/JS tool refs before loading so non-function tools stay available without
+    // executing user code.
+    const configTools = toolsDisabled
+      ? stripExecutableToolFileReferences(config.tools, context?.vars)
+      : config.tools;
+    const fileTools = configTools
+      ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
+      : [];
+    const normalizedTools = Array.isArray(fileTools)
+      ? normalizeTools(fileTools)
+      : fileTools
+        ? [fileTools]
+        : [];
+    const requestTools = toolsDisabled
+      ? removeGoogleFunctionDeclarations(normalizedTools)
+      : normalizedTools;
+
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
+      const usesRealtimeTextInput = this.modelName.startsWith('gemini-3.1-flash-live');
       let isResolved = false;
 
       const safeResolve = (response: ProviderResponse) => {
@@ -158,12 +272,21 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      let { apiVersion } = this.config;
+      let { apiVersion } = config;
       if (!apiVersion) {
         apiVersion = 'v1alpha';
       }
 
-      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
+      // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
+      let url: string;
+      if (accessToken) {
+        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?access_token=${accessToken}`;
+        logger.debug('Using OAuth2 access token for Google Live API authentication');
+      } else {
+        // Note: API keys are likely to be rejected by the Live API WebSocket endpoint
+        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+        logger.debug('Using API key for Google Live API authentication (may not be supported)');
+      }
 
       const ws = new WebSocket(url);
 
@@ -172,39 +295,48 @@ export class GoogleLiveProvider implements ApiProvider {
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
-      let statefulApiState: any = undefined;
+      let statefulApiState: unknown = undefined;
+      let hasFinalized = false;
 
       const isTextExpected =
-        this.config.generationConfig?.response_modalities?.includes('text') ?? false;
+        config.generationConfig?.response_modalities?.includes('text') ?? false;
       const isAudioExpected =
-        this.config.generationConfig?.response_modalities?.includes('audio') ?? false;
+        config.generationConfig?.response_modalities?.includes('audio') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;
 
       // Extract transcription config for use in message handler
-      const hasOutputTranscription = !!this.config.generationConfig?.outputAudioTranscription;
-      const hasInputTranscription = !!this.config.generationConfig?.inputAudioTranscription;
+      const hasOutputTranscription = !!config.generationConfig?.outputAudioTranscription;
 
       // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
       const timeout = setTimeout(() => {
         logger.error('WebSocket connection timed out after 30 seconds');
         ws.close();
         safeResolve({ error: 'WebSocket request timed out' });
-      }, this.config.timeoutMs || 30000);
+      }, config.timeoutMs || 30000);
 
       const finalizeResponse = async () => {
+        // Prevent multiple calls to finalizeResponse
+        if (hasFinalized) {
+          logger.debug('finalizeResponse already called, skipping duplicate call');
+          return;
+        }
+        hasFinalized = true;
+
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
         clearTimeout(timeout);
 
-        // Retrieve final state from stateful API before shutting down
-        if (this.config.functionToolStatefulApi) {
+        // Retrieve final state from stateful API before shutting down. Skip
+        // if the request has already been resolved (e.g. by an early
+        // onclose/timeout) — the caller has moved on and won't read the
+        // result.
+        if (!isResolved && !toolsDisabled && config.functionToolStatefulApi) {
           try {
-            const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
-            const apiResponse = await axios.get(url);
-            statefulApiState = apiResponse.data;
+            const url = new URL('get_state', config.functionToolStatefulApi.url).href;
+            statefulApiState = await fetchJson(url);
             logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
           } catch (err) {
             logger.error(`Error retrieving final state of api: ${JSON.stringify(err)}`);
@@ -260,7 +392,7 @@ export class GoogleLiveProvider implements ApiProvider {
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
-        } = this.config.generationConfig || {};
+        } = config.generationConfig || {};
 
         let formattedSpeechConfig;
         if (speechConfig) {
@@ -287,20 +419,20 @@ export class GoogleLiveProvider implements ApiProvider {
           setup: {
             model: `models/${this.modelName}`,
             generation_config: {
-              context: this.config.context,
-              examples: this.config.examples,
-              stopSequences: this.config.stopSequences,
-              temperature: this.config.temperature,
-              maxOutputTokens: this.config.maxOutputTokens,
-              topP: this.config.topP,
-              topK: this.config.topK,
+              context: config.context,
+              examples: config.examples,
+              stopSequences: config.stopSequences,
+              temperature: config.temperature,
+              maxOutputTokens: config.maxOutputTokens,
+              topP: config.topP,
+              topK: config.topK,
               ...restGenerationConfig,
               ...(formattedSpeechConfig ? { speech_config: formattedSpeechConfig } : {}),
               ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
-            ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+            ...(toolConfig ? { toolConfig } : {}),
+            ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }
@@ -316,6 +448,12 @@ export class GoogleLiveProvider implements ApiProvider {
       };
 
       ws.onmessage = async (event) => {
+        // Once the request has been resolved (e.g. by an early onclose or
+        // timeout), drop any in-flight messages so they don't trigger side
+        // effects like stateful-API fetches after the caller has moved on.
+        if (isResolved) {
+          return;
+        }
         // Handle different data types from WebSocket
         logger.debug('WebSocket message received');
         let responseData: string;
@@ -346,6 +484,11 @@ export class GoogleLiveProvider implements ApiProvider {
 
         try {
           const responseText = await new Response(responseData).text();
+          // Re-check after the await: the request may have been resolved by an
+          // onclose/timeout while we were parsing.
+          if (isResolved) {
+            return;
+          }
           const response = JSON.parse(responseText);
 
           if (response.error) {
@@ -373,149 +516,196 @@ export class GoogleLiveProvider implements ApiProvider {
           );
 
           if (response.setupComplete) {
-            const contentMessage = formatContentMessage(contents, contentIndex);
+            const contentMessage = formatContentMessage(
+              contents,
+              contentIndex,
+              usesRealtimeTextInput,
+            );
             contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
-          } else if (
-            response.serverContent?.outputTranscription?.text &&
-            !response.serverContent?.modelTurn
-          ) {
-            // Handle transcription-only messages (when transcription comes separately)
-            response_audio_transcript += response.serverContent.outputTranscription.text;
-            clearTimeout(timeout);
-          } else if (response.serverContent?.modelTurn?.parts) {
-            for (const part of response.serverContent.modelTurn.parts) {
-              if (part.text) {
-                response_text_total += part.text;
-                clearTimeout(timeout);
-              }
-              if (part.inlineData?.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
-                clearTimeout(timeout);
-                if (isAudioExpected) {
-                  hasAudioStreamEnded = false;
+          } else if (response.serverContent) {
+            const { serverContent } = response;
+
+            if (serverContent.modelTurn?.parts) {
+              for (const part of serverContent.modelTurn.parts) {
+                if (part.text) {
+                  response_text_total += part.text;
+                  clearTimeout(timeout);
                 }
-              }
-            }
-            if (response.serverContent.outputTranscription?.text) {
-              // Append transcription text (it comes in chunks)
-              response_audio_transcript += response.serverContent.outputTranscription.text;
-              // Mark that we've received audio content when transcription arrives
-              if (isAudioExpected) {
-                hasAudioContent = true;
-              }
-            }
-          } else if (response.serverContent?.generationComplete) {
-            logger.debug(
-              `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
-            );
-            if (isTextExpected && !hasTextStreamEnded) {
-              hasTextStreamEnded = true;
-            }
-            // When audio with transcription is expected, generation complete signals end of audio too
-            if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
-              hasAudioStreamEnded = true;
-            }
-            if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse().catch((err) => {
-                logger.error(`Error in finalizeResponse: ${err}`);
-                safeResolve({ error: `Error finalizing response: ${err}` });
-              });
-              return;
-            }
-          } else if (response.serverContent?.turnComplete && contentIndex >= contents.length) {
-            logger.debug(
-              `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
-            );
-            if (isTextExpected && !hasTextStreamEnded) {
-              hasTextStreamEnded = true;
-            }
-            if (isAudioExpected && !hasAudioStreamEnded) {
-              // When transcription is enabled, we should complete immediately on turnComplete
-              // as the audio and transcription are sent together
-              if (hasOutputTranscription || hasInputTranscription) {
-                hasAudioStreamEnded = true;
-              } else if (hasAudioContent) {
-                hasAudioStreamEnded = true;
-              } else {
-                hasAudioStreamEnded = true;
-              }
-            }
-            if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse().catch((err) => {
-                logger.error(`Error in finalizeResponse: ${err}`);
-                safeResolve({ error: `Error finalizing response: ${err}` });
-              });
-              return;
-            }
-          } else if (response.serverContent?.turnComplete && contentIndex < contents.length) {
-            const contentMessage = formatContentMessage(contents, contentIndex);
-            contentIndex += 1;
-            logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
-          } else if (response.toolCall?.functionCalls) {
-            for (const functionCall of response.toolCall.functionCalls) {
-              function_calls_total.push(functionCall);
-              if (functionCall && functionCall.id && functionCall.name) {
-                let callbackResponse = {};
-                const functionName = functionCall.name;
-                try {
-                  if (this.config.functionToolCallbacks?.[functionName]) {
-                    callbackResponse = await this.executeFunctionCallback(
-                      functionName,
-                      JSON.stringify(
-                        typeof functionCall.args === 'string'
-                          ? JSON.parse(functionCall.args)
-                          : functionCall.args,
-                      ),
-                    );
-                  } else if (this.config.functionToolStatefulApi) {
-                    logger.warn(
-                      'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
-                    );
-                    const url = new URL(functionName, this.config.functionToolStatefulApi.url).href;
-                    try {
-                      // Try GET first, then fall back to POST
-                      try {
-                        const axiosResponse = await axios.get(url, {
-                          params: functionCall.args || null,
-                        });
-                        callbackResponse = axiosResponse.data;
-                      } catch {
-                        const axiosResponse = await axios.post(url, functionCall.args || null);
-                        callbackResponse = axiosResponse.data;
-                      }
-                      logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
-                    } catch (err) {
-                      callbackResponse = {
-                        error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                      };
-                      logger.error(
-                        `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                      );
-                    }
+                if (part.inlineData?.mimeType?.includes('audio')) {
+                  hasAudioContent = true;
+                  response_audio_total += part.inlineData.data;
+                  clearTimeout(timeout);
+                  if (isAudioExpected) {
+                    hasAudioStreamEnded = false;
                   }
-                } catch (err) {
-                  callbackResponse = {
-                    error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                  };
-                  logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
                 }
-                const toolMessage = {
-                  tool_response: {
-                    function_responses: {
-                      id: functionCall.id,
-                      name: functionName,
-                      response: callbackResponse,
-                    },
-                  },
-                };
-                logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
-                ws.send(JSON.stringify(toolMessage));
+              }
+              if (serverContent.outputTranscription?.text) {
+                response_audio_transcript += serverContent.outputTranscription.text;
+                if (isAudioExpected) {
+                  hasAudioContent = true;
+                }
+                clearTimeout(timeout);
+              }
+            } else if (serverContent.outputTranscription?.text) {
+              // Handle transcription-only messages when transcription arrives separately.
+              response_audio_transcript += serverContent.outputTranscription.text;
+              clearTimeout(timeout);
+            }
+
+            if (serverContent.generationComplete) {
+              logger.debug(
+                `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
+              );
+              if (isTextExpected && !hasTextStreamEnded) {
+                hasTextStreamEnded = true;
+              }
+              if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
+                hasAudioStreamEnded = true;
+              }
+              if (usesRealtimeTextInput && contentIndex < contents.length) {
+                const contentMessage = formatContentMessage(
+                  contents,
+                  contentIndex,
+                  usesRealtimeTextInput,
+                );
+                contentIndex += 1;
+                logger.debug(
+                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessage)}`,
+                );
+                ws.send(JSON.stringify(contentMessage));
+                hasTextStreamEnded = !isTextExpected;
+                hasAudioStreamEnded = !isAudioExpected;
+                return;
               }
             }
+
+            if (serverContent.turnComplete && contentIndex < contents.length) {
+              const contentMessage = formatContentMessage(
+                contents,
+                contentIndex,
+                usesRealtimeTextInput,
+              );
+              contentIndex += 1;
+              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
+              ws.send(JSON.stringify(contentMessage));
+              return;
+            }
+
+            if (serverContent.turnComplete && contentIndex >= contents.length) {
+              logger.debug(
+                `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
+              );
+              if (isTextExpected && !hasTextStreamEnded) {
+                hasTextStreamEnded = true;
+              }
+              if (isAudioExpected && !hasAudioStreamEnded) {
+                hasAudioStreamEnded = true;
+              }
+            }
+
+            if (hasTextStreamEnded && hasAudioStreamEnded && contentIndex >= contents.length) {
+              try {
+                await finalizeResponse();
+              } catch (err) {
+                logger.error(`Error in finalizeResponse: ${err}`);
+                safeResolve({ error: `Error finalizing response: ${err}` });
+              }
+            }
+            return;
+          } else if (response.toolCall?.functionCalls) {
+            // Skip tool execution and tool_response sends if the request is
+            // already resolved (e.g. via timeout/onclose).
+            if (isResolved) {
+              return;
+            }
+            if (toolsDisabled) {
+              // Reply with an error tool_response so the model can complete its turn
+              // instead of waiting for a response that will never come (which would
+              // otherwise stall the websocket until the 30s timeoutMs fires).
+              logger.warn('Ignoring function calls received while tools are disabled.');
+              for (const functionCall of response.toolCall.functionCalls) {
+                if (functionCall?.id && functionCall.name) {
+                  const toolMessage = {
+                    tool_response: {
+                      function_responses: {
+                        id: functionCall.id,
+                        name: functionCall.name,
+                        response: { error: 'Tool calls are disabled for this request.' },
+                      },
+                    },
+                  };
+                  ws.send(JSON.stringify(toolMessage));
+                }
+              }
+            } else {
+              for (const functionCall of response.toolCall.functionCalls) {
+                function_calls_total.push(functionCall);
+                if (functionCall && functionCall.id && functionCall.name) {
+                  let callbackResponse: unknown = {};
+                  const functionName = functionCall.name;
+                  try {
+                    if (config.functionToolCallbacks?.[functionName]) {
+                      callbackResponse = await this.executeFunctionCallback(
+                        functionName,
+                        JSON.stringify(
+                          typeof functionCall.args === 'string'
+                            ? JSON.parse(functionCall.args)
+                            : functionCall.args,
+                        ),
+                        config.functionToolCallbacks,
+                      );
+                    } else if (config.functionToolStatefulApi) {
+                      logger.warn(
+                        'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
+                      );
+                      const baseUrl = new URL(functionName, config.functionToolStatefulApi.url)
+                        .href;
+                      try {
+                        callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
+                        logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
+                      } catch (err) {
+                        callbackResponse = {
+                          error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                        };
+                        logger.error(
+                          `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                        );
+                      }
+                    }
+                  } catch (err) {
+                    callbackResponse = {
+                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                    };
+                    logger.error(
+                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                    );
+                  }
+                  // The callback above may have awaited; bail before sending
+                  // a tool_response if the request has since been resolved.
+                  if (isResolved) {
+                    return;
+                  }
+                  const toolMessage = {
+                    tool_response: {
+                      function_responses: {
+                        id: functionCall.id,
+                        name: functionName,
+                        response: callbackResponse,
+                      },
+                    },
+                  };
+                  logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+                  ws.send(JSON.stringify(toolMessage));
+                }
+              }
+            }
+          } else if (response.sessionResumptionUpdate) {
+            logger.debug(
+              `Session resumption update received: ${JSON.stringify(response.sessionResumptionUpdate)}`,
+            );
           } else if (response.realtimeInput?.mediaChunks) {
             for (const chunk of response.realtimeInput.mediaChunks) {
               if (chunk.mimeType?.includes('audio')) {
@@ -557,11 +747,13 @@ export class GoogleLiveProvider implements ApiProvider {
                 'Unknown message with transcription enabled - marking audio as complete',
               );
               hasAudioStreamEnded = true;
-              if (hasTextStreamEnded && hasAudioStreamEnded) {
-                finalizeResponse().catch((err) => {
+              if (hasTextStreamEnded) {
+                try {
+                  await finalizeResponse();
+                } catch (err) {
                   logger.error(`Error in finalizeResponse: ${err}`);
                   safeResolve({ error: `Error finalizing response: ${err}` });
-                });
+                }
               }
             }
           }
@@ -658,14 +850,19 @@ export class GoogleLiveProvider implements ApiProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<any> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callbacks = this.config.functionToolCallbacks,
+  ): Promise<any> {
     try {
+      const shouldUseSharedCache = callbacks === this.config.functionToolCallbacks;
       // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
+      let callback = shouldUseSharedCache ? this.loadedFunctionCallbacks[functionName] : undefined;
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = this.config.functionToolCallbacks?.[functionName];
+        const callbackRef = callbacks?.[functionName];
 
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
@@ -675,11 +872,14 @@ export class GoogleLiveProvider implements ApiProvider {
             callback = new Function('return ' + callbackStr)();
           }
 
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
+          if (shouldUseSharedCache && callback) {
+            this.loadedFunctionCallbacks[functionName] = callback;
+          }
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
+          if (shouldUseSharedCache) {
+            this.loadedFunctionCallbacks[functionName] = callback;
+          }
         }
       }
 

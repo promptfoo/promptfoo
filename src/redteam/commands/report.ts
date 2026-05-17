@@ -2,8 +2,8 @@ import { getDefaultPort } from '../../constants';
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
 import { setConfigDirectoryPath } from '../../util/config/manage';
+import { setupEnv } from '../../util/index';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import type { Command } from 'commander';
 
@@ -25,9 +25,7 @@ export function redteamReportCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
-        telemetry.record('command_used', {
-          name: 'redteam report',
-        });
+        telemetry.record('redteam report', {});
 
         if (directory) {
           setConfigDirectoryPath(directory);

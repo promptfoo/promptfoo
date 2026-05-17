@@ -1,23 +1,27 @@
-import { fetchWithCache } from '../cache';
+import dedent from 'dedent';
 import { VERSION } from '../constants';
-import { fetchWithRetries } from '../fetch';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import {
   getRemoteGenerationUrl,
   getRemoteGenerationUrlForUnaligned,
+  neverGenerateRemote,
+  neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
+import { fetchWithRetries } from '../util/fetch/index';
+import { getRequestTimeoutMs } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
+} from '../types/index';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -26,6 +30,10 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
 }
 
+/**
+ * Provider for generating harmful/adversarial content using Promptfoo's unaligned models.
+ * Used by red team plugins to generate test cases for harmful content categories.
+ */
 export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   harmCategory: string;
   n: number;
@@ -48,10 +56,25 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   }
 
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
+    // Check if remote generation is disabled
+    if (neverGenerateRemote()) {
+      return {
+        error: dedent`
+          Remote generation is disabled. Harmful content generation requires Promptfoo's unaligned models.
+
+          To enable:
+          - Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
+          - Or configure an alternative unaligned model provider
+
+          Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation
+        `,
+      };
+    }
+
     const body = {
       email: getUserEmail(),
       harmCategory: this.harmCategory,
@@ -74,6 +97,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
         580000,
         2,
@@ -84,7 +108,6 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       }
 
       const data = await response.json();
-      logger.debug(`[HarmfulCompletionProvider] API call response: ${JSON.stringify(data)}`);
 
       const validOutputs: string[] = (
         Array.isArray(data.output) ? data.output : [data.output]
@@ -97,6 +120,10 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         output: validOutputs,
       };
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.info(`[HarmfulCompletionProvider] ${err}`);
       return {
         error: `[HarmfulCompletionProvider] ${err}`,
@@ -117,9 +144,21 @@ interface PromptfooChatCompletionOptions {
     | 'iterative:image'
     | 'iterative:tree'
     | 'judge'
-    | 'blocking-question-analysis';
+    | 'blocking-question-analysis'
+    | 'meta-agent-decision'
+    | 'hydra-decision'
+    | 'voice-crescendo'
+    | 'voice-crescendo-eval';
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   */
+  inputs?: Inputs;
 }
 
+/**
+ * Provider for red team adversarial strategies using Promptfoo's task-specific models.
+ * Supports multi-turn attack strategies like crescendo, goat, and iterative attacks.
+ */
 export class PromptfooChatCompletionProvider implements ApiProvider {
   private options: PromptfooChatCompletionOptions;
 
@@ -140,6 +179,22 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Check if remote generation is disabled
+    if (neverGenerateRemote()) {
+      return {
+        error: dedent`
+          Remote generation is disabled. This red team strategy requires Promptfoo's task-specific models.
+
+          To enable:
+          - Remove PROMPTFOO_DISABLE_REMOTE_GENERATION (or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)
+          - Or provide OPENAI_API_KEY for local generation (may have lower quality)
+
+          Learn more: https://www.promptfoo.dev/docs/red-team/configuration#remote-generation
+        `,
+      };
+    }
+
+    const materializationContext = getRemoteMaterializationContextFromVars(context?.vars);
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -147,10 +202,13 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      // Pass inputs schema for multi-input mode
+      ...(this.options.inputs && { inputs: this.options.inputs }),
+      ...(materializationContext ? { materializationContext } : {}),
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const response = await fetchWithRetries(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -158,15 +216,16 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
-      const { result, tokenUsage } = data;
+      const data = await response.json();
 
-      if (!result) {
-        logger.error(
-          `Error from promptfoo completion provider. Status: ${status} ${statusText} ${JSON.stringify(data)} `,
+      if (!data.result) {
+        logger.debug(
+          `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
           error: 'LLM did not return a result, likely refusal',
@@ -174,10 +233,17 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       }
 
       return {
-        output: result,
-        tokenUsage,
+        inputMaterialization: data.inputMaterialization,
+        materializationHandled: data.materializationHandled,
+        materializedVars: data.materializedVars,
+        output: data.result,
+        tokenUsage: data.tokenUsage,
       };
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -191,6 +257,13 @@ interface PromptfooAgentOptions {
   instructions?: string;
 }
 
+// Task ID constants for simulated user provider
+export const REDTEAM_SIMULATED_USER_TASK_ID = 'mischievous-user-redteam';
+
+/**
+ * Provider for simulating realistic user conversations using Promptfoo's conversation models.
+ * Supports both regular simulated users and adversarial red team users.
+ */
 export class PromptfooSimulatedUserProvider implements ApiProvider {
   private options: PromptfooAgentOptions;
   private taskId: string;
@@ -210,9 +283,39 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
+    _context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Check if this is a redteam task
+    const isRedteamTask = this.taskId === REDTEAM_SIMULATED_USER_TASK_ID;
+
+    // For redteam tasks, check the redteam-specific flag
+    // For regular tasks, only check the general flag
+    const shouldDisable = isRedteamTask
+      ? neverGenerateRemote() // Checks both flags
+      : neverGenerateRemoteForRegularEvals(); // Only checks general flag
+
+    if (shouldDisable) {
+      const relevantFlag = isRedteamTask
+        ? 'PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'
+        : 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+      const docsUrl = isRedteamTask
+        ? 'https://www.promptfoo.dev/docs/red-team/configuration#remote-generation'
+        : 'https://www.promptfoo.dev/docs/providers/simulated-user#remote-generation';
+
+      return {
+        error: dedent`
+          Remote generation is disabled.
+
+          SimulatedUser requires Promptfoo's conversation simulation models.
+
+          To enable, remove ${relevantFlag}
+
+          Learn more: ${docsUrl}
+        `,
+      };
+    }
+
     const messages = JSON.parse(prompt);
     const body = {
       task: this.taskId,
@@ -222,7 +325,6 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       version: VERSION,
     };
 
-    logger.debug(`Calling promptfoo agent API with body: ${JSON.stringify(body)}`);
     try {
       const response = await fetchWithRetries(
         getRemoteGenerationUrl(),
@@ -232,8 +334,9 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (!response.ok) {
@@ -250,6 +353,10 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
         tokenUsage: data.tokenUsage,
       };
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       return {
         error: `API call error: ${String(err)}`,
       };

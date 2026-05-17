@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - JavaScript test generator (4.2.7)'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests: file://../data/test-generator.js

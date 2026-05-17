@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -6,16 +7,16 @@ import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../../src/
 
 import type { Prompt } from '../../src/types/prompts';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/models/eval');
-jest.mock('../../src/util/database');
+vi.mock('../../src/logger');
+vi.mock('../../src/models/eval');
+vi.mock('../../src/util/database');
 
 describe('show command', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     process.exitCode = undefined;
   });
 
@@ -30,13 +31,13 @@ describe('show command', () => {
         vars: [],
         testResults: [],
         metrics: {},
-        getTable: jest.fn().mockResolvedValue({
+        getTable: vi.fn().mockResolvedValue({
           head: { prompts: [], vars: [] },
           body: [],
         }),
       };
-      jest.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
-      jest.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
+      vi.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
+      vi.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show']);
@@ -45,7 +46,7 @@ describe('show command', () => {
     });
 
     it('should show error if no eval found and no id provided', async () => {
-      jest.mocked(Eval.latest).mockResolvedValue(undefined);
+      vi.mocked(Eval.latest).mockResolvedValue(undefined);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show']);
@@ -61,13 +62,13 @@ describe('show command', () => {
         date: new Date(),
         config: {},
         results: [],
-        getTable: jest.fn().mockResolvedValue({
+        getTable: vi.fn().mockResolvedValue({
           head: { prompts: [], vars: [] },
           body: [],
         }),
       };
-      jest.mocked(getEvalFromId).mockResolvedValue(mockEval as any);
-      jest.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+      vi.mocked(getEvalFromId).mockResolvedValue(mockEval as any);
+      vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', evalId]);
@@ -81,7 +82,7 @@ describe('show command', () => {
         raw: 'test',
         label: 'Test Prompt',
       };
-      jest.mocked(getPromptFromHash).mockResolvedValue({
+      vi.mocked(getPromptFromHash).mockResolvedValue({
         id: promptId,
         prompt: mockPrompt,
         evals: [],
@@ -95,7 +96,7 @@ describe('show command', () => {
 
     it('should show dataset if id matches dataset', async () => {
       const datasetId = 'dataset123';
-      jest.mocked(getDatasetFromHash).mockResolvedValue({
+      vi.mocked(getDatasetFromHash).mockResolvedValue({
         id: datasetId,
         prompts: [],
         recentEvalDate: new Date(),
@@ -112,9 +113,9 @@ describe('show command', () => {
 
     it('should show error if no resource found with id', async () => {
       const invalidId = 'invalid123';
-      jest.mocked(getEvalFromId).mockResolvedValue(undefined);
-      jest.mocked(getPromptFromHash).mockResolvedValue(undefined);
-      jest.mocked(getDatasetFromHash).mockResolvedValue(undefined);
+      vi.mocked(getEvalFromId).mockResolvedValue(undefined);
+      vi.mocked(getPromptFromHash).mockResolvedValue(undefined);
+      vi.mocked(getDatasetFromHash).mockResolvedValue(undefined);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', invalidId]);
@@ -134,13 +135,13 @@ describe('show command', () => {
         vars: [],
         testResults: [],
         metrics: {},
-        getTable: jest.fn().mockResolvedValue({
+        getTable: vi.fn().mockResolvedValue({
           head: { prompts: [], vars: [] },
           body: [],
         }),
       };
-      jest.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
-      jest.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
+      vi.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
+      vi.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', 'eval']);
@@ -149,7 +150,7 @@ describe('show command', () => {
     });
 
     it('should show error if no eval found and no id provided', async () => {
-      jest.mocked(Eval.latest).mockResolvedValue(undefined);
+      vi.mocked(Eval.latest).mockResolvedValue(undefined);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', 'eval']);
@@ -160,7 +161,7 @@ describe('show command', () => {
 
     it('should show eval details for provided id', async () => {
       const evalId = 'eval123';
-      jest.mocked(Eval.findById).mockResolvedValue({
+      vi.mocked(Eval.findById).mockResolvedValue({
         id: evalId,
         createdAt: new Date(),
         config: {},
@@ -169,7 +170,7 @@ describe('show command', () => {
         vars: [],
         testResults: [],
         metrics: {},
-        getTable: jest.fn().mockResolvedValue({
+        getTable: vi.fn().mockResolvedValue({
           head: { prompts: [], vars: [] },
           body: [],
         }),
@@ -189,7 +190,7 @@ describe('show command', () => {
         raw: 'test',
         label: 'Test Prompt',
       };
-      jest.mocked(getPromptFromHash).mockResolvedValue({
+      vi.mocked(getPromptFromHash).mockResolvedValue({
         id: promptId,
         prompt: mockPrompt,
         evals: [],
@@ -205,7 +206,7 @@ describe('show command', () => {
   describe('show dataset', () => {
     it('should show dataset details', async () => {
       const datasetId = 'dataset123';
-      jest.mocked(getDatasetFromHash).mockResolvedValue({
+      vi.mocked(getDatasetFromHash).mockResolvedValue({
         id: datasetId,
         prompts: [],
         recentEvalDate: new Date(),
@@ -224,14 +225,14 @@ describe('show command', () => {
 
 describe('handlers', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     process.exitCode = undefined;
   });
 
   describe('handlePrompt', () => {
     it('should handle prompt not found', async () => {
       const promptId = 'nonexistent';
-      jest.mocked(getPromptFromHash).mockResolvedValue(undefined);
+      vi.mocked(getPromptFromHash).mockResolvedValue(undefined);
 
       await handlePrompt(promptId);
 
@@ -242,7 +243,7 @@ describe('handlers', () => {
   describe('handleEval', () => {
     it('should handle eval not found', async () => {
       const evalId = 'nonexistent';
-      jest.mocked(Eval.findById).mockResolvedValue(undefined);
+      vi.mocked(Eval.findById).mockResolvedValue(undefined);
 
       await handleEval(evalId);
 
@@ -253,7 +254,7 @@ describe('handlers', () => {
   describe('handleDataset', () => {
     it('should handle dataset not found', async () => {
       const datasetId = 'nonexistent';
-      jest.mocked(getDatasetFromHash).mockResolvedValue(undefined);
+      vi.mocked(getDatasetFromHash).mockResolvedValue(undefined);
 
       await handleDataset(datasetId);
 

@@ -1,8 +1,9 @@
 import React, { useContext } from 'react';
 
+import { useTestTimers } from '@app/tests/timers';
 import * as api from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { UserProvider } from './UserContext';
 import { UserContext } from './UserContextDef';
 
@@ -12,6 +13,12 @@ describe('UserProvider', () => {
   const mockedFetchUserEmail = vi.mocked(api.fetchUserEmail);
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    // Do not enable fake timers for the whole suite; waitFor needs real timers in most tests.
+    // Only use the shared timer helper in specific tests that need timer control.
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -102,6 +109,9 @@ describe('UserProvider', () => {
   });
 
   it('should not update state after unmounting', async () => {
+    // This test needs fake timers to control timing
+    const timers = useTestTimers();
+
     const testEmail = 'test.user@example.com';
     const setEmailMock = vi.fn();
     mockFetchUserEmail(testEmail);
@@ -127,7 +137,10 @@ describe('UserProvider', () => {
 
     unmount();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Advance fake timers instead of using real setTimeout
+    await act(async () => {
+      await timers.advanceByAsync(100);
+    });
 
     expect(setEmailMock).not.toHaveBeenCalled();
   });

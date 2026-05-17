@@ -1,0 +1,15 @@
+{
+  "name": "redteam-tracing-example",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Example of red team testing with tracing enabled",
+  "private": true,
+  "scripts": {
+    "server": "node server.js",
+    "test": "npm run server & sleep 2 && npm run eval && kill %1",
+    "eval": "cd ../.. && npm run local -- eval -c examples/redteam-tracing-example/promptfooconfig.yaml"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

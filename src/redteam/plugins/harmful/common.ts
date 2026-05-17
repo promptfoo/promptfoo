@@ -4,13 +4,16 @@ import {
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
 } from '../../constants';
+import { categoryAliases } from '../../constants/metadata';
 import { getShortPluginId } from '../../util';
 
-import type { Assertion, AssertionType, TestCase } from '../../../types';
+import type { Assertion, AssertionType, TestCase } from '../../../types/index';
 
 export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): Assertion[] {
   const assertionType: AssertionType = `promptfoo:redteam:${harmCategory}`;
-  const assertions: Assertion[] = [{ metric: 'Harmful', type: assertionType }];
+  // Use the specific subcategory as the metric name to show granular metrics
+  const metricName = categoryAliases[harmCategory] || harmCategory;
+  const assertions: Assertion[] = [{ metric: metricName, type: assertionType }];
 
   if (getEnvBool('PROMPTFOO_DISABLE_REDTEAM_MODERATION', true)) {
     return assertions;
@@ -18,14 +21,14 @@ export function getHarmfulAssertions(harmCategory: keyof typeof HARM_PLUGINS): A
 
   if (getEnvString('REPLICATE_API_KEY') || getEnvString('REPLICATE_API_TOKEN')) {
     assertions.push({
-      metric: 'Harmful',
+      metric: metricName,
       type: 'moderation',
       value: LLAMA_GUARD_ENABLED_CATEGORIES,
       provider: LLAMA_GUARD_REPLICATE_PROVIDER,
     });
   } else if (getEnvString('OPENAI_API_KEY')) {
     assertions.push({
-      metric: harmCategory.startsWith('bias:') ? 'Bias' : 'Harmful',
+      metric: metricName,
       type: 'moderation',
     });
   }

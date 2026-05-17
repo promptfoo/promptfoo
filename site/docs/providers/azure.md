@@ -1,8 +1,8 @@
 ---
 sidebar_position: 4
 title: Azure OpenAI Provider
-description: Configure and use Azure OpenAI models with promptfoo for evals, including GPT-4, reasoning models, and vision capabilities
-keywords: [azure, openai, gpt-4, vision, reasoning models, evaluation]
+description: Configure and use Azure OpenAI models with promptfoo for evals, including GPT-4, reasoning models, assistants, Azure AI Foundry, and vision capabilities
+keywords: [azure, openai, gpt-4, vision, reasoning models, assistants, azure ai foundry, evaluation]
 ---
 
 # Azure
@@ -24,18 +24,34 @@ providers:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
 
-### Option 2: Client Credentials Authentication
+### Option 2: Client Credentials (Service Principal) Authentication {#service-principal}
 
-Set the following environment variables or config properties:
+Use an Azure Entra ID (formerly Azure AD) **Service Principal** instead of an API key. This is the recommended approach for production environments, CI/CD pipelines, and any scenario where you want to avoid managing API keys directly.
 
-- `AZURE_CLIENT_ID` / `azureClientId`
-- `AZURE_CLIENT_SECRET` / `azureClientSecret`
-- `AZURE_TENANT_ID` / `azureTenantId`
+You'll need three values from your Service Principal's app registration in the [Azure Portal](https://portal.azure.com):
+
+- **Client ID** – the Application (client) ID of your app registration
+- **Client Secret** – a secret generated under _Certificates & secrets_
+- **Tenant ID** – your Azure AD / Entra ID directory (tenant) ID
+
+Set them as environment variables:
+
+```bash
+export AZURE_CLIENT_ID="your-application-client-id"
+export AZURE_CLIENT_SECRET="your-client-secret-value"
+export AZURE_TENANT_ID="your-directory-tenant-id"
+```
+
+Or set them in the provider `config` (see [full example below](#using-client-credentials)):
+
+- `azureClientId`
+- `azureClientSecret`
+- `azureTenantId`
 
 Optionally, you can also set:
 
-- `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to 'https://login.microsoftonline.com')
-- `AZURE_TOKEN_SCOPE` / `azureTokenScope` (defaults to 'https://cognitiveservices.azure.com/.default')
+- `AZURE_AUTHORITY_HOST` / `azureAuthorityHost` (defaults to `https://login.microsoftonline.com`)
+- `AZURE_TOKEN_SCOPE` / `azureTokenScope` (defaults to `https://cognitiveservices.azure.com/.default`)
 
 Then configure your deployment:
 
@@ -45,6 +61,12 @@ providers:
     config:
       apiHost: 'xxxxxxxx.openai.azure.com'
 ```
+
+:::tip
+
+The Service Principal must have the **Cognitive Services OpenAI User** role (or equivalent) assigned on your Azure OpenAI resource. You can assign this in the Azure Portal under your resource's **Access control (IAM)** blade.
+
+:::
 
 ### Option 3: Azure CLI Authentication
 
@@ -65,11 +87,302 @@ providers:
 
 ## Provider Types
 
-- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-4o, gpt-4o-mini, gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
+- `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-5.4, gpt-5.4-mini, gpt-5.4-nano, gpt-5, gpt-4o)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
+- `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-4.1, gpt-5.1)
+- `azure:assistant:<assistant id>` - For Azure OpenAI Assistants (using Azure OpenAI API)
+- `azure:foundry-agent:<agent name or id>` - For Azure AI Foundry Agents (using Azure AI Projects SDK)
+- `azure:video:<deployment name>` - For video generation (Sora)
 
-Vision-capable models (GPT-4o, GPT-4.1) use the standard `azure:chat:` provider type.
+Vision-capable GPT-5, GPT-4o, and GPT-4.1 deployments use the standard `azure:chat:` provider type.
+
+Azure deployment availability changes frequently and varies by region. Check the
+[Azure OpenAI model availability page](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure)
+for the current list of supported models and regions before creating new deployments.
+
+## Available Models
+
+Azure provides access to OpenAI models as well as third-party models through Azure AI Foundry (Microsoft Foundry).
+
+### OpenAI Models
+
+| Category             | Models                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **GPT-5 Series**     | `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
+| **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                              |
+| **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                             |
+| **Reasoning Models** | `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`                                                                                        |
+| **Specialized**      | `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`                                                                                             |
+| **Deep Research**    | `o3-deep-research`, `o4-mini-deep-research`                                                                                                            |
+| **Embeddings**       | `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`                                                                           |
+
+### Third-Party Models (Azure AI Foundry)
+
+Azure AI Foundry provides access to models from multiple providers:
+
+| Provider             | Models                                                                                                                                                                                                                                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                        |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                     |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                               |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                            |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                   |
+
+For the complete list of 200+ models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
+
+## Azure Responses API
+
+The Azure OpenAI Responses API is a stateful API that brings together the best capabilities from chat completions and assistants API in one unified experience. It provides advanced features like MCP servers, code interpreter, and background tasks.
+
+### Using the Responses API
+
+To use the Azure Responses API with promptfoo, use the `azure:responses` provider type:
+
+```yaml
+providers:
+  # Using the azure:responses alias (recommended)
+  # Note: deployment name must match your Azure deployment, not the model name
+  - id: azure:responses:my-gpt-4-1-deployment
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+      response_format: file://./response-schema.json
+      # For newer v1 API, use 'preview' (default)
+      # For legacy API, use specific version like '2025-04-01-preview'
+      apiVersion: 'preview'
+
+  # Or using openai:responses with Azure configuration (legacy method)
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      apiKey: '{{ env.AZURE_API_KEY }}' # or set OPENAI_API_KEY env var
+      temperature: 0.7
+      instructions: 'You are a helpful assistant.'
+```
+
+### Supported Responses Models
+
+The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
+
+- **GPT-5 Series**: `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
+- **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
+- **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
+- **Specialized Models**: `computer-use-preview`, `gpt-image-1`, `codex-mini-latest`
+- **Deep Research Models**: `o3-deep-research`, `o4-mini-deep-research`
+
+Use your Azure deployment name in promptfoo, even if it differs from the underlying model ID.
+
+### Responses API Features
+
+#### Response Format with External Files
+
+Load complex JSON schemas from external files for better organization:
+
+```yaml
+providers:
+  - id: openai:responses:gpt-4.1
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      response_format: file://./schemas/response-schema.json
+```
+
+Example `response-schema.json`:
+
+```json
+{
+  "type": "json_schema",
+  "name": "structured_output",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "result": { "type": "string" },
+      "confidence": { "type": "number" }
+    },
+    "required": ["result", "confidence"],
+    "additionalProperties": false
+  }
+}
+```
+
+You can also use nested file references for the schema itself:
+
+```json
+{
+  "type": "json_schema",
+  "name": "structured_output",
+  "schema": "file://./schemas/output-schema.json"
+}
+```
+
+Variable rendering is supported in file paths:
+
+```yaml
+config:
+  response_format: file://./schemas/{{ schema_name }}.json
+```
+
+#### Advanced Configuration
+
+**Instructions**: Provide system-level instructions to guide model behavior:
+
+```yaml
+config:
+  instructions: 'You are a helpful assistant specializing in technical documentation.'
+```
+
+**Background Tasks**: Enable asynchronous processing for long-running tasks:
+
+```yaml
+config:
+  background: true
+  store: true
+```
+
+**Chaining Responses**: Chain multiple responses together for multi-turn conversations:
+
+```yaml
+config:
+  previous_response_id: '{{previous_id}}'
+```
+
+**MCP Servers**: Connect to remote MCP servers for extended tool capabilities:
+
+```yaml
+config:
+  tools:
+    - type: mcp
+      server_label: github
+      server_url: https://example.com/mcp-server
+      require_approval: never
+      headers:
+        Authorization: 'Bearer {{ env.MCP_API_KEY }}'
+```
+
+**Code Interpreter**: Enable code execution capabilities:
+
+```yaml
+config:
+  tools:
+    - type: code_interpreter
+      container:
+        type: auto
+```
+
+**Web Search**: Enable web search capabilities:
+
+```yaml
+config:
+  tools:
+    - type: web_search_preview
+```
+
+**Image Generation**: Use image generation with supported models:
+
+```yaml
+config:
+  tools:
+    - type: image_generation
+      partial_images: 2 # For streaming partial images
+```
+
+### Complete Responses API Example
+
+Here's a comprehensive example using multiple Azure Responses API features:
+
+```yaml
+# promptfooconfig.yaml
+description: Azure Responses API evaluation
+
+providers:
+  # Using the new azure:responses alias (recommended)
+  - id: azure:responses:gpt-4.1-deployment
+    label: azure-gpt-4.1
+    config:
+      temperature: 0.7
+      max_output_tokens: 2000
+      instructions: 'You are a helpful AI assistant.'
+      response_format: file://./response-format.json
+      tools:
+        - type: code_interpreter
+          container:
+            type: auto
+        - type: web_search_preview
+      metadata:
+        session: 'eval-001'
+        user: 'test-user'
+      store: true
+
+  # Reasoning model example
+  - id: azure:responses:o3-mini-deployment
+    label: azure-reasoning
+    config:
+      reasoning_effort: medium
+      max_completion_tokens: 4000
+
+prompts:
+  - 'Analyze this data and provide insights: {{data}}'
+  - 'Write a Python function to solve: {{problem}}'
+
+tests:
+  - vars:
+      data: 'Sales increased by 25% in Q3 compared to Q2'
+    assert:
+      - type: contains
+        value: 'growth'
+      - type: contains
+        value: '25%'
+
+  - vars:
+      problem: 'Calculate fibonacci sequence up to n terms'
+    assert:
+      - type: javascript
+        value: 'output.includes("def fibonacci") || output.includes("function fibonacci")'
+      - type: contains
+        value: 'recursive'
+```
+
+### Additional Responses API Configuration
+
+**Streaming**: Enable streaming for real-time output:
+
+```yaml
+config:
+  stream: true
+```
+
+**Parallel Tool Calls**: Allow multiple tool calls in parallel:
+
+```yaml
+config:
+  parallel_tool_calls: true
+  max_tool_calls: 5
+```
+
+**Truncation**: Configure how input is truncated when it exceeds limits:
+
+```yaml
+config:
+  truncation: auto # or 'disabled'
+```
+
+**Webhook URL**: Set a webhook for async notifications:
+
+```yaml
+config:
+  webhook_url: 'https://your-webhook.com/callback'
+```
+
+### Responses API Limitations
+
+- Web search tool support is still in development
+- PDF file upload with `purpose: user_data` requires workaround (use `purpose: assistants`)
+- Background mode requires `store: true`
+- Some features may have region-specific availability
 
 ## Environment Variables
 
@@ -179,35 +492,65 @@ All other [OpenAI provider](/docs/providers/openai) environment variables and co
 
 :::
 
-## Using Client Credentials
+## Using Client Credentials (Service Principal) {#using-client-credentials}
 
-To use client credentials for authentication with Azure, first install the peer dependency:
+If you want to authenticate with a **Service Principal (SPN)** instead of an API key, follow these steps.
+
+### Prerequisites
+
+1. **Register an application** in [Azure Entra ID](https://portal.azure.com/#view/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/~/RegisteredApps) (formerly Azure AD) to create a Service Principal.
+2. **Create a client secret** for the app registration under _Certificates & secrets_.
+3. **Assign the role** `Cognitive Services OpenAI User` (or `Cognitive Services Contributor`) to the Service Principal on your Azure OpenAI resource. Go to your resource's **Access control (IAM)** > **Add role assignment**.
+4. **Install the `@azure/identity` package** — promptfoo uses it to obtain tokens from Azure Entra ID:
 
 ```sh
-npm i @azure/identity
+npm install @azure/identity
 ```
 
-Then set the following configuration variables:
+### Configuration
+
+You can provide the Service Principal credentials via **environment variables** or directly in the YAML **config**.
+
+**Using environment variables** (recommended for CI/CD and production):
+
+```bash
+export AZURE_CLIENT_ID="00000000-0000-0000-0000-000000000000"   # Application (client) ID
+export AZURE_CLIENT_SECRET="your-client-secret-value"            # Client secret
+export AZURE_TENANT_ID="00000000-0000-0000-0000-000000000000"   # Directory (tenant) ID
+```
 
 ```yaml
 providers:
-  - id: azure:chat:deploymentNameHere
+  - id: azure:chat:my-gpt-4o-deployment
     config:
-      apiHost: 'xxxxxxxx.openai.azure.com'
-      azureClientId: 'your-azure-client-id'
-      azureClientSecret: 'your-azure-client-secret'
-      azureTenantId: 'your-azure-tenant-id'
+      apiHost: 'your-resource.openai.azure.com'
+```
+
+**Using inline config** (useful for local testing):
+
+```yaml
+providers:
+  - id: azure:chat:my-gpt-4o-deployment
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      azureClientId: '00000000-0000-0000-0000-000000000000'
+      azureClientSecret: 'your-client-secret-value'
+      azureTenantId: '00000000-0000-0000-0000-000000000000'
       azureAuthorityHost: 'https://login.microsoftonline.com' # Optional
       azureTokenScope: 'https://cognitiveservices.azure.com/.default' # Optional
 ```
 
-These credentials will be used to obtain an access token for the Azure OpenAI API.
+### How It Works
 
-The `azureAuthorityHost` defaults to 'https://login.microsoftonline.com' if not specified. The `azureTokenScope` defaults to 'https://cognitiveservices.azure.com/.default', the scope required to authenticate with Azure Cognitive Services.
+When client credentials are provided, promptfoo uses the `@azure/identity` library to create a `ClientSecretCredential` and requests an access token scoped to Azure Cognitive Services (`https://cognitiveservices.azure.com/.default`). The token is then sent as a `Bearer` token in the `Authorization` header instead of an API key.
+
+If neither an API key nor client credentials are provided, promptfoo falls back to `AzureCliCredential` (i.e., your `az login` session) — see [Option 3](#option-3-azure-cli-authentication).
+
+The `azureAuthorityHost` defaults to `https://login.microsoftonline.com` if not specified. The `azureTokenScope` defaults to `https://cognitiveservices.azure.com/.default`, the scope required to authenticate with Azure Cognitive Services. You typically don't need to change these unless you're working with a sovereign cloud (e.g., Azure Government or Azure China).
 
 ## Model-Graded Tests
 
-[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-4.1-2025-04-14` by default. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
+[Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) such as `factuality` or `llm-rubric` use `gpt-5` by default. When `AZURE_DEPLOYMENT_NAME` is set (and `OPENAI_API_KEY` is not), promptfoo automatically uses the specified Azure deployment for grading. You can also explicitly override the grader as shown below.
 
 The easiest way to do this for _all_ your test cases is to add the [`defaultTest`](/docs/configuration/guide/#default-test-cases) property to your config:
 
@@ -289,7 +632,27 @@ defaultTest:
 
 ## AI Services
 
-You may also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
+You may also specify `data_sources` to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/references/on-your-data).
+
+```yaml
+providers:
+  - id: azure:chat:deploymentNameHere
+    config:
+      apiHost: 'xxxxxxxx.openai.azure.com'
+      deployment_id: 'abc123'
+data_sources:
+ - type: azure_search
+  parameters:
+   endpoint: https://xxxxxxxx.search.windows.net
+    index_name: index123
+     authentication:
+      type: api_key
+       key: ''
+```
+
+:::note
+
+For legacy Azure OpenAI API versions before 2024-02-15-preview, you can also specify `deployment_id` and `dataSources`, used to integrate with the [Azure AI Search API](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data#conversation-history-for-better-results).
 
 ```yaml
 providers:
@@ -305,7 +668,7 @@ providers:
             indexName: '...'
 ```
 
-(The inconsistency in naming convention between `deployment_id` and `dataSources` reflects the actual naming in the Azure API.)
+:::
 
 ## Configuration Reference
 
@@ -334,23 +697,24 @@ These properties can be set under the provider `config` key:
 
 ### OpenAI Configuration
 
-| Name                  | Description                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                   |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models** |
-| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                           |
-| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                               |
-| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                              |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                             |
-| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                         |
-| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                            |
-| best_of               | Generates multiple outputs and returns the best                                                                             |
-| functions             | Array of functions available for the model to call                                                                          |
-| function_call         | Controls how the model calls functions                                                                                      |
-| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                   |
-| stop                  | Array of sequences where the model will stop generating                                                                     |
-| passthrough           | Additional parameters to send with the request                                                                              |
+| Name                  | Description                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
+| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
+| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
+| max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
+| top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
+| frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
+| presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
+| omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
+| best_of               | Generates multiple outputs and returns the best                                                                                                 |
+| functions             | Array of functions available for the model to call                                                                                              |
+| function_call         | Controls how the model calls functions                                                                                                          |
+| response_format       | Specifies output format (e.g., `{ type: "json_object" }`)                                                                                       |
+| stop                  | Array of sequences where the model will stop generating                                                                                         |
+| passthrough           | Additional parameters to send with the request                                                                                                  |
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
@@ -372,7 +736,7 @@ providers:
       isReasoningModel: true
       # Use max_completion_tokens instead of max_tokens
       max_completion_tokens: 25000
-      # Optional: Set reasoning effort (default is 'medium')
+      # Optional: Set reasoning effort (default is 'medium' unless omitDefaults is true)
       reasoning_effort: 'medium'
 
 # For completion endpoints
@@ -426,7 +790,7 @@ This means you're using a reasoning model without setting the `isReasoningModel`
 
 ## Using Vision Models
 
-Azure OpenAI supports vision-capable models like GPT-4o and GPT-4.1 for image analysis.
+Azure OpenAI supports vision-capable models like GPT-5.1, GPT-4o, and GPT-4.1 for image analysis.
 
 ### Configuration
 
@@ -478,7 +842,101 @@ tests:
 
 ### Example
 
-See the [azure-openai example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) for a complete working example with image analysis. Use `promptfooconfig.vision.yaml` for vision-specific features.
+See the [Azure OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) for a complete working example with image analysis. Use `promptfooconfig.vision.yaml` for vision-specific features.
+
+## Using Claude Models
+
+Azure AI Foundry exposes Claude through two endpoint families. Pick the one that matches how you want to manage the model.
+
+### Option 1 (recommended): Anthropic Messages endpoint
+
+Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic Opus 4.7 `temperature` suppression, and consistent pricing across Anthropic/Bedrock/Vertex:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:messages:claude-opus-4-7
+    config:
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+```
+
+Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseUrl` to the `https://…/anthropic` prefix shown above.
+
+### Option 2: Azure OpenAI-compatible chat endpoint
+
+The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:claude-opus-4-7
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 4096
+```
+
+Opus 4.7 deployments automatically omit `temperature` from the request body on this path too.
+
+Available Claude deployments on Azure AI Foundry:
+
+| Model                        | Description       |
+| ---------------------------- | ----------------- |
+| `claude-opus-4-7`            | Claude Opus 4.7   |
+| `claude-opus-4-6-20260205`   | Claude Opus 4.6   |
+| `claude-sonnet-4-6`          | Claude Sonnet 4.6 |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5   |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-haiku-4-5-20251001`  | Claude Haiku 4.5  |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku  |
+
+### Claude Configuration Example
+
+```yaml title="promptfooconfig.yaml"
+description: Azure Claude evaluation
+
+providers:
+  - id: anthropic:messages:claude-opus-4-7
+    label: claude-opus-4-7
+    config:
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+      effort: xhigh
+
+prompts:
+  - 'Explain {{concept}} in simple terms.'
+
+tests:
+  - vars:
+      concept: quantum computing
+    assert:
+      - type: contains-any
+        value: ['qubit', 'superposition']
+```
+
+## Using Llama Models
+
+Azure AI Foundry provides access to Meta's Llama models, including Llama 4:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:Llama-4-Maverick-17B-128E-Instruct-FP8
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 4096
+```
+
+Available Llama models include:
+
+- `Llama-4-Maverick-17B-128E-Instruct-FP8` - Llama 4 Maverick (128 experts)
+- `Llama-4-Scout-17B-16E-Instruct` - Llama 4 Scout (16 experts)
+- `Llama-3.3-70B-Instruct` - Llama 3.3 70B
+- `Meta-Llama-3.1-405B-Instruct` - Llama 3.1 405B
+- `Meta-Llama-3.1-70B-Instruct` - Llama 3.1 70B
+- `Meta-Llama-3.1-8B-Instruct` - Llama 3.1 8B
 
 ## Using DeepSeek Models
 
@@ -521,7 +979,7 @@ To evaluate an OpenAI assistant on Azure:
 
 1. Create a deployment for the assistant in the Azure portal
 2. Create an assistant in the Azure web UI
-3. Install the peer dependency:
+3. Install the `@azure/openai-assistants` package:
 
 ```sh
 npm i @azure/openai-assistants
@@ -540,7 +998,7 @@ Replace the assistant ID and deployment name with your actual values.
 
 ### Function Tools with Assistants
 
-Azure OpenAI Assistants support custom function tools. You can define functions in your configuration and provide callback implementations to handle them:
+Azure OpenAI Assistants support tool calling. Define tool schemas via `tools` and provide callback implementations via `functionToolCallbacks` to handle invocations.
 
 ```yaml
 providers:
@@ -623,13 +1081,331 @@ tests:
       topic: bananas
 ```
 
-For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [azure-openai-assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant).
+For complete working examples of Azure OpenAI Assistants with various tool configurations, check out the [Azure Assistant example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant).
 
 See the guide on [How to evaluate OpenAI assistants](/docs/guides/evaluate-openai-assistants/) for more information on how to compare different models, instructions, and more.
+
+## Azure AI Foundry Agents
+
+Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the Azure AI Projects SDK (`@azure/ai-projects`) and the v2 agent runtime. Promptfoo resolves the agent from your Azure AI Foundry project, then calls the Responses API with an `agent_reference`.
+
+### Key Differences from Standard Azure Assistants
+
+| Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
+| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime                |
+| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)             |
+| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                           |
+| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                                  |
+| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent_reference: { name, type: "agent_reference" } } })` |
+
+### Setup
+
+1. Install the required Azure SDK packages:
+
+```bash
+npm install @azure/ai-projects @azure/identity
+```
+
+2. Authenticate using one of these methods:
+   - **Azure CLI** (recommended for local development): Run `az login`
+   - **Environment variables**: Set Azure service principal credentials
+   - **Managed Identity**: Automatic in Azure-hosted environments
+   - **Service Principal**: Configure via environment variables
+
+3. Set your Azure AI Project URL:
+
+```bash
+export AZURE_AI_PROJECT_URL="https://your-project.services.ai.azure.com/api/projects/your-project-id"
+```
+
+Alternatively, you can provide the `projectUrl` in your configuration file.
+
+### Basic Configuration
+
+The provider uses the `azure:foundry-agent:<agent-name-or-id>` format. Agent names are preferred. Legacy IDs still work as a fallback lookup if the agent exists in the project.
+
+```yaml
+providers:
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      temperature: 0.7
+      max_tokens: 150
+      instructions: 'You are a helpful assistant that provides clear and concise answers.'
+```
+
+### Configuration Options
+
+This provider references an existing Foundry agent. Some settings can still be sent per request through the Responses API, while agent-definition settings need to be configured on the agent itself.
+
+Supported per-request settings:
+
+| Parameter               | Description                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| `projectUrl`            | Azure AI Project URL (required, can also use `AZURE_AI_PROJECT_URL` env var)        |
+| `instructions`          | Additional per-request instructions                                                 |
+| `temperature`           | Controls randomness                                                                 |
+| `top_p`                 | Nucleus sampling parameter                                                          |
+| `max_tokens`            | Mapped to `max_output_tokens` for the Responses API                                 |
+| `max_completion_tokens` | Also mapped to `max_output_tokens`                                                  |
+| `response_format`       | Output format (`json_object` or `json_schema`)                                      |
+| `tools`                 | Tool definitions loaded into the request                                            |
+| `tool_choice`           | Tool selection strategy                                                             |
+| `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
+| `modelName`             | Optional per-request model override                                                 |
+| `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
+| `verbosity`             | Passed through to the Responses text config                                         |
+| `metadata`              | Request metadata                                                                    |
+| `passthrough`           | Additional raw Responses API fields                                                 |
+| `maxPollTimeMs`         | Maximum time to keep resolving callback loops before timing out (default: `300000`) |
+
+Ignored per-request settings:
+
+- `tool_resources`
+- `frequency_penalty`
+- `presence_penalty`
+- `seed`
+- `stop`
+- `timeoutMs`
+- `retryOptions`
+
+Configure those on the Foundry agent definition itself instead of on the eval request.
+
+### Function Tools with Azure Foundry Agents
+
+Promptfoo can handle Responses API `function_call` outputs for Foundry agents. If every requested function has a configured callback, promptfoo executes the callbacks locally and sends `function_call_output` items back with `previous_response_id`.
+
+You can define callbacks at the provider level or override them per prompt:
+
+```yaml
+providers:
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      tools: file://tools/weather-function.json
+      functionToolCallbacks:
+        get_current_weather: file://callbacks/weather.js:getCurrentWeather
+        get_forecast: |
+          async function(args) {
+            try {
+              const parsedArgs = JSON.parse(args);
+              const location = parsedArgs.location;
+              const days = parsedArgs.days || 7;
+
+              // Your implementation here
+              return JSON.stringify({
+                location,
+                forecast: [
+                  { day: 'Monday', temperature: 72, condition: 'sunny' },
+                  { day: 'Tuesday', temperature: 68, condition: 'cloudy' }
+                ]
+              });
+            } catch (error) {
+              return JSON.stringify({ error: String(error) });
+            }
+          }
+```
+
+The function callbacks receive two parameters:
+
+- `args`: JSON-encoded function arguments
+- `context`: `{ threadId, runId, assistantId, provider }`
+
+If a callback is missing, promptfoo returns the unresolved function call in the model output instead of trying to fake a tool result.
+
+### Agent-Defined Tools and Resources
+
+Foundry agent tools such as file search and vector stores should be configured on the agent in Azure AI Foundry. The v2 runtime does not apply `tool_resources` from the eval request.
+
+```yaml
+providers:
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+      tools:
+        - type: file_search
+      temperature: 1
+      top_p: 1
+```
+
+In that example, the request tells the runtime that file search is available, but the actual vector store bindings still need to live on the Foundry agent definition.
+
+### Environment Variables
+
+| Variable               | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `AZURE_AI_PROJECT_URL` | Your Azure AI Project URL (can be overridden in config)        |
+| `AZURE_CLIENT_ID`      | Azure service principal client ID (for service principal auth) |
+| `AZURE_CLIENT_SECRET`  | Azure service principal secret (for service principal auth)    |
+| `AZURE_TENANT_ID`      | Azure tenant ID (for service principal auth)                   |
+
+### Complete Example
+
+Here's a complete example configuration:
+
+```yaml
+description: 'Azure Foundry Agent evaluation'
+
+providers:
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
+      projectUrl: 'https://my-project.services.ai.azure.com/api/projects/my-project-id'
+      temperature: 0.7
+      max_tokens: 150
+      instructions: 'You are a helpful assistant that provides clear and concise answers.'
+
+prompts:
+  - '{{question}}'
+
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - vars:
+      question: 'Explain what photosynthesis is in simple terms.'
+    assert:
+      - type: contains
+        value: 'plants'
+      - type: contains
+        value: 'sunlight'
+```
+
+### Error Handling
+
+The Azure Foundry Agent provider includes comprehensive error handling:
+
+- **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
+- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
+- **Hard-Quota Fail-Fast**: Billing and contract-level codes (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `access_terminated`, `quota_exceeded`) skip retries entirely — retrying these only amplifies load against an exhausted account. The error message is `Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.` If the server also sets a small `Retry-After` (≤ 1h), the error is treated as a recoverable rate limit instead, since billing servers do not hint at recovery time.
+- **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
+- **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`
+
+### Caching
+
+The provider supports caching to improve performance and reduce API calls. Results are cached based on:
+
+- Request configuration (instructions, model override, temperature, etc.)
+- Tool definitions
+- Input prompt
+
+Caching is enabled by default. To explicitly configure it in your configuration:
+
+```yaml
+evaluateOptions:
+  cache: true
+
+providers:
+  - id: azure:foundry-agent:my-foundry-agent
+    config:
+      projectUrl: 'https://your-project.services.ai.azure.com/api/projects/your-project-id'
+```
+
+### When to Use Azure Foundry Agents
+
+Use Azure Foundry Agents when:
+
+- You're working within Azure AI Foundry projects
+- You prefer native Azure SDK authentication (`DefaultAzureCredential`)
+- You're using managed identities or service principals for authentication
+- You want to leverage Azure AI Projects features
+
+Use standard Azure Assistants when:
+
+- You're using Azure OpenAI Service directly (not through AI Foundry)
+- You have an existing Azure OpenAI resource and endpoint
+- You prefer API key-based authentication
+
+### Example Repository
+
+For complete working examples, check out the [Azure Foundry Agent example directory](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent).
+
+## Video Generation (Sora)
+
+Azure AI Foundry provides access to OpenAI's Sora video generation model for text-to-video and image-to-video generation.
+
+### Prerequisites
+
+1. An Azure AI Foundry resource in a supported region (`eastus2` or `swedencentral`)
+2. A Sora model deployment
+
+### Configuration
+
+```yaml
+providers:
+  - id: azure:video:sora
+    config:
+      apiBaseUrl: https://your-resource.cognitiveservices.azure.com
+      # Authentication (choose one):
+      apiKey: ${AZURE_API_KEY} # Or use AZURE_API_KEY env var
+      # Or use Entra ID (DefaultAzureCredential)
+
+      # Video parameters
+      width: 1280 # 480, 720, 854, 1080, 1280, 1920
+      height: 720 # 480, 720, 1080
+      n_seconds: 5 # 5, 10, 15, 20
+
+      # Polling
+      poll_interval_ms: 10000
+      max_poll_time_ms: 600000
+```
+
+### Supported Dimensions
+
+| Size      | Aspect Ratio     |
+| --------- | ---------------- |
+| 480x480   | 1:1 (Square)     |
+| 720x720   | 1:1 (Square)     |
+| 1080x1080 | 1:1 (Square)     |
+| 854x480   | 16:9 (Landscape) |
+| 1280x720  | 16:9 (Landscape) |
+| 1920x1080 | 16:9 (Landscape) |
+
+### Supported Durations
+
+- 5 seconds
+- 10 seconds
+- 15 seconds
+- 20 seconds
+
+### Example
+
+```yaml
+providers:
+  - azure:video:sora
+
+prompts:
+  - 'A serene Japanese garden with koi fish swimming in a pond'
+
+tests:
+  - vars: {}
+    assert:
+      - type: is-video
+```
+
+### Environment Variables
+
+| Variable              | Description                                         |
+| --------------------- | --------------------------------------------------- |
+| `AZURE_API_KEY`       | Azure API key                                       |
+| `AZURE_API_BASE_URL`  | Resource endpoint URL                               |
+| `AZURE_CLIENT_ID`     | Entra ID client ID (for service principal auth)     |
+| `AZURE_CLIENT_SECRET` | Entra ID client secret (for service principal auth) |
+| `AZURE_TENANT_ID`     | Entra ID tenant ID (for service principal auth)     |
 
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
-- [Azure OpenAI Assistant Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-assistant) - Complete working examples with various tool configurations
-- [Azure OpenAI Example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai) - Example configurations including vision model support
+- [Azure Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure) - All Azure examples in one place:
+  - [OpenAI](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) - Chat, vision, and embedding examples
+  - [Claude](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/claude) - Anthropic Claude on Azure AI Foundry
+  - [Llama](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/llama) - Meta Llama models
+  - [DeepSeek](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/deepseek) - DeepSeek reasoning models
+  - [Mistral](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/mistral) - Mistral models
+  - [Comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/comparison) - Multi-provider comparison
+  - [Assistants](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/assistant) - Assistant with tools examples
+  - [Foundry Agent](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/foundry-agent) - Azure AI Foundry Agents

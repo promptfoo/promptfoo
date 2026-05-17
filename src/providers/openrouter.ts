@@ -1,9 +1,11 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
+import type OpenAI from 'openai';
 
 import type {
   ApiProvider,
@@ -27,8 +29,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: 'https://openrouter.ai/api/v1',
-        apiKeyEnvar: 'OPENROUTER_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://openrouter.ai/api/v1',
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'OPENROUTER_API_KEY',
         passthrough: {
           // Pass through OpenRouter-specific options
           // https://openrouter.ai/docs/requests
@@ -68,31 +70,97 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'openrouter',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.max_tokens,
+      stopSequences: this.config.stop,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+      return result;
+    };
+
+    return withGenAISpan(
+      spanContext,
+      () => this.executeOpenRouterCall(prompt, context, callApiOptions),
+      resultExtractor,
+    );
+  }
+
+  private async executeOpenRouterCall(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Get the request body and config
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
-    let data, status, statusText;
+
+    // OpenAI SDK has APIError class for exceptions, but not a type for error responses
+    // in the JSON body. This interface represents the structure when the API returns
+    // an error object in the response body (not as an exception).
+    interface OpenAIErrorResponse {
+      error: {
+        message: string;
+        type?: string;
+        code?: string;
+      };
+    }
+
+    type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    };
+
+    let data: OpenRouterChatCompletionResponse;
+    let status: number;
+    let statusText: string;
     let cached = false;
 
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
-        `${this.getApiUrl()}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+      ({ data, cached, status, statusText } =
+        await fetchWithCache<OpenRouterChatCompletionResponse>(
+          `${this.getApiUrl()}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        context?.bustCache ?? context?.debug,
-      ));
+          getRequestTimeoutMs(),
+          'json',
+          context?.bustCache ?? context?.debug,
+        ));
 
       if (status < 200 || status >= 300) {
         return {
@@ -108,26 +176,29 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     if (data.error) {
       return {
-        error: formatOpenAiError(data),
+        error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
     // Process the response with special handling for Gemini
-    const message = data.choices[0].message;
+    const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
-    // Prioritize content over reasoning
-    let output = '';
-    if (message.content && message.content.trim()) {
+    // Prioritize tool calls over content and reasoning
+    let output: string | object = '';
+    const hasFunctionCall = !!(message.function_call && message.function_call.name);
+    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
+    if (hasFunctionCall || hasToolCalls) {
+      // Tool calls always take priority and never include thinking
+      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
+    } else if (message.content && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
       if (message.reasoning && (this.config.showThinking ?? true)) {
         output = `Thinking: ${message.reasoning}\n\n${output}`;
       }
-    } else if (message.function_call || message.tool_calls) {
-      output = message.function_call || message.tool_calls;
     } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content (shouldn't happen with Gemini)
+      // Fallback to reasoning if no content and showThinking is enabled
       output = message.reasoning;
     }
     // Handle structured output
@@ -175,5 +246,13 @@ export function createOpenRouterProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  return new OpenRouterProvider(modelName, options.config || {});
+  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
+  if (options.env && !providerOptions.env) {
+    providerOptions.env = options.env as ProviderOptions['env'];
+  }
+  if (options.id && !providerOptions.id) {
+    providerOptions.id = options.id;
+  }
+
+  return new OpenRouterProvider(modelName, providerOptions);
 }

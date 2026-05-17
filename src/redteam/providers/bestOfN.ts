@@ -5,15 +5,21 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { getSessionId } from '../util';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
-  ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
 
@@ -22,18 +28,22 @@ interface BestOfNResponse {
   task: 'jailbreak:best-of-n';
 }
 
+interface BestOfNConfig {
+  injectVar: string;
+  maxConcurrency: number;
+  nSteps?: number;
+  maxCandidatesPerStep?: number;
+}
+
 export default class BestOfNProvider implements ApiProvider {
-  private readonly injectVar: string;
-  private readonly maxConcurrency: number;
-  private readonly nSteps?: number;
-  private readonly maxCandidatesPerStep?: number;
+  readonly config: BestOfNConfig;
 
   id() {
     return 'promptfoo:redteam:best-of-n';
   }
 
   constructor(
-    options: ProviderOptions & {
+    options: {
       injectVar?: string;
       maxConcurrency?: number;
       nSteps?: number;
@@ -41,43 +51,50 @@ export default class BestOfNProvider implements ApiProvider {
     } = {},
   ) {
     if (neverGenerateRemote()) {
-      throw new Error(`Best-of-N strategy requires remote generation to be enabled`);
+      throw new Error(getRemoteGenerationExplicitlyDisabledError('Best-of-N strategy'));
     }
 
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
-    this.injectVar = options.injectVar;
-    this.maxConcurrency = options.maxConcurrency || 3;
-    this.nSteps = options.nSteps;
-    this.maxCandidatesPerStep = options.maxCandidatesPerStep;
+    this.config = {
+      injectVar: options.injectVar,
+      maxConcurrency: options.maxConcurrency || 3,
+      nSteps: options.nSteps,
+      maxCandidatesPerStep: options.maxCandidatesPerStep,
+    };
   }
 
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    logger.debug(`[Best-of-N] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[Best-of-N] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 
     const targetProvider: ApiProvider = context.originalProvider;
-
+    const targetTokenUsage = createEmptyTokenUsage();
+    const sessionIds: string[] = [];
     try {
       // Get candidate prompts from the server
-      const response = await fetch(getRemoteGenerationUrl(), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const response = await fetchWithProxy(
+        getRemoteGenerationUrl(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            task: 'jailbreak:best-of-n',
+            prompt: context.vars[this.config.injectVar],
+            nSteps: this.config.nSteps,
+            maxCandidatesPerStep: this.config.maxCandidatesPerStep,
+            version: VERSION,
+            email: getUserEmail(),
+          }),
         },
-        body: JSON.stringify({
-          task: 'jailbreak:best-of-n',
-          prompt: context.vars[this.injectVar],
-          nSteps: this.nSteps,
-          maxCandidatesPerStep: this.maxCandidatesPerStep,
-          version: VERSION,
-          email: getUserEmail(),
-        }),
-      });
+        options?.abortSignal,
+      );
 
       const data = (await response.json()) as BestOfNResponse;
       invariant(Array.isArray(data.modifiedPrompts), 'Expected modifiedPrompts array in response');
@@ -94,55 +111,114 @@ export default class BestOfNProvider implements ApiProvider {
       let lastResponse: ProviderResponse | null = null;
       let currentStep = 0;
 
-      await async.eachLimit(data.modifiedPrompts, this.maxConcurrency, async (candidatePrompt) => {
-        if (successfulResponse) {
-          return;
-        }
-
-        const targetVars = {
-          ...context.vars,
-          [this.injectVar]: candidatePrompt,
-        };
-
-        const renderedPrompt = await renderPrompt(
-          context.prompt,
-          targetVars,
-          context.filters,
-          targetProvider,
-        );
-
-        try {
-          const response = await targetProvider.callApi(renderedPrompt, context, options);
-          lastResponse = response;
-          currentStep++;
-          if (!response.error) {
-            successfulResponse = response;
-            successfulResponse.metadata = {
-              ...successfulResponse.metadata,
-              redteamFinalPrompt: candidatePrompt,
-              step: currentStep,
-            };
-            return false; // Stop processing more candidates
+      await async.eachLimit(
+        data.modifiedPrompts,
+        this.config.maxConcurrency,
+        async (candidatePrompt) => {
+          if (successfulResponse) {
+            return;
           }
-        } catch (err) {
-          logger.debug(`[Best-of-N] Candidate failed: ${err}`);
-          currentStep++;
-        }
-      });
+
+          if (typeof candidatePrompt !== 'string') {
+            logger.warn('[Best-of-N] Skipping non-string candidate prompt from remote generation', {
+              component: 'Best-of-N',
+              event: 'SkippingCandidatePrompt',
+              reason: 'non-string',
+              candidatePromptType: typeof candidatePrompt,
+            });
+            return;
+          }
+
+          const unsafeCandidateScheme = /^\s*(file:\/\/|package:)/i
+            .exec(candidatePrompt)?.[1]
+            .toLowerCase();
+          if (unsafeCandidateScheme) {
+            const schemeLabel = unsafeCandidateScheme.startsWith('file') ? 'file://' : 'package:';
+            logger.warn(
+              `[Best-of-N] Skipping unsafe ${schemeLabel} candidate prompt from remote generation`,
+              {
+                component: 'Best-of-N',
+                event: 'SkippingCandidatePrompt',
+                reason:
+                  schemeLabel === 'file://' ? 'unsafe-file-protocol' : 'unsafe-package-protocol',
+              },
+            );
+            return;
+          }
+
+          const targetVars = {
+            ...context.vars,
+            [this.config.injectVar]: candidatePrompt,
+          };
+
+          const renderedPrompt = await renderPrompt(
+            context.prompt,
+            targetVars,
+            context.filters,
+            targetProvider,
+            [this.config.injectVar], // Skip special loading and template rendering for the injection variable
+          );
+
+          try {
+            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
+            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
+            throwIfTargetPromptExceedsMaxChars(renderedPrompt);
+            const response = await targetProvider.callApi(renderedPrompt, context, options);
+            const sessionId = getSessionId(response, context);
+            if (sessionId) {
+              sessionIds.push(sessionId);
+            }
+            lastResponse = response;
+            accumulateResponseTokenUsage(targetTokenUsage, response);
+            currentStep++;
+            if (!response.error) {
+              successfulResponse = response;
+              successfulResponse.prompt = candidatePrompt;
+              successfulResponse.metadata = {
+                ...successfulResponse.metadata,
+                redteamFinalPrompt: candidatePrompt,
+                step: currentStep,
+              };
+              return false; // Stop processing more candidates
+            }
+          } catch (err) {
+            logger.debug(`[Best-of-N] Candidate failed: ${err}`);
+            lastResponse = { error: String(err) };
+            currentStep++;
+          }
+        },
+      );
 
       if (successfulResponse) {
+        (successfulResponse as ProviderResponse).tokenUsage = targetTokenUsage;
         return successfulResponse;
       }
-
+      if (lastResponse) {
+        (lastResponse as ProviderResponse).tokenUsage = targetTokenUsage;
+        (lastResponse as ProviderResponse).metadata = {
+          ...((lastResponse as ProviderResponse).metadata ?? {}),
+          sessionIds,
+        };
+      }
       return (
         lastResponse || {
           error: 'All candidates failed',
+          metadata: {
+            sessionIds,
+          },
         }
       );
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.error(`[Best-of-N] Error: ${err}`);
       return {
         error: String(err),
+        metadata: {
+          sessionIds,
+        },
       };
     }
   }

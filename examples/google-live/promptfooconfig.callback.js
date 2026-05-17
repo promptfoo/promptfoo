@@ -6,9 +6,13 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
   ],
   providers: [
     {
-      id: 'google:live:gemini-2.0-flash-exp',
+      // Using Gemini 3.1 Flash Live Preview
+      id: 'google:live:gemini-3.1-flash-live-preview',
       config: {
-        generationConfig: { response_modalities: ['text'] },
+        generationConfig: {
+          response_modalities: ['audio'],
+          outputAudioTranscription: {},
+        },
         timeoutMs: 10000,
         tools: [
           {

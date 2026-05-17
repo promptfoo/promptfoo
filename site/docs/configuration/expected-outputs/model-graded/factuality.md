@@ -18,6 +18,8 @@ assert:
     value: The Earth orbits around the Sun
 ```
 
+For non-English evaluation output, see the [multilingual evaluation guide](/docs/configuration/expected-outputs/model-graded#non-english-evaluation).
+
 ## How it works
 
 The factuality checker evaluates whether completion A (the LLM output) and reference B (the value) are factually consistent. It categorizes the relationship as one of:
@@ -38,8 +40,8 @@ Here's a complete example showing how to use factuality checks:
 prompts:
   - 'What is the capital of {{state}}?'
 providers:
-  - openai:gpt-4.1
-  - anthropic:claude-3-7-sonnet-20250219
+  - openai:gpt-5
+  - anthropic:claude-sonnet-4-5-20250929
 tests:
   - vars:
       state: California
@@ -75,7 +77,7 @@ Like other model-graded assertions, you can override the default grader:
 1. Using the CLI:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
+   promptfoo eval --grader openai:gpt-5-mini
    ```
 
 2. Using test options:
@@ -83,7 +85,7 @@ Like other model-graded assertions, you can override the default grader:
    ```yaml
    defaultTest:
      options:
-       provider: anthropic:claude-3-7-sonnet-20250219
+       provider: anthropic:claude-sonnet-4-5-20250929
    ```
 
 3. Using assertion-level override:
@@ -92,7 +94,7 @@ Like other model-graded assertions, you can override the default grader:
    assert:
      - type: factuality
        value: Sacramento is the capital of California
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5-mini
    ```
 
 ## Customizing the Prompt
@@ -133,6 +135,18 @@ The factuality checker will parse either format:
 
 - A single letter response like "A" or "(A)"
 - A JSON object: `{"category": "A", "reason": "Detailed explanation..."}`
+
+## Using Factuality with CSV
+
+Use the `factuality:` prefix in `__expected` columns:
+
+```csv title="tests.csv"
+question,__expected
+"What does GPT stand for?","factuality:Generative Pre-trained Transformer"
+"What is photosynthesis?","factuality:Plants convert sunlight into chemical energy"
+```
+
+To apply factuality to all rows, see [CSV with defaultTest](/docs/configuration/test-cases#csv-with-defaulttest).
 
 ## See Also
 

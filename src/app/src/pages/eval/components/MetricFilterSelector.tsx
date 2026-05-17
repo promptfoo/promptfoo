@@ -1,57 +1,45 @@
-import React from 'react';
-
-import Box from '@mui/material/Box';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { useTableStore } from './store';
-import type { SelectChangeEvent } from '@mui/material/Select';
 
-export const MetricFilterSelector: React.FC<{}> = () => {
+export const MetricFilterSelector = () => {
   const { filters, addFilter, resetFilters } = useTableStore();
   const availableMetrics = filters.options.metric;
 
-  const handleChange = React.useCallback(
-    (event: SelectChangeEvent) => {
-      const value = event.target.value;
+  const handleChange = (value: string) => {
+    // Always reset any existing filters.
+    resetFilters();
 
-      // Always reset any existing filters.
-      resetFilters();
-
-      if (value) {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value,
-        });
-      }
-    },
-    [addFilter, resetFilters],
-  );
+    if (value && value !== 'all') {
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value,
+      });
+    }
+  };
 
   const selectedMetric =
     Object.keys(filters.values).length > 0 ? Object.values(filters.values)[0].value : null;
 
   return (
-    <Box>
-      <FormControl variant="outlined" size="small" sx={{ minWidth: 180 }}>
-        <InputLabel id="metric-filter-label">Filter by Metric</InputLabel>
-        <Select
-          labelId="metric-filter-label"
-          id="metric-filter-select"
-          value={selectedMetric ?? ''}
-          onChange={handleChange}
-          label="Filter by Metric"
-        >
-          <MenuItem value="">All metrics</MenuItem>
-          {availableMetrics.map((metric) => (
-            <MenuItem key={metric} value={metric}>
-              {metric}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    </Box>
+    <Select value={selectedMetric ?? 'all'} onValueChange={handleChange}>
+      <SelectTrigger className="min-w-[180px] h-9" aria-label="Filter by Metric">
+        <SelectValue placeholder="Filter by Metric" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All metrics</SelectItem>
+        {availableMetrics.map((metric) => (
+          <SelectItem key={metric} value={metric}>
+            {metric}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 };

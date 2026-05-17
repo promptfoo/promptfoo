@@ -3,10 +3,26 @@ export interface GlobalConfig {
   hasHarmfulRedteamConsent?: boolean;
   account?: {
     email?: string;
+    emailNeedsValidation?: boolean;
+    emailValidated?: boolean;
   };
   cloud?: {
     appUrl?: string;
     apiHost?: string;
     apiKey?: string;
+    currentOrganizationId?: string;
+    sharing?: boolean;
+    currentTeamId?: string;
+    teams?: {
+      [organizationId: string]: {
+        currentTeamId?: string;
+        cache?: Array<{
+          id: string;
+          name: string;
+          slug: string;
+          lastFetched: string;
+        }>;
+      };
+    };
   };
 }

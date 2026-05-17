@@ -1,15 +1,17 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
   createHyperbolicImageProvider,
   formatHyperbolicImageOutput,
   HyperbolicImageProvider,
 } from '../../../src/providers/hyperbolic/image';
+import { mockProcessEnv } from '../../util/utils';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('HyperbolicImageProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
@@ -68,12 +70,15 @@ describe('HyperbolicImageProvider', () => {
 
   describe('callApi', () => {
     it('should throw error if no API key', async () => {
-      // Ensure no API key is set in environment
-      delete process.env.HYPERBOLIC_API_KEY;
-      const provider = new HyperbolicImageProvider('test');
-      await expect(provider.callApi('test prompt')).rejects.toThrow(
-        'Hyperbolic API key is not set',
-      );
+      const restoreEnv = mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
+      try {
+        const provider = new HyperbolicImageProvider('test');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'Hyperbolic API key is not set',
+        );
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should handle successful API call', async () => {
@@ -90,7 +95,7 @@ describe('HyperbolicImageProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const provider = new HyperbolicImageProvider('test', {
         config: { apiKey: 'test-key' },
@@ -106,7 +111,7 @@ describe('HyperbolicImageProvider', () => {
     });
 
     it('should handle API errors', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { error: 'API error' },
         cached: false,
         status: 400,
@@ -122,7 +127,7 @@ describe('HyperbolicImageProvider', () => {
     });
 
     it('should handle empty images array', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { images: [] },
         cached: false,
         status: 200,
@@ -138,7 +143,7 @@ describe('HyperbolicImageProvider', () => {
     });
 
     it('should handle network errors', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const provider = new HyperbolicImageProvider('test', {
         config: { apiKey: 'test-key' },

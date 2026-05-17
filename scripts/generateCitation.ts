@@ -1,6 +1,11 @@
-import fs from 'fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import yaml from 'js-yaml';
-import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Represents the structure of package.json file
@@ -64,6 +69,7 @@ const createDefaultCitation = (packageJson: PackageJson): Citation => ({
  */
 async function getReleaseDate(version: string): Promise<string | null> {
   try {
+    // biome-ignore lint/style/noRestrictedGlobals: Standalone script, fetchWithProxy not needed
     const response = await fetch(
       `https://api.github.com/repos/promptfoo/promptfoo/releases/tags/${version}`,
     );
@@ -90,11 +96,11 @@ export const updateCitation = async (): Promise<void> => {
   const packageJsonPath: string = path.join(__dirname, '../package.json');
   const citationPath: string = path.join(__dirname, '../CITATION.cff');
 
-  const packageJson: PackageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const packageJson: PackageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
 
   let citation: Citation;
   try {
-    citation = yaml.load(fs.readFileSync(citationPath, 'utf8')) as Citation;
+    citation = yaml.load(await fs.readFile(citationPath, 'utf8')) as Citation;
   } catch {
     citation = createDefaultCitation(packageJson);
   }
@@ -103,11 +109,12 @@ export const updateCitation = async (): Promise<void> => {
   const releaseDate = await getReleaseDate(packageJson.version);
   citation['date-released'] = releaseDate || new Date().toISOString().slice(0, 10);
 
-  fs.writeFileSync(citationPath, yaml.dump(citation, { lineWidth: -1 }));
+  await fs.writeFile(citationPath, yaml.dump(citation, { lineWidth: -1 }));
 
   console.log('CITATION.cff file has been updated.');
 };
 
-if (require.main === module) {
-  updateCitation().catch(console.error);
-}
+updateCitation().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

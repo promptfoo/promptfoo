@@ -74,7 +74,7 @@ Create a configuration file `promptfooconfig.yaml`:
 ```yaml
 targets:
   # You can target a model
-  - openai:chat:gpt-4.1
+  - openai:chat:gpt-5
   # Or an API endpoint
   - id: https
     config:
@@ -111,4 +111,4 @@ Outputs are graded as either PASS (secure) or FAIL (vulnerable) based on these c
 
 - [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
 - [Prompt Injection](../strategies/prompt-injection.md)
-- [Multilingual Attacks](../strategies/multilingual.md)
+- [Language Configuration](../configuration.md#language) - Test in multiple languages

@@ -1,10 +1,17 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
-import logger from '../logger';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
-import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
+
+function parseEnvFloat(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
 
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
@@ -15,6 +22,7 @@ class LocalAiGenericProvider implements ApiProvider {
   modelName: string;
   apiBaseUrl: string;
   config: LocalAiCompletionOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
@@ -22,6 +30,7 @@ class LocalAiGenericProvider implements ApiProvider {
   ) {
     const { id, config, env } = options;
     this.modelName = modelName;
+    this.env = env;
     this.apiBaseUrl =
       config?.apiBaseUrl ||
       env?.LOCALAI_BASE_URL ||
@@ -40,7 +49,7 @@ class LocalAiGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -51,9 +60,12 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       messages,
-      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
+      temperature:
+        this.config.temperature ??
+        parseEnvFloat(this.env?.LOCALAI_TEMPERATURE) ??
+        getEnvFloat('LOCALAI_TEMPERATURE') ??
+        0.7,
     };
-    logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -66,14 +78,14 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI API chat completions response: ${JSON.stringify(data)}`);
+
     try {
       return {
         output: data.choices[0].message.content,
@@ -103,14 +115,13 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI embeddings API response: ${JSON.stringify(data)}`);
 
     try {
       const embedding = data?.data?.[0]?.embedding;
@@ -133,9 +144,12 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
+      temperature:
+        this.config.temperature ??
+        parseEnvFloat(this.env?.LOCALAI_TEMPERATURE) ??
+        getEnvFloat('LOCALAI_TEMPERATURE') ??
+        0.7,
     };
-    logger.debug(`Calling LocalAI API: ${JSON.stringify(body)}`);
 
     let data;
     try {
@@ -148,14 +162,14 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tLocalAI completions API response: ${JSON.stringify(data)}`);
+
     try {
       return {
         output: data.choices[0].text,

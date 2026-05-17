@@ -3,18 +3,22 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 
 export class AzureCompletionProvider extends AzureGenericProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     await this.ensureInitialized();
     invariant(this.authHeaders, 'auth headers are not initialized');
@@ -44,7 +48,6 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    logger.debug(`Calling Azure API: ${JSON.stringify(body)}`);
     let data;
     let cached = false;
     try {
@@ -61,7 +64,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         context?.bustCache ?? context?.debug,
       )) as any);
@@ -71,7 +74,6 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
     try {
       // Handle content filter errors (HTTP 400 with content_filter code)
       if (data.error) {

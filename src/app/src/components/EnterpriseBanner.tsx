@@ -1,20 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
-import InfoIcon from '@mui/icons-material/Info';
-import Alert from '@mui/material/Alert';
-import Link from '@mui/material/Link';
+import { Info } from 'lucide-react';
 
 interface EnterpriseBannerProps {
   evalId?: string;
-  sx?: React.CSSProperties;
+  className?: string;
 }
 
 /**
  * Enterprise Banner component that shows information about community edition
  * Displays only when in redteam mode and when user is not logged into cloud
  */
-const EnterpriseBanner: React.FC<EnterpriseBannerProps> = ({ evalId, sx }) => {
+const EnterpriseBanner = ({ evalId, className }: EnterpriseBannerProps) => {
   const [isCloudEnabled, setIsCloudEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -52,24 +52,23 @@ const EnterpriseBanner: React.FC<EnterpriseBannerProps> = ({ evalId, sx }) => {
   }
 
   return (
-    <Alert
-      severity="info"
-      icon={<InfoIcon />}
-      sx={{
-        '& a': {
-          color: 'primary.main',
-          fontWeight: 'bold',
-          textDecoration: 'underline',
-        },
-        ...sx,
-      }}
-    >
-      You're using the community edition of Promptfoo's red teaming suite. For advanced capabilities
-      and support, learn more about{' '}
-      <Link href="https://www.promptfoo.dev/docs/enterprise/" target="_blank" rel="noopener">
-        Promptfoo Enterprise
-      </Link>
-      .
+    <Alert variant="info" className={cn(className)}>
+      <Info className="size-4" />
+      <AlertContent>
+        <AlertDescription>
+          You're using the community edition of Promptfoo's red teaming suite. For advanced
+          capabilities and support, learn more about{' '}
+          <a
+            href="https://www.promptfoo.dev/docs/enterprise/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-bold underline text-primary hover:text-primary/80"
+          >
+            Promptfoo Enterprise
+          </a>
+          .
+        </AlertDescription>
+      </AlertContent>
     </Alert>
   );
 };

@@ -1,4 +1,5 @@
-import fs from 'fs';
+import { randomUUID } from 'crypto';
+import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -8,64 +9,98 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
-
-let ffmpegCache: any = null;
+import type { TestCase } from '../../types/index';
 
 function shouldShowProgressBar(): boolean {
   return !cliState.webUI && logger.level !== 'debug';
 }
 
-async function importFfmpeg(): Promise<any> {
-  if (ffmpegCache) {
-    return ffmpegCache;
-  }
+async function getSystemFont(): Promise<string> {
+  const platform = os.platform();
 
+  if (platform === 'darwin') {
+    // macOS
+    return '/System/Library/Fonts/Helvetica.ttc';
+  } else if (platform === 'win32') {
+    // Windows
+    return 'C:/Windows/Fonts/arial.ttf';
+  } else {
+    // Linux - try common font paths
+    const linuxFonts = [
+      '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+      '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+      '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+    ];
+
+    for (const fontPath of linuxFonts) {
+      try {
+        await fsPromises.access(fontPath);
+        return fontPath;
+      } catch {
+        continue;
+      }
+    }
+
+    // Fallback to a generic font name that ffmpeg might resolve
+    return 'DejaVu-Sans';
+  }
+}
+
+let ffmpegAvailable = false;
+
+async function checkFfmpegAvailable(): Promise<void> {
+  if (ffmpegAvailable) {
+    return;
+  }
   try {
-    ffmpegCache = await import('fluent-ffmpeg');
-    return ffmpegCache;
+    const { execa } = await import('execa');
+    await execa('ffmpeg', ['-version']);
+    ffmpegAvailable = true;
   } catch (error) {
-    logger.warn(`fluent-ffmpeg library not available: ${error}`);
     throw new Error(
-      'To use the video strategy, please install fluent-ffmpeg: npm install fluent-ffmpeg\n' +
-        'Also make sure you have FFmpeg installed on your system:\n' +
+      'To use the video strategy, FFmpeg must be installed on your system:\n' +
         '- macOS: brew install ffmpeg\n' +
         '- Ubuntu/Debian: apt-get install ffmpeg\n' +
-        '- Windows: Download from ffmpeg.org',
+        '- Windows: Download from ffmpeg.org\n' +
+        `Error: ${error}`,
     );
   }
 }
 
-async function createTempVideoEnvironment(text: string): Promise<{
+export function escapeDrawtextString(text: string): string {
+  // Escape special characters for FFmpeg's drawtext filter when text is
+  // wrapped in single quotes and passed directly via execa (no shell).
+  // See: https://ffmpeg.org/ffmpeg-filters.html#drawtext-1
+  return text
+    .replace(/\\/g, '\\\\') // Backslash must be escaped first (special even in single-quoted strings)
+    .replace(/'/g, "'\\''") // Single quote: close quote, escaped quote, reopen quote
+    .replace(/:/g, '\\:') // Colon (option separator even within single-quoted values)
+    .replace(/\n/g, '\\n') // Newline
+    .replace(/%/g, '%%'); // Percent: drawtext uses %{} expansion; %% is the literal
+}
+
+async function createTempVideoEnvironment(): Promise<{
   tempDir: string;
-  textFilePath: string;
   outputPath: string;
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 }> {
   const tempDir = path.join(os.tmpdir(), 'promptfoo-video');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
+  await fsPromises.mkdir(tempDir, { recursive: true });
 
-  const textFilePath = path.join(tempDir, 'text.txt');
-  const outputPath = path.join(tempDir, 'output-video.mp4');
+  const outputPath = path.join(tempDir, `output-video-${randomUUID()}.mp4`);
 
-  fs.writeFileSync(textFilePath, text);
-
-  const cleanup = () => {
+  const cleanup = async () => {
     try {
-      if (fs.existsSync(textFilePath)) {
-        fs.unlinkSync(textFilePath);
-      }
-      if (fs.existsSync(outputPath)) {
-        fs.unlinkSync(outputPath);
-      }
+      await fsPromises.unlink(outputPath);
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
+      }
       logger.warn(`Failed to clean up temporary files: ${error}`);
     }
   };
 
-  return { tempDir, textFilePath, outputPath, cleanup };
+  return { tempDir, outputPath, cleanup };
 }
 
 export function getFallbackBase64(text: string): string {
@@ -75,41 +110,38 @@ export function getFallbackBase64(text: string): string {
 async function textToVideo(text: string): Promise<string> {
   try {
     if (neverGenerateRemote()) {
-      const ffmpegModule = await importFfmpeg();
-      const { textFilePath, outputPath, cleanup } = await createTempVideoEnvironment(text);
+      await checkFfmpegAvailable();
+      const { outputPath, cleanup } = await createTempVideoEnvironment();
 
-      return new Promise((resolve, reject) => {
-        ffmpegModule()
-          .input('color=white:s=640x480:d=5')
-          .inputFormat('lavfi')
-          .input(textFilePath)
-          .inputOptions(['-f', 'concat'])
-          .complexFilter([
-            `[0:v]drawtext=fontfile=/System/Library/Fonts/Helvetica.ttc:text='${text.replace(/'/g, "\\'")}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2[v]`,
-          ])
-          .outputOptions(['-map', '[v]'])
-          .save(outputPath)
-          .on('end', async () => {
-            try {
-              const videoData = fs.readFileSync(outputPath);
-              const base64Video = videoData.toString('base64');
-              cleanup();
-              resolve(base64Video);
-            } catch (error) {
-              logger.error(`Error processing video output: ${error}`);
-              cleanup();
-              reject(error);
-            }
-          })
-          .on('error', (err: Error) => {
-            logger.error(`Error creating video: ${err}`);
-            cleanup();
-            reject(err);
-          });
-      });
+      try {
+        const escapedText = escapeDrawtextString(text);
+        const systemFont = await getSystemFont();
+
+        // Create a 5-second video with white background and text overlay
+        const { execa } = await import('execa');
+        await execa('ffmpeg', [
+          '-f',
+          'lavfi',
+          '-i',
+          'color=white:s=640x480:d=5',
+          '-vf',
+          `drawtext=fontfile=${systemFont}:text='${escapedText}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`,
+          '-y', // Overwrite output file if it exists
+          outputPath,
+        ]);
+
+        const videoData = await fsPromises.readFile(outputPath);
+        const base64Video = videoData.toString('base64');
+        await cleanup();
+        return base64Video;
+      } catch (error) {
+        logger.error(`Error creating video with ffmpeg: ${error}`);
+        await cleanup();
+        throw error;
+      }
     } else {
       throw new Error(
-        'Local video generation requires fluent-ffmpeg. Future versions may support remote generation.',
+        'Local video generation requires FFmpeg to be installed. Future versions may support remote generation.',
       );
     }
   } catch (error) {
@@ -228,47 +260,10 @@ export async function addVideoToBase64(
 export async function writeVideoFile(base64Video: string, outputFilePath: string): Promise<void> {
   try {
     const videoBuffer = Buffer.from(base64Video, 'base64');
-    fs.writeFileSync(outputFilePath, videoBuffer);
+    await fsPromises.writeFile(outputFilePath, videoBuffer);
     logger.info(`Video file written to: ${outputFilePath}`);
   } catch (error) {
     logger.error(`Failed to write video file: ${error}`);
     throw error;
   }
-}
-
-async function main(): Promise<void> {
-  const textToConvert = process.argv[2] || 'This is a test of the video encoding strategy.';
-
-  logger.info(`Converting text to video: "${textToConvert}"`);
-
-  try {
-    const base64Video = await textToVideo(textToConvert);
-
-    logger.info(`Base64 video (first 100 chars): ${base64Video.substring(0, 100)}...`);
-    logger.info(`Total base64 video length: ${base64Video.length} characters`);
-
-    const testCase = {
-      vars: {
-        prompt: textToConvert,
-      },
-    };
-
-    const processedTestCases = await addVideoToBase64([testCase], 'prompt');
-
-    logger.info('Test case processed successfully.');
-    logger.info(`Original prompt length: ${textToConvert.length} characters`);
-    const processedPrompt = processedTestCases[0].vars?.prompt as string;
-    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
-
-    if (require.main === module) {
-      await writeVideoFile(base64Video, 'test-video.mp4');
-      logger.info(`You can open it with any video player to verify the conversion.`);
-    }
-  } catch (error) {
-    logger.error(`Error generating video from text: ${error}`);
-  }
-}
-
-if (require.main === module) {
-  main();
 }

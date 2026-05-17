@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { TokenUsage } from '../../src/types/shared';
@@ -39,6 +40,13 @@ describe('TokenUsageTracker', () => {
 
     expect(tracked).toEqual({
       ...usage,
+      completionDetails: {
+        reasoning: 20,
+        acceptedPrediction: 15,
+        rejectedPrediction: 5,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
+      },
       assertions: {
         ...usage.assertions,
         numRequests: 0,
@@ -46,6 +54,8 @@ describe('TokenUsageTracker', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -53,7 +63,9 @@ describe('TokenUsageTracker', () => {
 
   it('should handle undefined token usage', () => {
     tracker.trackUsage('test-provider', undefined);
-    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
+    expect(tracker.getProviderUsage('test-provider')).toEqual(
+      expect.objectContaining({ numRequests: 1 }),
+    );
   });
 
   it('should merge token usage for the same provider', () => {
@@ -109,6 +121,8 @@ describe('TokenUsageTracker', () => {
         reasoning: 60,
         acceptedPrediction: 45,
         rejectedPrediction: 15,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 90,
@@ -120,6 +134,8 @@ describe('TokenUsageTracker', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });
@@ -181,6 +197,8 @@ describe('TokenUsageTracker', () => {
         reasoning: 60,
         acceptedPrediction: 45,
         rejectedPrediction: 15,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       },
       assertions: {
         total: 90,
@@ -192,6 +210,8 @@ describe('TokenUsageTracker', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       },
     });

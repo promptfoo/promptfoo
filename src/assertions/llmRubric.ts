@@ -1,13 +1,15 @@
-import { matchesLlmRubric } from '../matchers';
+import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleLlmRubric = ({
+export const handleLlmRubric = async ({
   assertion,
+  inverse,
   renderedValue,
   outputString,
   test,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' ||
@@ -21,5 +23,29 @@ export const handleLlmRubric = ({
 
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
-  return matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars, assertion);
+
+  const resp = await matchesLlmRubric(
+    renderedValue || '',
+    outputString,
+    test.options,
+    test.vars,
+    assertion,
+    undefined,
+    providerCallContext,
+  );
+
+  if (isGraderFailure(resp)) {
+    return { ...resp, assertion };
+  }
+
+  // Clamp only on inversion so a NaN or out-of-range grader score cannot turn
+  // `1 - score` into a misleading negative/inflated value.
+  const score = inverse
+    ? Math.min(1, Math.max(0, 1 - (Number.isFinite(resp.score) ? resp.score : 0)))
+    : resp.score;
+  return {
+    ...resp,
+    pass: resp.pass !== inverse,
+    score,
+  };
 };

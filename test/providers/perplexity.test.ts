@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import {
   calculatePerplexityCost,
@@ -5,11 +6,10 @@ import {
   PerplexityProvider,
 } from '../../src/providers/perplexity';
 
-jest.mock('../../src/providers/openai/chat');
-
 describe('Perplexity Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('createPerplexityProvider', () => {
@@ -128,7 +128,7 @@ describe('Perplexity Provider', () => {
 
     it('should override callApi to calculate costs correctly', async () => {
       // Mock the parent class callApi method
-      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
         output: 'Test output',
         tokenUsage: {
           total: 20,
@@ -147,7 +147,7 @@ describe('Perplexity Provider', () => {
 
     it('should handle cached responses correctly', async () => {
       // Mock the parent class callApi method with a cached response
-      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
         output: 'Cached output',
         tokenUsage: {
           total: 20,
@@ -166,9 +166,27 @@ describe('Perplexity Provider', () => {
       expect(result.cost).toBeUndefined();
     });
 
+    it('should still calculate cost for fresh responses with cached input tokens', async () => {
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+        output: 'Fresh output',
+        tokenUsage: {
+          total: 20,
+          prompt: 10,
+          completion: 10,
+          cached: 5,
+        },
+        cached: false,
+      });
+
+      const provider = new PerplexityProvider('sonar-pro');
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.00018);
+    });
+
     it('should pass through error responses', async () => {
       // Mock the parent class callApi method with an error
-      jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
         error: 'API error',
       });
 

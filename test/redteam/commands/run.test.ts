@@ -1,35 +1,58 @@
 import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EmailValidationError } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { ProbeLimitExceededError } from '../../../src/redteam/types';
 import { getConfigFromCloud } from '../../../src/util/cloud';
 
-jest.mock('../../../src/cliState', () => ({
-  remote: false,
+vi.mock('../../../src/cliState', () => ({
+  default: {
+    remote: false,
+  },
 }));
 
-jest.mock('../../../src/telemetry', () => ({
-  record: jest.fn(),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('../../../src/util', () => ({
-  setupEnv: jest.fn(),
+vi.mock('../../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/redteam/shared', () => ({
-  doRedteamRun: jest.fn().mockResolvedValue({}),
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setupEnv: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/redteam/shared', () => ({
+  doRedteamRun: vi.fn().mockResolvedValue({}),
 }));
 
-jest.mock('../../../src/util/cloud', () => ({
-  getConfigFromCloud: jest.fn(),
-}));
+vi.mock('../../../src/util/cloud', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getConfigFromCloud: vi.fn(),
+  };
+});
 
 describe('redteamRunCommand', () => {
   let program: Command;
   let originalExitCode: number | undefined;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     program = new Command();
     redteamRunCommand(program);
     // Store original exitCode to restore later
@@ -54,7 +77,7 @@ describe('redteamRunCommand', () => {
         },
       ],
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // UUID format for config and target
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -74,6 +97,7 @@ describe('redteamRunCommand', () => {
         config: undefined,
         loadedFromCloud: true,
         target: targetUUID,
+        eventSource: 'cli',
       }),
     );
   });
@@ -129,6 +153,23 @@ describe('redteamRunCommand', () => {
     expect(doRedteamRun).not.toHaveBeenCalled();
   });
 
+  it('should not log an unexpected error for recoverable email validation failures', async () => {
+    vi.mocked(doRedteamRun).mockRejectedValueOnce(
+      new EmailValidationError(
+        'email_verification_required',
+        'Please verify your email address and try again.',
+      ),
+    );
+
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+
+    await runCommand!.parseAsync(['node', 'test']);
+
+    expect(process.exitCode).toBe(1);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it('should throw error when target is not a UUID', async () => {
     // UUID format for config but not for target
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -155,7 +196,7 @@ describe('redteamRunCommand', () => {
       providers: [{ id: 'test-provider' }],
       targets: [], // Empty targets
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // UUID format for config and target
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -183,7 +224,155 @@ describe('redteamRunCommand', () => {
         config: undefined,
         loadedFromCloud: true,
         target: targetUUID,
+        eventSource: 'cli',
       }),
     );
+  });
+
+  describe('--description flag for custom scan names', () => {
+    it('should override config description when --description flag is provided', async () => {
+      const mockConfig = {
+        description: 'Original Cloud Description',
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+      const customDescription = 'My Custom Scan Name';
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--config',
+        configUUID,
+        '--target',
+        targetUUID,
+        '--description',
+        customDescription,
+      ]);
+
+      // Verify that the description was overridden
+      expect(mockConfig.description).toBe(customDescription);
+
+      // Verify doRedteamRun was called with the updated config
+      expect(doRedteamRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          liveRedteamConfig: expect.objectContaining({
+            description: customDescription,
+          }),
+          eventSource: 'cli',
+        }),
+      );
+    });
+
+    it('should keep original description when --description flag is not provided', async () => {
+      const originalDescription = 'Original Cloud Description';
+      const mockConfig = {
+        description: originalDescription,
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '--config',
+        configUUID,
+        '--target',
+        targetUUID,
+      ]);
+
+      // Verify that the description was not changed
+      expect(mockConfig.description).toBe(originalDescription);
+
+      // Verify doRedteamRun was called with the original description
+      expect(doRedteamRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          liveRedteamConfig: expect.objectContaining({
+            description: originalDescription,
+          }),
+          eventSource: 'cli',
+        }),
+      );
+    });
+
+    it('should support short -d flag for description', async () => {
+      const mockConfig = {
+        description: 'Original Cloud Description',
+        prompts: ['Test prompt'],
+        vars: {},
+        providers: [{ id: 'test-provider' }],
+        targets: [{ id: 'test-provider' }],
+      };
+      vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+      const configUUID = '12345678-1234-1234-1234-123456789012';
+      const targetUUID = '87654321-4321-4321-4321-210987654321';
+      const customDescription = 'Short Flag Description';
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync([
+        'node',
+        'test',
+        '-c',
+        configUUID,
+        '-t',
+        targetUUID,
+        '-d',
+        customDescription,
+      ]);
+
+      // Verify that the description was overridden using short flag
+      expect(mockConfig.description).toBe(customDescription);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should suppress stack trace when doRedteamRun throws ProbeLimitExceededError', async () => {
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(new ProbeLimitExceededError(100, 100));
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('An unexpected error occurred during red team run'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should still log unexpected errors with stack', async () => {
+      const boom = new Error('boom');
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(boom);
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('An unexpected error occurred during red team run: boom'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
   });
 });

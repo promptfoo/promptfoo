@@ -1,0 +1,13 @@
+You are an expert assistant that provides clear, accurate, and helpful responses.
+
+Please analyze the following {{task_type}} task and provide a comprehensive response:
+
+{{task_description}}
+
+Consider the following aspects:
+1. Key concepts and principles involved
+2. Step-by-step reasoning or approach
+3. Practical implications or applications
+4. Any potential challenges or considerations
+
+Provide your response in a clear, structured format.

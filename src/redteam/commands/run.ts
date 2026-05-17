@@ -3,16 +3,16 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
-import { DEFAULT_MAX_CONCURRENCY } from '../../evaluator';
+import { EmailValidationError } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
 import { getConfigFromCloud } from '../../util/cloud';
+import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
+import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
+import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
-
-import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
@@ -36,11 +36,8 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option(
-      '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      (val) => Number.parseInt(val, 10),
-      DEFAULT_MAX_CONCURRENCY,
+    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
+      Number.parseInt(val, 10),
     )
     .option('--delay <number>', 'Delay in milliseconds between API calls', (val) =>
       Number.parseInt(val, 10),
@@ -49,15 +46,23 @@ export function redteamRunCommand(program: Command) {
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
+      '--strict',
+      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      false,
+    )
+    .option(
+      '--filter-prompts <pattern>',
+      'Only run tests with prompts whose id or label matches the regex pattern',
+    )
+    .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
+    .option('-d, --description <text>', 'Custom description/name for this scan run')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam run',
-      });
+      telemetry.record('redteam run', {});
 
       if (opts.config && UUID_REGEX.test(opts.config)) {
         if (opts.target && !UUID_REGEX.test(opts.target)) {
@@ -73,6 +78,12 @@ export function redteamRunCommand(program: Command) {
         ) {
           configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];
         }
+
+        // Override description if provided via CLI flag
+        if (opts.description) {
+          configObj.description = opts.description;
+        }
+
         opts.liveRedteamConfig = configObj;
         opts.config = undefined;
 
@@ -89,14 +100,23 @@ export function redteamRunCommand(program: Command) {
         if (opts.remote) {
           cliState.remote = true;
         }
-        await doRedteamRun(opts);
+        if (opts.maxConcurrency !== undefined) {
+          cliState.maxConcurrency = opts.maxConcurrency;
+        }
+        await doRedteamRun({ ...opts, eventSource: 'cli' });
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');
-          error.errors.forEach((err: z.ZodIssue) => {
+          error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else {
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
+        } else if (
+          !(error instanceof EmailValidationError) &&
+          !(error instanceof ProbeLimitExceededError)
+        ) {
+          // These expected failures are already logged by their helpers.
           logger.error(
             `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
               error instanceof Error ? error.stack : ''
@@ -104,6 +124,10 @@ export function redteamRunCommand(program: Command) {
           );
         }
         process.exitCode = 1;
+      } finally {
+        // Reset cliState to prevent stale state leaking to later commands
+        cliState.remote = false;
+        cliState.maxConcurrency = undefined;
       }
     });
 

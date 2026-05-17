@@ -1,11 +1,12 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { WebhookProvider } from '../../src/providers/webhook';
 
-jest.mock('../../src/cache');
+vi.mock('../../src/cache');
 
 describe('WebhookProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
@@ -50,7 +51,7 @@ describe('WebhookProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
 
       const provider = new WebhookProvider('http://test.com');
       const result = await provider.callApi('test prompt');
@@ -72,6 +73,8 @@ describe('WebhookProvider', () => {
 
       expect(result).toEqual({
         output: 'test response',
+        cached: false,
+        latencyMs: undefined,
       });
     });
 
@@ -85,7 +88,7 @@ describe('WebhookProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
 
       const provider = new WebhookProvider('http://test.com', {
         config: { foo: 'bar' },
@@ -111,7 +114,7 @@ describe('WebhookProvider', () => {
     });
 
     it('should handle fetch errors', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const provider = new WebhookProvider('http://test.com');
       const result = await provider.callApi('test prompt');
@@ -131,7 +134,7 @@ describe('WebhookProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
 
       const provider = new WebhookProvider('http://test.com');
       const result = await provider.callApi('test prompt');

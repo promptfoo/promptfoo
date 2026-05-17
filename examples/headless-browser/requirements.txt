@@ -1,2 +1,0 @@
-gradio>=4.0.0
-playwright>=1.40.0 

@@ -8,11 +8,13 @@ import { RedteamGraderBase, RedteamPluginBase } from './base';
 import type {
   ApiProvider,
   Assertion,
+  AssertionValue,
   AtomicTestCase,
   GradingResult,
   PluginConfig,
   TestCase,
-} from '../../types';
+} from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:intent';
 
@@ -34,7 +36,7 @@ export class IntentPlugin extends RedteamPluginBase {
     return '';
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     const assertions: Assertion[] = [
       {
         type: PLUGIN_ID,
@@ -44,7 +46,7 @@ export class IntentPlugin extends RedteamPluginBase {
     return assertions;
   }
 
-  async generateTests(n: number, delayMs: number): Promise<TestCase[]> {
+  async generateTests(_n: number, delayMs: number): Promise<TestCase[]> {
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
 
@@ -174,6 +176,10 @@ export class IntentGrader extends RedteamGraderBase {
     llmOutput: string,
     test: AtomicTestCase,
     provider: ApiProvider | undefined,
+    renderedValue?: AssertionValue,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     // Ensure we have all required metadata
     const metadata = {
@@ -192,7 +198,10 @@ export class IntentGrader extends RedteamGraderBase {
         metadata,
       },
       provider,
-      undefined,
+      renderedValue,
+      additionalRubric,
+      skipRefusalCheck,
+      gradingContext,
     );
   }
 }

@@ -1,4 +1,5 @@
-import * as fs from 'fs';
+import * as fsSync from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
@@ -6,7 +7,8 @@ import yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { setupEnv } from '../../util';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { setupEnv } from '../../util/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
 
@@ -39,11 +41,11 @@ type Document = {
 };
 
 export function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): string[] {
-  const files = fs.readdirSync(dirPath);
+  const files = fsSync.readdirSync(dirPath);
 
   files.forEach((file) => {
     const fullPath = path.join(dirPath, file);
-    if (fs.statSync(fullPath).isDirectory()) {
+    if (fsSync.statSync(fullPath).isDirectory()) {
       arrayOfFiles = getAllFiles(fullPath, arrayOfFiles);
     } else {
       arrayOfFiles.push(fullPath);
@@ -57,7 +59,7 @@ export async function generatePoisonedDocument(
   document: string,
   goal?: PoisonOptions['goal'],
 ): Promise<PoisonResponse> {
-  const response = await fetch(getRemoteGenerationUrl(), {
+  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -91,7 +93,7 @@ export async function poisonDocument(
   logger.debug(`Poisoning ${JSON.stringify(doc)}`);
 
   try {
-    const documentContent = doc.isFile ? fs.readFileSync(doc.docLike, 'utf-8') : doc.docLike;
+    const documentContent = doc.isFile ? await fs.readFile(doc.docLike, 'utf-8') : doc.docLike;
     const result = await generatePoisonedDocument(documentContent, goal);
 
     if (doc.isFile) {
@@ -109,14 +111,14 @@ export async function poisonDocument(
       outputFilePath = path.join(outputDir, docPath);
 
       // Create necessary subdirectories
-      fs.mkdirSync(path.dirname(outputFilePath), { recursive: true });
+      await fs.mkdir(path.dirname(outputFilePath), { recursive: true });
     } else {
       // Generate a filename for / from the document content
       const hash = Buffer.from(documentContent).toString('base64').slice(0, 8);
       outputFilePath = path.join(outputDir, `poisoned-${hash}.txt`);
     }
 
-    fs.writeFileSync(outputFilePath, result.poisonedDocument);
+    await fs.writeFile(outputFilePath, result.poisonedDocument);
     logger.debug(`Wrote poisoned document to ${outputFilePath}`);
 
     logger.info(chalk.green(`✓ Successfully poisoned ${doc.isFile ? doc.docLike : 'document'}`));
@@ -136,7 +138,7 @@ export async function doPoisonDocuments(options: PoisonOptions) {
   const outputDir = options.outputDir || 'poisoned-documents';
 
   // Always create output directory since we're always using it
-  fs.mkdirSync(outputDir, { recursive: true });
+  await fs.mkdir(outputDir, { recursive: true });
 
   logger.info(chalk.blue('Generating poisoned documents...'));
 
@@ -145,8 +147,8 @@ export async function doPoisonDocuments(options: PoisonOptions) {
 
   for (const doc of options.documents) {
     // Is the document a ∈{file|directory} path or document content?
-    if (fs.existsSync(doc)) {
-      const stat = fs.statSync(doc);
+    const stat = await fs.stat(doc).catch(() => undefined);
+    if (stat) {
       if (stat.isDirectory()) {
         docs = [
           ...docs,
@@ -167,7 +169,7 @@ export async function doPoisonDocuments(options: PoisonOptions) {
   );
 
   // Write summary YAML file
-  fs.writeFileSync(outputPath, yaml.dump({ documents: results }));
+  await fs.writeFile(outputPath, yaml.dump({ documents: results }));
   logger.info(chalk.green(`\nWrote ${results.length} poisoned documents summary to ${outputPath}`));
 }
 
@@ -186,9 +188,7 @@ export function poisonCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (documents: DocumentLike[], opts: Omit<PoisonOptions, 'documents'>) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam poison',
-      });
+      telemetry.record('redteam poison', {});
 
       try {
         await doPoisonDocuments({
@@ -197,7 +197,7 @@ export function poisonCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`An unexpected error occurred: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

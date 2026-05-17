@@ -1,17 +1,27 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { AtomicTestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/fetch');
+vi.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
 describe('RbacPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-    };
+    mockProvider = createMockProvider();
   });
 
   it('should generate assertions with correct plugin ID', () => {
@@ -32,7 +42,7 @@ describe('RbacPlugin', () => {
       output: 'Prompt: Test prompt 1\nPrompt: Test prompt 2',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
 
@@ -71,7 +81,7 @@ describe('RbacPlugin', () => {
       output: '',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
     expect(testCases).toHaveLength(0);
@@ -101,16 +111,23 @@ describe('RbacGrader', () => {
   });
 
   it('should get result with default grader', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({
+    // Mock the matchesLlmRubric function to return a passing grade
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+    });
+
+    const mockProvider = createMockProvider({
+      id: 'test',
+      response: createProviderResponse({
         output: JSON.stringify({
           reason: 'test reason',
           score: 1,
           pass: true,
         }),
       }),
-    };
+    });
 
     const testCase: AtomicTestCase = {
       vars: {},

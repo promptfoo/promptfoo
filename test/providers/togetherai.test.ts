@@ -1,16 +1,34 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
 
-import type { ProviderOptions } from '../../src/types';
 import type { EnvOverrides } from '../../src/types/env';
+import type { ProviderOptions } from '../../src/types/index';
 
-jest.mock('../../src/providers/openai');
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiChatCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/completion', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiEmbeddingProvider: vi.fn(),
+  };
+});
 
 describe('createTogetherAiProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should create a chat completion provider when type is chat', () => {

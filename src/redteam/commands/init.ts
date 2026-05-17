@@ -1,9 +1,9 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
@@ -16,7 +16,8 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
-import { isRunningUnderNpx, setupEnv } from '../../util';
+import { setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import {
@@ -29,10 +30,11 @@ import {
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
+import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
-import type { ProviderOptions, RedteamPluginObject } from '../../types';
+import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
@@ -49,7 +51,7 @@ prompts:
   {% if prompts.length > 0 and not prompts[0].startsWith('file://') -%}
   # You can also reference external prompts, e.g.
   # - file:///path/to/prompt.json
-  # Learn more: https://promptfoo.dev/docs/configuration/parameters/#prompts
+  # Learn more: https://promptfoo.dev/docs/configuration/prompts/
   {% endif %}
 {% endif -%}
 
@@ -205,12 +207,12 @@ export function renderRedteamConfig({
 }
 
 export async function redteamInit(directory: string | undefined) {
-  telemetry.record('command_used', { name: 'redteam init - started' });
+  telemetry.record('redteam init', { phase: 'started' });
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
-  if (projectDir !== '.' && !fs.existsSync(projectDir)) {
-    fs.mkdirSync(projectDir, { recursive: true });
+  if (projectDir !== '.') {
+    await fs.mkdir(projectDir, { recursive: true });
   }
 
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
@@ -310,19 +312,23 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-4.1-mini', value: 'openai:gpt-4.1-mini' },
-      { name: 'openai:gpt-4.1', value: 'openai:gpt-4.1' },
+      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
+      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
       {
-        name: 'anthropic:claude-sonnet-4-20250514',
-        value: 'anthropic:messages:claude-sonnet-4-20250514',
+        name: 'anthropic:claude-opus-4-6',
+        value: 'anthropic:messages:claude-opus-4-6',
+      },
+      {
+        name: 'anthropic:claude-opus-4-5-20251101',
+        value: 'anthropic:messages:claude-opus-4-5-20251101',
+      },
+      {
+        name: 'anthropic:claude-sonnet-4-5-20250929',
+        value: 'anthropic:messages:claude-sonnet-4-5-20250929',
       },
       {
         name: 'anthropic:claude-opus-4-1-20250805',
         value: 'anthropic:messages:claude-opus-4-1-20250805',
-      },
-      {
-        name: 'anthropic:claude-opus-4-20250514',
-        value: 'anthropic:messages:claude-opus-4-20250514',
       },
       {
         name: 'anthropic:claude-3-7-sonnet-20250219',
@@ -343,7 +349,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-4.1-mini', label }];
+      providers = [{ id: 'openai:gpt-5-mini', label }];
     } else {
       providers = [{ id: selectedProvider, label }];
     }
@@ -613,10 +619,10 @@ export async function redteamInit(directory: string | undefined) {
     providers,
     descriptions: subCategoryDescriptions,
   });
-  fs.writeFileSync(configPath, redteamConfig, 'utf8');
+  await fs.writeFile(configPath, redteamConfig, 'utf8');
 
   if (writeChatPy) {
-    fs.writeFileSync(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
+    await fs.writeFile(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
   }
 
   console.clear();
@@ -625,6 +631,7 @@ export async function redteamInit(directory: string | undefined) {
   );
 
   telemetry.record('command_used', { name: 'redteam init' });
+  telemetry.record('redteam init', { phase: 'completed' });
   await recordOnboardingStep('finish');
 
   if (deferGeneration) {
@@ -633,7 +640,7 @@ export async function redteamInit(directory: string | undefined) {
         chalk.green(dedent`
           To generate test cases and run your red team, use the command:
 
-              ${chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`)}
+              ${chalk.bold(promptfooCommand('redteam run'))}
         `),
     );
     return;
@@ -646,22 +653,31 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose generate', { value: readyToGenerate });
 
     if (readyToGenerate) {
-      await doGenerateRedteam({
-        purpose,
-        plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-        cache: false,
-        write: false,
-        output: 'redteam.yaml',
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-        numTests,
-      });
+      try {
+        await doGenerateRedteam({
+          purpose,
+          plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+          cache: false,
+          write: false,
+          output: 'redteam.yaml',
+          defaultConfig: {},
+          defaultConfigPath: configPath,
+          numTests,
+        });
+      } catch (error) {
+        if (error instanceof ProbeLimitExceededError) {
+          // doGenerateRedteam already logged the user-facing quota message.
+          process.exitCode = 1;
+          return;
+        }
+        throw error;
+      }
     } else {
       logger.info(
         '\n' +
           chalk.blue(
             'To generate test cases and run your red team later, use the command: ' +
-              chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam run`),
+              chalk.bold(promptfooCommand('redteam run')),
           ),
       );
     }
@@ -700,20 +716,21 @@ export function initCommand(program: Command) {
             await redteamInit(directory);
           }
         } catch (err) {
-          if (err instanceof ExitPromptError) {
+          if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
             logger.info(
               '\n' +
                 chalk.blue(
                   'Red team initialization paused. To continue setup later, use the command: ',
                 ) +
-                chalk.bold(`${isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo'} redteam init`),
+                chalk.bold(promptfooCommand('redteam init')),
             );
             logger.info(
               chalk.blue('For help or feedback, visit ') +
                 chalk.green('https://www.promptfoo.dev/contact/'),
             );
             await recordOnboardingStep('early exit');
-            process.exit(130);
+            process.exitCode = 130;
+            return;
           } else {
             throw err;
           }

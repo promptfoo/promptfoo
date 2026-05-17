@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI gpt-realtime-1.5 model demonstration
+prompts:
+  - file://realtime-input.json
+
+providers:
+  - id: openai:realtime:gpt-realtime-1.5
+    config:
+      modalities: ['text', 'audio']
+      voice: 'cedar' # Voice available with gpt-realtime-1.5
+      instructions: 'You are a helpful assistant. Keep your responses concise and informative.'
+      # Increase WebSocket timeout to handle potential slow connections
+      websocketTimeout: 60000 # 60 seconds
+
+tests:
+  - vars:
+      question: 'Tell me about the benefits of real-time communication with AI models.'
+    assert:
+      - type: llm-rubric
+        value: Discusses the benefits of real-time communication with AI models
+
+  - vars:
+      question: 'What are some applications of voice-enabled AI assistants?'
+    assert:
+      - type: llm-rubric
+        value: Discusses applications of voice-enabled AI assistants
+
+  - vars:
+      question: 'How can real-time AI enhance customer service experiences?'
+    assert:
+      - type: llm-rubric
+        value: Explains how real-time AI can enhance customer service
+
+  - vars:
+      question: 'Can you demonstrate your new improved voice capabilities?'
+    assert:
+      - type: llm-rubric
+        value: Responds appropriately about voice capabilities or improvements

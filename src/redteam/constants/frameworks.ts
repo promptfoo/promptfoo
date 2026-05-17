@@ -3,21 +3,26 @@ import { FOUNDATION_PLUGINS, PII_PLUGINS } from './plugins';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
+type FrameworkMapping = { plugins: Plugin[]; strategies: Strategy[] };
+
 export const FRAMEWORK_NAMES: Record<string, string> = {
+  'dod:ai:ethics': 'DoD AI Ethical Principles',
   'mitre:atlas': 'MITRE ATLAS',
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
   'owasp:llm': 'OWASP LLM Top 10',
-  'owasp:agentic': 'OWASP Agentic v1.0',
+  'owasp:agentic': 'OWASP Top 10 for Agentic Applications',
   'eu:ai-act': 'EU AI Act',
+  'iso:42001': 'ISO/IEC 42001',
+  gdpr: 'GDPR',
 };
 
 export const OWASP_LLM_TOP_10_NAMES = [
   'Prompt Injection',
   'Sensitive Information Disclosure',
   'Supply Chain',
+  'Data and Model Poisoning',
   'Improper Output Handling',
-  'Insecure Output Handling',
   'Excessive Agency',
   'System Prompt Leakage',
   'Vector and Embedding Weaknesses',
@@ -38,7 +43,43 @@ export const OWASP_API_TOP_10_NAMES = [
   'Unsafe Consumption of APIs',
 ];
 
-export const OWASP_AGENTIC_NAMES = ['T1: Memory Poisoning'];
+/**
+ * OWASP Top 10 for Agentic Applications (December 2025)
+ * The official OWASP Top 10 list for AI agent security risks.
+ * Announced during Black Hat Europe 2025 and the OWASP Agentic Security Summit.
+ *
+ * @see https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications/
+ */
+export const OWASP_AGENTIC_NAMES = [
+  'ASI01: Agent Goal Hijack',
+  'ASI02: Tool Misuse and Exploitation',
+  'ASI03: Identity and Privilege Abuse',
+  'ASI04: Agentic Supply Chain Vulnerabilities',
+  'ASI05: Unexpected Code Execution',
+  'ASI06: Memory and Context Poisoning',
+  'ASI07: Insecure Inter-Agent Communication',
+  'ASI08: Cascading Failures',
+  'ASI09: Human Agent Trust Exploitation',
+  'ASI10: Rogue Agents',
+];
+
+export const GDPR_ARTICLE_NAMES = [
+  'Principles of Processing Personal Data',
+  'Special Categories of Personal Data',
+  'Right of Access',
+  'Right to Erasure',
+  'Automated Decision-Making',
+  'Data Protection by Design',
+  'Security of Processing',
+];
+
+export const DOD_AI_ETHICS_PRINCIPLE_NAMES = [
+  'Responsible',
+  'Equitable',
+  'Traceable',
+  'Reliable',
+  'Governable',
+];
 
 export const OWASP_LLM_TOP_10_MAPPING: Record<
   string,
@@ -47,7 +88,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   'owasp:llm:01': {
     // Prompt Injection
     plugins: ['ascii-smuggling', 'indirect-prompt-injection', 'prompt-extraction', 'harmful'],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:02': {
     // Sensitive Information Disclosure
@@ -60,7 +101,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'cross-session-leak',
       'prompt-extraction',
     ],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:03': {
     // Supply Chain
@@ -79,12 +120,12 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'harmful:radicalization',
       'harmful:specialized-advice',
     ],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:05': {
     // Improper Output Handling
     plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'owasp:llm:06': {
     // Excessive Agency
@@ -97,7 +138,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'sql-injection',
       'ssrf',
     ],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:07': {
     // System Prompt Leakage
@@ -110,7 +151,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:session',
       'pii:social',
     ],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:08': {
     // Vector and Embedding Weaknesses
@@ -122,7 +163,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:session',
       'pii:social',
     ],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:09': {
     // Misinformation
@@ -132,7 +173,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'harmful:misinformation-disinformation',
       'harmful:specialized-advice',
     ],
-    strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:10': {
     // Unbounded Consumption
@@ -188,15 +229,75 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 };
 
 /**
- * OWASP Agentic AI - Threats and Mitigations v1.0 (February 2025)
+ * OWASP Top 10 for Agentic Applications (December 2025)
+ * The official OWASP Top 10 list for AI agent security risks.
+ * Announced during Black Hat Europe 2025 and the OWASP Agentic Security Summit.
+ *
+ * @see https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications/
  */
-export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
+export const OWASP_AGENTIC_TOP_10_MAPPING: Record<
   string,
   { plugins: Plugin[]; strategies: Strategy[] }
 > = {
-  'owasp:agentic:t01': {
-    plugins: ['agentic:memory-poisoning'],
-    strategies: [],
+  'owasp:agentic:asi01': {
+    // ASI01: Agent Goal Hijack
+    // Occurs when an attacker alters an agent's objectives or decision path through malicious content
+    plugins: ['hijacking', 'system-prompt-override', 'indirect-prompt-injection', 'intent'],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+  },
+  'owasp:agentic:asi02': {
+    // ASI02: Tool Misuse and Exploitation
+    // Occurs when an agent uses legitimate tools in unsafe ways
+    plugins: ['excessive-agency', 'mcp', 'tool-discovery'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
+  },
+  'owasp:agentic:asi03': {
+    // ASI03: Identity and Privilege Abuse
+    // Agents inherit user/system identities with high-privilege credentials
+    plugins: ['rbac', 'bfla', 'bola', 'imitation'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
+  },
+  'owasp:agentic:asi04': {
+    // ASI04: Agentic Supply Chain Vulnerabilities
+    // Compromised tools, plugins, prompt templates, and external servers
+    plugins: ['indirect-prompt-injection', 'mcp'],
+    strategies: ['jailbreak-templates'],
+  },
+  'owasp:agentic:asi05': {
+    // ASI05: Unexpected Code Execution
+    // Agents generate or run code/commands unsafely
+    plugins: ['shell-injection', 'sql-injection', 'harmful:cybercrime:malicious-code', 'ssrf'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
+  },
+  'owasp:agentic:asi06': {
+    // ASI06: Memory and Context Poisoning
+    // Attackers poison agent memory systems, embeddings, and RAG databases
+    plugins: ['agentic:memory-poisoning', 'cross-session-leak', 'indirect-prompt-injection'],
+    strategies: ['jailbreak', 'crescendo'],
+  },
+  'owasp:agentic:asi07': {
+    // ASI07: Insecure Inter-Agent Communication
+    // Multi-agent systems face spoofed identities, replayed messages, tampering
+    plugins: ['indirect-prompt-injection', 'hijacking', 'imitation'],
+    strategies: ['jailbreak-templates'],
+  },
+  'owasp:agentic:asi08': {
+    // ASI08: Cascading Failures
+    // Small errors in one agent propagate across planning, execution, memory
+    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'divergent-repetition'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
+  },
+  'owasp:agentic:asi09': {
+    // ASI09: Human Agent Trust Exploitation
+    // Users over-trust agent recommendations or explanations
+    plugins: ['overreliance', 'imitation', 'harmful:misinformation-disinformation'],
+    strategies: ['crescendo'],
+  },
+  'owasp:agentic:asi10': {
+    // ASI10: Rogue Agents
+    // Compromised or misaligned agents act harmfully while appearing legitimate
+    plugins: ['excessive-agency', 'hijacking', 'rbac', 'goal-misalignment'],
+    strategies: ['jailbreak', 'crescendo'],
   },
 };
 
@@ -221,9 +322,8 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'jailbreak:composite',
       'crescendo',
       'goat',
-      'prompt-injection',
+      'jailbreak-templates',
       'best-of-n',
-      'multilingual',
     ],
   },
 
@@ -246,7 +346,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'jailbreak',
       'jailbreak:tree',
       'jailbreak:composite',
-      'prompt-injection',
+      'jailbreak-templates',
       'hex',
       'base64',
       'homoglyph',
@@ -272,16 +372,7 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'indirect-prompt-injection',
       'hijacking',
     ],
-    strategies: [
-      'jailbreak',
-      'jailbreak:tree',
-      'jailbreak:composite',
-      'crescendo',
-      'goat',
-      'multilingual',
-      'pandamonium',
-      'gcg',
-    ],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'crescendo', 'goat', 'gcg'],
   },
 
   /**
@@ -302,18 +393,24 @@ export const OWASP_LLM_RED_TEAM_MAPPING: Record<
       'harmful:self-harm',
       'harmful:hate',
     ],
-    strategies: ['crescendo', 'goat', 'jailbreak:tree', 'jailbreak:composite', 'prompt-injection'],
+    strategies: [
+      'crescendo',
+      'goat',
+      'jailbreak:tree',
+      'jailbreak:composite',
+      'jailbreak-templates',
+    ],
   },
 };
 
 export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   'nist:ai:measure:1.1': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'nist:ai:measure:1.2': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'nist:ai:measure:2.1': {
     plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
@@ -329,7 +426,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:2.4': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'nist:ai:measure:2.5': {
     plugins: ['excessive-agency'],
@@ -345,7 +442,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:2.7': {
     plugins: ['harmful:cybercrime', 'shell-injection', 'sql-injection'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'nist:ai:measure:2.8': {
     plugins: ['bfla', 'bola', 'rbac'],
@@ -373,7 +470,7 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
   'nist:ai:measure:3.1': {
     plugins: ['excessive-agency', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'nist:ai:measure:3.2': {
     plugins: ['excessive-agency'],
@@ -397,10 +494,102 @@ export const NIST_AI_RMF_MAPPING: Record<string, { plugins: Plugin[]; strategies
   },
 };
 
-export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+const MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING: FrameworkMapping = {
+  plugins: [
+    'ascii-smuggling',
+    'excessive-agency',
+    'harmful:cybercrime:malicious-code',
+    'hallucination',
+    'indirect-prompt-injection',
+    'rag-poisoning',
+  ],
+  strategies: ['jailbreak', 'jailbreak:tree'],
+};
+
+export const MITRE_ATLAS_MAPPING: Record<string, FrameworkMapping> = {
+  'mitre:atlas:ai-attack-staging': MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING,
+  // No promptfoo plugin directly validates model access level yet; keep the alias for matrix completeness.
+  'mitre:atlas:ai-model-access': {
+    plugins: [],
+    strategies: [],
+  },
+  'mitre:atlas:collection': {
+    plugins: [
+      'data-exfil',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      'rag-document-exfiltration',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:command-and-control': {
+    plugins: [
+      'excessive-agency',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+      'mcp',
+      'shell-injection',
+      'ssrf',
+    ],
+    strategies: ['crescendo'],
+  },
+  'mitre:atlas:credential-access': {
+    plugins: [
+      'data-exfil',
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      'rag-document-exfiltration',
+      'tool-discovery',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:defense-evasion': {
+    plugins: [
+      'ascii-smuggling',
+      'hijacking',
+      'imitation',
+      'rag-source-attribution',
+      'special-token-injection',
+    ],
+    strategies: ['base64', 'jailbreak', 'jailbreak-templates', 'leetspeak', 'rot13'],
+  },
+  'mitre:atlas:discovery': {
+    plugins: [
+      'debug-access',
+      'model-identification',
+      'prompt-extraction',
+      'system-prompt-override',
+      'tool-discovery',
+    ],
+    strategies: [],
+  },
+  'mitre:atlas:execution': {
+    plugins: [
+      'excessive-agency',
+      'hijacking',
+      'indirect-prompt-injection',
+      'mcp',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+      'system-prompt-override',
+      'tool-discovery',
+    ],
+    strategies: ['jailbreak', 'jailbreak-templates'],
+  },
   'mitre:atlas:exfiltration': {
     plugins: [
       'ascii-smuggling',
+      'cross-session-leak',
+      'data-exfil',
       'harmful:privacy',
       'indirect-prompt-injection',
       'pii:api-db',
@@ -408,29 +597,79 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
       'pii:session',
       'pii:social',
       'prompt-extraction',
+      'rag-document-exfiltration',
     ],
     strategies: [],
   },
   'mitre:atlas:impact': {
-    plugins: ['excessive-agency', 'harmful', 'hijacking', 'imitation'],
+    plugins: [
+      'divergent-repetition',
+      'excessive-agency',
+      'harmful',
+      'hijacking',
+      'imitation',
+      'reasoning-dos',
+    ],
     strategies: ['crescendo'],
   },
   'mitre:atlas:initial-access': {
-    plugins: ['debug-access', 'harmful:cybercrime', 'shell-injection', 'sql-injection', 'ssrf'],
-    strategies: ['base64', 'jailbreak', 'leetspeak', 'prompt-injection', 'rot13'],
+    plugins: [
+      'debug-access',
+      'harmful:cybercrime',
+      'indirect-prompt-injection',
+      'mcp',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+    ],
+    strategies: ['base64', 'jailbreak', 'leetspeak', 'jailbreak-templates', 'rot13'],
   },
-  'mitre:atlas:ml-attack-staging': {
-    plugins: ['ascii-smuggling', 'excessive-agency', 'hallucination', 'indirect-prompt-injection'],
-    strategies: ['jailbreak', 'jailbreak:tree'],
-  },
-  'mitre:atlas:reconnaissance': {
-    plugins: ['competitors', 'policy', 'prompt-extraction', 'rbac'],
-    strategies: ['multilingual'],
-  },
-  'mitre:atlas:resource-development': {
-    plugins: ['harmful:cybercrime', 'harmful:illegal-drugs', 'harmful:indiscriminate-weapons'],
+  'mitre:atlas:lateral-movement': {
+    plugins: ['bfla', 'bola', 'harmful:cybercrime', 'rbac'],
     strategies: [],
   },
+  'mitre:atlas:persistence': {
+    plugins: [
+      'agentic:memory-poisoning',
+      'cross-session-leak',
+      'indirect-prompt-injection',
+      'rag-poisoning',
+      'system-prompt-override',
+    ],
+    strategies: ['jailbreak'],
+  },
+  'mitre:atlas:privilege-escalation': {
+    plugins: [
+      'bfla',
+      'bola',
+      'debug-access',
+      'excessive-agency',
+      'mcp',
+      'rbac',
+      'shell-injection',
+      'system-prompt-override',
+    ],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak-templates'],
+  },
+  'mitre:atlas:reconnaissance': {
+    plugins: ['competitors', 'model-identification', 'policy', 'prompt-extraction', 'rbac'],
+    strategies: [],
+  },
+  'mitre:atlas:resource-development': {
+    plugins: [
+      'harmful:chemical-biological-weapons',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+      'harmful:illegal-drugs',
+      'harmful:indiscriminate-weapons',
+    ],
+    strategies: [],
+  },
+};
+
+export const MITRE_ATLAS_LEGACY_MAPPING: Record<string, FrameworkMapping> = {
+  // Kept for configs created before MITRE renamed this tactic to AI Attack Staging.
+  'mitre:atlas:ml-attack-staging': MITRE_ATLAS_AI_ATTACK_STAGING_MAPPING,
 };
 
 /**
@@ -445,15 +684,30 @@ export const MITRE_ATLAS_MAPPING: Record<string, { plugins: Plugin[]; strategies
 export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
   /* ----------  Art. 5 – Prohibited practices  --------------------------------- */
   'eu:ai-act:art5:subliminal-manipulation': {
-    plugins: ['hijacking', 'intent', 'excessive-agency'],
-    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'prompt-injection'],
+    plugins: ['hijacking', 'intent', 'excessive-agency', 'harmful:misinformation-disinformation'],
+    strategies: ['jailbreak', 'jailbreak:tree', 'jailbreak:composite', 'jailbreak-templates'],
   },
   'eu:ai-act:art5:exploitation-of-vulnerabilities': {
-    plugins: ['hijacking', 'imitation', 'harmful:misinformation-disinformation'],
-    strategies: [],
+    // Art. 5(1)(b) – targets age, disability, social/economic situation
+    plugins: [
+      'hijacking',
+      'imitation',
+      'harmful:misinformation-disinformation',
+      'bias:age',
+      'bias:disability',
+    ],
+    strategies: ['jailbreak'],
   },
   'eu:ai-act:art5:social-scoring': {
-    plugins: ['harmful:misinformation-disinformation', 'overreliance'],
+    // Art. 5(1)(c) – discriminatory classification of persons
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'overreliance',
+      'bias:age',
+      'bias:gender',
+      'bias:race',
+      'bias:disability',
+    ],
     strategies: [],
   },
   'eu:ai-act:art5:biometric-categorisation': {
@@ -476,36 +730,265 @@ export const EU_AI_ACT_MAPPING: Record<string, { plugins: Plugin[]; strategies: 
   },
   'eu:ai-act:annex3:critical-infrastructure': {
     plugins: ['shell-injection', 'sql-injection', 'ssrf', 'excessive-agency'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'eu:ai-act:annex3:education': {
-    plugins: ['harmful:misinformation-disinformation', 'hallucination', 'overreliance'],
+    // Annex III §3 – access to education, learning outcomes, appropriate level
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'hallucination',
+      'overreliance',
+      'bias:race',
+      'bias:gender',
+      'bias:disability',
+    ],
     strategies: [],
   },
   'eu:ai-act:annex3:employment': {
-    plugins: ['imitation', 'pii:direct', 'overreliance'],
+    // Annex III §4 – recruitment, selection, promotion, termination
+    plugins: [
+      'imitation',
+      'pii:direct',
+      'overreliance',
+      'bias:gender',
+      'bias:race',
+      'bias:age',
+      'bias:disability',
+    ],
     strategies: [],
   },
   'eu:ai-act:annex3:essential-services': {
-    plugins: ['pii:direct', 'pii:session', 'excessive-agency'],
+    // Annex III §5 – creditworthiness, emergency dispatch, public services
+    plugins: ['pii:direct', 'pii:session', 'excessive-agency', 'bias:race', 'bias:gender'],
     strategies: [],
   },
   'eu:ai-act:annex3:law-enforcement': {
-    plugins: ['pii:direct', 'pii:api-db', 'harmful:privacy'],
+    // Annex III §6 – risk assessments, profiling, evidence evaluation
+    plugins: ['pii:direct', 'pii:api-db', 'harmful:privacy', 'bias:race'],
     strategies: [],
   },
   'eu:ai-act:annex3:migration-border': {
-    plugins: ['pii:direct', 'harmful:hate', 'harmful:privacy'],
+    // Annex III §7 – verification, risk assessments, document authenticity
+    plugins: ['pii:direct', 'harmful:hate', 'harmful:privacy', 'bias:race'],
     strategies: [],
   },
   'eu:ai-act:annex3:justice-democracy': {
-    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'pii:direct'],
+    // Annex III §8 – interpreting facts/law, applying law to facts
+    plugins: [
+      'hallucination',
+      'harmful:misinformation-disinformation',
+      'pii:direct',
+      'bias:race',
+      'bias:gender',
+    ],
     strategies: [],
   },
 };
 
+/**
+ * ISO/IEC 42001 – AI Management System (AIMS) framework risk areas
+ * Covers key risk domains: human oversight, fairness, privacy, robustness, security, ethics, transparency.
+ */
+export const ISO_42001_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'iso:42001:accountability': {
+    // Human oversight & accountability – prevent over-autonomy and misuse
+    plugins: ['excessive-agency', 'overreliance', 'hijacking'],
+    strategies: [],
+  },
+  'iso:42001:fairness': {
+    // Fairness & bias – prevent discrimination or hate in AI outcomes
+    plugins: ['bias:age', 'bias:disability', 'bias:gender', 'bias:race', 'harmful:hate'],
+    strategies: [],
+  },
+  'iso:42001:privacy': {
+    // Data privacy & protection – prevent personal data leaks
+    plugins: ['harmful:privacy', 'pii:api-db', 'pii:direct', 'pii:session', 'pii:social'],
+    strategies: [],
+  },
+  'iso:42001:robustness': {
+    // Robustness – resilience against prompt injection and adversarial input
+    plugins: ['ascii-smuggling', 'prompt-extraction'],
+    strategies: ['jailbreak', 'jailbreak:composite', 'jailbreak:tree'],
+  },
+  'iso:42001:security': {
+    // Technical security – resistance to code injection and exploitation
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'jailbreak:composite', 'base64', 'rot13'],
+  },
+  'iso:42001:safety': {
+    // Safety & ethical use – prevent harmful, illegal, or unethical outputs
+    plugins: [
+      'harmful:chemical-biological-weapons',
+      'harmful:child-exploitation',
+      'harmful:violent-crime',
+      'harmful:cybercrime',
+      'harmful:cybercrime:malicious-code',
+    ],
+    strategies: ['jailbreak', 'jailbreak:composite', 'jailbreak:tree'],
+  },
+  'iso:42001:transparency': {
+    // Transparency & trust – avoid misinformation, deception, or unsupported claims
+    plugins: [
+      'harmful:misinformation-disinformation',
+      'hallucination',
+      'imitation',
+      'unverifiable-claims',
+      'politics',
+      'religion',
+    ],
+    strategies: [],
+  },
+};
+
+/**
+ * EU General Data Protection Regulation (GDPR)
+ * Maps key GDPR articles to relevant Promptfoo plugins for testing AI/LLM systems
+ * for compliance with data protection requirements.
+ *
+ * Sources:
+ *  * GDPR full text: https://gdpr-info.eu/
+ */
+export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> = {
+  'gdpr:art5': {
+    // Article 5 - Principles relating to processing of personal data
+    // (lawfulness, fairness, transparency, purpose limitation, data minimization, accuracy)
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'hallucination',
+      'harmful:misinformation-disinformation',
+    ],
+    strategies: [],
+  },
+  'gdpr:art9': {
+    // Article 9 - Processing of special categories of personal data
+    // (sensitive data like health, biometric, genetic data, racial/ethnic origin)
+    plugins: [
+      'pii:direct',
+      'pii:social',
+      'harmful:privacy',
+      'bias:age',
+      'bias:disability',
+      'bias:gender',
+      'bias:race',
+    ],
+    strategies: [],
+  },
+  'gdpr:art15': {
+    // Article 15 - Right of access by the data subject
+    plugins: ['pii:api-db', 'pii:session', 'rbac', 'bola', 'bfla'],
+    strategies: [],
+  },
+  'gdpr:art17': {
+    // Article 17 - Right to erasure ("right to be forgotten")
+    plugins: ['pii:api-db', 'pii:direct', 'pii:session', 'harmful:privacy', 'cross-session-leak'],
+    strategies: [],
+  },
+  'gdpr:art22': {
+    // Article 22 - Automated individual decision-making, including profiling
+    plugins: [
+      'bias:age',
+      'bias:disability',
+      'bias:gender',
+      'bias:race',
+      'harmful:hate',
+      'overreliance',
+      'hallucination',
+    ],
+    strategies: [],
+  },
+  'gdpr:art25': {
+    // Article 25 - Data protection by design and by default
+    plugins: [
+      'harmful:privacy',
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'pii:social',
+      'prompt-extraction',
+      // 'cross-session-leak',
+    ],
+    strategies: [],
+  },
+  'gdpr:art32': {
+    // Article 32 - Security of processing
+    plugins: [
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
+      'debug-access',
+      'harmful:cybercrime',
+      'rbac',
+      'bfla',
+      'bola',
+    ],
+    strategies: [],
+  },
+};
+
+/**
+ * U.S. Department of Defense (DoD) AI ethical principles.
+ *
+ * Source:
+ *  * https://www.defense.gov/News/News-Stories/Article/Article/2094085/dod-adopts-5-principles-of-artificial-intelligence-ethics/
+ */
+export const DOD_AI_ETHICS_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> =
+  {
+    'dod:ai:ethics:01': {
+      // Responsible: personnel exercise judgment and remain accountable for AI outcomes.
+      plugins: ['excessive-agency', 'goal-misalignment', 'overreliance', 'hijacking'],
+      strategies: ['jailbreak', 'jailbreak-templates'],
+    },
+    'dod:ai:ethics:02': {
+      // Equitable: AI behavior should minimize unintended bias and discriminatory outcomes.
+      plugins: ['bias:age', 'bias:disability', 'bias:gender', 'bias:race', 'harmful:hate'],
+      strategies: [],
+    },
+    'dod:ai:ethics:03': {
+      // Traceable: methodology and outputs should be auditable and attributable.
+      plugins: [
+        'hallucination',
+        'harmful:misinformation-disinformation',
+        'rag-source-attribution',
+        'unverifiable-claims',
+      ],
+      strategies: [],
+    },
+    'dod:ai:ethics:04': {
+      // Reliable: systems should perform safely, securely, and effectively in intended contexts.
+      plugins: [
+        'harmful:misinformation-disinformation',
+        'harmful:unsafe-practices',
+        'shell-injection',
+        'sql-injection',
+        'ssrf',
+        'debug-access',
+        'reasoning-dos',
+      ],
+      strategies: ['jailbreak', 'jailbreak-templates'],
+    },
+    'dod:ai:ethics:05': {
+      // Governable: operators should be able to detect, control, and disable unintended behavior.
+      plugins: [
+        'excessive-agency',
+        'hijacking',
+        'indirect-prompt-injection',
+        'system-prompt-override',
+        'rbac',
+        'bfla',
+        'bola',
+        'tool-discovery',
+      ],
+      strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+    },
+  };
+
 // Aliased plugins are like collections, except they are hidden from the standard plugin list.
 export const ALIASED_PLUGINS = [
+  'dod:ai:ethics',
   'mitre:atlas',
   'nist:ai',
   'nist:ai:measure',
@@ -515,6 +998,7 @@ export const ALIASED_PLUGINS = [
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
   'owasp:llm:redteam:runtime',
+  'owasp:agentic',
   'toxicity',
   'bias',
   'misinformation',
@@ -522,25 +1006,35 @@ export const ALIASED_PLUGINS = [
   'personal-safety',
   'tool-discovery:multi-turn',
   'eu:ai-act',
+  'iso:42001',
+  'gdpr',
   ...Object.keys(MITRE_ATLAS_MAPPING),
+  ...Object.keys(MITRE_ATLAS_LEGACY_MAPPING),
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
-  ...Object.keys(OWASP_AGENTIC_REDTEAM_MAPPING),
+  ...Object.keys(OWASP_AGENTIC_TOP_10_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
+  ...Object.keys(ISO_42001_MAPPING),
+  ...Object.keys(GDPR_MAPPING),
+  ...Object.keys(DOD_AI_ETHICS_MAPPING),
 ] as const;
 
 export const ALIASED_PLUGIN_MAPPINGS: Record<
   string,
   Record<string, { plugins: string[]; strategies: string[] }>
 > = {
+  'dod:ai:ethics': DOD_AI_ETHICS_MAPPING,
+  'mitre:atlas:ml-attack-staging': MITRE_ATLAS_LEGACY_MAPPING,
   'mitre:atlas': MITRE_ATLAS_MAPPING,
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
-  'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
+  'owasp:agentic': OWASP_AGENTIC_TOP_10_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
+  'iso:42001': ISO_42001_MAPPING,
+  gdpr: GDPR_MAPPING,
   'tool-discovery:multi-turn': {
     'tool-discovery:multi-turn': {
       plugins: ['tool-discovery'],

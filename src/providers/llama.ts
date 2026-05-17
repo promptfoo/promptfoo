@@ -1,9 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
-import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types';
+import type { ApiProvider, ProviderResponse } from '../types/index';
 
 interface LlamaCompletionOptions {
   n_predict?: number;
@@ -68,11 +67,15 @@ export class LlamaProvider implements ApiProvider {
 
     const url = getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
 
-    logger.debug(`[llama] Calling API at ${url} with body ${JSON.stringify(body)}`);
+    interface LlamaCompletionResponse {
+      content: string;
+    }
 
-    let response;
+    let data: LlamaCompletionResponse;
+    let cached = false;
+    let latencyMs: number | undefined;
     try {
-      response = await fetchWithCache(
+      ({ data, cached, latencyMs } = await fetchWithCache<LlamaCompletionResponse>(
         `${url}/completion`,
         {
           method: 'POST',
@@ -81,23 +84,23 @@ export class LlamaProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
-      );
+        getRequestTimeoutMs(),
+      ));
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    logger.debug(`[llama] API call response: ${JSON.stringify(response)}`);
-
     try {
       return {
-        output: response.data.content,
+        output: data.content,
+        cached,
+        latencyMs,
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
+        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
   }

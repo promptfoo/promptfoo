@@ -4,10 +4,10 @@ import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface AimlApiModel {
@@ -35,7 +35,7 @@ export async function fetchAimlApiModels(env?: EnvOverrides): Promise<AimlApiMod
     const { data } = await fetchWithCache<any>(
       'https://api.aimlapi.com/models',
       { headers },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
     const models = data?.data || data?.models || data;

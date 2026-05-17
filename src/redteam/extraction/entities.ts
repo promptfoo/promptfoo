@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
-import type { ApiProvider } from '../../types';
+import type { ApiProvider } from '../../types/index';
 import type { RedTeamTask } from './util';
 
 export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {

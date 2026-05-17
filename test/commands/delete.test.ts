@@ -1,23 +1,24 @@
 import confirm from '@inquirer/confirm';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { deleteCommand, handleEvalDelete, handleEvalDeleteAll } from '../../src/commands/delete';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import * as database from '../../src/util/database';
 
-import type { EvalWithMetadata } from '../../src/types';
+import type { EvalWithMetadata } from '../../src/types/index';
 
-jest.mock('@inquirer/confirm');
-jest.mock('../../src/util/database');
-jest.mock('../../src/logger');
-jest.mock('../../src/models/eval');
+vi.mock('@inquirer/confirm');
+vi.mock('../../src/util/database');
+vi.mock('../../src/logger');
+vi.mock('../../src/models/eval');
 
 describe('delete command', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     process.exitCode = undefined;
   });
 
@@ -32,24 +33,21 @@ describe('delete command', () => {
     });
 
     it('should handle error when deleting evaluation', async () => {
-      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
       const error = new Error('Delete failed');
-      jest.mocked(database.deleteEval).mockRejectedValueOnce(error);
+      vi.mocked(database.deleteEval).mockRejectedValueOnce(error);
 
       await handleEvalDelete('test-id');
 
       expect(logger.error).toHaveBeenCalledWith(
         'Could not delete evaluation with ID test-id:\nError: Delete failed',
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
-
-      mockExit.mockRestore();
+      expect(process.exitCode).toBe(1);
     });
   });
 
   describe('handleEvalDeleteAll', () => {
     it('should delete all evaluations when confirmed', async () => {
-      jest.mocked(confirm).mockResolvedValueOnce(true);
+      vi.mocked(confirm).mockResolvedValueOnce(true);
 
       await handleEvalDeleteAll();
 
@@ -58,7 +56,7 @@ describe('delete command', () => {
     });
 
     it('should not delete evaluations when not confirmed', async () => {
-      jest.mocked(confirm).mockResolvedValueOnce(false);
+      vi.mocked(confirm).mockResolvedValueOnce(false);
 
       await handleEvalDeleteAll();
 
@@ -121,7 +119,7 @@ describe('delete command', () => {
         },
       } as EvalWithMetadata;
 
-      jest.mocked(database.getEvalFromId).mockResolvedValueOnce(mockEval);
+      vi.mocked(database.getEvalFromId).mockResolvedValueOnce(mockEval);
 
       deleteCommand(program);
       await program.parseAsync(['node', 'test', 'delete', 'test-id']);
@@ -131,7 +129,7 @@ describe('delete command', () => {
     });
 
     it('should handle when resource does not exist', async () => {
-      jest.mocked(database.getEvalFromId).mockResolvedValueOnce(undefined);
+      vi.mocked(database.getEvalFromId).mockResolvedValueOnce(undefined);
 
       deleteCommand(program);
       await program.parseAsync(['node', 'test', 'delete', 'test-id']);
@@ -193,7 +191,7 @@ describe('delete command', () => {
           id: 'latest-id',
         } as any;
 
-        jest.mocked(Eval.latest).mockResolvedValueOnce(mockLatestEval);
+        vi.mocked(Eval.latest).mockResolvedValueOnce(mockLatestEval);
 
         deleteCommand(program);
         await program.parseAsync(['node', 'test', 'delete', 'eval', 'latest']);
@@ -202,7 +200,7 @@ describe('delete command', () => {
       });
 
       it('should handle when no latest eval exists', async () => {
-        jest.mocked(Eval.latest).mockResolvedValueOnce(undefined);
+        vi.mocked(Eval.latest).mockResolvedValueOnce(undefined);
 
         deleteCommand(program);
         await program.parseAsync(['node', 'test', 'delete', 'eval', 'latest']);
@@ -212,7 +210,7 @@ describe('delete command', () => {
       });
 
       it('should handle all evals deletion', async () => {
-        jest.mocked(confirm).mockResolvedValueOnce(true);
+        vi.mocked(confirm).mockResolvedValueOnce(true);
 
         deleteCommand(program);
         await program.parseAsync(['node', 'test', 'delete', 'eval', 'all']);

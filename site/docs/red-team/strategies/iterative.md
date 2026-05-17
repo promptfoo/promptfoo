@@ -79,10 +79,11 @@ The iterative jailbreak strategy creates refined single-shot jailbreaks that con
 
 ## Related Concepts
 
-- [Prompt Injections](prompt-injection.md)
-- [Tree-based Jailbreaks](tree.md)
-- [Multi-turn Jailbreaks](multi-turn.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Hydra Multi-turn](hydra.md) - Agentic follow-up attacks with branching backtracks
+- [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
+- [Prompt Injections](prompt-injection.md) - Direct injection techniques
+- [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
 
 [^1]: Mehrotra, A., et al. (2023). "Tree of Attacks: Jailbreaking Black-Box LLMs Automatically". arXiv:2312.02119

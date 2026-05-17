@@ -1,6 +1,0 @@
-{
-  "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "@types/node": "^24.3.0"
-  }
-}

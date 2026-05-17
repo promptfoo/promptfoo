@@ -1,58 +1,43 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
+import { AlertTriangle, Info } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import PageWrapper from '../PageWrapper';
 import Prompts from '../Prompts';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
-import TestTargetConfiguration from './TestTargetConfiguration';
-import type { ProviderResponse, ProviderTestResponse } from '@promptfoo/types';
 
 import type { ProviderOptions } from '../../types';
-import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
 interface TargetConfigurationProps {
   onNext: () => void;
   onBack: () => void;
-  setupModalOpen: boolean;
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function TargetConfiguration({
-  onNext,
-  onBack,
-  setupModalOpen,
-}: TargetConfigurationProps) {
+export default function TargetConfiguration({ onNext, onBack }: TargetConfigurationProps) {
   const { config, updateConfig, providerType } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
   );
-  const [testingTarget, setTestingTarget] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success?: boolean;
-    message?: string;
-    suggestions?: string[];
-    providerResponse?: ProviderResponse;
-  } | null>(null);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [promptRequired, setPromptRequired] = useState(requiresPrompt(selectedTarget));
-  const [testingEnabled, setTestingEnabled] = useState(providerType === 'http');
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
 
-  const configEditorRef = useRef<ProviderConfigEditorRef>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
   const { recordEvent } = useTelemetry();
 
+  const handleValidationRequest = useCallback((validator: () => boolean) => {
+    validateRef.current = validator;
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_configuration' });
   }, []);
@@ -60,7 +45,6 @@ export default function TargetConfiguration({
   useEffect(() => {
     updateConfig('target', selectedTarget);
     setPromptRequired(requiresPrompt(selectedTarget));
-    setTestingEnabled(providerType === 'http');
   }, [selectedTarget, updateConfig]);
 
   const handleProviderChange = (provider: ProviderOptions) => {
@@ -69,80 +53,6 @@ export default function TargetConfiguration({
       feature: 'redteam_config_target_configured',
       target: provider.id,
     });
-  };
-
-  const handleTestTarget = async () => {
-    setTestingTarget(true);
-    setTestResult(null);
-    recordEvent('feature_used', { feature: 'redteam_config_target_test' });
-    try {
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), 30000);
-
-      const response = await callApi('/providers/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(selectedTarget),
-        signal: abortController.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      // Handle PF Server Errors:
-      if (!response.ok) {
-        let errorMessage = 'Network response was not ok';
-        try {
-          const errorData = (await response.json()) as { error?: string };
-          if (errorData.error) {
-            errorMessage = errorData.error;
-          }
-        } catch {
-          // ignore json parsing errors
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data = (await response.json()) as ProviderTestResponse;
-
-      const result = data.testResult;
-
-      if (result.error) {
-        setTestResult({
-          providerResponse: data.providerResponse,
-        });
-      } else if (result.changes_needed) {
-        setTestResult({
-          success: false,
-          message: result.changes_needed_reason,
-          suggestions: result.changes_needed_suggestions,
-          providerResponse: data.providerResponse,
-        });
-      } else {
-        setTestResult({
-          success: true,
-          message: 'Target configuration is valid!',
-          providerResponse: data.providerResponse,
-        });
-      }
-    } catch (error) {
-      console.error('Error testing target:', error);
-      let message: string;
-
-      if (error instanceof Error && error.name === 'AbortError') {
-        message = 'Request timed out after 30 seconds';
-      } else {
-        message = error instanceof Error ? error.message : String(error);
-      }
-
-      setTestResult({
-        success: false,
-        message,
-      });
-    } finally {
-      setTestingTarget(false);
-    }
   };
 
   // Handle errors from child components
@@ -172,8 +82,8 @@ export default function TargetConfiguration({
     // Enable validation when button is clicked
     setShouldValidate(true);
 
-    // Use the ref to validate
-    const isValid = configEditorRef.current?.validate() ?? false;
+    // Call the validation function
+    const isValid = validateRef.current?.() ?? false;
 
     // Only proceed if there are no errors
     if (isValid && !validationErrors) {
@@ -190,68 +100,58 @@ export default function TargetConfiguration({
       nextDisabled={!isProviderValid()}
       warningMessage={isProviderValid() ? undefined : getNextButtonTooltip()}
     >
-      <Stack direction="column" spacing={3}>
+      <div className="flex flex-col gap-6">
         {/* Validation Error Display */}
         {validationErrors && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            <Typography variant="body2">
-              Please fix the following issues before continuing:
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1, fontWeight: 'medium' }}>
-              {validationErrors}
-            </Typography>
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                <p className="text-sm">Please fix the following issues before continuing:</p>
+                <p className="mt-2 text-sm font-medium">{validationErrors}</p>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
         {/* Documentation Alert for specific providers */}
         {hasSpecificDocumentation(providerType) && (
-          <Alert severity="info" sx={{ mb: 2 }}>
-            <Box>
-              <Typography variant="body2">
+          <Alert variant="info">
+            <Info className="size-4" />
+            <AlertContent>
+              <AlertDescription>
                 Need help configuring {selectedTarget.label || selectedTarget.id}?{' '}
-                <Link
+                <a
                   href={getProviderDocumentationUrl(providerType)}
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="text-primary hover:underline"
                 >
                   View the documentation
-                </Link>{' '}
+                </a>{' '}
                 for detailed setup instructions and examples.
-              </Typography>
-            </Box>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 
         {/* Provider Configuration Section */}
         <ProviderConfigEditor
-          ref={configEditorRef}
           provider={selectedTarget}
           setProvider={handleProviderChange}
           extensions={config.extensions}
           onExtensionsChange={(extensions) => updateConfig('extensions', extensions)}
-          opts={{
-            hideErrors: false,
-            disableModelSelection: false,
-          }}
           setError={handleError}
           validateAll={shouldValidate}
-          onValidate={(isValid) => {
+          onValidate={() => {
             // Validation errors will be displayed through the handleError function
           }}
+          onValidationRequest={handleValidationRequest}
           providerType={providerType}
         />
 
-        {testingEnabled && (
-          <TestTargetConfiguration
-            testingTarget={testingTarget}
-            handleTestTarget={handleTestTarget}
-            selectedTarget={selectedTarget}
-            testResult={testResult}
-          />
-        )}
-
         {promptRequired && <Prompts />}
-      </Stack>
+      </div>
     </PageWrapper>
   );
 }

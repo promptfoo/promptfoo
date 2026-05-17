@@ -48,7 +48,7 @@ steps:
     displayName: 'Install dependencies'
 
   - script: |
-      npx promptfoo eval
+      npx promptfoo eval -o promptfoo-results.json -o promptfoo-results.junit.xml
     displayName: 'Run promptfoo evaluations'
     env:
       OPENAI_API_KEY: $(OPENAI_API_KEY)
@@ -58,7 +58,7 @@ steps:
   - task: PublishTestResults@2
     inputs:
       testResultsFormat: 'JUnit'
-      testResultsFiles: 'promptfoo-results.xml'
+      testResultsFiles: 'promptfoo-results.junit.xml'
       mergeTestResults: true
       testRunTitle: 'Promptfoo Evaluation Results'
     condition: succeededOrFailed()
@@ -89,7 +89,7 @@ You can configure the pipeline to fail when promptfoo assertions don't pass by m
 
 ```yaml
 - script: |
-    npx promptfoo eval --fail-on-error
+    npx promptfoo eval --fail-on-error -o promptfoo-results.junit.xml
   displayName: 'Run promptfoo evaluations'
   env:
     OPENAI_API_KEY: $(OPENAI_API_KEY)
@@ -162,10 +162,10 @@ Test across multiple configurations or models in parallel:
 ```yaml
 strategy:
   matrix:
-    gpt4:
-      MODEL: 'gpt-4'
+    gpt:
+      MODEL: 'gpt-5.1'
     claude:
-      MODEL: 'claude-3-opus-20240229'
+      MODEL: 'claude-sonnet-4-5-20250929'
 
 steps:
   - script: |
@@ -183,6 +183,6 @@ If you encounter issues with your Azure Pipelines integration:
 - **Check logs**: Review detailed logs in Azure DevOps to identify errors
 - **Verify API keys**: Ensure your API keys are correctly set as pipeline variables
 - **Permissions**: Make sure the pipeline has access to read your configuration files
-- **Node.js version**: Promptfoo requires Node.js >= 20.0.0
+- **Node.js version**: Promptfoo requires Node.js `^20.20.0` or `>=22.22.0`
 
 If you're getting timeouts during evaluations, you may need to adjust the pipeline timeout settings or consider using a [self-hosted agent](https://learn.microsoft.com/en-us/azure/devops/pipelines/agents/agents) for better stability with long-running evaluations.

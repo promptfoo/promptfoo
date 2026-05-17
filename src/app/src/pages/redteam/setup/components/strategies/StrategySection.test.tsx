@@ -1,9 +1,30 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 
 import type { StrategyCardData } from './types';
+
+type StrategyItemMockProps = {
+  strategy: StrategyCardData;
+  isSelected: boolean;
+  onConfigClick: (strategyId: StrategyCardData['id']) => void;
+};
+
+vi.mock('./StrategyItem', () => ({
+  StrategyItem: vi
+    .fn()
+    .mockImplementation(({ strategy, isSelected, onConfigClick }: StrategyItemMockProps) => (
+      <div>
+        {isSelected && strategy.id === 'multilingual' && (
+          <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
+            Settings
+          </button>
+        )}
+        {strategy.name}
+      </div>
+    )),
+}));
 
 describe('StrategySection', () => {
   const mockOnToggle = vi.fn();
@@ -11,9 +32,9 @@ describe('StrategySection', () => {
   const mockOnSelectNone = vi.fn();
 
   const testStrategies: StrategyCardData[] = [
-    { id: 'strategy1', name: 'Strategy 1', description: 'Description 1' },
-    { id: 'strategy2', name: 'Strategy 2', description: 'Description 2' },
-    { id: 'strategy3', name: 'Strategy 3', description: 'Description 3' },
+    { id: 'basic', name: 'Strategy 1', description: 'Description 1' },
+    { id: 'jailbreak', name: 'Strategy 2', description: 'Description 2' },
+    { id: 'multilingual', name: 'Strategy 3', description: 'Description 3' },
   ];
 
   beforeEach(() => {
@@ -24,6 +45,8 @@ describe('StrategySection', () => {
     it('renders section title', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -33,11 +56,19 @@ describe('StrategySection', () => {
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();
+      expect(screen.getByText('Test Section').parentElement?.parentElement).toHaveClass(
+        'flex-col',
+        'items-start',
+        'sm:flex-row',
+        'sm:items-center',
+      );
     });
 
     it('renders section description when provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           description="This is a test description"
           strategies={testStrategies}
@@ -53,6 +84,8 @@ describe('StrategySection', () => {
     it('does not render description when not provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -67,6 +100,8 @@ describe('StrategySection', () => {
     it('renders all strategy items', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -85,21 +120,25 @@ describe('StrategySection', () => {
     it('shows Reset button when strategies exist', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1']}
+          selectedIds={['basic']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      expect(screen.getByText('Reset')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /reset/i })).toBeInTheDocument();
     });
 
     it('disables Reset button when no strategies are selected', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -109,94 +148,110 @@ describe('StrategySection', () => {
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
+      const resetButton = screen.getByRole('button', { name: /reset/i });
       expect(resetButton).toBeDisabled();
     });
 
     it('enables Reset button when strategies are selected', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'strategy2']}
+          selectedIds={['basic', 'jailbreak']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
+      const resetButton = screen.getByRole('button', { name: /reset/i });
       expect(resetButton).not.toBeDisabled();
     });
 
-    it('calls onSelectNone with selected strategy IDs when Reset is clicked', () => {
+    it('calls onSelectNone with selected strategy IDs when Reset is clicked', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'strategy3']}
+          selectedIds={['basic', 'multilingual']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
-      expect(mockOnSelectNone).toHaveBeenCalledWith(['strategy1', 'strategy3']);
+      expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
 
-    it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', () => {
+    it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'strategy3']}
+          selectedIds={['basic', 'multilingual']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
       expect(mockOnToggle).toHaveBeenCalledTimes(2);
-      expect(mockOnToggle).toHaveBeenCalledWith('strategy1');
-      expect(mockOnToggle).toHaveBeenCalledWith('strategy3');
+      expect(mockOnToggle).toHaveBeenCalledWith('basic');
+      expect(mockOnToggle).toHaveBeenCalledWith('multilingual');
     });
 
-    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', () => {
+    it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'nonexistent', 'strategy3']}
+          selectedIds={['basic', 'nonexistent', 'multilingual']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      const resetButton = screen.getByText('Reset');
-      fireEvent.click(resetButton);
+      const resetButton = screen.getByRole('button', { name: /reset/i });
+      await user.click(resetButton);
 
-      expect(mockOnSelectNone).toHaveBeenCalledWith(['strategy1', 'strategy3']);
+      expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
 
     it('does not call onSelectNone or onToggle when strategies are empty but selectedIds contains IDs', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={[]}
-          selectedIds={['strategy1', 'strategy2']}
+          selectedIds={['basic', 'jailbreak']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      const resetButton = screen.queryByText('Reset');
+      const resetButton = screen.queryByRole('button', { name: /reset/i });
 
       expect(resetButton).toBeNull();
       expect(mockOnSelectNone).not.toHaveBeenCalled();
@@ -208,6 +263,8 @@ describe('StrategySection', () => {
     it('applies highlighted styling when highlighted prop is true', () => {
       const { container } = render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -217,14 +274,16 @@ describe('StrategySection', () => {
         />,
       );
 
-      // Look for the grid container with special styling
-      const gridContainer = container.querySelector('[class*="MuiBox-root"]');
+      // Look for the grid container with highlighted styling (Tailwind classes)
+      const gridContainer = container.querySelector('.border-primary\\/10');
       expect(gridContainer).toBeInTheDocument();
     });
 
     it('applies special title styling when highlighted', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Highlighted Section"
           strategies={testStrategies}
           selectedIds={[]}
@@ -244,6 +303,8 @@ describe('StrategySection', () => {
     it('renders empty section when no strategies provided', () => {
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Empty Section"
           strategies={[]}
           selectedIds={[]}
@@ -260,23 +321,17 @@ describe('StrategySection', () => {
 
   describe('Theme customization', () => {
     it('renders without error when theme.palette.primary.main is not defined and highlighted is true', () => {
-      const customTheme = createTheme({
-        palette: {
-          mode: 'light',
-        },
-      });
-
       render(
-        <ThemeProvider theme={customTheme}>
-          <StrategySection
-            title="Test Section"
-            strategies={testStrategies}
-            selectedIds={[]}
-            onToggle={mockOnToggle}
-            onConfigClick={mockOnConfigClick}
-            highlighted={true}
-          />
-        </ThemeProvider>,
+        <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
+          title="Test Section"
+          strategies={testStrategies}
+          selectedIds={[]}
+          onToggle={mockOnToggle}
+          onConfigClick={mockOnConfigClick}
+          highlighted={true}
+        />,
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();
@@ -284,26 +339,8 @@ describe('StrategySection', () => {
   });
 
   describe('Configurable strategies', () => {
-    beforeEach(() => {
-      vi.mock('./StrategyItem', () => ({
-        StrategyItem: vi
-          .fn()
-          .mockImplementation(({ strategy, isSelected, onToggle, onConfigClick }) => (
-            <div>
-              {isSelected && strategy.id === 'configurable-strategy-id' && (
-                <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
-                  Settings
-                </button>
-              )}
-              {strategy.name}
-            </div>
-          )),
-        CONFIGURABLE_STRATEGIES: ['configurable-strategy-id'],
-      }));
-    });
-
     it('renders config button when strategy is selected and configurable', () => {
-      const configurableStrategyId = 'configurable-strategy-id';
+      const configurableStrategyId = 'multilingual';
       const configurableStrategy: StrategyCardData = {
         id: configurableStrategyId,
         name: 'Configurable Strategy',
@@ -312,6 +349,8 @@ describe('StrategySection', () => {
 
       render(
         <StrategySection
+          isStrategyDisabled={() => false}
+          isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={[configurableStrategy]}
           selectedIds={[configurableStrategyId]}
@@ -320,7 +359,7 @@ describe('StrategySection', () => {
         />,
       );
 
-      const configButton = screen.getByLabelText('settings');
+      const configButton = screen.getByRole('button', { name: /settings/i });
       expect(configButton).toBeInTheDocument();
     });
   });

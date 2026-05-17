@@ -1,147 +1,46 @@
-import assertions from './assertions';
+import assertions from './assertions/index';
 import * as cache from './cache';
-import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
-import { runDbMigrations } from './migrate';
-import Eval from './models/eval';
-import { processPrompts, readProviderPromptMap } from './prompts';
-import { loadApiProvider, loadApiProviders, resolveProvider } from './providers';
+import { evaluate } from './node';
+import { loadApiProvider, loadApiProviders } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
-import { Plugins } from './redteam/plugins';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
+import { Plugins } from './redteam/plugins/index';
 import { doRedteamRun } from './redteam/shared';
-import { Strategies } from './redteam/strategies';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util';
-import { maybeLoadFromExternalFile } from './util/file';
-import { readTests } from './util/testCaseReader';
+import { Strategies } from './redteam/strategies/index';
 
-import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types';
-import type { ApiProvider } from './types/providers';
-import { isApiProvider } from './types/providers';
+import type { RedteamRunOptions } from './redteam/types';
 
+export { EvalRunError } from './commands/eval';
+export { PromptSuggestionsRejectedError } from './evaluator';
+export { EmailValidationError } from './globalConfig/accounts';
+export { ServerError, type ServerErrorPhase } from './server/errors';
 export { generateTable } from './table';
-export * from './types';
+// EVENT_SOURCES, EventSource, EventSourceSchema, isCliEventSource flow through ./types/index.
+export * from './types/index';
+// Transform types and runtime guard for users passing inline transform functions
+// via the Node.js package.
+export { isTransformFunction } from './types/transform';
+export { ConfigResolutionError } from './util/config/load';
 
-async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
-  if (testSuite.writeLatestResults) {
-    await runDbMigrations();
-  }
+// Extension hook context types for users writing custom extensions
+export type {
+  AfterAllExtensionHookContext,
+  AfterEachExtensionHookContext,
+  BeforeAllExtensionHookContext,
+  BeforeEachExtensionHookContext,
+  ExtensionHookContextMap,
+} from './evaluatorHelpers';
+export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
-  const loadedProviders = await loadApiProviders(testSuite.providers, {
-    env: testSuite.env,
-  });
-  const providerMap: Record<string, ApiProvider> = {};
-  for (const p of loadedProviders) {
-    providerMap[p.id()] = p;
-    if (p.label) {
-      providerMap[p.label] = p;
-    }
-  }
+type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource'>;
 
-  // Resolve defaultTest from file reference if needed
-  let resolvedDefaultTest = testSuite.defaultTest;
-  if (typeof testSuite.defaultTest === 'string' && testSuite.defaultTest.startsWith('file://')) {
-    resolvedDefaultTest = await maybeLoadFromExternalFile(testSuite.defaultTest);
-  }
-
-  const constructedTestSuite: TestSuite = {
-    ...testSuite,
-    defaultTest: resolvedDefaultTest as TestSuite['defaultTest'],
-    scenarios: testSuite.scenarios as Scenario[],
-    providers: loadedProviders,
-    tests: await readTests(testSuite.tests),
-
-    nunjucksFilters: await readFilters(testSuite.nunjucksFilters || {}),
-
-    // Full prompts expected (not filepaths)
-    prompts: await processPrompts(testSuite.prompts),
-  };
-
-  // Resolve nested providers
-  if (typeof constructedTestSuite.defaultTest === 'object') {
-    // Resolve defaultTest.provider (only if it's not already an ApiProvider instance)
-    if (
-      constructedTestSuite.defaultTest?.provider &&
-      !isApiProvider(constructedTestSuite.defaultTest.provider)
-    ) {
-      constructedTestSuite.defaultTest.provider = await resolveProvider(
-        constructedTestSuite.defaultTest.provider,
-        providerMap,
-        { env: testSuite.env },
-      );
-    }
-    // Resolve defaultTest.options.provider (only if it's not already an ApiProvider instance)
-    if (
-      constructedTestSuite.defaultTest?.options?.provider &&
-      !isApiProvider(constructedTestSuite.defaultTest.options.provider)
-    ) {
-      constructedTestSuite.defaultTest.options.provider = await resolveProvider(
-        constructedTestSuite.defaultTest.options.provider,
-        providerMap,
-        { env: testSuite.env },
-      );
-    }
-  }
-
-  for (const test of constructedTestSuite.tests || []) {
-    if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
-        env: testSuite.env,
-      });
-    }
-    if (test.assert) {
-      for (const assertion of test.assert) {
-        if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
-          continue;
-        }
-
-        if (assertion.provider && !isApiProvider(assertion.provider)) {
-          assertion.provider = await resolveProvider(assertion.provider, providerMap, {
-            env: testSuite.env,
-          });
-        }
-      }
-    }
-  }
-
-  // Other settings
-  if (options.cache === false || (options.repeat && options.repeat > 1)) {
-    cache.disableCache();
-  }
-
-  const parsedProviderPromptMap = readProviderPromptMap(testSuite, constructedTestSuite.prompts);
-  const unifiedConfig = { ...testSuite, prompts: constructedTestSuite.prompts };
-  const evalRecord = testSuite.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts)
-    : new Eval(unifiedConfig);
-
-  // Run the eval!
-  const ret = await doEvaluate(
-    {
-      ...constructedTestSuite,
-      providerPromptMap: parsedProviderPromptMap,
-    },
-    evalRecord,
-    {
-      eventSource: 'library',
-      isRedteam: Boolean(testSuite.redteam),
-      ...options,
-    },
-  );
-
-  if (testSuite.outputPath) {
-    if (typeof testSuite.outputPath === 'string') {
-      await writeOutput(testSuite.outputPath, evalRecord, null);
-    } else if (Array.isArray(testSuite.outputPath)) {
-      await writeMultipleOutputs(testSuite.outputPath, evalRecord, null);
-    }
-  }
-
-  return ret;
+async function runRedteam(options: LibraryRedteamRunOptions = {}) {
+  return doRedteamRun({ ...options, eventSource: 'library' });
 }
 
 const redteam = {
@@ -158,10 +57,10 @@ const redteam = {
     Grader: RedteamGraderBase,
   },
   generate: doGenerateRedteam,
-  run: doRedteamRun,
+  run: runRedteam,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
 
 export default {
   assertions,
@@ -169,5 +68,6 @@ export default {
   evaluate,
   guardrails,
   loadApiProvider,
+  loadApiProviders,
   redteam,
 };

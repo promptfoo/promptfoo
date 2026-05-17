@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: http
+    config:
+      url: http://localhost:8080/inference
+      method: POST
+      headers:
+        'Content-Type': 'application/json'
+      body:
+        message: '{{prompt}}'
+        sessionId: '{{sessionId}}'
+      transformResponse: 'json.output'
+
+extensions:
+  - file://hooks.js:extensionHook
+
+redteam:
+  plugins:
+    - id: harmful:violent-crime
+      numTests: 5
+  strategies:
+    # Single-turn strategy
+    - id: basic
+    # Multi-turn strategy
+    - id: goat
+      config:
+        maxTurns: 5
+        stateful: true

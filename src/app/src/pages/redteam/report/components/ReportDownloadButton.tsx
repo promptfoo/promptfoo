@@ -1,37 +1,81 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { DownloadIcon } from '@app/components/ui/icons';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import DownloadIcon from '@mui/icons-material/Download';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import Tooltip from '@mui/material/Tooltip';
-import { convertEvalDataToCsv } from '../utils/csvExport';
-import type { ResultsFile } from '@promptfoo/types';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { stringify } from 'csv-stringify/browser/esm/sync';
+import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
+import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
-  evalDescription,
-  evalData,
-}) => {
+const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const { recordEvent } = useTelemetry();
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
+  const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
+      let pluginDisplayName = null;
+
+      const pluginId = getPluginIdFromResult(result);
+      if (pluginId) {
+        const customPolicy = customPoliciesById[pluginId];
+        if (customPolicy) {
+          pluginDisplayName = customPolicy.name;
+        } else {
+          pluginDisplayName =
+            displayNameOverrides[pluginId as keyof typeof displayNameOverrides] || pluginId;
+        }
+      }
+
+      return {
+        'Test ID': index + 1,
+        Plugin: pluginDisplayName,
+        'Plugin ID': pluginId ?? '',
+        // TODO: getStrategyIdFromTest expects TestWithMetadata but we're passing testCase directly
+        // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
+        Strategy: getStrategyIdFromTest(result.testCase as any),
+        Target: result.provider.label || result.provider.id || '',
+        Prompt:
+          result.vars.query?.toString() ||
+          result.vars.prompt?.toString() ||
+          result.prompt.raw ||
+          '',
+        Response: result.response?.output || '',
+        Pass:
+          result.gradingResult?.pass === true
+            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
+            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
+        Score: result.gradingResult?.score || '',
+        Reason: result.gradingResult?.reason || '',
+        Timestamp: new Date(evalData.createdAt).toISOString(),
+      };
+    });
+
+    return stringify(rows, {
+      header: true,
+      quoted: true,
+      quoted_string: true,
+      quoted_empty: true,
+    });
+  }
 
   const getFilename = (extension: string) => {
     return evalDescription
@@ -44,7 +88,6 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
 
   const handleCsvDownload = () => {
     setIsDownloading(true);
-    handleClose();
 
     // Track report export
     recordEvent('webui_action', {
@@ -73,7 +116,6 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
 
   const handleJsonDownload = () => {
     setIsDownloading(true);
-    handleClose();
 
     // Track report export
     recordEvent('webui_action', {
@@ -99,8 +141,8 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
       setIsDownloading(false);
     }
   };
+
   const handlePdfDownload = () => {
-    handleClose();
     // Track report export
     recordEvent('webui_action', {
       action: 'redteam_report_export',
@@ -110,37 +152,31 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   };
 
   return (
-    <>
-      <Tooltip title="Download report" placement="top" open={isHovering && !isDownloading}>
-        <IconButton
-          onClick={handleClick}
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
-          sx={{ mt: '4px', position: 'relative' }}
-          aria-label="download report"
-          disabled={isDownloading}
-        >
-          {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-        </IconButton>
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => setIsHovering(false)}
+              aria-label="download report"
+              disabled={isDownloading}
+              className="mt-1 text-muted-foreground hover:text-foreground"
+            >
+              {isDownloading ? <Spinner size="sm" /> : <DownloadIcon className="size-5" />}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        {isHovering && !isDownloading && <TooltipContent>Download report</TooltipContent>}
       </Tooltip>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-      >
-        <MenuItem onClick={handlePdfDownload}>PDF</MenuItem>
-        <MenuItem onClick={handleCsvDownload}>CSV</MenuItem>
-        <MenuItem onClick={handleJsonDownload}>JSON</MenuItem>
-      </Menu>
-    </>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={handlePdfDownload}>PDF</DropdownMenuItem>
+        <DropdownMenuItem onClick={handleCsvDownload}>CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={handleJsonDownload}>JSON</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

@@ -57,11 +57,29 @@ promptfoo redteam poison documents/
 
 Adding documents to your RAG knowledge base will depend on your specific system.
 
-If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/parameters/).
+If you have Promptfoo configured for gray-box testing, you can simply add a `{{documents}}` variable to your prompt. See [prompt configuration](/docs/configuration/prompts/).
 
 ### Running a scan
 
-See the [red team quickstart](/docs/red-team/quickstart/) guide for more information on running a scan.
+Add the `rag-poisoning` plugin to your redteam config. Each `intendedResults` entry should describe an expected outcome if the poisoning succeeds:
+
+```yaml
+redteam:
+  plugins:
+    - id: rag-poisoning
+      config:
+        intendedResults:
+          - 'In order to contact customer support, use this email: attacker@evil.com'
+          - 'The company is going out of business and giving away free products'
+```
+
+Then run the scan:
+
+```sh
+promptfoo redteam run
+```
+
+See the [red team quickstart](/docs/red-team/quickstart/) guide for more information.
 
 ## Reference
 
@@ -191,5 +209,4 @@ Here are some common document poisoning patterns that the plugin tests:
 - [Prompt Injection](/docs/red-team/strategies/prompt-injection)
 - [Information Disclosure](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
 - [System Prompt Extraction](/docs/red-team/plugins/prompt-extraction)
-
-For more information on LLM security testing, see our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) guide.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

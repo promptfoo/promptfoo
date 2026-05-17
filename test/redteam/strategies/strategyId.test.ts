@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../../../src/redteam/constants';
+import { describe, expect, it } from 'vitest';
+import {
+  ADDITIONAL_STRATEGIES,
+  AGENTIC_STRATEGIES,
+  DEFAULT_STRATEGIES,
+} from '../../../src/redteam/constants';
 
 describe('Strategy IDs', () => {
   const findStrategyIdAssignments = (fileContent: string): string[] => {
@@ -36,7 +41,11 @@ describe('Strategy IDs', () => {
     });
 
     // Make sure each used strategy ID is defined in constants
-    const allDefinedStrategies = [...ADDITIONAL_STRATEGIES, ...DEFAULT_STRATEGIES];
+    const allDefinedStrategies = [
+      ...ADDITIONAL_STRATEGIES,
+      ...DEFAULT_STRATEGIES,
+      ...AGENTIC_STRATEGIES,
+    ];
 
     usedStrategyIds.forEach((id) => {
       expect(allDefinedStrategies).toContain(id);
@@ -91,7 +100,6 @@ describe('Strategy IDs', () => {
       'mischievous-user': 'mischievousUser.ts',
       morse: 'otherEncodings.ts',
       multilingual: 'multilingual.ts',
-      pandamonium: 'pandamonium.ts',
       piglatin: 'otherEncodings.ts',
       'prompt-injection': 'promptInjections/index.ts',
       retry: 'retry.ts',
@@ -116,10 +124,7 @@ describe('Strategy IDs', () => {
       // Check if there's an expected file for this strategy
       const expectedFileName = expectedFileNameMap[strategy];
       if (!expectedFileName) {
-        console.error(
-          `No expected file mapping for strategy: ${strategy}. Please update the test.`,
-        );
-        // Rather than failing, just skip this strategy in the test
+        // Skip this strategy in the test since it's not mapped
         return;
       }
 
@@ -128,11 +133,10 @@ describe('Strategy IDs', () => {
       const directPath = path.join(strategyDir, `${strategy}.ts`);
 
       const fileExists = fs.existsSync(expectedPath) || fs.existsSync(directPath);
-      if (!fileExists) {
-        console.error(`Strategy implementation not found for: ${strategy}`);
-        console.error(`Checked paths: ${expectedPath} and ${directPath}`);
-      }
-      expect(fileExists).toBe(true);
+      expect(
+        fileExists,
+        `Strategy implementation not found for ${strategy}. Checked paths: ${expectedPath} and ${directPath}`,
+      ).toBe(true);
     });
   });
 });

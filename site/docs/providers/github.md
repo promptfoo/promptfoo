@@ -35,8 +35,8 @@ GitHub Models provides access to industry-leading AI models from various provide
 
 **Language Models**
 
-- OpenAI GPT-4.1 series (gpt-4.1, gpt-4.1-mini, gpt-4.1-nano)
-- OpenAI GPT-4o series (gpt-4o, gpt-4o-mini)
+- OpenAI GPT-4.1 series (gpt-5, gpt-5-mini, gpt-5-nano)
+- OpenAI GPT-4o series (gpt-4o, gpt-5-mini)
 - OpenAI reasoning models (o1-preview, o1-mini, o3-mini)
 - Anthropic Claude series (claude-4-opus, claude-4-sonnet, claude-3.7-sonnet, claude-3.5-sonnet, claude-3.5-haiku)
 - Google Gemini series (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash)
@@ -60,18 +60,18 @@ For the most up-to-date list of available models, visit the [GitHub Models marke
 
 ```yaml
 providers:
-  - github:openai/gpt-4.1
+  - github:openai/gpt-5
 ```
 
 ### With Configuration
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: github:anthropic/claude-4-opus
+  - id: github:anthropic/claude-4-opus # Uses GITHUB_TOKEN env var
     config:
       temperature: 0.7
       max_tokens: 4096
-      apiKey: ${GITHUB_TOKEN}
+      # apiKey: "{{ env.GITHUB_TOKEN }}"  # optional, auto-detected
 ```
 
 ### Multiple Models
@@ -79,17 +79,17 @@ providers:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: github-fast
-    provider: github:openai/gpt-4.1-nano
+    provider: github:openai/gpt-5-nano
     config:
       temperature: 0.5
 
   - id: github-balanced
-    provider: github:openai/gpt-4.1-mini
+    provider: github:openai/gpt-5-mini
     config:
       temperature: 0.6
 
   - id: github-smart
-    provider: github:openai/gpt-4.1
+    provider: github:openai/gpt-5
     config:
       temperature: 0.7
 
@@ -141,7 +141,7 @@ Each model has specific rate limits and pricing. Check the [GitHub Models docume
 
 ## API Information
 
-- **Base URL**: `https://models.github.ai`
+- **Base URL**: `https://models.github.ai/inference`
 - **Format**: OpenAI-compatible API
 - **Endpoints**: Standard chat completions and embeddings
 
@@ -166,9 +166,9 @@ Models are accessed using the format `github:[model-id]` where `model-id` follow
 
 Examples:
 
-- `github:openai/gpt-4.1`
-- `github:openai/gpt-4.1-mini`
-- `github:openai/gpt-4.1-nano`
+- `github:openai/gpt-5`
+- `github:openai/gpt-5-mini`
+- `github:openai/gpt-5-nano`
 - `github:anthropic/claude-4-opus`
 - `github:anthropic/claude-4-sonnet`
 - `github:google/gemini-2.5-pro`
@@ -187,8 +187,8 @@ Examples:
 import promptfoo from 'promptfoo';
 
 // Basic usage
-const results = await promptfoo.evaluate({
-  providers: ['github:openai/gpt-4.1', 'github:anthropic/claude-4-opus'],
+const evalRecord = await promptfoo.evaluate({
+  providers: ['github:openai/gpt-5', 'github:anthropic/claude-4-opus'],
   prompts: ['Write a function to {{task}}'],
   tests: [
     {
@@ -202,9 +202,10 @@ const results = await promptfoo.evaluate({
     },
   ],
 });
+const results = await evalRecord.toEvaluateSummary();
 
 // Using specialized models
-const specializedModels = await promptfoo.evaluate({
+const specializedModelsEvalRecord = await promptfoo.evaluate({
   providers: [
     'github:azureml-mistral/Codestral-2501', // Code generation
     'github:deepseek/deepseek-r1', // Advanced reasoning
@@ -224,6 +225,7 @@ const specializedModels = await promptfoo.evaluate({
     },
   ],
 });
+const specializedModels = await specializedModelsEvalRecord.toEvaluateSummary();
 ```
 
 For more information on specific models and their capabilities, refer to the [GitHub Models marketplace](https://github.com/marketplace/models/).

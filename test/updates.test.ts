@@ -1,31 +1,35 @@
-let mockExecAsync: jest.Mock;
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
-jest.mock('util', () => ({
-  ...jest.requireActual('util'),
-  promisify: jest.fn((fn) => {
-    if (fn.name === 'exec') {
-      // Return a function that will use mockExecAsync when called
-      return (...args: any[]) => {
-        if (!mockExecAsync) {
-          mockExecAsync = jest.fn();
-        }
-        return mockExecAsync(...args);
-      };
-    }
-    return jest.requireActual('util').promisify(fn);
-  }),
+// Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
+const { mockExecAsync } = vi.hoisted(() => {
+  const mockExecAsync = vi.fn();
+  return { mockExecAsync };
+});
+
+// Mock child_process.exec with custom promisify symbol
+vi.mock('child_process', async () => {
+  const actual = await vi.importActual<typeof import('child_process')>('child_process');
+  const mockExec = Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: mockExecAsync,
+  });
+  return {
+    ...actual,
+    exec: mockExec,
+  };
+});
+
+vi.mock('../src/util/fetch/index.ts', () => ({
+  fetchWithTimeout: vi.fn(),
 }));
 
-jest.mock('../src/fetch', () => ({
-  fetchWithTimeout: jest.fn(),
+vi.mock('../src/version', () => ({
+  VERSION: '0.11.0',
+  POSTHOG_KEY: '',
+  ENGINES: { node: '>=20.0.0' },
 }));
 
-jest.mock('../package.json', () => ({
-  version: '0.11.0',
-}));
-
-import packageJson from '../package.json';
-import { fetchWithTimeout } from '../src/fetch';
+import logger from '../src/logger';
 import {
   checkForUpdates,
   checkModelAuditUpdates,
@@ -33,14 +37,21 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
+import { fetchWithTimeout } from '../src/util/fetch/index';
+import { VERSION } from '../src/version';
 
 beforeEach(() => {
-  mockExecAsync = jest.fn();
+  vi.mocked(fetchWithTimeout).mockReset();
+  mockExecAsync.mockReset();
+  mockExecAsync.mockResolvedValue({
+    stdout: 'modelaudit, version 0.0.0',
+    stderr: '',
+  });
 });
 
 describe('getLatestVersion', () => {
   it('should return the latest version of the package', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
     } as never);
@@ -50,7 +61,7 @@ describe('getLatestVersion', () => {
   });
 
   it('should throw an error if the response is not ok', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: false,
     } as never);
 
@@ -61,16 +72,23 @@ describe('getLatestVersion', () => {
 });
 
 describe('checkForUpdates', () => {
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    jest.spyOn(console, 'log').mockImplementation(() => {});
+    // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
+    vi.mocked(fetchWithTimeout).mockReset();
+    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
-    jest.mocked(console.log).mockRestore();
+    loggerInfoSpy.mockRestore();
+    restoreEnv();
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
     } as never);
@@ -80,7 +98,7 @@ describe('checkForUpdates', () => {
   });
 
   it('should log an update message if a newer version is available - major ver', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ latestVersion: '1.1.0' }),
     } as never);
@@ -90,9 +108,9 @@ describe('checkForUpdates', () => {
   });
 
   it('should not log an update message if the current version is up to date', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ latestVersion: packageJson.version }),
+      json: async () => ({ latestVersion: VERSION }),
     } as never);
 
     const result = await checkForUpdates();
@@ -102,7 +120,7 @@ describe('checkForUpdates', () => {
 
 describe('getModelAuditLatestVersion', () => {
   it('should return the latest version from PyPI', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ info: { version: '0.1.7' } }),
     } as never);
@@ -111,13 +129,13 @@ describe('getModelAuditLatestVersion', () => {
     expect(version).toBe('0.1.7');
     expect(fetchWithTimeout).toHaveBeenCalledWith(
       'https://pypi.org/pypi/modelaudit/json',
-      {},
-      1000,
+      { headers: { 'x-promptfoo-silent': 'true' } },
+      10000,
     );
   });
 
   it('should return null if PyPI request fails', async () => {
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: false,
     } as never);
 
@@ -126,7 +144,7 @@ describe('getModelAuditLatestVersion', () => {
   });
 
   it('should return null if fetch throws', async () => {
-    jest.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('Network error'));
+    vi.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('Network error'));
 
     const version = await getModelAuditLatestVersion();
     expect(version).toBeNull();
@@ -134,9 +152,9 @@ describe('getModelAuditLatestVersion', () => {
 });
 
 describe('getModelAuditCurrentVersion', () => {
-  it('should return the current version from pip show', async () => {
+  it('should return the current version from modelaudit --version', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.5\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.5',
       stderr: '',
     });
 
@@ -144,7 +162,7 @@ describe('getModelAuditCurrentVersion', () => {
     expect(version).toBe('0.1.5');
   });
 
-  it('should return null if pip show fails', async () => {
+  it('should return null if modelaudit --version fails', async () => {
     mockExecAsync.mockRejectedValueOnce(new Error('Command failed'));
 
     const version = await getModelAuditCurrentVersion();
@@ -153,7 +171,7 @@ describe('getModelAuditCurrentVersion', () => {
 
   it('should return null if version pattern not found', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nSummary: Model audit tool',
+      stdout: 'some invalid output',
       stderr: '',
     });
 
@@ -163,23 +181,26 @@ describe('getModelAuditCurrentVersion', () => {
 });
 
 describe('checkModelAuditUpdates', () => {
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    jest.spyOn(console, 'log').mockImplementation(() => {});
-    delete process.env.PROMPTFOO_DISABLE_UPDATE;
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
   });
 
   afterEach(() => {
-    jest.mocked(console.log).mockRestore();
-    jest.clearAllMocks();
+    loggerInfoSpy.mockRestore();
+    restoreEnv();
   });
 
   it('should return true and log message when update is available', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.5\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.5',
       stderr: '',
     });
 
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ info: { version: '0.1.7' } }),
     } as never);
@@ -190,11 +211,11 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return false when versions are equal', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.7\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.7',
       stderr: '',
     });
 
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ info: { version: '0.1.7' } }),
     } as never);
@@ -205,11 +226,11 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return false when current version is newer', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.2.0\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.2.0',
       stderr: '',
     });
 
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ info: { version: '0.1.7' } }),
     } as never);
@@ -219,17 +240,22 @@ describe('checkModelAuditUpdates', () => {
   });
 
   it('should return false when PROMPTFOO_DISABLE_UPDATE is set', async () => {
-    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+    const restoreDisableUpdate = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+    try {
+      vi.mocked(fetchWithTimeout).mockReset();
 
-    const result = await checkModelAuditUpdates();
-    expect(result).toBeFalsy();
-    expect(fetchWithTimeout).not.toHaveBeenCalled();
+      const result = await checkModelAuditUpdates();
+      expect(result).toBeFalsy();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+    } finally {
+      restoreDisableUpdate();
+    }
   });
 
   it('should return false when current version cannot be determined', async () => {
     mockExecAsync.mockRejectedValueOnce(new Error('Command failed'));
 
-    jest.mocked(fetchWithTimeout).mockResolvedValueOnce({
+    vi.mocked(fetchWithTimeout).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ info: { version: '0.1.7' } }),
     } as never);
@@ -240,11 +266,11 @@ describe('checkModelAuditUpdates', () => {
 
   it('should return false when latest version cannot be determined', async () => {
     mockExecAsync.mockResolvedValueOnce({
-      stdout: 'Name: modelaudit\nVersion: 0.1.5\nSummary: Model audit tool',
+      stdout: 'modelaudit, version 0.1.5',
       stderr: '',
     });
 
-    jest.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('Network error'));
+    vi.mocked(fetchWithTimeout).mockRejectedValueOnce(new Error('Network error'));
 
     const result = await checkModelAuditUpdates();
     expect(result).toBeFalsy();

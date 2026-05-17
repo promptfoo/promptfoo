@@ -4,13 +4,13 @@ import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
+} from '../../types/index';
 import type { AzureCompletionOptions, AzureProviderOptions } from './types';
 
 export class AzureGenericProvider implements ApiProvider {
@@ -58,7 +58,7 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async ensureInitialized() {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
   }
@@ -99,18 +99,25 @@ export class AzureGenericProvider implements ApiProvider {
       this.env?.AZURE_AUTHORITY_HOST ||
       getEnvString('AZURE_AUTHORITY_HOST');
 
-    const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
+    try {
+      const { ClientSecretCredential, AzureCliCredential } = await import('@azure/identity');
 
-    if (clientSecret && clientId && tenantId) {
-      const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
-        authorityHost: authorityHost || 'https://login.microsoftonline.com',
-      });
+      if (clientSecret && clientId && tenantId) {
+        const credential = new ClientSecretCredential(tenantId, clientId, clientSecret, {
+          authorityHost: authorityHost || 'https://login.microsoftonline.com',
+        });
+        return credential;
+      }
+
+      // Fallback to Azure CLI
+      const credential = new AzureCliCredential();
       return credential;
+    } catch (err) {
+      logger.error(`Error loading @azure/identity: ${err}`);
+      throw new Error(
+        'The @azure/identity package is required for Azure authentication. Please install it with: npm install @azure/identity',
+      );
     }
-
-    // Fallback to Azure CLI
-    const credential = new AzureCliCredential();
-    return credential;
   }
 
   async getAccessToken() {
@@ -169,9 +176,9 @@ Please choose one of the following options:
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }

@@ -1,13 +1,13 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
+} from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
@@ -26,7 +26,7 @@ export function calculatePerplexityCost(
   modelName: string,
   promptTokens?: number,
   completionTokens?: number,
-  usageTier: 'high' | 'medium' | 'low' = 'medium',
+  _usageTier: 'high' | 'medium' | 'low' = 'medium',
 ): number {
   if (!promptTokens && !completionTokens) {
     return 0;
@@ -156,7 +156,7 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
 
     // Replace the cost calculation with our own
     if (response.tokenUsage) {
-      if (response.tokenUsage.cached) {
+      if (response.cached) {
         // For cached responses, don't recalculate cost
         return response;
       }

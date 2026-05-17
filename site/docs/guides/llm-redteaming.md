@@ -1,5 +1,5 @@
 ---
-sidebar_label: How to red team LLM applications
+sidebar_label: How to Red Team LLM Applications
 description: Protect your LLM applications from prompt injection, jailbreaks, and data leaks with automated red teaming tests that identify 20+ vulnerability types and security risks
 ---
 
@@ -54,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node 20 or later](https://nodejs.org/en/download/package-manager/).
+First, install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`.
 
 Then create a new project for your red teaming needs:
 
@@ -93,7 +93,7 @@ In this example, let's pretend we're building a trip planner app. I’ll set a p
 
 ```yaml
 prompts:
-  - 'Act as a travel agent and help the user plan their trip to {{destination}}.  Be friendly and concise. User query: {{query}}'
+  - 'Act as a travel agent and help the user plan their trip to {{destination}}. Be friendly and concise. User query: {{query}}'
 ```
 
 ### What if you don't have a prompt?
@@ -108,7 +108,7 @@ In most cases your prompt will be more complex, in which case you could create a
 [
   {
     'role': 'system',
-    'content': 'Act as a travel agent and help the user plan their trip to {{destination}}.  Be friendly and concise.',
+    'content': 'Act as a travel agent and help the user plan their trip to {{destination}}. Be friendly and concise.',
   },
   { 'role': 'user', 'content': '{{query}}' },
 ]
@@ -130,7 +130,7 @@ def get_prompt(context):
   if context['vars']['destination'] === 'Australia':
     return f"Act as a travel agent, mate: {{query}}"
 
-  return f"Act as a travel agent and help the user plan their trip.  Be friendly and concise. User query: {{query}}"
+  return f"Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
 
 ```
 
@@ -165,9 +165,9 @@ You should choose at least one target. If desired, set multiple in order to comp
 
 ```yaml
 targets:
-  - openai:gpt-4.1
-  - anthropic:messages:claude-3-5-sonnet-20241022
-  - ollama:chat:llama3.3:70b
+  - openai:gpt-5
+  - anthropic:claude-sonnet-4-6
+  - ollama:chat:llama4:scout
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).
@@ -224,14 +224,14 @@ You can also reference nested objects. For example, `json.choices[0].message.con
 
 ### Configuring the grader
 
-The results of the red team are graded by a model. By default, `gpt-4.1-2025-04-14` is used and the test expects an `OPENAI_API_KEY` environment variable.
+The results of the red team are graded by a model. By default, `gpt-5` is used and the test expects an `OPENAI_API_KEY` environment variable.
 
 You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here’s an example of using Llama3 as a grader locally:
 
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3.3:70b'
+    provider: 'ollama:chat:llama4:scout'
 ```
 
 And in this example, we use [Azure OpenAI](/docs/providers/azure/#model-graded-tests) as a grader:

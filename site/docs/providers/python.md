@@ -1,11 +1,19 @@
 ---
-sidebar_label: Custom Python
-description: 'Create custom Python scripts for advanced model integrations, evaluations, and complex testing logic with full flexibility'
+title: Python Provider
+sidebar_label: Python Provider
+sidebar_position: 50
+description: 'Create custom Python scripts for advanced model integrations, evals, and complex testing logic'
 ---
 
 # Python Provider
 
 The Python provider enables you to create custom evaluation logic using Python scripts. This allows you to integrate Promptfoo with any Python-based model, API, or custom logic.
+
+:::tip Python Overview
+
+For an overview of all Python integrations (providers, assertions, test generators, prompts), see the [Python integration guide](/docs/integrations/python).
+
+:::
 
 **Common use cases:**
 
@@ -62,6 +70,8 @@ npx promptfoo@latest eval
 That's it! You've created your first custom Python provider.
 
 ## How It Works
+
+Python providers use persistent worker processes. Your script is loaded once when the worker starts, not on every call. This makes subsequent calls much faster, especially for scripts with heavy imports like ML models.
 
 When Promptfoo evaluates a test case with a Python provider:
 
@@ -171,12 +181,30 @@ Provides information about the current test case:
 ```python
 {
     "vars": {
-        # Variables used in this test case
         "user_input": "Hello world",
         "system_prompt": "You are a helpful assistant"
-    }
+    },
+    "prompt": {
+        "raw": "...",
+        "label": "...",
+    },
+    "test": {
+        "vars": { ... },
+        "metadata": {
+            "pluginId": "...",   # Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
+            "strategyId": "...", # Redteam strategy (e.g. "jailbreak", "prompt-injection")
+        },
+    },
 }
 ```
+
+For redteam evals, use `context['test']['metadata']['pluginId']` and `context['test']['metadata']['strategyId']` to identify which plugin and strategy generated the test case.
+
+:::note
+
+Non-serializable fields (`logger`, `getCache`, `filters`, `originalProvider`) are removed before passing context to Python. Additional fields like `evaluationId`, `testCaseId`, `testIdx`, `promptIdx`, and `repeatIndex` are also available.
+
+:::
 
 ### Return Format
 
@@ -199,6 +227,9 @@ def call_api(prompt, options, context):
     result["cost"] = 0.0025  # in dollars
     result["cached"] = False
     result["logProbs"] = [-0.5, -0.3, -0.1]
+    result["latencyMs"] = 150  # custom latency in milliseconds
+    result["conversationEnded"] = False
+    result["conversationEndReason"] = "thread_closed"
 
     # Error handling
     if something_went_wrong:
@@ -206,6 +237,8 @@ def call_api(prompt, options, context):
 
     return result
 ```
+
+For workflows that make multiple model calls, set `tokenUsage.numRequests` yourself. Fresh Python-provider results that omit it are recorded as one request.
 
 ### Types
 
@@ -218,11 +251,14 @@ class ProviderOptions:
 
 class CallApiContextParams:
     vars: Dict[str, str]
+    prompt: Optional[Dict[str, Any]]       # Prompt template (raw, label, config)
+    test: Optional[Dict[str, Any]]         # Full test case including metadata
 
 class TokenUsage:
     total: int
     prompt: int
     completion: int
+    numRequests: int
 
 class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]
@@ -231,6 +267,10 @@ class ProviderResponse:
     cost: Optional[float]
     cached: Optional[bool]
     logProbs: Optional[List[float]]
+    latencyMs: Optional[int]  # overrides measured latency
+    conversationEnded: Optional[bool]
+    conversationEndReason: Optional[str]
+    metadata: Optional[Dict[str, Any]]
 
 class ProviderEmbeddingResponse:
     embedding: List[float]
@@ -247,6 +287,10 @@ class ProviderClassificationResponse:
 :::tip
 Always include the `output` field in your response, even if it's an empty string when an error occurs.
 :::
+
+For multi-turn red team strategies, return `conversationEnded: True` (with optional
+`conversationEndReason`) when your target intentionally closes the active thread so promptfoo
+stops probing gracefully instead of continuing into timeout/error turns.
 
 ## Complete Examples
 
@@ -387,12 +431,29 @@ providers:
     label: 'My Custom Provider' # Optional display name
     config:
       # Any configuration your provider needs
-      api_key: ${CUSTOM_API_KEY}
+      api_key: '{{ env.CUSTOM_API_KEY }}'
       endpoint: https://api.example.com
       model_params:
         temperature: 0.7
         max_tokens: 100
 ```
+
+### Link to Cloud Target
+
+:::info Promptfoo Cloud Feature
+Available in [Promptfoo Cloud](/docs/enterprise) deployments.
+:::
+
+Link your local provider configuration to a cloud target using `linkedTargetId`:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      linkedTargetId: 'promptfoo://provider/12345678-1234-1234-1234-123456789abc'
+```
+
+See [Linking Local Targets to Cloud](/docs/red-team/troubleshooting/linking-targets/) for setup instructions.
 
 ### Using External Configuration Files
 
@@ -425,9 +486,68 @@ Supported formats:
 - **Python** (`.py`) - Must export a function returning config
 - **JavaScript** (`.js`, `.mjs`) - Must export a function returning config
 
+### Worker Configuration
+
+Python providers use persistent worker processes that stay alive between calls, making subsequent calls faster.
+
+#### Parallelism
+
+Control the number of workers per provider:
+
+```yaml
+providers:
+  # Default: 1 worker
+  - id: file://my_provider.py
+
+  # Multiple workers for parallel execution
+  - id: file://api_wrapper.py
+    config:
+      workers: 4
+```
+
+Or set globally:
+
+```bash
+export PROMPTFOO_PYTHON_WORKERS=4
+```
+
+**When to use 1 worker** (default):
+
+- GPU-bound ML models
+- Scripts with heavy imports (avoids loading them multiple times)
+- Conversational flows requiring session state
+
+**When to use multiple workers:**
+
+- CPU-bound tasks where parallelism helps
+- Lightweight API wrappers
+
+Note that global state is not shared across workers. If your script uses global variables for session management (common in conversational flows like red team evaluations), use `workers: 1` to ensure all requests hit the same worker.
+
+#### Timeouts
+
+Default timeout is 5 minutes (300 seconds). Increase if needed:
+
+```yaml
+providers:
+  - id: file://slow_model.py
+    config:
+      timeout: 300000 # milliseconds
+```
+
+Or set globally for all providers:
+
+```bash
+export REQUEST_TIMEOUT_MS=600000  # 10 minutes
+```
+
 ### Environment Configuration
 
 #### Custom Python Executable
+
+You can specify a custom Python executable in several ways:
+
+**Option 1: Per-provider configuration**
 
 ```yaml
 providers:
@@ -435,6 +555,29 @@ providers:
     config:
       pythonExecutable: /path/to/venv/bin/python
 ```
+
+**Option 2: Global environment variable**
+
+```bash
+# Use specific Python version globally
+export PROMPTFOO_PYTHON=/usr/bin/python3.11
+npx promptfoo@latest eval
+```
+
+#### Python Detection Process
+
+Promptfoo automatically detects your Python installation in this priority order:
+
+1. **Provider config**: `pythonExecutable` in your config
+2. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
+3. **Windows smart detection**: Uses `where python` and filters out Microsoft Store stubs (Windows only)
+4. **Smart detection**: Uses `python -c "import sys; print(sys.executable)"` to find the actual Python path
+5. **Fallback commands**:
+   - Windows: `python`, `python3`, `py -3`, `py`
+   - macOS/Linux: `python3`, `python`
+
+This enhanced detection is especially helpful on Windows where the Python launcher (`py.exe`) might not be available.
+Use `pythonExecutable` when one provider needs a different interpreter than the global default.
 
 #### Environment Variables
 
@@ -444,6 +587,9 @@ export PROMPTFOO_PYTHON=/usr/bin/python3.11
 
 # Add custom module paths
 export PYTHONPATH=/path/to/my/modules:$PYTHONPATH
+
+# Enable Python debugging with pdb
+export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 
 # Run evaluation
 npx promptfoo@latest eval
@@ -522,17 +668,204 @@ def call_api(prompt, options, context):
         }
 ```
 
+### OpenTelemetry Tracing
+
+Python providers automatically emit OpenTelemetry spans when tracing is enabled. This provides visibility into Python provider execution as part of your evaluation traces.
+
+**Requirements:**
+
+```bash
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+**Enable tracing:**
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+```
+
+Install the Python OpenTelemetry packages and enable the wrapper instrumentation:
+
+```bash
+export PROMPTFOO_ENABLE_OTEL=true
+```
+
+When wrapper OTEL instrumentation is enabled, the Python provider wrapper:
+
+- Creates child spans linked to the parent evaluation trace
+- Records request/response body attributes
+- Captures token usage from `tokenUsage` in your response
+- Includes evaluation and test case metadata
+
+The spans follow [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) with attributes like `gen_ai.request.model`, `gen_ai.usage.input_tokens`, and `gen_ai.usage.output_tokens`.
+
+This span covers the provider call itself. If you need internal workflow telemetry for tools, agents, or handoffs, create custom child spans or export framework-native traces into Promptfoo. See the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) for a full example that makes `trajectory:*` assertions work with the Python `openai-agents` SDK.
+
+### Handling Retries
+
+When calling external APIs, implement retry logic in your script to handle rate limits and transient failures:
+
+```python
+import time
+import requests
+
+def call_api(prompt, options, context):
+    """Provider with retry logic for external API calls."""
+    config = options.get('config', {})
+    max_retries = config.get('max_retries', 3)
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                config['api_url'],
+                json={'prompt': prompt},
+                timeout=30
+            )
+
+            # Handle rate limits
+            if response.status_code == 429:
+                wait_time = int(response.headers.get('Retry-After', 2 ** attempt))
+                time.sleep(wait_time)
+                continue
+
+            response.raise_for_status()
+            return response.json()
+
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                return {"output": "", "error": f"Failed after {max_retries} attempts: {str(e)}"}
+            time.sleep(2 ** attempt)  # Exponential backoff
+```
+
+### Handling Multimodal Content
+
+Custom providers handle multimodal content the same way whether the media comes from a standard eval or a red team strategy: read the media variable from `context['vars']` and translate it into the target API's expected payload shape.
+
+For standard evals, provide the media value through `tests[].vars`, `defaultTest.vars`, a dataset column, or a dynamic variable:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: file://multimodal_provider.py
+
+prompts:
+  - '{{image}} {{question}}'
+
+tests:
+  - vars:
+      image: 'data:image/png;base64,iVBORw0KGgo...'
+      question: Describe this image.
+```
+
+In this case, `context['vars']['image']` contains the configured value. It may be raw base64, a `data:` URL, an external URL, or another representation your provider knows how to forward.
+
+For red team runs, [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), and [video](/docs/red-team/strategies/video) strategies generate media and store it in the template variable named by `redteam.injectVar`. The rendered `prompt` also contains the media value, but `context['vars']` is safer because it preserves variable boundaries and avoids parsing a very long prompt.
+
+| Red team strategy | `context['vars'][inject_var]`                            | Extra context                                                                  | Forwarding notes                                                                                                                                                                                                                   |
+| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`           | Raw PNG base64, no `data:` prefix                        | `context['vars']['image_text']`, `context['test']['metadata']['originalText']` | Wrap as `data:image/png;base64,...` for APIs that expect data URLs.                                                                                                                                                                |
+| `audio`           | Raw MP3 base64 from remote generation, no `data:` prefix | `context['test']['metadata']['originalText']`                                  | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
+| `video`           | Raw MP4 base64 when local FFmpeg generation succeeds     | `context['vars']['video_text']`, `context['test']['metadata']['originalText']` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
+
+Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+
+```python title="multimodal_provider.py"
+import os
+import requests
+
+def call_api(prompt, options, context):
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        return {'error': 'OPENAI_API_KEY is required'}
+
+    image_base64 = context['vars'].get('image', '')
+    question = context['vars'].get('question', 'Describe this image')
+
+    # Red team image runs provide raw PNG base64. Eval vars may already provide a URL.
+    image_url = (
+        image_base64
+        if image_base64.startswith(('data:', 'http://', 'https://'))
+        else f'data:image/png;base64,{image_base64}'
+    )
+
+    response = requests.post(
+        'https://api.openai.com/v1/chat/completions',
+        headers={'Authorization': f'Bearer {api_key}'},
+        json={
+            'model': 'gpt-5',
+            'messages': [{
+                'role': 'user',
+                'content': [
+                    {'type': 'image_url', 'image_url': {'url': image_url}},
+                    {'type': 'text', 'text': question},
+                ],
+            }],
+        },
+    )
+
+    if not response.ok:
+        return {'error': f'OpenAI API error {response.status_code}: {response.text}'}
+
+    result = response.json()
+    output = result.get('choices', [{}])[0].get('message', {}).get('content')
+    if output:
+        return {'output': output}
+    return {'error': f'OpenAI API returned no output: {result}'}
+```
+
+For red team runs, set `redteam.injectVar` to the same template variable:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: file://multimodal_provider.py
+
+prompts:
+  - '{{image}} {{question}}'
+
+defaultTest:
+  vars:
+    question: Describe this image.
+
+redteam:
+  purpose: A vision assistant that answers questions about images.
+  injectVar: image
+  plugins:
+    - harmful:hate
+  strategies:
+    - image
+    - id: basic
+      config:
+        enabled: false
+```
+
+:::note
+
+`injectVar` defaults to the **last** template variable in your prompt. With `{{image}} {{question}}`, it defaults to `question` — not `image`. Always set `injectVar` explicitly when using media strategies.
+
+:::
+
+Static variables and dataset-driven media may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive. For debugging, log length, detected MIME type, a hash, or the first few bytes after decoding instead of the full base64 payload.
+
+See the [multimodal red team guide](/docs/guides/multimodal-red-team) and [JavaScript provider multimodal docs](/docs/providers/custom-api#handling-multimodal-content) for more examples.
+
 ## Troubleshooting
 
 ### Common Issues and Solutions
 
-| Issue                     | Solution                                                            |
-| ------------------------- | ------------------------------------------------------------------- |
-| "Module not found" errors | Set `PYTHONPATH` or use `pythonExecutable` for virtual environments |
-| Script not executing      | Check file path is relative to `promptfooconfig.yaml`               |
-| No output visible         | Use `LOG_LEVEL=debug` to see print statements                       |
-| JSON parsing errors       | Ensure prompt format matches your parsing logic                     |
-| Timeout errors            | Optimize initialization code, load models once                      |
+| Issue                       | Solution                                                            |
+| --------------------------- | ------------------------------------------------------------------- |
+| `spawn py -3 ENOENT` errors | Set `PROMPTFOO_PYTHON` env var or use `pythonExecutable` in config  |
+| `Python 3 not found` errors | Ensure `python` command works or set `PROMPTFOO_PYTHON`             |
+| "Module not found" errors   | Set `PYTHONPATH` or use `pythonExecutable` for virtual environments |
+| Script not executing        | Check file path is relative to `promptfooconfig.yaml`               |
+| No output visible           | Use `LOG_LEVEL=debug` to see print statements                       |
+| JSON parsing errors         | Ensure prompt format matches your parsing logic                     |
+| Timeout errors              | Optimize initialization code, load models once                      |
 
 ### Debugging Tips
 
@@ -583,22 +916,6 @@ def call_api(prompt, options, context):
    ```
 
    This allows interactive debugging directly in your terminal during evaluation runs.
-
-### Performance Optimization
-
-:::tip
-Initialize expensive resources (models, connections) outside the function to avoid reloading on each call:
-
-```python
-# Initialize once
-model = load_model()
-
-def call_api(prompt, options, context):
-    # Use pre-loaded model
-    return {"output": model.generate(prompt)}
-```
-
-:::
 
 ## Migration Guide
 
