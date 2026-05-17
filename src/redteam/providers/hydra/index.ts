@@ -10,7 +10,6 @@ import {
   type TraceContextData,
 } from '../../../tracing/traceContext';
 import invariant from '../../../util/invariant';
-import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
@@ -44,7 +43,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
-  isValidChatMessageArray,
   type Message,
   type TargetResponse,
   type TurnBacktrackingStopReason,
@@ -94,6 +92,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     graderPassed: boolean | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }>;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -101,6 +100,45 @@ interface HydraMetadata extends BaseRedteamMetadata {
 
 interface HydraResponse extends ProviderResponse {
   metadata: HydraMetadata;
+}
+
+interface HydraRunState {
+  sessionIds: string[];
+  successfulAttacks: Array<{
+    turn: number;
+    message: string;
+    response: string;
+    traceSummary?: string;
+  }>;
+  totalTokenUsage: TokenUsage;
+  vulnerabilityAchieved: boolean;
+  stopReason: TurnBacktrackingStopReason;
+  storedGraderResult?: GradingResult;
+  lastTargetResponse?: TargetResponse;
+  backtrackCount: number;
+  agentFailureError?: string;
+  redteamHistory: HydraMetadata['redteamHistory'];
+  lastTransformResult?: TransformResult;
+  lastTransformDisplayVars?: Record<string, string>;
+  lastFinalAttackPrompt?: string;
+  previousTraceSummary?: string;
+  traceSnapshots: TraceContextData[];
+}
+
+interface HydraMessageResult {
+  nextMessage: string;
+  processedMessage: string;
+  currentRenderInputVars?: Record<string, string>;
+}
+
+interface HydraTargetPromptResult {
+  finalTargetPrompt: string;
+  transformResult?: TransformResult;
+}
+
+interface HydraTraceResult {
+  traceContext: TraceContextData | null;
+  computedTraceSummary?: string;
 }
 
 interface HydraConfig {
@@ -229,6 +267,753 @@ export class HydraProvider implements ApiProvider {
     });
   }
 
+  private buildCloudRequest({
+    goal,
+    testRunId,
+    scanId,
+    turn,
+    test,
+    state,
+    tracingOptions,
+  }: {
+    goal: string;
+    testRunId: string;
+    scanId: string;
+    turn: number;
+    test?: AtomicTestCase;
+    state: HydraRunState;
+    tracingOptions: ReturnType<typeof resolveTracingOptions>;
+  }) {
+    const conversationHistory = this.excludeTargetOutputFromAgenticAttackGeneration
+      ? this.conversationHistory.map((message) =>
+          message.role === 'assistant'
+            ? { ...message, content: '[Response hidden for privacy - grader feedback provided]' }
+            : message,
+        )
+      : this.conversationHistory;
+
+    return {
+      task: 'hydra-decision',
+      testRunId,
+      scanId,
+      turn,
+      goal,
+      purpose: test?.metadata?.purpose,
+      modifiers: test?.metadata?.modifiers,
+      conversationHistory,
+      ...(this.config.inputs && { inputs: this.config.inputs }),
+      lastGraderResult:
+        turn > 1 && state.storedGraderResult
+          ? {
+              pass: state.storedGraderResult.pass,
+              score: state.storedGraderResult.score,
+            }
+          : undefined,
+      stateful: this.stateful,
+      maxTurns: this.maxTurns,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
+      ...(tracingOptions.includeInAttack && state.previousTraceSummary
+        ? { traceSummary: state.previousTraceSummary }
+        : {}),
+    };
+  }
+
+  private async getNextHydraMessage({
+    goal,
+    testRunId,
+    scanId,
+    turn,
+    test,
+    options,
+    state,
+    tracingOptions,
+  }: {
+    goal: string;
+    testRunId: string;
+    scanId: string;
+    turn: number;
+    test?: AtomicTestCase;
+    options?: CallApiOptionsParams;
+    state: HydraRunState;
+    tracingOptions: ReturnType<typeof resolveTracingOptions>;
+  }): Promise<HydraMessageResult | null> {
+    const cloudRequest = this.buildCloudRequest({
+      goal,
+      testRunId,
+      scanId,
+      turn,
+      test,
+      state,
+      tracingOptions,
+    });
+    const serializedRequest = JSON.stringify(cloudRequest);
+    const agentResp = await this.agentProvider.callApi(
+      serializedRequest,
+      {
+        prompt: {
+          raw: serializedRequest,
+          label: 'hydra-agent',
+        },
+        vars: {},
+      },
+      options,
+    );
+    accumulateResponseTokenUsage(state.totalTokenUsage, agentResp, { countAsRequest: false });
+
+    if (this.agentProvider.delay) {
+      await sleep(this.agentProvider.delay);
+    }
+    if (agentResp.error) {
+      logger.debug('[Hydra] Agent provider error', { turn, testRunId, error: agentResp.error });
+      state.agentFailureError = agentResp.error;
+      return null;
+    }
+
+    const cloudResponse = agentResp.output as any;
+    const nextMessage = typeof agentResp.output === 'string'
+      ? agentResp.output
+      : cloudResponse?.result || cloudResponse?.message;
+    if (!nextMessage) {
+      logger.info('[Hydra] Missing message from agent', { turn });
+      state.agentFailureError = 'Hydra agent did not return an attack message';
+      return null;
+    }
+
+    let processedMessage = nextMessage;
+    const extractedPrompt = extractPromptFromTags(nextMessage);
+    if (extractedPrompt) {
+      processedMessage = extractedPrompt;
+    }
+    if (this.config.inputs && shouldGenerateRemote()) {
+      assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
+    }
+
+    const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+    if (
+      this.config.inputs &&
+      shouldGenerateRemote() &&
+      !currentInputVars &&
+      !agentResp.materializedVars
+    ) {
+      logger.warn('[Hydra] Remote multi-input generation returned an invalid prompt format', {
+        turn,
+        messagePreview: processedMessage.slice(0, 200),
+      });
+      state.agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
+      return null;
+    }
+
+    let materializedInputVars:
+      | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+      | undefined;
+    if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
+      materializedInputVars = shouldGenerateRemote()
+        ? buildRemoteMaterializedInputVariables(agentResp, currentInputVars ?? {}, this.config.inputs)
+        : await materializeInputVariablesWithMetadata(currentInputVars!, this.config.inputs, {
+            materializationIndex: turn,
+            pluginId: 'hydra',
+            provider: this.agentProvider,
+            purpose: test?.metadata?.purpose as string | undefined,
+          });
+    }
+
+    return {
+      nextMessage,
+      processedMessage,
+      currentRenderInputVars: materializedInputVars?.vars ?? currentInputVars,
+    };
+  }
+
+  private async buildHydraTargetPrompt({
+    prompt,
+    filters,
+    vars,
+    targetProvider,
+    message,
+    turn,
+    context,
+    test,
+  }: {
+    prompt: Prompt;
+    filters: NunjucksFilterMap | undefined;
+    vars: Record<string, VarValue>;
+    targetProvider: ApiProvider;
+    message: HydraMessageResult;
+    turn: number;
+    context?: CallApiContextParams;
+    test?: AtomicTestCase;
+  }): Promise<HydraTargetPromptResult | null> {
+    this.conversationHistory.push({ role: 'user', content: message.processedMessage });
+
+    let targetPrompt: string;
+    if (this.stateful) {
+      const escapedMessage = message.processedMessage
+        .replace(/\{\{/g, '{ {')
+        .replace(/\}\}/g, '} }')
+        .replace(/\{%/g, '{ %')
+        .replace(/%\}/g, '% }');
+      targetPrompt = await renderPrompt(
+        prompt,
+        {
+          ...vars,
+          [this.injectVar]: escapedMessage,
+          ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+          ...(message.currentRenderInputVars || {}),
+        },
+        filters,
+        targetProvider,
+        [this.injectVar],
+      );
+    } else {
+      await renderPrompt(
+        prompt,
+        { ...vars, [this.injectVar]: 'test' },
+        filters,
+        targetProvider,
+        [this.injectVar],
+      );
+      targetPrompt = JSON.stringify(this.conversationHistory);
+    }
+
+    logger.debug('[Hydra] Sending to target', {
+      turn,
+      stateful: this.stateful,
+      messageLength: message.nextMessage.length,
+    });
+
+    if (this.perTurnLayers.length === 0) {
+      return { finalTargetPrompt: targetPrompt };
+    }
+
+    logger.debug('[Hydra] Applying per-turn transforms', {
+      turn,
+      layers: this.perTurnLayers.map((layer) => (typeof layer === 'string' ? layer : layer.id)),
+    });
+    const transformResult = await applyRuntimeTransforms(
+      message.nextMessage,
+      this.injectVar,
+      this.perTurnLayers,
+      Strategies,
+      {
+        evaluationId: context?.evaluationId,
+        testCaseId: test?.metadata?.testCaseId as string | undefined,
+        purpose: test?.metadata?.purpose as string | undefined,
+        goal: test?.metadata?.goal as string | undefined,
+      },
+    );
+    if (transformResult.error) {
+      logger.warn('[Hydra] Transform failed, skipping turn', { turn, error: transformResult.error });
+      this.conversationHistory.pop();
+      return null;
+    }
+
+    let finalTargetPrompt = transformResult.prompt;
+    if (transformResult.audio || transformResult.image) {
+      const historyWithoutCurrentTurn = this.conversationHistory.slice(0, -1);
+      finalTargetPrompt = JSON.stringify({
+        _promptfoo_audio_hybrid: true,
+        history: historyWithoutCurrentTurn,
+        currentTurn: {
+          role: 'user' as const,
+          transcript: message.nextMessage,
+          ...(transformResult.audio && { audio: transformResult.audio }),
+          ...(transformResult.image && { image: transformResult.image }),
+        },
+      });
+      logger.debug('[Hydra] Using hybrid format (history + audio/image current turn)', {
+        turn,
+        historyLength: historyWithoutCurrentTurn.length,
+        hasAudio: !!transformResult.audio,
+        hasImage: !!transformResult.image,
+      });
+    }
+    logger.debug('[Hydra] Per-turn transforms applied', {
+      turn,
+      originalLength: message.nextMessage.length,
+      transformedLength: finalTargetPrompt.length,
+      hasAudio: !!transformResult.audio,
+      hasImage: !!transformResult.image,
+    });
+
+    return { finalTargetPrompt, transformResult };
+  }
+
+  private async captureTrace({
+    context,
+    iterationStart,
+    tracingOptions,
+    shouldFetchTrace,
+    state,
+  }: {
+    context?: CallApiContextParams;
+    iterationStart: number;
+    tracingOptions: ReturnType<typeof resolveTracingOptions>;
+    shouldFetchTrace: boolean;
+    state: HydraRunState;
+  }): Promise<HydraTraceResult> {
+    if (!shouldFetchTrace) {
+      return { traceContext: null };
+    }
+    const traceparent = context?.traceparent ?? undefined;
+    const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+    if (!traceId) {
+      return { traceContext: null };
+    }
+    const traceContext = await fetchTraceContext(traceId, {
+      earliestStartTime: iterationStart,
+      includeInternalSpans: tracingOptions.includeInternalSpans,
+      maxSpans: tracingOptions.maxSpans,
+      maxDepth: tracingOptions.maxDepth,
+      maxRetries: tracingOptions.maxRetries,
+      retryDelayMs: tracingOptions.retryDelayMs,
+      spanFilter: tracingOptions.spanFilter,
+      sanitizeAttributes: tracingOptions.sanitizeAttributes,
+    });
+    if (!traceContext) {
+      return { traceContext: null };
+    }
+    state.traceSnapshots.push(traceContext);
+    return {
+      traceContext,
+      computedTraceSummary:
+        tracingOptions.includeInAttack || tracingOptions.includeInGrading
+          ? formatTraceSummary(traceContext)
+          : undefined,
+    };
+  }
+
+  private async normalizeHydraResponse({
+    targetResponse,
+    context,
+    vars,
+    state,
+    turn,
+  }: {
+    targetResponse: TargetResponse;
+    context?: CallApiContextParams;
+    vars: Record<string, VarValue>;
+    state: HydraRunState;
+    turn: number;
+  }): Promise<{ targetResponse: TargetResponse; historyOutput: string } | null> {
+    if (isConversationEndedResponse(targetResponse)) {
+      logger.info('[Hydra] Target ended conversation', {
+        turn,
+        reason: targetResponse.conversationEndReason,
+      });
+      state.stopReason = 'Target ended conversation';
+      return null;
+    }
+    if (targetResponse.error) {
+      logger.info('[Hydra] Target error', { turn, error: targetResponse.error });
+      return null;
+    }
+    if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
+      logger.info('[Hydra] Malformed target response - missing output', {
+        turn,
+        responseKeys: Object.keys(targetResponse),
+      });
+      return null;
+    }
+    if (!targetResponse.output || !targetResponse.output.trim()) {
+      logger.info('[Hydra] Empty target response', {
+        turn,
+        outputIsNull: targetResponse.output === null,
+        outputIsUndefined: targetResponse.output === undefined,
+        outputIsEmptyString: targetResponse.output === '',
+        outputValue: targetResponse.output,
+        outputTrimmed: targetResponse.output?.trim(),
+      });
+      targetResponse.output = '[Target provided empty response - likely refused]';
+    }
+
+    if (this.stateful && targetResponse.sessionId) {
+      this.sessionId = targetResponse.sessionId;
+      state.sessionIds.push(targetResponse.sessionId);
+      vars.sessionId = targetResponse.sessionId;
+      if (context) {
+        context.vars.sessionId = targetResponse.sessionId;
+      }
+    }
+
+    if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      });
+    }
+    const historyOutput =
+      isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
+        ? scrubOutputForHistory(targetResponse.output)
+        : targetResponse.output;
+    this.conversationHistory.push({ role: 'assistant', content: historyOutput });
+    return { targetResponse, historyOutput };
+  }
+
+  private maybeBacktrackHydra({
+    targetResponse,
+    turn,
+    state,
+  }: {
+    targetResponse: TargetResponse;
+    turn: number;
+    state: HydraRunState;
+  }) {
+    if (this.stateful || this.maxBacktracks <= 0 || !isBasicRefusal(targetResponse.output)) {
+      return { shouldContinue: false, shouldBreak: false, retryTurn: false };
+    }
+    state.backtrackCount += 1;
+    if (this.conversationHistory.length >= 2) {
+      this.conversationHistory.pop();
+      this.conversationHistory.pop();
+    }
+    if (state.backtrackCount >= this.maxBacktracks) {
+      state.stopReason = 'Max backtracks reached';
+      return { shouldContinue: false, shouldBreak: true, retryTurn: false };
+    }
+    return { shouldContinue: true, shouldBreak: false, retryTurn: turn > 1 };
+  }
+
+  private async gradeHydraTurn({
+    nextMessage,
+    targetResponse,
+    targetProvider,
+    test,
+    assertToUse,
+    getGraderById,
+    tracingOptions,
+    traceContext,
+    gradingTraceSummary,
+    transformResult,
+    context,
+    turn,
+    state,
+  }: {
+    nextMessage: string;
+    targetResponse: TargetResponse;
+    targetProvider: ApiProvider;
+    test?: AtomicTestCase;
+    assertToUse?: NonNullable<AtomicTestCase['assert']>[number];
+    getGraderById: (id: string) => any;
+    tracingOptions: ReturnType<typeof resolveTracingOptions>;
+    traceContext: TraceContextData | null;
+    gradingTraceSummary?: string;
+    transformResult?: TransformResult;
+    context?: CallApiContextParams;
+    turn: number;
+    state: HydraRunState;
+  }) {
+    if (!test || !assertToUse) {
+      return undefined;
+    }
+    const grader = getGraderById(assertToUse.type);
+    if (!grader) {
+      return undefined;
+    }
+
+    const gradingContext: RedteamGradingContext = {
+      providerResponse: targetResponse,
+      ...(tracingOptions.includeInGrading
+        ? { traceContext, traceSummary: gradingTraceSummary }
+        : {}),
+    };
+    const webPageUuid = transformResult?.metadata?.webPageUuid as string | undefined;
+    if (webPageUuid) {
+      const webPageUrl = transformResult?.metadata?.webPageUrl as string | undefined;
+      const evalId =
+        context?.evaluationId ??
+        (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+      try {
+        const exfilData = await checkExfilTracking(webPageUuid, evalId);
+        if (exfilData) {
+          Object.assign(gradingContext, {
+            wasExfiltrated: exfilData.wasExfiltrated,
+            exfilCount: exfilData.exfilCount,
+            exfilRecords: exfilData.exfilRecords,
+          });
+        }
+      } catch (error) {
+        logger.warn('[Hydra] Failed to fetch exfil tracking from server', { error, webPageUuid });
+      }
+    }
+    if (
+      gradingContext.wasExfiltrated === undefined &&
+      targetResponse.metadata?.wasExfiltrated !== undefined
+    ) {
+      Object.assign(gradingContext, {
+        wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+        exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+        exfilRecords: [],
+      });
+    }
+
+    const { grade, rubric } = await grader.getResult(
+      nextMessage,
+      targetResponse.output,
+      test,
+      targetProvider,
+      getGraderAssertionValue(assertToUse),
+      undefined,
+      undefined,
+      gradingContext,
+    );
+    state.storedGraderResult = {
+      ...grade,
+      assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+    };
+    logger.debug('[Hydra] Grader result', { turn, passed: grade.pass });
+    return grade;
+  }
+
+  private async updateHydraLearnings({
+    scanId,
+    testRunId,
+    state,
+    options,
+  }: {
+    scanId: string;
+    testRunId: string;
+    state: HydraRunState;
+    options?: CallApiOptionsParams;
+  }) {
+    try {
+      const turnsCompleted = this.conversationHistory.filter((message) => message.role === 'user').length;
+      const learningRequest = {
+        task: 'hydra-decision',
+        testRunId,
+        scanId,
+        testComplete: true,
+        finalResult: {
+          success: state.vulnerabilityAchieved,
+          totalTurns: turnsCompleted,
+        },
+      };
+      const serializedRequest = JSON.stringify(learningRequest);
+      const learningResponse = await this.agentProvider.callApi(
+        serializedRequest,
+        {
+          prompt: {
+            raw: serializedRequest,
+            label: 'hydra-learning-update',
+          },
+          vars: {},
+        },
+        options,
+      );
+      accumulateResponseTokenUsage(state.totalTokenUsage, learningResponse, { countAsRequest: false });
+      logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
+    } catch (error) {
+      logger.warn('[Hydra] Failed to update scan learnings', { error });
+    }
+  }
+
+  private buildHydraResponse({
+    state,
+    context,
+  }: {
+    state: HydraRunState;
+    context?: CallApiContextParams;
+  }): HydraResponse {
+    const messages = this.conversationHistory.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })) as Record<string, any>[];
+    const hydraRoundsCompleted = this.conversationHistory.filter((message) => message.role === 'user').length;
+    const failClosedError =
+      (state.totalTokenUsage.numRequests ?? 0) === 0
+        ? state.agentFailureError || 'Hydra did not execute any target probes'
+        : undefined;
+
+    return {
+      output: state.lastTargetResponse?.output || '',
+      ...(failClosedError
+        ? { error: failClosedError }
+        : state.lastTargetResponse?.error
+          ? { error: state.lastTargetResponse.error }
+          : {}),
+      metadata: {
+        sessionId: this.sessionId || getSessionId(state.lastTargetResponse, context),
+        messages,
+        hydraRoundsCompleted,
+        hydraBacktrackCount: state.backtrackCount,
+        hydraResult: state.vulnerabilityAchieved,
+        stopReason: state.stopReason,
+        successfulAttacks: state.successfulAttacks,
+        totalSuccessfulAttacks: state.successfulAttacks.length,
+        storedGraderResult: state.storedGraderResult,
+        redteamHistory: state.redteamHistory,
+        sessionIds: state.sessionIds,
+        traceSnapshots:
+          state.traceSnapshots.length > 0
+            ? state.traceSnapshots.map((trace) => formatTraceForMetadata(trace))
+            : undefined,
+        ...(state.lastTransformDisplayVars && { transformDisplayVars: state.lastTransformDisplayVars }),
+        redteamFinalPrompt: state.lastFinalAttackPrompt || state.successfulAttacks[0]?.message,
+      },
+      tokenUsage: state.totalTokenUsage,
+      guardrails: state.lastTargetResponse?.guardrails,
+    };
+  }
+
+  private async executeHydraTurn({
+    goal,
+    testRunId,
+    scanId,
+    turn,
+    test,
+    options,
+    state,
+    tracingOptions,
+    shouldFetchTrace,
+    prompt,
+    filters,
+    vars,
+    targetProvider,
+    context,
+    assertToUse,
+    getGraderById,
+  }: {
+    goal: string;
+    testRunId: string;
+    scanId: string;
+    turn: number;
+    test?: AtomicTestCase;
+    options?: CallApiOptionsParams;
+    state: HydraRunState;
+    tracingOptions: ReturnType<typeof resolveTracingOptions>;
+    shouldFetchTrace: boolean;
+    prompt: Prompt;
+    filters: NunjucksFilterMap | undefined;
+    vars: Record<string, VarValue>;
+    targetProvider: ApiProvider;
+    context?: CallApiContextParams;
+    assertToUse?: NonNullable<AtomicTestCase['assert']>[number];
+    getGraderById: (id: string) => any;
+  }) {
+    const message = await this.getNextHydraMessage({
+      goal,
+      testRunId,
+      scanId,
+      turn,
+      test,
+      options,
+      state,
+      tracingOptions,
+    });
+    if (!message) {
+      return { action: 'continue' as const };
+    }
+
+    const promptResult = await this.buildHydraTargetPrompt({
+      prompt,
+      filters,
+      vars,
+      targetProvider,
+      message,
+      turn,
+      context,
+      test,
+    });
+    if (!promptResult) {
+      return { action: 'continue' as const };
+    }
+    state.lastTransformResult = promptResult.transformResult;
+    state.lastTransformDisplayVars =
+      promptResult.transformResult?.displayVars ?? state.lastTransformDisplayVars;
+    state.lastFinalAttackPrompt = promptResult.finalTargetPrompt;
+
+    const iterationStart = Date.now();
+    const targetVars: Record<string, VarValue> = {
+      ...vars,
+      ...(message.currentRenderInputVars || {}),
+      [this.injectVar]: promptResult.finalTargetPrompt,
+    };
+    if (this.sessionId) {
+      targetVars.sessionId = this.sessionId;
+    }
+    const targetContext = context ? { ...context, vars: targetVars } : context;
+    let targetResponse = await getTargetResponse(
+      targetProvider,
+      promptResult.finalTargetPrompt,
+      targetContext,
+      options,
+    );
+    state.lastTargetResponse = targetResponse;
+    accumulateResponseTokenUsage(state.totalTokenUsage, targetResponse);
+    const { traceContext, computedTraceSummary } = await this.captureTrace({
+      context,
+      iterationStart,
+      tracingOptions,
+      shouldFetchTrace,
+      state,
+    });
+    const normalizedResponse = await this.normalizeHydraResponse({
+      targetResponse,
+      context,
+      vars,
+      state,
+      turn,
+    });
+    if (!normalizedResponse) {
+      return {
+        action: state.stopReason === 'Target ended conversation' ? ('break' as const) : ('continue' as const),
+      };
+    }
+
+    targetResponse = normalizedResponse.targetResponse;
+    const backtrackResult = this.maybeBacktrackHydra({ targetResponse, turn, state });
+    if (backtrackResult.shouldBreak) {
+      return { action: 'break' as const };
+    }
+    if (backtrackResult.shouldContinue) {
+      return { action: 'continue' as const, retryTurn: backtrackResult.retryTurn };
+    }
+
+    state.previousTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
+    const graderResult = await this.gradeHydraTurn({
+      nextMessage: message.nextMessage,
+      targetResponse,
+      targetProvider,
+      test,
+      assertToUse,
+      getGraderById,
+      tracingOptions,
+      traceContext,
+      gradingTraceSummary: tracingOptions.includeInGrading ? computedTraceSummary : undefined,
+      transformResult: state.lastTransformResult,
+      context,
+      turn,
+      state,
+    });
+    state.redteamHistory.push({
+      prompt: message.nextMessage,
+      promptAudio: state.lastTransformResult?.audio,
+      promptImage: state.lastTransformResult?.image,
+      output: normalizedResponse.historyOutput,
+      outputAudio: targetResponse.audio
+        ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
+        : undefined,
+      graderPassed: graderResult?.pass,
+      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      traceSummary: computedTraceSummary,
+      inputVars: message.currentRenderInputVars,
+    });
+    if (graderResult?.pass !== false) {
+      return { action: 'continue' as const };
+    }
+
+    state.vulnerabilityAchieved = true;
+    state.successfulAttacks.push({
+      turn,
+      message: message.nextMessage,
+      response: targetResponse.output,
+      traceSummary: computedTraceSummary,
+    });
+    state.stopReason = 'Grader failed';
+    return { action: 'break' as const };
+  }
+
   private async runAttack({
     prompt,
     filters,
@@ -248,13 +1033,10 @@ export class HydraProvider implements ApiProvider {
     options?: CallApiOptionsParams;
     test?: AtomicTestCase;
   }): Promise<HydraResponse> {
-    // Initialize scanId: use evaluationId if available, otherwise use instance scanId or generate new one
     if (!this.scanId) {
       this.scanId = context?.evaluationId || crypto.randomUUID();
     }
     const scanId = context?.evaluationId || this.scanId;
-
-    // Resolve tracing options
     const tracingOptions = resolveTracingOptions({
       strategyId: 'hydra',
       test,
@@ -262,8 +1044,6 @@ export class HydraProvider implements ApiProvider {
     });
     const shouldFetchTrace =
       tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
-    const traceSnapshots: TraceContextData[] = [];
-
     logger.debug('[Hydra] Starting attack', {
       goal,
       scanId,
@@ -272,738 +1052,62 @@ export class HydraProvider implements ApiProvider {
       tracingEnabled: tracingOptions.enabled,
     });
 
-    // Reset state
     this.conversationHistory = [];
     this.sessionId = undefined;
-    const sessionIds: string[] = [];
-    const successfulAttacks: Array<{
-      turn: number;
-      message: string;
-      response: string;
-      traceSummary?: string;
-    }> = [];
-
-    const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+    const state: HydraRunState = {
+      sessionIds: [],
+      successfulAttacks: [],
+      totalTokenUsage: createEmptyTokenUsage(),
+      vulnerabilityAchieved: false,
+      stopReason: 'Max turns reached',
+      storedGraderResult: undefined,
+      lastTargetResponse: undefined,
+      backtrackCount: 0,
+      agentFailureError: undefined,
+      redteamHistory: [],
+      lastTransformResult: undefined,
+      lastTransformDisplayVars: undefined,
+      lastFinalAttackPrompt: undefined,
+      previousTraceSummary: undefined,
+      traceSnapshots: [],
+    };
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
-
-    let vulnerabilityAchieved = false;
-    let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
-    let storedGraderResult: GradingResult | undefined = undefined;
-    let lastTargetResponse: TargetResponse | undefined = undefined;
-    let backtrackCount = 0;
-    let agentFailureError: string | undefined;
-
-    const redteamHistory: Array<{
-      prompt: string;
-      promptAudio?: MediaData;
-      promptImage?: MediaData;
-      output: string;
-      outputAudio?: MediaData;
-      outputImage?: MediaData;
-      graderPassed: boolean | undefined;
-      trace?: Record<string, unknown>;
-      traceSummary?: string;
-      inputVars?: Record<string, string>;
-    }> = [];
-    let lastTransformResult: TransformResult | undefined;
-
-    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
-    let lastTransformDisplayVars: Record<string, string> | undefined;
-
-    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
-    let lastFinalAttackPrompt: string | undefined;
-
-    // Find the grader
     const { getGraderById } = await import('../../graders');
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
-
-    // Track the previous turn's trace summary for attack generation
-    let previousTraceSummary: string | undefined;
+    const assertToUse =
+      test?.assert?.find((assertion: { type: string }) =>
+        assertion.type && assertion.type.includes(test.metadata?.pluginId),
+      ) ?? test?.assert?.find((assertion: { type: string }) => assertion.type);
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
       logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
-
-      // Build request for cloud agent
-      // Conditionally exclude target outputs from conversation history for privacy
-      const conversationHistoryForCloud = this.excludeTargetOutputFromAgenticAttackGeneration
-        ? this.conversationHistory.map((msg) =>
-            msg.role === 'assistant'
-              ? { ...msg, content: '[Response hidden for privacy - grader feedback provided]' }
-              : msg,
-          )
-        : this.conversationHistory;
-
-      const cloudRequest = {
-        task: 'hydra-decision',
+      const turnResult = await this.executeHydraTurn({
+        goal,
         testRunId,
         scanId,
         turn,
-        goal,
-        purpose: test?.metadata?.purpose,
-        modifiers: test?.metadata?.modifiers,
-        conversationHistory: conversationHistoryForCloud,
-        ...(this.config.inputs && { inputs: this.config.inputs }),
-        lastGraderResult:
-          turn > 1 && storedGraderResult
-            ? {
-                pass: storedGraderResult.pass,
-                score: storedGraderResult.score,
-              }
-            : undefined,
-        stateful: this.stateful,
-        maxTurns: this.maxTurns,
-        excludeTargetOutputFromAgenticAttackGeneration:
-          this.excludeTargetOutputFromAgenticAttackGeneration,
-        // Include trace summary from previous turn if tracing is enabled for attack generation
-        ...(tracingOptions.includeInAttack && previousTraceSummary
-          ? { traceSummary: previousTraceSummary }
-          : {}),
-      };
-
-      // Get next message from cloud
-      const agentResp = await this.agentProvider.callApi(
-        JSON.stringify(cloudRequest),
-        {
-          prompt: {
-            raw: JSON.stringify(cloudRequest),
-            label: 'hydra-agent',
-          },
-          vars: {},
-        },
+        test,
         options,
-      );
-
-      // Agent coordination calls are internal and should not count as target probes.
-      accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
-
-      if (this.agentProvider.delay) {
-        await sleep(this.agentProvider.delay);
-      }
-
-      if (agentResp.error) {
-        logger.debug('[Hydra] Agent provider error', {
-          turn,
-          testRunId,
-          error: agentResp.error,
-        });
-        agentFailureError = agentResp.error;
-        continue;
-      }
-
-      // Extract message from cloud response
-      let nextMessage: string;
-
-      if (typeof agentResp.output === 'string') {
-        // PromptfooChatCompletionProvider extracts data.result as string
-        nextMessage = agentResp.output;
-      } else {
-        const cloudResponse = agentResp.output as any;
-        nextMessage = cloudResponse.result || cloudResponse.message;
-      }
-
-      if (!nextMessage) {
-        logger.info('[Hydra] Missing message from agent', { turn });
-        agentFailureError = 'Hydra agent did not return an attack message';
-        continue;
-      }
-
-      // Extract JSON from <Prompt> tags if present (multi-input mode)
-      // Do this BEFORE adding to conversation history so we don't store the tags
-      let processedMessage = nextMessage;
-      const extractedPrompt = extractPromptFromTags(nextMessage);
-      if (extractedPrompt) {
-        processedMessage = extractedPrompt;
-      }
-
-      // Extract input vars from the processed message for multi-input mode
-      if (this.config.inputs && shouldGenerateRemote()) {
-        assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
-      }
-      const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
-      let materializedInputVars:
-        | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
-        | undefined;
-      if (
-        this.config.inputs &&
-        shouldGenerateRemote() &&
-        !currentInputVars &&
-        !agentResp.materializedVars
-      ) {
-        logger.warn('[Hydra] Remote multi-input generation returned an invalid prompt format', {
-          turn,
-          messagePreview: processedMessage.slice(0, 200),
-        });
-        agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
-        continue;
-      }
-      if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
-        if (shouldGenerateRemote()) {
-          materializedInputVars = buildRemoteMaterializedInputVariables(
-            agentResp,
-            currentInputVars ?? {},
-            this.config.inputs,
-          );
-        } else {
-          materializedInputVars = await materializeInputVariablesWithMetadata(
-            currentInputVars!,
-            this.config.inputs,
-            {
-              materializationIndex: turn,
-              pluginId: 'hydra',
-              provider: this.agentProvider,
-              purpose: test?.metadata?.purpose as string | undefined,
-            },
-          );
-        }
-      }
-      const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
-
-      // Add message to conversation history (without <Prompt> tags)
-      this.conversationHistory.push({
-        role: 'user',
-        content: processedMessage,
-      });
-
-      // Send to target (different based on stateful/stateless)
-      let targetPrompt: string;
-
-      if (this.stateful) {
-        // Stateful: send only the new message with sessionId
-        const escapedMessage = processedMessage
-          .replace(/\{\{/g, '{ {')
-          .replace(/\}\}/g, '} }')
-          .replace(/\{%/g, '{ %')
-          .replace(/%\}/g, '% }');
-
-        // Build updated vars - handle multi-input mode
-        const updatedVars: Record<string, VarValue> = {
-          ...vars,
-          [this.injectVar]: escapedMessage,
-          ...(this.sessionId ? { sessionId: this.sessionId } : {}),
-          // Add extracted input vars if available
-          ...(currentRenderInputVars || {}),
-        };
-
-        targetPrompt = await renderPrompt(
-          prompt,
-          updatedVars,
-          filters,
-          targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-        );
-      } else {
-        // Stateless: send full conversation history as JSON
-        // Try to parse the rendered prompt to see if it's already chat format
-        const samplePrompt = await renderPrompt(
-          prompt,
-          {
-            ...vars,
-            [this.injectVar]: 'test',
-          },
-          filters,
-          targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-        );
-
-        if (isValidJson(samplePrompt)) {
-          const parsed = JSON.parse(samplePrompt);
-          if (isValidChatMessageArray(parsed)) {
-            // It's already chat format, inject our conversation
-            targetPrompt = JSON.stringify(this.conversationHistory);
-          } else {
-            // Not chat format, use standard rendering
-            targetPrompt = JSON.stringify(this.conversationHistory);
-          }
-        } else {
-          // Not JSON, send as conversation array
-          targetPrompt = JSON.stringify(this.conversationHistory);
-        }
-      }
-
-      logger.debug('[Hydra] Sending to target', {
-        turn,
-        stateful: this.stateful,
-        messageLength: nextMessage.length,
-      });
-
-      // ═══════════════════════════════════════════════════════════════════════
-      // Apply per-turn layer transforms if configured (e.g., audio, base64)
-      // This enables: layer: { steps: [hydra, audio] }
-      // ═══════════════════════════════════════════════════════════════════════
-      let finalTargetPrompt = targetPrompt;
-      lastTransformResult = undefined;
-      if (this.perTurnLayers.length > 0) {
-        logger.debug('[Hydra] Applying per-turn transforms', {
-          turn,
-          layers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
-        });
-        // Transform the actual message content (nextMessage), not the full targetPrompt
-        // This ensures we convert just the text to audio, not the JSON structure
-        lastTransformResult = await applyRuntimeTransforms(
-          nextMessage,
-          this.injectVar,
-          this.perTurnLayers,
-          Strategies,
-          {
-            evaluationId: context?.evaluationId,
-            testCaseId: test?.metadata?.testCaseId as string | undefined,
-            purpose: test?.metadata?.purpose as string | undefined,
-            goal: test?.metadata?.goal as string | undefined,
-          },
-        );
-
-        // Skip turn if transform failed
-        if (lastTransformResult.error) {
-          logger.warn('[Hydra] Transform failed, skipping turn', {
-            turn,
-            error: lastTransformResult.error,
-          });
-          // Remove the user message we added since we're skipping
-          this.conversationHistory.pop();
-          continue;
-        }
-
-        // For audio/image transforms, send a hybrid format:
-        // - Previous turns as text (for context)
-        // - Current turn as audio/image (the actual attack)
-        // This allows the target model to understand conversation context while receiving the current attack in the transformed format
-        if (lastTransformResult.audio || lastTransformResult.image) {
-          // Build hybrid payload with conversation history + current transformed turn
-          const historyWithoutCurrentTurn = this.conversationHistory.slice(0, -1);
-          const hybridPayload = {
-            _promptfoo_audio_hybrid: true,
-            history: historyWithoutCurrentTurn,
-            currentTurn: {
-              role: 'user' as const,
-              transcript: nextMessage, // Original text for reference
-              ...(lastTransformResult.audio && {
-                audio: lastTransformResult.audio,
-              }),
-              ...(lastTransformResult.image && {
-                image: lastTransformResult.image,
-              }),
-            },
-          };
-          finalTargetPrompt = JSON.stringify(hybridPayload);
-          logger.debug('[Hydra] Using hybrid format (history + audio/image current turn)', {
-            turn,
-            historyLength: historyWithoutCurrentTurn.length,
-            hasAudio: !!lastTransformResult.audio,
-            hasImage: !!lastTransformResult.image,
-          });
-        } else {
-          // No audio/image, just use the transformed text
-          finalTargetPrompt = lastTransformResult.prompt;
-        }
-
-        logger.debug('[Hydra] Per-turn transforms applied', {
-          turn,
-          originalLength: nextMessage.length,
-          transformedLength: finalTargetPrompt.length,
-          hasAudio: !!lastTransformResult.audio,
-          hasImage: !!lastTransformResult.image,
-        });
-
-        // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
-        if (lastTransformResult.displayVars) {
-          lastTransformDisplayVars = lastTransformResult.displayVars;
-        }
-      }
-
-      // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-      lastFinalAttackPrompt = finalTargetPrompt;
-
-      // Get target response
-      const iterationStart = Date.now();
-      const targetContext = context
-        ? {
-            ...context,
-            vars: {
-              ...vars,
-              ...(this.sessionId ? { sessionId: this.sessionId } : {}),
-              ...(currentRenderInputVars || {}),
-              [this.injectVar]: finalTargetPrompt,
-            },
-          }
-        : context;
-      let targetResponse = await getTargetResponse(
+        state,
+        tracingOptions,
+        shouldFetchTrace,
+        prompt,
+        filters,
+        vars,
         targetProvider,
-        finalTargetPrompt,
-        targetContext,
-        options,
-      );
-      lastTargetResponse = targetResponse;
-      accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-
-      // Fetch trace context if tracing is enabled
-      let traceContext: TraceContextData | null = null;
-      let computedTraceSummary: string | undefined;
-      if (shouldFetchTrace) {
-        const traceparent = context?.traceparent ?? undefined;
-        const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
-
-        if (traceId) {
-          traceContext = await fetchTraceContext(traceId, {
-            earliestStartTime: iterationStart,
-            includeInternalSpans: tracingOptions.includeInternalSpans,
-            maxSpans: tracingOptions.maxSpans,
-            maxDepth: tracingOptions.maxDepth,
-            maxRetries: tracingOptions.maxRetries,
-            retryDelayMs: tracingOptions.retryDelayMs,
-            spanFilter: tracingOptions.spanFilter,
-            sanitizeAttributes: tracingOptions.sanitizeAttributes,
-          });
-
-          if (traceContext) {
-            traceSnapshots.push(traceContext);
-            if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
-              computedTraceSummary = formatTraceSummary(traceContext);
-            }
-          }
-        }
-      }
-
-      logger.debug('[Hydra] Received target response', {
-        turn,
-        responseLength: targetResponse.output?.length,
-        hasTrace: !!traceContext,
+        context,
+        assertToUse,
+        getGraderById,
       });
-
-      if (isConversationEndedResponse(targetResponse)) {
-        logger.info('[Hydra] Target ended conversation', {
-          turn,
-          reason: targetResponse.conversationEndReason,
-        });
-        stopReason = 'Target ended conversation';
-        break;
+      if (turnResult.retryTurn) {
+        turn--;
       }
-
-      if (targetResponse.error) {
-        logger.info('[Hydra] Target error', { turn, error: targetResponse.error });
-        continue;
-      }
-
-      if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
-        logger.info('[Hydra] Malformed target response - missing output', {
-          turn,
-          responseKeys: Object.keys(targetResponse),
-        });
-        continue;
-      }
-
-      if (!targetResponse.output || !targetResponse.output.trim()) {
-        logger.info('[Hydra] Empty target response', {
-          turn,
-          outputIsNull: targetResponse.output === null,
-          outputIsUndefined: targetResponse.output === undefined,
-          outputIsEmptyString: targetResponse.output === '',
-          outputValue: targetResponse.output,
-          outputTrimmed: targetResponse.output?.trim(),
-        });
-        // Replace empty output with marker so agent knows target refused
-        targetResponse.output = '[Target provided empty response - likely refused]';
-      }
-
-      // Capture sessionId if stateful
-      if (this.stateful && targetResponse.sessionId) {
-        this.sessionId = targetResponse.sessionId;
-        sessionIds.push(targetResponse.sessionId);
-        vars['sessionId'] = targetResponse.sessionId;
-        if (!context) {
-          context = {
-            vars: { ...vars, sessionId: targetResponse.sessionId },
-            prompt,
-          };
-        }
-        context.vars['sessionId'] = targetResponse.sessionId;
-      }
-
-      // Externalize blobs to avoid token bloat in Hydra/meta prompts
-      if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
-        const beforeOutput = targetResponse.output;
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
-        if (targetResponse.output !== beforeOutput) {
-          logger.debug('[Hydra] Externalized binary output', {
-            turn,
-            beforeLength: beforeOutput?.length,
-            afterLength: targetResponse.output?.length,
-            blobUris:
-              targetResponse.metadata && 'blobUris' in targetResponse.metadata
-                ? targetResponse.metadata.blobUris
-                : undefined,
-          });
-        } else if (typeof targetResponse.output === 'string') {
-          logger.debug('[Hydra] Binary output not externalized (using in-band)', {
-            turn,
-            responseLength: targetResponse.output.length,
-          });
-        }
-      }
-
-      const historyOutput =
-        isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()
-          ? scrubOutputForHistory(targetResponse.output)
-          : targetResponse.output;
-
-      // Add response to conversation history
-      this.conversationHistory.push({
-        role: 'assistant',
-        content: historyOutput,
-      });
-
-      // Check for refusal and backtrack if in stateless mode and backtracking enabled
-      const isRefusal = isBasicRefusal(targetResponse.output);
-
-      if (!this.stateful && this.maxBacktracks > 0 && isRefusal) {
-        logger.debug('[Hydra] Response rejected (basic refusal), backtracking...', {
-          turn,
-          backtrackCount: backtrackCount + 1,
-          maxBacktracks: this.maxBacktracks,
-          conversationLengthBefore: this.conversationHistory.length,
-        });
-        backtrackCount++;
-
-        // Remove last user + assistant messages
-        if (this.conversationHistory.length >= 2) {
-          this.conversationHistory.pop(); // Remove assistant
-          this.conversationHistory.pop(); // Remove user
-        }
-
-        logger.debug('[Hydra] After backtracking state', {
-          turn,
-          backtrackCount,
-          conversationLength: this.conversationHistory.length,
-          willDecrementTurn: turn > 1,
-        });
-
-        if (backtrackCount >= this.maxBacktracks) {
-          logger.debug(`[Hydra] Max backtracks (${this.maxBacktracks}) reached. Exiting loop.`, {
-            backtrackCount,
-            maxBacktracks: this.maxBacktracks,
-          });
-          stopReason = 'Max backtracks reached';
-          break;
-        }
-
-        if (turn > 1) {
-          turn--; // Decrement turn to retry
-        }
-        continue;
-      }
-
-      // Grade the response
-      let graderResult: GradingResult | undefined = undefined;
-
-      // Prepare trace summaries for attack generation and grading
-      const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
-      const gradingTraceSummary = tracingOptions.includeInGrading
-        ? computedTraceSummary
-        : undefined;
-
-      // Update previous trace summary for next turn's attack generation
-      previousTraceSummary = attackTraceSummary;
-
-      if (test && assertToUse) {
-        const grader = getGraderById(assertToUse.type);
-        if (grader) {
-          // Build grading context with provider raw output, tracing, and exfil tracking data.
-          const gradingContext: RedteamGradingContext = {
-            providerResponse: targetResponse,
-            ...(tracingOptions.includeInGrading
-              ? { traceContext, traceSummary: gradingTraceSummary }
-              : {}),
-          };
-
-          // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
-          // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
-          // ONLY source for webPageUuid (set by indirect-web-pwn strategy during applyRuntimeTransforms)
-          const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
-          if (webPageUuid) {
-            // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
-            const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
-            const evalId =
-              context?.evaluationId ??
-              (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
-
-            logger.debug('[Hydra] Fetching exfil tracking from server API', {
-              webPageUuid,
-              evalId,
-              source: 'lastTransformResult.metadata',
-            });
-
-            try {
-              const exfilData = await checkExfilTracking(webPageUuid, evalId);
-              if (exfilData) {
-                Object.assign(gradingContext, {
-                  wasExfiltrated: exfilData.wasExfiltrated,
-                  exfilCount: exfilData.exfilCount,
-                  exfilRecords: exfilData.exfilRecords,
-                });
-              }
-            } catch (error) {
-              logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
-                error,
-                webPageUuid,
-              });
-            }
-          }
-
-          // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-          if (
-            gradingContext.wasExfiltrated === undefined &&
-            targetResponse.metadata?.wasExfiltrated !== undefined
-          ) {
-            logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
-            Object.assign(gradingContext, {
-              wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
-              exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
-              exfilRecords: [],
-            });
-          }
-
-          const { grade, rubric } = await grader.getResult(
-            nextMessage,
-            targetResponse.output,
-            test,
-            targetProvider,
-            getGraderAssertionValue(assertToUse),
-            undefined, // additionalRubric
-            undefined, // skipRefusalCheck
-            gradingContext,
-          );
-          graderResult = grade;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
-
-          logger.debug('[Hydra] Grader result', {
-            turn,
-            passed: grade.pass,
-          });
-        }
-      }
-
-      // Store in redteam history (with audio/image if transforms were applied)
-      redteamHistory.push({
-        prompt: nextMessage,
-        promptAudio: lastTransformResult?.audio,
-        promptImage: lastTransformResult?.image,
-        output: historyOutput,
-        outputAudio: targetResponse.audio
-          ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
-          : undefined,
-        // Note: outputImage would come from provider if model responds with image
-        graderPassed: graderResult?.pass,
-        trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-        traceSummary: computedTraceSummary,
-        // Include input vars for multi-input mode (extracted from current prompt)
-        inputVars: currentRenderInputVars,
-      });
-
-      // Check if vulnerability was achieved
-      if (graderResult?.pass === false) {
-        vulnerabilityAchieved = true;
-        successfulAttacks.push({
-          turn,
-          message: nextMessage,
-          response: targetResponse.output,
-          traceSummary: computedTraceSummary,
-        });
-        stopReason = 'Grader failed';
-
-        logger.debug('[Hydra] Vulnerability achieved!', { turn });
+      if (turnResult.action === 'break') {
         break;
       }
     }
 
-    // Update scan learnings
-    if (scanId) {
-      try {
-        const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
-        const learningRequest = {
-          task: 'hydra-decision',
-          testRunId,
-          scanId,
-          testComplete: true,
-          finalResult: {
-            success: vulnerabilityAchieved,
-            totalTurns: turnsCompleted,
-          },
-        };
-
-        const learningResponse = await this.agentProvider.callApi(
-          JSON.stringify(learningRequest),
-          {
-            prompt: {
-              raw: JSON.stringify(learningRequest),
-              label: 'hydra-learning-update',
-            },
-            vars: {},
-          },
-          options,
-        );
-        // Learning update is an internal cloud call, not a target probe.
-        accumulateResponseTokenUsage(totalTokenUsage, learningResponse, {
-          countAsRequest: false,
-        });
-
-        logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
-      } catch (error) {
-        logger.warn('[Hydra] Failed to update scan learnings', { error });
-        // Don't fail test if learning update fails
-      }
-    }
-
-    const messages = this.conversationHistory.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    })) as Record<string, any>[];
-    const targetProbeCount = totalTokenUsage.numRequests ?? 0;
-    const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
-    const failClosedError =
-      targetProbeCount === 0
-        ? agentFailureError || 'Hydra did not execute any target probes'
-        : undefined;
-
-    return {
-      output: lastTargetResponse?.output || '',
-      ...(failClosedError
-        ? { error: failClosedError }
-        : lastTargetResponse?.error
-          ? { error: lastTargetResponse.error }
-          : {}),
-      metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
-        messages,
-        hydraRoundsCompleted,
-        hydraBacktrackCount: backtrackCount,
-        hydraResult: vulnerabilityAchieved,
-        stopReason,
-        successfulAttacks,
-        totalSuccessfulAttacks: successfulAttacks.length,
-        storedGraderResult,
-        redteamHistory,
-        sessionIds,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
-        redteamFinalPrompt: lastFinalAttackPrompt || successfulAttacks[0]?.message,
-      },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastTargetResponse?.guardrails,
-    };
+    await this.updateHydraLearnings({ scanId, testRunId, state, options });
+    return this.buildHydraResponse({ state, context });
   }
 }
 
