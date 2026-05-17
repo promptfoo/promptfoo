@@ -3,7 +3,10 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
-import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
+import {
+  AwsBedrockGenericProvider,
+  createBedrockCacheKeyHash,
+} from '../../../src/providers/bedrock/base';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
@@ -2144,7 +2147,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
   describe('params', () => {
-    it('should include Mistral-specific parameters without top_k', async () => {
+    it('should use the chat-completion request format without top_k', async () => {
       const config = {
         max_tokens: 200,
         temperature: 0.7,
@@ -2157,7 +2160,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
-        prompt,
+        messages: [{ role: 'user', content: prompt }],
         stop,
         max_tokens: 200,
         temperature: 0.7,
@@ -2175,8 +2178,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
-        prompt,
-        stop,
+        messages: [{ role: 'user', content: prompt }],
         max_tokens: 1024,
         temperature: 0,
         top_p: 1,
@@ -2263,6 +2265,29 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       expect(result).toHaveProperty('completion', undefined);
       expect(result).toHaveProperty('total', undefined);
       expect(result).toHaveProperty('numRequests', 1);
+    });
+  });
+});
+
+describe('BEDROCK_MODEL MISTRAL_CHAT', () => {
+  const modelHandler = BEDROCK_MODEL.MISTRAL_CHAT;
+
+  it('should preserve structured chat prompts for newer Mistral models', async () => {
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'Summarize this.' },
+    ]);
+
+    const params = await modelHandler.params({}, prompt, []);
+
+    expect(params).toEqual({
+      messages: [
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: 'Summarize this.' },
+      ],
+      max_tokens: 1024,
+      temperature: 0,
+      top_p: 1,
     });
   });
 });
@@ -2436,6 +2461,73 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         prompt: undefined,
         completion: undefined,
         total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('BEDROCK_MODEL DEEPSEEK_CHAT', () => {
+  const modelHandler = BEDROCK_MODEL.DEEPSEEK_CHAT;
+
+  describe('params', () => {
+    it('should use the chat-completion request format for V3 models', async () => {
+      const params = await modelHandler.params(
+        {
+          max_tokens: 1000,
+          temperature: 0.8,
+          top_p: 0.95,
+        },
+        'Solve this problem',
+        ['END'],
+      );
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Solve this problem' }],
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+        stop: ['END'],
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from chat completion format', async () => {
+      expect(
+        modelHandler.output(
+          {},
+          {
+            choices: [
+              {
+                message: {
+                  content: 'This is a V3 response.',
+                },
+              },
+            ],
+          },
+        ),
+      ).toBe('This is a V3 response.');
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from usage objects', async () => {
+      expect(
+        modelHandler.tokenUsage!(
+          {
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 18,
+              total_tokens: 30,
+            },
+          },
+          'prompt',
+        ),
+      ).toEqual({
+        prompt: 12,
+        completion: 18,
+        total: 30,
         numRequests: 1,
       });
     });
@@ -2804,6 +2896,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-3-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_3);
     expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
       BEDROCK_MODEL.MISTRAL_LARGE_2407,
     );
@@ -2839,12 +2932,34 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
 
   it('should map DeepSeek models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['deepseek.v3-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK_CHAT);
+    expect(AWS_BEDROCK_MODELS['deepseek.v3.2']).toBe(BEDROCK_MODEL.DEEPSEEK_CHAT);
     expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+  });
+
+  it('should map newer Mistral models correctly', async () => {
+    [
+      'mistral.devstral-2-123b',
+      'mistral.magistral-small-2509',
+      'mistral.ministral-3-14b-instruct',
+      'mistral.ministral-3-8b-instruct',
+      'mistral.ministral-3-3b-instruct',
+      'mistral.mistral-large-3-675b-instruct',
+      'mistral.pixtral-large-2502-v1:0',
+      'mistral.voxtral-mini-3b-2507',
+      'mistral.voxtral-small-24b-2507',
+      'us.mistral.pixtral-large-2502-v1:0',
+      'eu.mistral.pixtral-large-2502-v1:0',
+    ].forEach((modelId) => {
+      expect(AWS_BEDROCK_MODELS[modelId]).toBe(BEDROCK_MODEL.MISTRAL_CHAT);
+    });
   });
 
   it('should map OpenAI models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-120b']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-20b']).toBe(BEDROCK_MODEL.OPENAI);
   });
 
   it('should map APAC regional models correctly', async () => {
@@ -3181,6 +3296,300 @@ describe('AwsBedrockCompletionProvider', () => {
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
   });
+
+  it('should hash prompt and secret values in the cache key', async () => {
+    const modelName = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0';
+    const prompt = 'PFQA_BEDROCK_PROMPT_SENTINEL';
+    const apiKey = 'PFQA_BEDROCK_SECRET_SENTINEL';
+    const otherApiKey = 'PFQA_BEDROCK_OTHER_SECRET_SENTINEL';
+    const cachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(cachedResponseData));
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(AWS_BEDROCK_MODELS[modelName].params).mockImplementation(
+      async (config, promptText) => ({
+        prompt: promptText,
+        ...config,
+      }),
+    );
+
+    const provider = new AwsBedrockCompletionProvider(modelName, {
+      config: {
+        region: 'us-east-1',
+        apiKey,
+      } as BedrockClaudeMessagesCompletionOptions,
+    });
+
+    const result = await provider.callApi(prompt);
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('processed output');
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockCache.get).toHaveBeenCalledTimes(1);
+
+    const cacheKey = mockCache.get.mock.calls[0][0] as string;
+    const cacheKeyPrefix = `bedrock:${modelName}:us-east-1:`;
+    expect(cacheKey.startsWith(cacheKeyPrefix)).toBe(true);
+    expect(cacheKey.slice(cacheKeyPrefix.length)).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKey).not.toContain(prompt);
+    expect(cacheKey).not.toContain(apiKey);
+    expect(cacheKey).not.toContain(otherApiKey);
+
+    const otherProvider = new AwsBedrockCompletionProvider(modelName, {
+      config: {
+        region: 'us-east-1',
+        apiKey: otherApiKey,
+      } as BedrockClaudeMessagesCompletionOptions,
+    });
+
+    await otherProvider.callApi(prompt);
+
+    const otherCacheKey = mockCache.get.mock.calls[1][0] as string;
+    expect(otherCacheKey.startsWith(cacheKeyPrefix)).toBe(true);
+    expect(otherCacheKey.slice(cacheKeyPrefix.length)).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(otherCacheKey).not.toBe(cacheKey);
+    expect(otherCacheKey).not.toContain(prompt);
+    expect(otherCacheKey).not.toContain(apiKey);
+    expect(otherCacheKey).not.toContain(otherApiKey);
+  });
+
+  it('should separate cache keys across Bedrock auth configuration', () => {
+    const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+    const region = 'us-east-1';
+    const baseConfig = {
+      region,
+    } as BedrockClaudeMessagesCompletionOptions;
+
+    const cacheKeys = [
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          apiKey: 'PFQA_BEDROCK_API_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+          sessionToken: 'PFQA_BEDROCK_SESSION_TOKEN_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          profile: 'promptfoo-profile-b',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          endpoint: 'https://bedrock-runtime.us-west-2.amazonaws.com',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+    ];
+
+    expect(new Set(cacheKeys).size).toBe(cacheKeys.length);
+    for (const cacheKey of cacheKeys) {
+      expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain('PFQA_BEDROCK');
+      expect(cacheKey).not.toContain('promptfoo-profile');
+      expect(cacheKey).not.toContain('bedrock-runtime');
+    }
+  });
+
+  it('should prefer explicit credentials over bearer auth in cache metadata', () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const sharedBearerConfig = {
+        region,
+        apiKey: 'PFQA_BEDROCK_SHARED_BEARER',
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      const explicitCredentialsA = createBedrockCacheKeyHash({
+        config: {
+          ...sharedBearerConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+      const explicitCredentialsB = createBedrockCacheKeyHash({
+        config: {
+          ...sharedBearerConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_B',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_B',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+
+      expect(explicitCredentialsA).not.toBe(explicitCredentialsB);
+      for (const cacheKey of [explicitCredentialsA, explicitCredentialsB]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should keep Bedrock auth cache metadata stable across module reloads', async () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+        accessKeyId: 'PFQA_BEDROCK_RELOAD_ACCESS_KEY',
+        secretAccessKey: 'PFQA_BEDROCK_RELOAD_SECRET_KEY',
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      async function getCacheKeyFromFreshModule() {
+        vi.resetModules();
+        const { createBedrockCacheKeyHash: createFreshBedrockCacheKeyHash } = await import(
+          '../../../src/providers/bedrock/base'
+        );
+        return createFreshBedrockCacheKeyHash({ config, params, region });
+      }
+
+      const firstCacheKey = await getCacheKeyFromFreshModule();
+      const secondCacheKey = await getCacheKeyFromFreshModule();
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(firstCacheKey).not.toContain('PFQA_BEDROCK');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should ignore undefined auth config values in cache auth metadata', () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const baseConfig = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      const defaultCacheKey = createBedrockCacheKeyHash({ config: baseConfig, params, region });
+      const undefinedBearerCacheKey = createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          apiKey: undefined,
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+      const incompleteExplicitCacheKey = createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_ONLY',
+          secretAccessKey: undefined,
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+
+      expect(undefinedBearerCacheKey).toBe(defaultCacheKey);
+      expect(incompleteExplicitCacheKey).toBe(defaultCacheKey);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should separate cache keys by effective bearer token env value', () => {
+    let restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'PFQA_BEDROCK_ENV_BEARER_A',
+      });
+      const bearerACacheKey = createBedrockCacheKeyHash({ config, params, region });
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'PFQA_BEDROCK_ENV_BEARER_B',
+      });
+      const bearerBCacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      expect(bearerACacheKey).not.toBe(bearerBCacheKey);
+      for (const cacheKey of [bearerACacheKey, bearerBCacheKey]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_A');
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_B');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should preserve non-auth request fields named like credentials in request hashes', () => {
+    const region = 'us-east-1';
+    const config = {
+      region,
+      apiKey: 'PFQA_BEDROCK_AUTH_SECRET',
+    } as BedrockClaudeMessagesCompletionOptions;
+
+    const requestA = createBedrockCacheKeyHash({
+      config,
+      params: {
+        prompt: 'Shared prompt',
+        additionalModelRequestFields: {
+          toolSchema: {
+            apiKey: 'request-visible-api-key-a',
+          },
+        },
+      },
+      region,
+    });
+    const requestB = createBedrockCacheKeyHash({
+      config,
+      params: {
+        prompt: 'Shared prompt',
+        additionalModelRequestFields: {
+          toolSchema: {
+            apiKey: 'request-visible-api-key-b',
+          },
+        },
+      },
+      region,
+    });
+
+    expect(requestA).not.toBe(requestB);
+    expect(requestA).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(requestB).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(requestA).not.toContain('request-visible-api-key-a');
+    expect(requestB).not.toContain('request-visible-api-key-b');
+  });
 });
 
 describe('BEDROCK_MODEL.QWEN', () => {
@@ -3393,8 +3802,11 @@ describe('BEDROCK_MODEL.QWEN', () => {
 describe('Qwen model mapping', () => {
   it('should include all Qwen models in AWS_BEDROCK_MODELS', async () => {
     const qwenModels = [
+      'qwen.qwen3-coder-next',
       'qwen.qwen3-coder-480b-a35b-v1:0',
       'qwen.qwen3-coder-30b-a3b-v1:0',
+      'qwen.qwen3-next-80b-a3b',
+      'qwen.qwen3-vl-235b-a22b',
       'qwen.qwen3-235b-a22b-2507-v1:0',
       'qwen.qwen3-32b-v1:0',
     ];
