@@ -1,15 +1,78 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockResponse } from '../../util/utils';
 
-// Helper to create mock Response
-function createMockResponse(data: unknown, ok = true, status = 200): Response {
-  return {
-    ok,
-    status,
-    statusText: ok ? 'OK' : 'Error',
-    json: () => Promise.resolve(data),
-    text: () => Promise.resolve(JSON.stringify(data)),
-    headers: new Headers(),
-  } as Response;
+import type { MultiTurnPromptParams } from '../../../src/server/services/redteamTestCaseGenerationService';
+
+async function getExpectedRemoteGenerationUrl() {
+  const { getRemoteGenerationUrl } = await vi.importActual<
+    typeof import('../../../src/redteam/remoteGeneration')
+  >('../../../src/redteam/remoteGeneration');
+  return getRemoteGenerationUrl();
+}
+const TEST_REQUEST_TIMEOUT_MS = 300000;
+const MOCKED_MODULES = [
+  '../../../src/util/fetch/index',
+  '../../../src/redteam/remoteGeneration',
+  '../../../src/providers/shared',
+  '../../../src/constants',
+];
+
+function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
+  const fetchWithRetries = rejectWith
+    ? vi.fn().mockRejectedValueOnce(rejectWith)
+    : vi.fn().mockResolvedValueOnce(
+        createMockResponse({
+          body: responseBody,
+        }),
+      );
+
+  vi.doMock('../../../src/util/fetch/index', () => ({
+    fetchWithRetries,
+  }));
+  vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
+    getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+  }));
+  vi.doMock('../../../src/providers/shared', () => ({
+    getRequestTimeoutMs: () => TEST_REQUEST_TIMEOUT_MS,
+  }));
+  vi.doMock('../../../src/constants', () => ({
+    VERSION: '0.0.0-test',
+  }));
+
+  return fetchWithRetries;
+}
+
+async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['strategyId']) {
+  const { generateMultiTurnPrompt } = await import(
+    '../../../src/server/services/redteamTestCaseGenerationService'
+  );
+
+  await generateMultiTurnPrompt({
+    pluginId: 'harmful:hate',
+    strategyId,
+    strategyConfigRecord: {},
+    history: [],
+    turn: 0,
+    maxTurns: 5,
+    baseMetadata: { pluginConfig: {} },
+    generatedPrompt: 'initial prompt',
+    purpose: 'test purpose',
+  });
+}
+
+async function expectTaskRequest(fetchWithRetries: ReturnType<typeof vi.fn>, expectedTask: string) {
+  expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  const [url, request, timeout] = fetchWithRetries.mock.calls[0]!;
+  const body = JSON.parse(String(request.body));
+
+  expect(url).toBe(await getExpectedRemoteGenerationUrl());
+  expect(request).toMatchObject({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  expect(body.task).toBe(expectedTask);
+  expect(timeout).toBe(TEST_REQUEST_TIMEOUT_MS);
 }
 
 describe('redteamTestCaseGenerationService', () => {
@@ -17,203 +80,66 @@ describe('redteamTestCaseGenerationService', () => {
     vi.resetModules();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+    for (const modulePath of MOCKED_MODULES) {
+      vi.doUnmock(modulePath);
+    }
+    vi.resetModules();
+  });
+
   describe('multi-turn strategy handlers use fetchWithRetries', () => {
     it('should call fetchWithRetries with correct parameters for GOAT strategy', async () => {
-      // Re-setup mocks after module reset
-      const mockFetchWithRetries = vi.fn();
-      vi.doMock('../../../src/util/fetch/index', () => ({
-        fetchWithRetries: mockFetchWithRetries,
-      }));
-      vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-        neverGenerateRemote: vi.fn().mockReturnValue(false),
-      }));
-      vi.doMock('../../../src/providers/shared', () => ({
-        REQUEST_TIMEOUT_MS: 300000,
-      }));
-      vi.doMock('../../../src/constants', () => ({
-        VERSION: '0.0.0-test',
-      }));
-
-      const mockResponse = createMockResponse({
+      const fetchWithRetries = mockRemoteGeneration({
         message: { content: 'test prompt' },
         tokenUsage: { total: 100 },
       });
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
-      const { generateMultiTurnPrompt } = await import(
-        '../../../src/server/services/redteamTestCaseGenerationService'
-      );
+      await generatePromptForStrategy('goat');
 
-      await generateMultiTurnPrompt({
-        pluginId: 'harmful:hate',
-        strategyId: 'goat',
-        strategyConfigRecord: {},
-        history: [],
-        turn: 0,
-        maxTurns: 5,
-        baseMetadata: { pluginConfig: {} },
-        generatedPrompt: 'initial prompt',
-        purpose: 'test purpose',
-      });
+      await expectTaskRequest(fetchWithRetries, 'goat');
+    });
 
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/v1/task',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: expect.stringContaining('"task":"goat"'),
-        }),
-        300000,
-      );
+    it('should propagate remote generation failures', async () => {
+      const remoteError = new Error('remote generation failed');
+      const fetchWithRetries = mockRemoteGeneration(undefined, remoteError);
+
+      await expect(generatePromptForStrategy('goat')).rejects.toThrow('remote generation failed');
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
     it('should call fetchWithRetries with correct parameters for Crescendo strategy', async () => {
-      const mockFetchWithRetries = vi.fn();
-      vi.doMock('../../../src/util/fetch/index', () => ({
-        fetchWithRetries: mockFetchWithRetries,
-      }));
-      vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-        neverGenerateRemote: vi.fn().mockReturnValue(false),
-      }));
-      vi.doMock('../../../src/providers/shared', () => ({
-        REQUEST_TIMEOUT_MS: 300000,
-      }));
-      vi.doMock('../../../src/constants', () => ({
-        VERSION: '0.0.0-test',
-      }));
-
-      const mockResponse = createMockResponse({
+      const fetchWithRetries = mockRemoteGeneration({
         result: {
           generatedQuestion: 'test question',
           lastResponseSummary: 'summary',
           rationaleBehindJailbreak: 'rationale',
         },
       });
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
-      const { generateMultiTurnPrompt } = await import(
-        '../../../src/server/services/redteamTestCaseGenerationService'
-      );
+      await generatePromptForStrategy('crescendo');
 
-      await generateMultiTurnPrompt({
-        pluginId: 'harmful:hate',
-        strategyId: 'crescendo',
-        strategyConfigRecord: {},
-        history: [],
-        turn: 0,
-        maxTurns: 5,
-        baseMetadata: { pluginConfig: {} },
-        generatedPrompt: 'initial prompt',
-        purpose: 'test purpose',
-      });
-
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/v1/task',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: expect.stringContaining('"task":"crescendo"'),
-        }),
-        300000,
-      );
+      await expectTaskRequest(fetchWithRetries, 'crescendo');
     });
 
     it('should call fetchWithRetries with correct parameters for Hydra strategy', async () => {
-      const mockFetchWithRetries = vi.fn();
-      vi.doMock('../../../src/util/fetch/index', () => ({
-        fetchWithRetries: mockFetchWithRetries,
-      }));
-      vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-        neverGenerateRemote: vi.fn().mockReturnValue(false),
-      }));
-      vi.doMock('../../../src/providers/shared', () => ({
-        REQUEST_TIMEOUT_MS: 300000,
-      }));
-      vi.doMock('../../../src/constants', () => ({
-        VERSION: '0.0.0-test',
-      }));
-
-      const mockResponse = createMockResponse({
+      const fetchWithRetries = mockRemoteGeneration({
         result: { prompt: 'test prompt' },
       });
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
-      const { generateMultiTurnPrompt } = await import(
-        '../../../src/server/services/redteamTestCaseGenerationService'
-      );
+      await generatePromptForStrategy('jailbreak:hydra');
 
-      await generateMultiTurnPrompt({
-        pluginId: 'harmful:hate',
-        strategyId: 'jailbreak:hydra',
-        strategyConfigRecord: {},
-        history: [],
-        turn: 0,
-        maxTurns: 5,
-        baseMetadata: { pluginConfig: {} },
-        generatedPrompt: 'initial prompt',
-        purpose: 'test purpose',
-      });
-
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/v1/task',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: expect.stringContaining('"task":"hydra-decision"'),
-        }),
-        300000,
-      );
+      await expectTaskRequest(fetchWithRetries, 'hydra-decision');
     });
 
     it('should call fetchWithRetries with correct parameters for Mischievous User strategy', async () => {
-      const mockFetchWithRetries = vi.fn();
-      vi.doMock('../../../src/util/fetch/index', () => ({
-        fetchWithRetries: mockFetchWithRetries,
-      }));
-      vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-        getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-        neverGenerateRemote: vi.fn().mockReturnValue(false),
-      }));
-      vi.doMock('../../../src/providers/shared', () => ({
-        REQUEST_TIMEOUT_MS: 300000,
-      }));
-      vi.doMock('../../../src/constants', () => ({
-        VERSION: '0.0.0-test',
-      }));
-
-      const mockResponse = createMockResponse({
+      const fetchWithRetries = mockRemoteGeneration({
         result: 'test prompt',
       });
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
-      const { generateMultiTurnPrompt } = await import(
-        '../../../src/server/services/redteamTestCaseGenerationService'
-      );
+      await generatePromptForStrategy('mischievous-user');
 
-      await generateMultiTurnPrompt({
-        pluginId: 'harmful:hate',
-        strategyId: 'mischievous-user',
-        strategyConfigRecord: {},
-        history: [],
-        turn: 0,
-        maxTurns: 5,
-        baseMetadata: { pluginConfig: {} },
-        generatedPrompt: 'initial prompt',
-        purpose: 'test purpose',
-      });
-
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(
-        'https://api.promptfoo.app/api/v1/task',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: expect.stringContaining('"task":"mischievous-user-redteam"'),
-        }),
-        300000,
-      );
+      await expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
     });
   });
 });

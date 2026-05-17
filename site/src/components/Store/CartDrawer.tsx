@@ -2,7 +2,8 @@ import React from 'react';
 
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined';
 import RemoveIcon from '@mui/icons-material/Remove';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -12,11 +13,13 @@ import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { useCartContext } from './CartProvider';
+import { useCopyToClipboard } from './useCopyToClipboard';
 import { formatPrice, getAttributeName, getCheckoutUrl } from './useFourthwall';
 
 export function CartDrawer() {
-  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading } =
+  const { cart, isCartOpen, closeCart, removeFromCart, updateQuantity, isLoading, couponCode } =
     useCartContext();
+  const { copied: copiedInDrawer, handleCopy: handleCopyInDrawer } = useCopyToClipboard(couponCode);
 
   const handleCheckout = () => {
     if (cart?.id) {
@@ -31,13 +34,15 @@ export function CartDrawer() {
       anchor="right"
       open={isCartOpen}
       onClose={closeCart}
-      PaperProps={{
-        sx: {
-          width: { xs: '100%', sm: '400px' },
-          maxWidth: '100vw',
-          // Support safe area insets for notched phones
-          paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: '100%', sm: '400px' },
+            maxWidth: '100vw',
+            // Support safe area insets for notched phones
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+          },
         },
       }}
     >
@@ -298,6 +303,49 @@ export function CartDrawer() {
           </Typography>
 
           <Divider sx={{ mb: 2 }} />
+
+          {couponCode && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                mb: 2,
+                p: 1.5,
+                backgroundColor: 'var(--ifm-color-success-contrast-background)',
+                borderRadius: '8px',
+                border: '1px solid var(--ifm-color-success-dark)',
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{ flex: 1, color: 'var(--ifm-color-success-darkest)' }}
+              >
+                Enter code{' '}
+                <Box component="span" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+                  {couponCode}
+                </Box>{' '}
+                at checkout
+              </Typography>
+              <IconButton
+                size="small"
+                onClick={handleCopyInDrawer}
+                aria-label="Copy promo code"
+                title={copiedInDrawer ? 'Copied!' : 'Copy code'}
+                sx={{ color: 'var(--ifm-color-success-darkest)', p: 0.5 }}
+              >
+                <ContentCopyIcon sx={{ fontSize: '0.9rem' }} />
+              </IconButton>
+              {copiedInDrawer && (
+                <Typography
+                  variant="caption"
+                  sx={{ color: 'var(--ifm-color-success-darkest)', fontWeight: 500 }}
+                >
+                  Copied!
+                </Typography>
+              )}
+            </Box>
+          )}
 
           <Button
             variant="contained"

@@ -2,16 +2,15 @@ import React from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
 import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import yaml from 'js-yaml';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import type { UnifiedConfig } from '@promptfoo/types';
-import 'prismjs/components/prism-yaml';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
@@ -44,6 +43,8 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const textareaId = React.useId();
+  const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
   const { getTestSuite, updateConfig } = useStore();
@@ -103,6 +104,20 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     showToast(`Downloaded ${YAML_DOWNLOAD_FILE_NAME}`, 'success');
   };
 
+  const handleEditorKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement | HTMLDivElement> = (
+    event,
+  ) => {
+    const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
+    if (readOnly || !isSaveShortcut) {
+      return;
+    }
+
+    event.preventDefault();
+    if (hasUnsavedChanges) {
+      handleSave();
+    }
+  };
+
   // Initial load effect
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -128,11 +143,25 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     setHasUnsavedChanges(code !== originalCode);
   }, [code, originalCode]);
 
+  React.useEffect(() => {
+    // react-simple-code-editor does not expose arbitrary textarea props directly.
+    const textarea = editorContainerRef.current?.querySelector('textarea');
+    if (!textarea) {
+      return;
+    }
+
+    if (readOnly) {
+      textarea.removeAttribute('aria-keyshortcuts');
+    } else {
+      textarea.setAttribute('aria-keyshortcuts', 'Control+S Meta+S');
+    }
+  }, [readOnly]);
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Action bar */}
       {!readOnly && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
               <SaveIcon className="size-4 mr-2" />
@@ -193,7 +222,11 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
       {/* Editor Container */}
       <div className="relative min-w-0">
+        <label htmlFor={textareaId} className="sr-only">
+          {readOnly ? 'YAML configuration preview' : 'YAML configuration editor'}
+        </label>
         <div
+          ref={editorContainerRef}
           className={cn(
             'rounded-lg overflow-auto max-h-[60vh]',
             'border-2 transition-all',
@@ -202,7 +235,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
         >
           <Editor
             autoCapitalize="off"
+            textareaId={textareaId}
             value={code}
+            onKeyDown={handleEditorKeyDown}
             onValueChange={(newCode) => {
               if (readOnly) {
                 return;
@@ -234,7 +269,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
         {/* Copy button - offset to avoid scrollbar */}
         <div className="absolute top-2 right-5">
-          <CopyButton value={code} />
+          <CopyButton value={code} aria-label="Copy YAML configuration" />
         </div>
       </div>
     </div>

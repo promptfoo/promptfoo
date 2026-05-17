@@ -7,6 +7,7 @@ import {
   createCloudflareGatewayProvider,
 } from '../../src/providers/cloudflare-gateway';
 import { loadApiProviders } from '../../src/providers/index';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
 
@@ -579,20 +580,20 @@ describe('CloudflareGateway Provider', () => {
   });
 
   describe('Environment Variable Support', () => {
-    const originalEnv = process.env;
+    const originalEnv = { ...process.env };
 
     beforeEach(() => {
       vi.resetModules();
-      process.env = { ...originalEnv };
+      mockProcessEnv({ ...originalEnv }, { clear: true });
     });
 
     afterEach(() => {
-      process.env = originalEnv;
+      mockProcessEnv(originalEnv, { clear: true });
     });
 
     it('should use environment variables for account ID and gateway ID', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account-id';
-      process.env.CLOUDFLARE_GATEWAY_ID = 'env-gateway-id';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'env-account-id' });
+      mockProcessEnv({ CLOUDFLARE_GATEWAY_ID: 'env-gateway-id' });
 
       const provider = createCloudflareGatewayProvider('cloudflare-gateway:openai:gpt-4o', {
         config: { apiKey: 'test-key' },
@@ -602,8 +603,8 @@ describe('CloudflareGateway Provider', () => {
     });
 
     it('should prefer config values over environment variables', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account-id';
-      process.env.CLOUDFLARE_GATEWAY_ID = 'env-gateway-id';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'env-account-id' });
+      mockProcessEnv({ CLOUDFLARE_GATEWAY_ID: 'env-gateway-id' });
 
       const provider = new CloudflareGatewayOpenAiProvider('openai', 'gpt-4o', {
         config: {
@@ -617,8 +618,8 @@ describe('CloudflareGateway Provider', () => {
     });
 
     it('should support custom environment variable names', () => {
-      process.env.CUSTOM_ACCOUNT = 'custom-account-id';
-      process.env.CUSTOM_GATEWAY = 'custom-gateway-id';
+      mockProcessEnv({ CUSTOM_ACCOUNT: 'custom-account-id' });
+      mockProcessEnv({ CUSTOM_GATEWAY: 'custom-gateway-id' });
 
       const provider = createCloudflareGatewayProvider('cloudflare-gateway:openai:gpt-4o', {
         config: {
@@ -658,7 +659,7 @@ describe('CloudflareGateway Provider', () => {
     it('should require API key for azure-openai', () => {
       // Clear the environment variable to ensure validation triggers
       const originalAzureKey = process.env.AZURE_OPENAI_API_KEY;
-      delete process.env.AZURE_OPENAI_API_KEY;
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: undefined });
 
       try {
         expect(() =>
@@ -675,7 +676,7 @@ describe('CloudflareGateway Provider', () => {
       } finally {
         // Restore the environment variable
         if (originalAzureKey !== undefined) {
-          process.env.AZURE_OPENAI_API_KEY = originalAzureKey;
+          mockProcessEnv({ AZURE_OPENAI_API_KEY: originalAzureKey });
         }
       }
     });

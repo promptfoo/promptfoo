@@ -20,7 +20,11 @@
   <a href="https://discord.gg/promptfoo">Discord</a>
 </p>
 
+> Promptfoo is now part of OpenAI. Promptfoo remains open source and MIT licensed. Read the [company update](https://www.promptfoo.dev/blog/promptfoo-joining-openai/).
+
 ## Quick Start
+
+Requires [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0` for npm and npx usage.
 
 ```sh
 npm install -g promptfoo
