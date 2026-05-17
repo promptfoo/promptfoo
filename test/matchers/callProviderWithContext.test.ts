@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { callProviderWithContext } from '../../src/matchers';
+import { callProviderWithContext } from '../../src/matchers/providers';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { createMockProvider } from '../factories/provider';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
@@ -13,19 +14,26 @@ import type {
 } from '../../src/types/index';
 
 function createProvider(response: ProviderResponse = { output: 'ok' }): ApiProvider {
-  return {
-    id: () => 'test-grader',
-    callApi: vi.fn().mockResolvedValue(response),
-  };
+  return createMockProvider({ id: 'test-grader', response });
 }
 
 function createRegistry(): RateLimitRegistryRef & {
-  execute: ReturnType<typeof vi.fn>;
-  dispose: ReturnType<typeof vi.fn>;
+  executeSpy: ReturnType<typeof vi.fn>;
+  disposeSpy: ReturnType<typeof vi.fn>;
 } {
+  const executeSpy = vi.fn();
+  const disposeSpy = vi.fn();
+
   return {
-    execute: vi.fn(async (_provider, callFn) => callFn()),
-    dispose: vi.fn(),
+    async execute(provider, callFn, options) {
+      executeSpy(provider, callFn, options);
+      return callFn();
+    },
+    dispose() {
+      disposeSpy();
+    },
+    executeSpy,
+    disposeSpy,
   };
 }
 
@@ -58,7 +66,7 @@ describe('callProviderWithContext', () => {
       callProviderWithContext(provider, 'grade this', 'rubric', vars),
     );
 
-    expect(registry.execute).toHaveBeenCalledWith(
+    expect(registry.executeSpy).toHaveBeenCalledWith(
       provider,
       expect.any(Function),
       expect.objectContaining({
@@ -102,7 +110,7 @@ describe('callProviderWithContext', () => {
     );
     await callProviderWithContext(provider, 'direct', 'rubric', vars);
 
-    expect(registry.execute).toHaveBeenCalledTimes(1);
+    expect(registry.executeSpy).toHaveBeenCalledTimes(1);
     expect(provider.callApi).toHaveBeenCalledTimes(2);
     expect(provider.callApi).toHaveBeenLastCalledWith('direct', {
       prompt: { raw: 'direct', label: 'rubric' },
@@ -123,8 +131,8 @@ describe('callProviderWithContext', () => {
       callProviderWithContext(wrappedProvider, 'grade this', 'rubric', vars),
     );
 
-    expect(contextRegistry.execute).not.toHaveBeenCalled();
-    expect(wrapperRegistry.execute).toHaveBeenCalledTimes(1);
+    expect(contextRegistry.executeSpy).not.toHaveBeenCalled();
+    expect(wrapperRegistry.executeSpy).toHaveBeenCalledTimes(1);
     expect(provider.callApi).toHaveBeenCalledWith(
       'grade this',
       {

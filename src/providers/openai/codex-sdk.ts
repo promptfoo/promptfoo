@@ -15,8 +15,11 @@ import {
   getTraceparent,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
+import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -61,6 +64,9 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
+ *   the OpenAI API uses 'none' instead of 'minimal'
+ * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
@@ -74,7 +80,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -192,7 +198,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
@@ -403,7 +409,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js 20.20+ or 22.22+.
+      Requires Node.js ^20.20.0 or >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -420,7 +426,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
+      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -431,31 +437,11 @@ async function loadCodexSDK(): Promise<any> {
   }
 }
 
-// Pricing per 1M tokens
-// See: https://openai.com/pricing
-const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
-  // GPT-5.4 models
-  'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
-  // gpt-5.4-pro does not have discounted cached-input pricing.
-  'gpt-5.4-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
-  // GPT-5.3 Codex models
-  'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
-  // GPT-5.2 models
-  'gpt-5.2': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.2-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  // GPT-5.1 Codex models
-  'gpt-5.1-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  'gpt-5.1-codex-max': { input: 3.0, output: 12.0, cache_read: 0.3 },
-  'gpt-5.1-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
-  // GPT-5 models
-  'gpt-5-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  'gpt-5-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
-  'gpt-5': { input: 2.0, output: 8.0, cache_read: 0.2 },
-};
-
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.5 models
+    'gpt-5.5',
+    'gpt-5.5-pro',
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-pro',
@@ -1301,9 +1287,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     conversationMessages: Array<{ role: string; content: string }>;
   } {
     const agentMessages = state.items.filter((item) => item.type === 'agent_message');
+    const finalAgentMessage = [...agentMessages]
+      .reverse()
+      .find((item) => typeof item.text === 'string');
     return {
-      finalResponse:
-        agentMessages.length > 0 ? agentMessages.map((item) => item.text).join('\n') : '',
+      finalResponse: finalAgentMessage?.text ?? '',
       items: state.items,
       usage: state.usage,
       reasoningTexts: state.reasoningTexts,
@@ -1806,10 +1794,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Merge configs (prompt config takes precedence)
-    const config: OpenAICodexSDKConfig = {
+    const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;
@@ -1945,10 +1934,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
     const apiKey = this.getApiKey(config);
-    const workingDirectory = config.working_dir ?? process.cwd();
+    const workingDirectory =
+      resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
+    const additionalDirectories = config.additional_directories?.map(
+      (directory) => resolveAgenticWorkingDir(directory, cliState.basePath) ?? directory,
+    );
     const resolvedConfig: OpenAICodexSDKConfig = {
       ...config,
       working_dir: workingDirectory,
+      ...(additionalDirectories ? { additional_directories: additionalDirectories } : {}),
     };
 
     // Prepare environment with OTEL config for deep tracing
@@ -2176,29 +2170,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
+      ...(typeof turnUsage.reasoning_output_tokens === 'number'
+        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+        : {}),
     };
   }
 
   private calculateCodexResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
-  ): number {
-    if (!tokenUsage || !model) {
-      return 0;
-    }
-
-    const pricing = CODEX_MODEL_PRICING[model];
-    if (!pricing) {
-      return 0;
-    }
-
-    const cachedTokens = tokenUsage.cached || 0;
-    const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
-    const inputCost = uncachedInputTokens * (pricing.input / 1_000_000);
-    const cacheReadCost = cachedTokens * (pricing.cache_read / 1_000_000);
-    const outputCost = (tokenUsage.completion || 0) * (pricing.output / 1_000_000);
-
-    return inputCost + cacheReadCost + outputCost;
+  ): number | undefined {
+    return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
   }
 
   private async cleanupCodexTurn(

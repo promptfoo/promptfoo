@@ -6,9 +6,11 @@ import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import {
+  createShareableModelAuditUrl,
   createShareableUrl,
   determineShareDomain,
   hasEvalBeenShared,
+  hasModelAuditBeenShared,
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
@@ -16,6 +18,7 @@ import { makeRequest } from '../src/util/cloud';
 
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
+import type ModelAudit from '../src/models/modelAudit';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -55,6 +58,7 @@ function buildMockEval(): Partial<Eval> {
 }
 
 const mockFetch = vi.fn();
+const originalIsTTY = process.stdout.isTTY;
 
 vi.mock('../src/globalConfig/cloud', () => {
   const cloudConfig = {
@@ -141,6 +145,11 @@ describe('stripAuthFromUrl', () => {
   });
 });
 
+afterEach(() => {
+  vi.resetAllMocks();
+  process.stdout.isTTY = originalIsTTY;
+});
+
 describe('isSharingEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -213,6 +222,7 @@ describe('determineShareDomain', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
+    vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
   });
 
   it('should use DEFAULT_SHARE_VIEW_BASE_URL when no custom domain is specified', () => {
@@ -292,12 +302,90 @@ describe('determineShareDomain', () => {
   });
 });
 
+describe('model audit sharing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvBool).mockReset();
+    vi.mocked(cloudConfig.isEnabled).mockReset();
+    vi.mocked(cloudConfig.getApiHost).mockReset();
+    vi.mocked(cloudConfig.getAppUrl).mockReset();
+    vi.mocked(cloudConfig.getApiKey).mockReset();
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReset();
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReset();
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+  });
+
+  const mockAudit = {
+    id: 'scan-123',
+    createdAt: 1,
+    updatedAt: 2,
+    name: 'Audit',
+    author: 'test@example.com',
+    modelPath: '/tmp/model.pkl',
+    modelType: null,
+    results: {},
+    checks: [],
+    issues: [],
+    hasErrors: false,
+    totalChecks: 1,
+    passedChecks: 1,
+    failedChecks: 0,
+    metadata: {},
+    modelId: 'owner/model',
+    revisionSha: 'abc123',
+    contentHash: 'sha256:def456',
+    modelSource: 'huggingface',
+    sourceLastModified: 123,
+    scannerVersion: '0.2.30',
+  } as unknown as ModelAudit;
+
+  it('does not upload when sharing is disabled', async () => {
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+
+    const result = await createShareableModelAuditUrl(mockAudit);
+
+    expect(result).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('includes selected team context in share uploads', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'scan-123' }),
+    });
+
+    const result = await createShareableModelAuditUrl(mockAudit);
+
+    expect(result).toBe('https://app.example.com/model-audit/scan-123');
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.teamId).toBe('team-456');
+  });
+
+  it('scopes prior-share lookup to the selected team', async () => {
+    vi.mocked(makeRequest).mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const result = await hasModelAuditBeenShared(mockAudit);
+
+    expect(result).toBe(true);
+    expect(makeRequest).toHaveBeenCalledWith('model-audits/scan-123?teamId=team-456', 'GET');
+  });
+});
+
 describe('createShareableUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
     vi.mocked(envars.isCI).mockReturnValue(false);
     vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
+    vi.mocked(constants.getShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
     mockFetch.mockReset();
     // Mock process.stdout.isTTY
     process.stdout.isTTY = false;
@@ -327,6 +415,7 @@ describe('createShareableUrl', () => {
 
     const result = await createShareableUrl(mockEval as Eval);
     expect(result).toBe(`https://app.example.com/eval/mock-eval-id`);
+    expect(mockEval.useOldResults).toHaveBeenCalled();
   });
 
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
@@ -402,6 +491,61 @@ describe('createShareableUrl', () => {
     });
     const result2 = await createShareableUrl(mockEval as Eval);
     expect(result2).not.toEqual(result);
+  });
+
+  it('skips email collection when author is already set', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+
+    const mockEval = buildMockEval();
+    mockEval.author = 'preset-author@example.com';
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // getUserEmail should not have been called since author was already set
+    expect(getUserEmail).not.toHaveBeenCalled();
+    // The author should remain unchanged
+    expect(mockEval.author).toBe('preset-author@example.com');
+  });
+
+  it('still backfills author from stored email when author is null in a TTY', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(getUserEmail).mockReturnValue('stored@example.com');
+
+    const mockEval = buildMockEval();
+    mockEval.author = null as any;
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // getUserEmail must have been consulted since no author was set.
+    expect(getUserEmail).toHaveBeenCalled();
+    expect(mockEval.author).toBe('stored@example.com');
+    expect(mockEval.save).toHaveBeenCalled();
   });
 
   describe('chunked sending', () => {

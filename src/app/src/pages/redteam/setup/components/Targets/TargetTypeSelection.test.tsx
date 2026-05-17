@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetTypeSelection from './TargetTypeSelection';
@@ -97,7 +97,7 @@ describe('TargetTypeSelection', () => {
     });
   });
 
-  it('should allow user to enter name, reveal types, select one, and proceed', async () => {
+  it('should render target types immediately, require a name and type, and proceed', async () => {
     const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
@@ -115,34 +115,19 @@ describe('TargetTypeSelection', () => {
 
     renderComponent();
 
-    // Initially, no footer Next button should be present
-    expect(screen.queryByRole('button', { name: /^Next$/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    const footerNextButton = screen.getByRole('button', { name: /^Next$/i });
+    expect(footerNextButton).toBeDisabled();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
     await user.type(nameInput, 'My Test API');
 
-    // After entering name, the inline "Continue" button should appear
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
-    });
-
-    const inlineNextButton = screen.getByRole('button', { name: 'Continue' });
-    await user.click(inlineNextButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
-    });
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
     expect(onNext).not.toHaveBeenCalled();
-    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
-      feature: 'redteam_config_target_type_section_revealed',
-    });
-
-    // Now the footer Next button should appear but be disabled (no provider selected)
-    const footerNextButton = await screen.findByRole('button', { name: /^Next$/i });
     expect(footerNextButton).toBeDisabled();
 
-    // Provider list is expanded - select OpenAI by clicking the card
+    // Select OpenAI by clicking the card
     const openAICard = await screen.findByText('OpenAI');
     const cardElement = openAICard.closest('[role="button"]');
     await user.click(cardElement!);
@@ -167,15 +152,67 @@ describe('TargetTypeSelection', () => {
     expect(onNext).toHaveBeenCalledTimes(1);
   });
 
-  it('should have the Next button disabled and provider type section not visible when target name is empty', () => {
+  it('should show the target type section and keep Next disabled when target name is empty', () => {
     renderComponent();
 
-    // Initially, no footer Next button should be present, and no target type section
-    expect(screen.queryByRole('button', { name: /^Next$/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
+  });
+
+  it('should not derive a selected provider type from the default incomplete target', () => {
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: undefined,
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
+    expect(mockSetProviderType).not.toHaveBeenCalled();
+  });
+
+  it('should clear a stale persisted provider type for an incomplete target', () => {
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'http',
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
+    expect(mockSetProviderType).toHaveBeenCalledWith(undefined);
+  });
+
+  it('stacks the quick-start prompt before the layout has room for a side-by-side treatment', () => {
+    renderComponent();
+
+    expect(
+      screen.getByText('New to red teaming? Load an example to explore the setup.').parentElement,
+    ).toHaveClass('flex-col', 'sm:flex-row');
   });
 
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
+    const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
       config: {
@@ -193,20 +230,13 @@ describe('TargetTypeSelection', () => {
     renderComponent();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
-    fireEvent.change(nameInput, { target: { value: 'My Test API' } });
+    await user.click(nameInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('My Test API');
 
-    const inlineNextButton = await screen.findByRole('button', {
-      name: 'Continue',
-    });
-    fireEvent.click(inlineNextButton);
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
-    });
-
-    // Provider list is expanded - select OpenAI
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
     const openAICard = await screen.findByText('OpenAI');
-    fireEvent.click(openAICard.closest('.cursor-pointer') as HTMLElement);
+    await user.click(openAICard.closest('.cursor-pointer') as HTMLElement);
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalledWith(
@@ -225,25 +255,26 @@ describe('TargetTypeSelection', () => {
     });
   });
 
-  it('should disable Next button after entering a target name, revealing the target type section, and then deleting the target name', async () => {
+  it('should disable Next button after entering a target name, selecting a type, and then deleting the target name', async () => {
+    const user = userEvent.setup();
     renderComponent();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
-    fireEvent.change(nameInput, { target: { value: 'My Test API' } });
+    await user.click(nameInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('My Test API');
 
-    const inlineNextButton = await screen.findByRole('button', {
-      name: 'Continue',
-    });
-    fireEvent.click(inlineNextButton);
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
-    });
+    const openAICard = await screen.findByText('OpenAI');
+    await user.click(openAICard.closest('.cursor-pointer') as HTMLElement);
 
     // Now the footer Next button should be present
-    await screen.findByRole('button', { name: /^Next$/i });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
+    });
 
-    fireEvent.change(nameInput, { target: { value: '' } });
+    await user.clear(nameInput);
 
     // The button should be disabled because the target name is now empty
     await waitFor(() => {
@@ -253,6 +284,7 @@ describe('TargetTypeSelection', () => {
   });
 
   it('should maintain revealed provider type section and validate new name when target name is changed', async () => {
+    const user = userEvent.setup();
     // Start with a saved config so the Next button can be enabled
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
@@ -270,23 +302,22 @@ describe('TargetTypeSelection', () => {
 
     renderComponent();
 
-    // With complete saved config, target type section should be visible
-    await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
     // Now the footer Next button should be present and enabled
     const footerNextButton = await screen.findByRole('button', { name: /^Next$/i });
     expect(footerNextButton).toBeEnabled();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
-    fireEvent.change(nameInput, { target: { value: 'New Target Name' } });
+    await user.click(nameInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('New Target Name');
 
     expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
 
-    fireEvent.change(nameInput, { target: { value: '' } });
+    await user.clear(nameInput);
 
     // The button should be disabled because the target name is now empty
     await waitFor(() => {
@@ -349,14 +380,12 @@ describe('TargetTypeSelection', () => {
         expect(screen.getByText('Select Target Type')).toBeInTheDocument();
       });
 
-      // The footer Next button should be present (visible when target type section is shown)
+      // The footer Next button should be present while validation controls whether it can advance.
       const footerNextButton = screen.getByRole('button', { name: /^Next$/i });
       expect(footerNextButton).toBeInTheDocument();
     });
 
-    it('should NOT show target type section when no provider is selected (empty id without providerType)', async () => {
-      // This verifies we don't accidentally show the section for truly incomplete configs
-      // When there's no complete saved config, the component resets to initial state
+    it('should show target type section when no provider is selected', () => {
       const mockSetProviderType = vi.fn();
       mockUseRedTeamConfig.mockReturnValue({
         config: {
@@ -373,11 +402,8 @@ describe('TargetTypeSelection', () => {
 
       renderComponent();
 
-      // The target type section should NOT be visible
-      expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
-
-      // No footer Next button should be present
-      expect(screen.queryByRole('button', { name: /^Next$/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
     });
 
     it('should show target type section for standard providers with non-empty id', async () => {
@@ -434,16 +460,7 @@ describe('TargetTypeSelection', () => {
       const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
       await user.type(nameInput, 'my-custom-target');
 
-      // Click the inline "Continue" button to reveal the section
-      const inlineNextButton = await screen.findByRole('button', {
-        name: 'Continue',
-      });
-      await user.click(inlineNextButton);
-
-      // Wait for target type section to be visible
-      await waitFor(() => {
-        expect(screen.getByText('Select Target Type')).toBeInTheDocument();
-      });
+      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
       // The footer Next button should be present and enabled since we have providerType set and label entered
       const footerNextButton = await screen.findByRole('button', { name: /^Next$/i });

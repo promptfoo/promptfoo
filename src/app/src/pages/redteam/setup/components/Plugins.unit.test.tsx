@@ -55,7 +55,15 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
     <button type="button" {...props}>
       {children ?? 'Generate test case'}
     </button>
@@ -152,6 +160,17 @@ describe('Plugins - State Management Unit Tests', () => {
 
       const pluginsTab = screen.getByRole('tab', { name: /Plugins/ });
       expect(pluginsTab.textContent).toContain('Plugins (3)');
+    });
+
+    it('lets the tab strip wrap on narrow screens', () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('tablist')).toHaveClass(
+        'max-w-full',
+        'justify-start',
+        'flex-wrap',
+        'overflow-visible',
+      );
     });
 
     it('should derive set with object plugins from config', () => {

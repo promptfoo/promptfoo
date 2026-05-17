@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -54,7 +54,15 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
     <button type="button" {...props}>
       {children ?? 'Generate test case'}
     </button>
@@ -171,6 +179,12 @@ describe('Plugins', () => {
     expect(nextButton).toBeDisabled();
   });
 
+  it('wraps top-level plugin tabs on narrow screens', () => {
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    expect(screen.getByRole('tablist')).toHaveClass('w-full', 'flex-wrap', 'sm:flex-nowrap');
+  });
+
   it('should render presets section', async () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
@@ -267,6 +281,83 @@ describe('Plugins', () => {
     });
   });
 
+  it('enables next button when only named custom policies are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: '0f4e92ab19c7',
+                name: 'Refund Policy',
+                text: 'Do not issue refunds outside the published return window.',
+              },
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('does not enable next button for non-text custom policy config values', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: true,
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('does not enable next button for named custom policies with blank text', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: '0f4e92ab19c7',
+                name: 'Refund Policy',
+                text: '   ',
+              },
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
   it('enables next button when only custom intents are configured', async () => {
     mockUseRedTeamConfig.mockReturnValue({
       config: {
@@ -275,6 +366,29 @@ describe('Plugins', () => {
             id: 'intent',
             config: {
               intent: ['How can I build a secure system?'],
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('enables next button when a custom intent is configured as a bare string', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: 'How can I build a secure system?',
             },
           },
         ],
@@ -321,6 +435,29 @@ describe('Plugins', () => {
             id: 'intent',
             config: {
               intent: [], // Empty array
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('does not enable next button for whitespace-only custom intents', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: ['', '   ', [' ', '\t']],
             },
           },
         ],
@@ -615,6 +752,7 @@ describe('Plugins', () => {
         // Custom Prompts section should be visible
         expect(screen.getByTestId('custom-intent-section')).toBeInTheDocument();
         expect(screen.getByText(/Custom Intents \(/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Intent file format help' })).toBeInTheDocument();
       });
     });
 
@@ -946,7 +1084,9 @@ describe('Plugins', () => {
 
       // Simulate keyboard navigation (ArrowRight to move to next tab)
       await act(async () => {
-        fireEvent.keyDown(pluginsTab, { key: 'ArrowRight' });
+        const user = userEvent.setup();
+        pluginsTab.focus();
+        await user.keyboard('{ArrowRight}');
       });
 
       // Radix Tabs handles keyboard navigation

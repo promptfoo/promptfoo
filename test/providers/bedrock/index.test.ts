@@ -3,7 +3,10 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
-import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
+import {
+  AwsBedrockGenericProvider,
+  createBedrockCacheKeyHash,
+} from '../../../src/providers/bedrock/base';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
@@ -20,6 +23,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -55,7 +59,7 @@ const nodeHttpHandlerFactory = vi.hoisted(() => {
 });
 
 const credentialProviderSsoFactory = vi.hoisted(() => ({
-  mockSSOProvider: vi.fn(),
+  fromSSO: vi.fn(() => 'sso-provider'),
 }));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
@@ -74,6 +78,10 @@ vi.mock('@smithy/node-http-handler', () => ({
 }));
 
 const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: credentialProviderSsoFactory.fromSSO,
+}));
 
 // Preserve proxy variables so they can be restored after each test. These are
 // set in the container environment and can influence proxy-related logic in the
@@ -118,14 +126,16 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEDROCK_MAX_RETRIES;
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    credentialProviderSsoFactory.fromSSO.mockReset();
+    credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
     // installed in the test environment.
-    process.env.HTTP_PROXY = '';
-    process.env.HTTPS_PROXY = '';
+    mockProcessEnv({ HTTP_PROXY: '' });
+    mockProcessEnv({ HTTPS_PROXY: '' });
 
     nodeHttpHandlerFactory.setHandlerFactory(function () {
       return { handle: vi.fn() };
@@ -134,16 +144,16 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     if (ORIGINAL_HTTP_PROXY === undefined) {
-      delete process.env.HTTP_PROXY;
+      mockProcessEnv({ HTTP_PROXY: undefined });
     } else {
-      process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
     }
     if (ORIGINAL_HTTPS_PROXY === undefined) {
-      delete process.env.HTTPS_PROXY;
+      mockProcessEnv({ HTTPS_PROXY: undefined });
     } else {
-      process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
     }
   });
 
@@ -215,7 +225,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
-    process.env.AWS_BEDROCK_MAX_RETRIES = '10';
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '10' });
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
         super('test-model', { config: { region: 'us-east-1' } });
@@ -265,7 +275,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
     const mockHandler = {
       handle: vi.fn(),
     };
@@ -290,7 +300,7 @@ describe('AwsBedrockGenericProvider', () => {
       requestHandler,
     });
 
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });
 
   it('should add Authorization header with Bearer token to requests when using API key', async () => {
@@ -616,6 +626,35 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.system).toBe('You are a helpful assistant.');
     });
 
+    it('omits temperature for Claude Opus 4.7 on Bedrock invokeModel path', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0.5,
+      };
+      // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-7',
+      );
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('still forwards temperature for Claude Opus 4.6 on Bedrock invokeModel (regression)', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0,
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.temperature).toBe(0);
+    });
+
     it('should convert lone system message to user message', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -763,24 +802,14 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      vi.mock('@aws-sdk/credential-provider-sso', async (importOriginal) => {
-        return {
-          ...(await importOriginal()),
-
-          fromSSO: (config: any) => {
-            credentialProviderSsoFactory.mockSSOProvider();
-            expect(config).toEqual({ profile: 'test-profile' });
-            return 'sso-provider';
-          },
-        };
-      });
-
       const provider = new TestBedrockProvider({
         profile: 'test-profile',
       });
 
       const credentials = await provider.getCredentials();
-      expect(credentialProviderSsoFactory.mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentialProviderSsoFactory.fromSSO).toHaveBeenCalledWith({
+        profile: 'test-profile',
+      });
       expect(credentials).toBe('sso-provider');
     });
 
@@ -799,21 +828,21 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize config apiKey over environment variable', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({
         apiKey: 'test-config-api-key',
       });
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize explicit credentials over API key', async () => {
@@ -850,10 +879,10 @@ describe('addConfigParam', () => {
 
   it('should add env value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY);
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should add default value if neither config nor env value is provided', async () => {
@@ -864,26 +893,26 @@ describe('addConfigParam', () => {
 
   it('should prioritize config value over env and default values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', 'configValue', process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('configValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should prioritize env value over default value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should parse env value if default value is a number', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '42';
+    mockProcessEnv({ TEST_ENV_KEY: '42' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(42);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle undefined config, env, and default values gracefully', async () => {
@@ -894,18 +923,18 @@ describe('addConfigParam', () => {
 
   it('should correctly parse non-number string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'nonNumberString';
+    mockProcessEnv({ TEST_ENV_KEY: 'nonNumberString' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(0);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should correctly parse empty string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '';
+    mockProcessEnv({ TEST_ENV_KEY: '' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle env value not set', async () => {
@@ -930,10 +959,10 @@ describe('addConfigParam', () => {
 
   it('should handle special characters in env values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
+    mockProcessEnv({ TEST_ENV_KEY: '!@#$%^&*()_+' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('!@#$%^&*()_+');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 });
 
@@ -2118,7 +2147,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
   describe('params', () => {
-    it('should include Mistral-specific parameters without top_k', async () => {
+    it('should use the chat-completion request format without top_k', async () => {
       const config = {
         max_tokens: 200,
         temperature: 0.7,
@@ -2131,7 +2160,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
-        prompt,
+        messages: [{ role: 'user', content: prompt }],
         stop,
         max_tokens: 200,
         temperature: 0.7,
@@ -2149,8 +2178,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
-        prompt,
-        stop,
+        messages: [{ role: 'user', content: prompt }],
         max_tokens: 1024,
         temperature: 0,
         top_p: 1,
@@ -2241,6 +2269,29 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 });
 
+describe('BEDROCK_MODEL MISTRAL_CHAT', () => {
+  const modelHandler = BEDROCK_MODEL.MISTRAL_CHAT;
+
+  it('should preserve structured chat prompts for newer Mistral models', async () => {
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'Summarize this.' },
+    ]);
+
+    const params = await modelHandler.params({}, prompt, []);
+
+    expect(params).toEqual({
+      messages: [
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: 'Summarize this.' },
+      ],
+      max_tokens: 1024,
+      temperature: 0,
+      top_p: 1,
+    });
+  });
+});
+
 describe('BEDROCK_MODEL DEEPSEEK', () => {
   const modelHandler = BEDROCK_MODEL.DEEPSEEK;
 
@@ -2277,9 +2328,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
     });
 
     it('should respect environment variables', async () => {
-      process.env.AWS_BEDROCK_MAX_TOKENS = '2000';
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.9';
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '2000' });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.9' });
 
       const config = {};
       const prompt = 'Test with env vars';
@@ -2293,9 +2344,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         top_p: 0.9,
       });
 
-      delete process.env.AWS_BEDROCK_MAX_TOKENS;
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 
@@ -2410,6 +2461,73 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         prompt: undefined,
         completion: undefined,
         total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('BEDROCK_MODEL DEEPSEEK_CHAT', () => {
+  const modelHandler = BEDROCK_MODEL.DEEPSEEK_CHAT;
+
+  describe('params', () => {
+    it('should use the chat-completion request format for V3 models', async () => {
+      const params = await modelHandler.params(
+        {
+          max_tokens: 1000,
+          temperature: 0.8,
+          top_p: 0.95,
+        },
+        'Solve this problem',
+        ['END'],
+      );
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Solve this problem' }],
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+        stop: ['END'],
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from chat completion format', async () => {
+      expect(
+        modelHandler.output(
+          {},
+          {
+            choices: [
+              {
+                message: {
+                  content: 'This is a V3 response.',
+                },
+              },
+            ],
+          },
+        ),
+      ).toBe('This is a V3 response.');
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from usage objects', async () => {
+      expect(
+        modelHandler.tokenUsage!(
+          {
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 18,
+              total_tokens: 30,
+            },
+          },
+          'prompt',
+        ),
+      ).toEqual({
+        prompt: 12,
+        completion: 18,
+        total: 30,
         numRequests: 1,
       });
     });
@@ -2778,6 +2896,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-3-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_3);
     expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
       BEDROCK_MODEL.MISTRAL_LARGE_2407,
     );
@@ -2813,12 +2932,34 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
 
   it('should map DeepSeek models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['deepseek.v3-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK_CHAT);
+    expect(AWS_BEDROCK_MODELS['deepseek.v3.2']).toBe(BEDROCK_MODEL.DEEPSEEK_CHAT);
     expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+  });
+
+  it('should map newer Mistral models correctly', async () => {
+    [
+      'mistral.devstral-2-123b',
+      'mistral.magistral-small-2509',
+      'mistral.ministral-3-14b-instruct',
+      'mistral.ministral-3-8b-instruct',
+      'mistral.ministral-3-3b-instruct',
+      'mistral.mistral-large-3-675b-instruct',
+      'mistral.pixtral-large-2502-v1:0',
+      'mistral.voxtral-mini-3b-2507',
+      'mistral.voxtral-small-24b-2507',
+      'us.mistral.pixtral-large-2502-v1:0',
+      'eu.mistral.pixtral-large-2502-v1:0',
+    ].forEach((modelId) => {
+      expect(AWS_BEDROCK_MODELS[modelId]).toBe(BEDROCK_MODEL.MISTRAL_CHAT);
+    });
   });
 
   it('should map OpenAI models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-120b']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-20b']).toBe(BEDROCK_MODEL.OPENAI);
   });
 
   it('should map APAC regional models correctly', async () => {
@@ -2928,6 +3069,24 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
+  });
+
+  it('should map Claude Opus 4.7 models correctly', async () => {
+    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+
+    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
+    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+
+    // Sanity check: the -v1 suffix variant (which Anthropic/AWS docs do not publish) is NOT
+    // registered. Regressing this would silently route requests through the generic fallback.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7-v1']).toBeUndefined();
   });
 
   it('should map Nova 2 models correctly', async () => {
@@ -3137,6 +3296,300 @@ describe('AwsBedrockCompletionProvider', () => {
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
   });
+
+  it('should hash prompt and secret values in the cache key', async () => {
+    const modelName = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0';
+    const prompt = 'PFQA_BEDROCK_PROMPT_SENTINEL';
+    const apiKey = 'PFQA_BEDROCK_SECRET_SENTINEL';
+    const otherApiKey = 'PFQA_BEDROCK_OTHER_SECRET_SENTINEL';
+    const cachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(cachedResponseData));
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(AWS_BEDROCK_MODELS[modelName].params).mockImplementation(
+      async (config, promptText) => ({
+        prompt: promptText,
+        ...config,
+      }),
+    );
+
+    const provider = new AwsBedrockCompletionProvider(modelName, {
+      config: {
+        region: 'us-east-1',
+        apiKey,
+      } as BedrockClaudeMessagesCompletionOptions,
+    });
+
+    const result = await provider.callApi(prompt);
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('processed output');
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockCache.get).toHaveBeenCalledTimes(1);
+
+    const cacheKey = mockCache.get.mock.calls[0][0] as string;
+    const cacheKeyPrefix = `bedrock:${modelName}:us-east-1:`;
+    expect(cacheKey.startsWith(cacheKeyPrefix)).toBe(true);
+    expect(cacheKey.slice(cacheKeyPrefix.length)).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKey).not.toContain(prompt);
+    expect(cacheKey).not.toContain(apiKey);
+    expect(cacheKey).not.toContain(otherApiKey);
+
+    const otherProvider = new AwsBedrockCompletionProvider(modelName, {
+      config: {
+        region: 'us-east-1',
+        apiKey: otherApiKey,
+      } as BedrockClaudeMessagesCompletionOptions,
+    });
+
+    await otherProvider.callApi(prompt);
+
+    const otherCacheKey = mockCache.get.mock.calls[1][0] as string;
+    expect(otherCacheKey.startsWith(cacheKeyPrefix)).toBe(true);
+    expect(otherCacheKey.slice(cacheKeyPrefix.length)).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(otherCacheKey).not.toBe(cacheKey);
+    expect(otherCacheKey).not.toContain(prompt);
+    expect(otherCacheKey).not.toContain(apiKey);
+    expect(otherCacheKey).not.toContain(otherApiKey);
+  });
+
+  it('should separate cache keys across Bedrock auth configuration', () => {
+    const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+    const region = 'us-east-1';
+    const baseConfig = {
+      region,
+    } as BedrockClaudeMessagesCompletionOptions;
+
+    const cacheKeys = [
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          apiKey: 'PFQA_BEDROCK_API_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+          sessionToken: 'PFQA_BEDROCK_SESSION_TOKEN_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          profile: 'promptfoo-profile-b',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          endpoint: 'https://bedrock-runtime.us-west-2.amazonaws.com',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+    ];
+
+    expect(new Set(cacheKeys).size).toBe(cacheKeys.length);
+    for (const cacheKey of cacheKeys) {
+      expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain('PFQA_BEDROCK');
+      expect(cacheKey).not.toContain('promptfoo-profile');
+      expect(cacheKey).not.toContain('bedrock-runtime');
+    }
+  });
+
+  it('should prefer explicit credentials over bearer auth in cache metadata', () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const sharedBearerConfig = {
+        region,
+        apiKey: 'PFQA_BEDROCK_SHARED_BEARER',
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      const explicitCredentialsA = createBedrockCacheKeyHash({
+        config: {
+          ...sharedBearerConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+      const explicitCredentialsB = createBedrockCacheKeyHash({
+        config: {
+          ...sharedBearerConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_B',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_B',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+
+      expect(explicitCredentialsA).not.toBe(explicitCredentialsB);
+      for (const cacheKey of [explicitCredentialsA, explicitCredentialsB]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should keep Bedrock auth cache metadata stable across module reloads', async () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+        accessKeyId: 'PFQA_BEDROCK_RELOAD_ACCESS_KEY',
+        secretAccessKey: 'PFQA_BEDROCK_RELOAD_SECRET_KEY',
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      async function getCacheKeyFromFreshModule() {
+        vi.resetModules();
+        const { createBedrockCacheKeyHash: createFreshBedrockCacheKeyHash } = await import(
+          '../../../src/providers/bedrock/base'
+        );
+        return createFreshBedrockCacheKeyHash({ config, params, region });
+      }
+
+      const firstCacheKey = await getCacheKeyFromFreshModule();
+      const secondCacheKey = await getCacheKeyFromFreshModule();
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(firstCacheKey).not.toContain('PFQA_BEDROCK');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should ignore undefined auth config values in cache auth metadata', () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const baseConfig = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      const defaultCacheKey = createBedrockCacheKeyHash({ config: baseConfig, params, region });
+      const undefinedBearerCacheKey = createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          apiKey: undefined,
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+      const incompleteExplicitCacheKey = createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_ONLY',
+          secretAccessKey: undefined,
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+
+      expect(undefinedBearerCacheKey).toBe(defaultCacheKey);
+      expect(incompleteExplicitCacheKey).toBe(defaultCacheKey);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should separate cache keys by effective bearer token env value', () => {
+    let restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'PFQA_BEDROCK_ENV_BEARER_A',
+      });
+      const bearerACacheKey = createBedrockCacheKeyHash({ config, params, region });
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'PFQA_BEDROCK_ENV_BEARER_B',
+      });
+      const bearerBCacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      expect(bearerACacheKey).not.toBe(bearerBCacheKey);
+      for (const cacheKey of [bearerACacheKey, bearerBCacheKey]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_A');
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_B');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should preserve non-auth request fields named like credentials in request hashes', () => {
+    const region = 'us-east-1';
+    const config = {
+      region,
+      apiKey: 'PFQA_BEDROCK_AUTH_SECRET',
+    } as BedrockClaudeMessagesCompletionOptions;
+
+    const requestA = createBedrockCacheKeyHash({
+      config,
+      params: {
+        prompt: 'Shared prompt',
+        additionalModelRequestFields: {
+          toolSchema: {
+            apiKey: 'request-visible-api-key-a',
+          },
+        },
+      },
+      region,
+    });
+    const requestB = createBedrockCacheKeyHash({
+      config,
+      params: {
+        prompt: 'Shared prompt',
+        additionalModelRequestFields: {
+          toolSchema: {
+            apiKey: 'request-visible-api-key-b',
+          },
+        },
+      },
+      region,
+    });
+
+    expect(requestA).not.toBe(requestB);
+    expect(requestA).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(requestB).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(requestA).not.toContain('request-visible-api-key-a');
+    expect(requestB).not.toContain('request-visible-api-key-b');
+  });
 });
 
 describe('BEDROCK_MODEL.QWEN', () => {
@@ -3197,8 +3650,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
     });
 
     it('should use environment variables for defaults', async () => {
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.8';
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.8' });
 
       const config = {};
       const prompt = 'Test prompt';
@@ -3208,8 +3661,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result.temperature).toBe(0.5);
       expect(result.top_p).toBe(0.8);
 
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 
@@ -3349,8 +3802,11 @@ describe('BEDROCK_MODEL.QWEN', () => {
 describe('Qwen model mapping', () => {
   it('should include all Qwen models in AWS_BEDROCK_MODELS', async () => {
     const qwenModels = [
+      'qwen.qwen3-coder-next',
       'qwen.qwen3-coder-480b-a35b-v1:0',
       'qwen.qwen3-coder-30b-a3b-v1:0',
+      'qwen.qwen3-next-80b-a3b',
+      'qwen.qwen3-vl-235b-a22b',
       'qwen.qwen3-235b-a22b-2507-v1:0',
       'qwen.qwen3-32b-v1:0',
     ];

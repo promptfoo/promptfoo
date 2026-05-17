@@ -3,17 +3,13 @@ import * as path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
+import { createMockProvider } from '../../factories/provider';
 
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiFunction,
-  TestCase,
-} from '../../../src/types/index';
+import type { AtomicTestCase, TestCase } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -66,10 +62,7 @@ vi.mock('glob', async (importOriginal) => {
 vi.mock('better-sqlite3');
 
 describe('IntentPlugin', () => {
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: vi.fn() as CallApiFunction,
-  };
+  const mockProvider = createMockProvider();
 
   beforeEach(() => {
     vi.clearAllMocks();

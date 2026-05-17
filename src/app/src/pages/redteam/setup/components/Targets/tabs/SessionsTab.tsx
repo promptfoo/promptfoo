@@ -66,15 +66,12 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
 
   const updateHeaders = (newHeaders: Array<{ key: string; value: string }>) => {
     setHeaders(newHeaders);
-    const headersObj = newHeaders.reduce(
-      (acc, { key, value }) => {
-        if (key.trim()) {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    const headersObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+      if (key.trim()) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
     updateSession('headers', Object.keys(headersObj).length > 0 ? headersObj : undefined);
   };
 
@@ -158,7 +155,10 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
         </p>
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div
+              key={index}
+              className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center"
+            >
               <Input
                 value={header.key}
                 onChange={(e) => updateHeader(index, 'key', e.target.value)}
@@ -175,8 +175,9 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label={`Remove header ${index + 1}`}
                 onClick={() => removeHeader(index)}
-                className="shrink-0"
+                className="self-end shrink-0 sm:self-auto"
               >
                 <Trash2 className="size-4 text-muted-foreground" />
               </Button>

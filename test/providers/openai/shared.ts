@@ -4,9 +4,9 @@ export function getOpenAiMissingApiKeyMessage(envVar = 'OPENAI_API_KEY'): string
 
 export function restoreEnvVar(name: string, value: string | undefined): void {
   if (value === undefined) {
-    delete process.env[name];
+    Reflect.deleteProperty(process.env, name);
     return;
   }
 
-  process.env[name] = value;
+  Object.assign(process.env, { [name]: value });
 }

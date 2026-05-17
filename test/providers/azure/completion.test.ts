@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { AzureCompletionProvider } from '../../../src/providers/azure/completion';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -25,14 +26,14 @@ describe('AzureCompletionProvider', () => {
     vi.spyOn(AzureCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
       'api-key': 'test-key',
     });
-    delete process.env.OPENAI_STOP;
-    process.env.AZURE_API_HOST = 'test.azure.com';
-    process.env.AZURE_API_KEY = 'test-key';
+    mockProcessEnv({ OPENAI_STOP: undefined });
+    mockProcessEnv({ AZURE_API_HOST: 'test.azure.com' });
+    mockProcessEnv({ AZURE_API_KEY: 'test-key' });
   });
 
   afterEach(() => {
-    delete process.env.AZURE_API_HOST;
-    delete process.env.AZURE_API_KEY;
+    mockProcessEnv({ AZURE_API_HOST: undefined });
+    mockProcessEnv({ AZURE_API_KEY: undefined });
     vi.restoreAllMocks();
     vi.clearAllMocks();
   });
@@ -172,7 +173,7 @@ describe('AzureCompletionProvider', () => {
   });
 
   it('should handle invalid OPENAI_STOP env var', async () => {
-    process.env.OPENAI_STOP = '{invalid json}';
+    mockProcessEnv({ OPENAI_STOP: '{invalid json}' });
 
     const provider = new AzureCompletionProvider('test', {
       config: { apiHost: 'test.azure.com' },
@@ -183,7 +184,7 @@ describe('AzureCompletionProvider', () => {
       /OPENAI_STOP is not a valid JSON string/,
     );
 
-    delete process.env.OPENAI_STOP;
+    mockProcessEnv({ OPENAI_STOP: undefined });
   });
 
   it('should handle missing output and finish_reason not content_filter', async () => {

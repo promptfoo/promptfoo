@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fsPromises from 'fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -9,7 +9,8 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
-import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -26,8 +27,24 @@ const {
   mockGetConfigDirectoryPath: vi.fn(),
 }));
 
+const fsPromiseMocks = vi.hoisted(() => ({
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+}));
+
 // Mock the dependencies
-vi.mock('fs');
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsPromiseMocks,
+    },
+    ...fsPromiseMocks,
+  };
+});
 vi.mock('../../../src/storage', () => ({
   storeMedia: mockStoreMedia,
   mediaExists: mockMediaExists,
@@ -61,10 +78,11 @@ describe('OpenAiVideoProvider', () => {
     // Default config directory path
     mockGetConfigDirectoryPath.mockReturnValue('/test/config');
 
-    // Default: no cached video exists (fs.existsSync returns false for cache files)
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-    vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+    vi.mocked(fsPromises.readFile).mockRejectedValue(
+      Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
+    );
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.writeFile).mockResolvedValue(undefined);
 
     // Default: no cached video exists
     const mockStorage = {
@@ -390,8 +408,7 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should throw error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiVideoProvider('sora-2');
@@ -400,15 +417,15 @@ describe('OpenAiVideoProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnv();
       }
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      const originalCustomEnv = process.env.CUSTOM_VIDEO_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_VIDEO_API_KEY;
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_VIDEO_API_KEY: undefined,
+      });
 
       try {
         const provider = new OpenAiVideoProvider('sora-2', {
@@ -425,8 +442,7 @@ describe('OpenAiVideoProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_VIDEO_API_KEY'),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
-        restoreEnvVar('CUSTOM_VIDEO_API_KEY', originalCustomEnv);
+        restoreEnv();
       }
     });
 
@@ -811,12 +827,7 @@ describe('OpenAiVideoProvider', () => {
 
   describe('checkVideoCache', () => {
     it('should return video key if cache mapping exists and video file exists', async () => {
-      // Mock filesystem: cache mapping file exists
-      vi.mocked(fs.existsSync).mockImplementation((filePath: fs.PathLike) => {
-        const pathStr = String(filePath);
-        return pathStr.includes('test-cache-key.json');
-      });
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
           videoKey: 'video/abc123def456.mp4',
           thumbnailKey: 'video/abc123def456.webp',
@@ -837,26 +848,18 @@ describe('OpenAiVideoProvider', () => {
       const result = await checkVideoCache('test-cache-key');
 
       expect(result).toBe('video/abc123def456.mp4');
-      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fsPromises.readFile).toHaveBeenCalled();
       expect(mockStorage.exists).toHaveBeenCalledWith('video/abc123def456.mp4');
     });
 
     it('should return null if cache mapping does not exist', async () => {
-      // Mock filesystem: cache mapping file does not exist
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
       const result = await checkVideoCache('nonexistent-key');
 
       expect(result).toBe(null);
     });
 
     it('should return null if video file no longer exists', async () => {
-      // Mock filesystem: cache mapping file exists
-      vi.mocked(fs.existsSync).mockImplementation((filePath: fs.PathLike) => {
-        const pathStr = String(filePath);
-        return pathStr.includes('test-key.json');
-      });
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
           videoKey: 'video/deleted123.mp4',
         }),
@@ -880,9 +883,7 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      // Mock filesystem: cache mapping file exists
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
           videoKey: 'video/stored123.mp4',
         }),
@@ -919,9 +920,7 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      // Mock filesystem: cache mapping file exists
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
           videoKey: 'video/stored123.mp4',
           thumbnailKey: 'video/stored123.webp',
@@ -956,9 +955,7 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      // Mock filesystem: cache mapping file exists
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
           videoKey: 'video/stored123.mp4',
           thumbnailKey: 'video/stored123.webp',
@@ -1094,13 +1091,12 @@ describe('OpenAiVideoProvider', () => {
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
-      // Mock file system for reading the image file
-      vi.mocked(fs.existsSync).mockImplementation((path: fs.PathLike) => {
-        const pathStr = path.toString();
-        return pathStr === '/path/to/image.png';
+      vi.mocked(fsPromises.readFile).mockImplementation(async (filePath) => {
+        if (String(filePath) === '/path/to/image.png') {
+          return Buffer.from('fake image data');
+        }
+        throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
       });
-
-      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('fake image data'));
 
       // Setup mocks for success
       mockFetchWithProxy.mockResolvedValueOnce({
@@ -1133,7 +1129,7 @@ describe('OpenAiVideoProvider', () => {
       await provider.callApi('Animate this file');
 
       // Verify the file was read
-      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/image.png');
+      expect(fsPromises.readFile).toHaveBeenCalledWith('/path/to/image.png');
 
       // Verify the request body includes base64 encoded data
       const expectedBase64 = Buffer.from('fake image data').toString('base64');
@@ -1156,8 +1152,9 @@ describe('OpenAiVideoProvider', () => {
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
-      // Mock file system - file does not exist
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fsPromises.readFile).mockRejectedValue(
+        Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
+      );
 
       const result = await provider.callApi('Animate nonexistent file');
 

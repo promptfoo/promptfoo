@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -49,6 +49,22 @@ describe('HttpAdvancedConfiguration', () => {
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
+  });
+
+  it('adapts advanced tabs across narrow and wide layouts', () => {
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{ id: 'http-provider', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    expect(screen.getByRole('tablist')).toHaveClass(
+      'grid-cols-2',
+      'md:grid-cols-3',
+      'xl:inline-flex',
+      'xl:!h-10',
+    );
   });
 
   describe('Token Estimation Accordion Initial State', () => {
@@ -300,9 +316,9 @@ describe('HttpAdvancedConfiguration', () => {
     await user.click(authorizationTab);
 
     const pfxPasswordInput = screen.getByLabelText('PFX Password') as HTMLInputElement;
-    // Use fireEvent.change instead of user.type for controlled inputs
-    // since the mock doesn't update selectedTarget between keystrokes
-    fireEvent.change(pfxPasswordInput, { target: { value: 'test-password' } });
+    await user.click(pfxPasswordInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('test-password');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
@@ -337,10 +353,12 @@ describe('HttpAdvancedConfiguration', () => {
     const keystorePasswordInput = screen.getByLabelText('Keystore Password');
     const keyAliasInput = screen.getByLabelText('Key Alias');
 
-    // Use fireEvent.change instead of user.type for controlled inputs
-    // since the mock doesn't update selectedTarget between keystrokes
-    fireEvent.change(keystorePasswordInput, { target: { value: 'testPassword' } });
-    fireEvent.change(keyAliasInput, { target: { value: 'testAlias' } });
+    await user.click(keystorePasswordInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('testPassword');
+    await user.click(keyAliasInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('testAlias');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
@@ -382,9 +400,9 @@ describe('HttpAdvancedConfiguration', () => {
     expect(keystorePasswordInput).toBeInTheDocument();
 
     const envVar = '${MY_PASSWORD}';
-    // Use fireEvent.change instead of user.type for controlled inputs
-    // since the mock doesn't update selectedTarget between keystrokes
-    fireEvent.change(keystorePasswordInput, { target: { value: envVar } });
+    await user.click(keystorePasswordInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(envVar);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
@@ -558,7 +576,9 @@ describe('HttpAdvancedConfiguration', () => {
     await user.click(authorizationTab);
 
     const input = screen.getByLabelText(/Auth File Path/i);
-    fireEvent.change(input, { target: { value: './auth/next.ts' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('./auth/next.ts');
 
     expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('auth', {
       type: 'file',

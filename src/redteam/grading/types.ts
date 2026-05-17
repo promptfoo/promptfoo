@@ -1,4 +1,6 @@
 import type { TraceContextData } from '../../tracing/traceContext';
+import type { ProviderResponse } from '../../types/providers';
+import type { TraceData } from '../../types/tracing';
 import type { RedteamHistoryEntry } from '../types';
 
 /**
@@ -8,6 +10,8 @@ import type { RedteamHistoryEntry } from '../types';
  * between redteam providers and plugin base classes.
  */
 export interface RedteamGradingContext {
+  providerResponse?: ProviderResponse;
+  traceData?: TraceData | null;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
   // Prior multi-turn conversation context for graders that need provenance across turns.

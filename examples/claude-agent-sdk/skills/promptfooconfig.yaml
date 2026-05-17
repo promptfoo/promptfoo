@@ -6,7 +6,11 @@ providers:
     config:
       working_dir: ./sample-project
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Grep', 'Glob']
+      # `skills` (SDK 0.2.120+) auto-allows the Skill tool and filters which
+      # discovered skills are loaded. Use `all` to enable every discovered skill,
+      # or a name list (e.g. ['code-review']) to scope the test deterministically.
+      skills: ['code-review']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
 
 prompts:
   - 'Review the authentication module for security issues'

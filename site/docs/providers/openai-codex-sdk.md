@@ -25,19 +25,19 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## What Promptfoo Can and Can't Evaluate
 
-| Eval surface                       | Supported? | Notes                                                                                                                                                                                                                                                                         |
-| ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                    |
-| Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                             |
-| JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                        |
-| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
-| Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                     |
-| Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                               |
-| Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                             |
-| Multi-turn thread persistence      | Partial    | `persist_threads` pools by prompt template + config, not by rendered prompt values. `deep_tracing` disables thread persistence.                                                                                                                                               |
-| Embeddings/moderation/image APIs   | No         | Use the standard `openai:*` providers for those API surfaces.                                                                                                                                                                                                                 |
-| Live partial-token streaming       | No         | `enable_streaming` is used to aggregate Codex events and emit traces; promptfoo still receives the final response after the turn completes.                                                                                                                                   |
-| Sampling knobs                     | Limited    | `model_reasoning_effort` is supported. Direct `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed by this provider.                                                                                                                                  |
+| Eval surface                       | Supported? | Notes                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                                                                                                        |
+| Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                                                                                                                 |
+| JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                            |
+| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
+| Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                         |
+| Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                   |
+| Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                 |
+| Multi-turn thread persistence      | Partial    | `persist_threads` pools by prompt template + config, not by rendered prompt values. `deep_tracing` disables thread persistence.                                                                                                                                                                                                                                   |
+| Embeddings/moderation/image APIs   | No         | Use the standard `openai:*` providers for those API surfaces.                                                                                                                                                                                                                                                                                                     |
+| Live partial-token streaming       | No         | `enable_streaming` is used to aggregate Codex events and emit traces; promptfoo still receives the final response after the turn completes.                                                                                                                                                                                                                       |
+| Sampling knobs                     | Limited    | `model_reasoning_effort` is supported. Direct `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed by this provider.                                                                                                                                                                                                                      |
 
 ## Installation
 
@@ -101,7 +101,7 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 
 ### Basic Usage
 
-By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
+By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. When you set `working_dir`, relative values are resolved from the directory containing the config file. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -121,7 +121,7 @@ Specify which OpenAI model to use for code generation:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:codex:gpt-5.4
+  - openai:codex:gpt-5.5
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -133,7 +133,7 @@ If you need additional Codex settings, you can still set the model via `config.m
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.4
+      model: gpt-5.5
 ```
 
 ### With Working Directory
@@ -177,31 +177,31 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 The provider validates top-level provider config strictly. If you mistype a provider field such as `sandboxMode` instead of `sandbox_mode`, provider loading can fail before any rows run. Prompt-level config is parsed more leniently because promptfoo merges generic test options into `prompt.config`; unrelated keys are ignored there, while invalid values for known Codex fields still return a row-level provider error. Put extra Codex CLI settings that are not listed below under `cli_config`.
 
-| Parameter                | Type     | Description                                                  | Default              |
-| ------------------------ | -------- | ------------------------------------------------------------ | -------------------- |
-| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.    | Environment variable |
-| `base_url`               | string   | Custom API base URL                                          | None                 |
-| `working_dir`            | string   | Directory for Codex to operate in                            | Current directory    |
-| `additional_directories` | string[] | Additional directories the agent can access                  | None                 |
-| `model`                  | string   | Model to use                                                 | SDK default          |
-| `sandbox_mode`           | string   | Sandbox access level (see below)                             | `workspace-write`    |
-| `model_reasoning_effort` | string   | Reasoning intensity (see below)                              | SDK default          |
-| `network_access_enabled` | boolean  | Allow network requests                                       | false                |
-| `web_search_enabled`     | boolean  | Allow web search                                             | false                |
-| `web_search_mode`        | string   | Web search mode: `disabled`, `cached`, or `live`             | SDK default          |
-| `collaboration_mode`     | string   | Multi-agent preset mapped to `cli_config.collaboration_mode` | None                 |
-| `approval_policy`        | string   | When to require approval (see below)                         | SDK default          |
-| `cli_config`             | object   | Additional Codex CLI config overrides                        | None                 |
-| `skip_git_repo_check`    | boolean  | Skip Git repository validation                               | false                |
-| `codex_path_override`    | string   | Custom path to codex binary                                  | None                 |
-| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                | None (creates new)   |
-| `persist_threads`        | boolean  | Keep threads alive between calls                             | false                |
-| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                | 1                    |
-| `output_schema`          | object   | JSON schema for structured responses                         | None                 |
-| `cli_env`                | object   | Custom environment variables for Codex CLI                   | Minimal shell env    |
-| `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                | `false`              |
-| `enable_streaming`       | boolean  | Enable streaming events                                      | false                |
-| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                | false                |
+| Parameter                | Type     | Description                                                                                          | Default              |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
+| `base_url`               | string   | Custom API base URL                                                                                  | None                 |
+| `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
+| `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
+| `model`                  | string   | Model to use                                                                                         | SDK default          |
+| `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
+| `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
+| `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |
+| `web_search_enabled`     | boolean  | Allow web search                                                                                     | false                |
+| `web_search_mode`        | string   | Web search mode: `disabled`, `cached`, or `live`                                                     | SDK default          |
+| `collaboration_mode`     | string   | Multi-agent preset mapped to `cli_config.collaboration_mode`                                         | None                 |
+| `approval_policy`        | string   | When to require approval (see below)                                                                 | SDK default          |
+| `cli_config`             | object   | Additional Codex CLI config overrides                                                                | None                 |
+| `skip_git_repo_check`    | boolean  | Skip Git repository validation                                                                       | false                |
+| `codex_path_override`    | string   | Custom path to codex binary                                                                          | None                 |
+| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
+| `persist_threads`        | boolean  | Keep threads alive between calls                                                                     | false                |
+| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
+| `output_schema`          | object   | JSON schema for structured responses                                                                 | None                 |
+| `cli_env`                | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
+| `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
+| `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
+| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
 
 ### Sandbox Modes
 
@@ -224,26 +224,30 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-The SDK supports various OpenAI models. Use `gpt-5.4` for the latest frontier model:
+The SDK supports various OpenAI models. Use `gpt-5.5` for the latest frontier model:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.4 # Recommended for code tasks
+      model: gpt-5.5 # Recommended for code tasks
 ```
 
 Supported models include:
 
-- **GPT-5.4** - Frontier model for professional work (`gpt-5.4`)
-- **GPT-5.4 Pro** - Higher-capacity variant (`gpt-5.4-pro`)
+- **GPT-5.5** - Latest frontier model for professional work (`gpt-5.5`)
+- **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
+- **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
+- **GPT-5.4 Pro** - Previous higher-capacity variant (`gpt-5.4-pro`)
 - **GPT-5.3 Codex** - Latest codex generation (`gpt-5.3-codex`, `gpt-5.3-codex-spark`)
 - **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
 - **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
-If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise fall back to the provider's generic `codex` label with `response.cost: 0`.
+If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
+
+GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
 
 ### Mini Models
 
@@ -336,6 +340,10 @@ tests:
 ```
 
 The output should be valid JSON matching your schema, but it is still returned as a string in `response.output`.
+
+:::tip
+This is the OpenAI Codex SDK's analogue of the Claude Agent SDK's [`output_format`](/docs/providers/claude-agent-sdk#structured-output). The two have slightly different shapes (a bare schema here, `{type: 'json_schema', schema: {...}}` on Claude) and Claude additionally hands the JS assertion a parsed object while Codex keeps `output` as a string — wrap with `JSON.parse(output)` in JS assertions on this side. The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
 
 ### Zod Schemas
 
@@ -540,15 +548,17 @@ providers:
 
 Available levels vary by model:
 
-| Level     | Description                          | Supported Models                                                               |
-| --------- | ------------------------------------ | ------------------------------------------------------------------------------ |
-| `minimal` | Minimal reasoning overhead           | gpt-5.4, gpt-5.2                                                               |
-| `low`     | Light reasoning, faster responses    | All models                                                                     |
-| `medium`  | Balanced (default)                   | All models                                                                     |
-| `high`    | Thorough reasoning for complex tasks | All models                                                                     |
-| `xhigh`   | Maximum reasoning depth              | gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
+| Level     | Description                          | Supported Models                                                                                     |
+| --------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `minimal` | Minimal reasoning overhead           | gpt-5.5, gpt-5.4, gpt-5.2                                                                            |
+| `low`     | Light reasoning, faster responses    | All models                                                                                           |
+| `medium`  | Balanced (default)                   | All models                                                                                           |
+| `high`    | Thorough reasoning for complex tasks | All models                                                                                           |
+| `xhigh`   | Maximum reasoning depth              | gpt-5.5, gpt-5.5-pro, gpt-5.4, gpt-5.4-pro, gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1-codex-max |
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
+
+For GPT-5.5 API requests, use `none`, `low`, `medium`, `high`, or `xhigh` reasoning where the runtime exposes those values. The current Codex SDK type still exposes `minimal`, `low`, `medium`, `high`, and `xhigh`.
 
 ## Additional Directories
 
@@ -578,6 +588,17 @@ providers:
       cli_env:
         CUSTOM_VAR: custom-value
         ANOTHER_VAR: another-value
+```
+
+Codex provider config is rendered with test-case vars at call time. This lets you pass row-specific synthetic canaries and disposable workspaces:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: '{{workspaceDir}}'
+      cli_env:
+        PFQA_SECRET_ENV_READ: '{{secretEnvValue}}'
 ```
 
 By default, promptfoo now passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.
@@ -631,7 +652,7 @@ tests:
         value: token-skill
 ```
 
-The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. They are useful when you want to run the same config from a different current working directory, such as the repository root in CI.
+The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. `working_dir` paths in the config resolve from the config file's directory, so `CODEX_SKILLS_WORKING_DIR` is mainly useful when you want to point at a different sample project. Codex resolves `CODEX_HOME` itself, so set `CODEX_HOME_OVERRIDE` to an absolute path when you run the example from another working directory or want Codex to use a different home directory.
 
 :::note
 
@@ -831,7 +852,7 @@ This works because all three test cases render from the same prompt template (`{
 - The provider returns a final response after the Codex turn completes. `enable_streaming` is for event aggregation and tracing, not live partial output in assertions.
 - `output_schema` does not change the response type exposed to promptfoo assertions. `response.output` remains a string.
 - `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed as first-class provider config fields.
-- Cost is estimated only for known model names in the provider's pricing table. If you omit `config.model` or use an unknown model, `response.cost` is `0`.
+- Cost is estimated only for known model names. If you omit `config.model` or use an unknown model, `response.cost` is undefined.
 - `persist_threads`, `thread_id`, and `thread_pool_size` are ignored when `deep_tracing: true`.
 - `approval_policy: on-request` and similar interactive policies are usually a poor fit for unattended eval runs. Prefer `never` for deterministic CI unless you intentionally want approval-gated tool behavior.
 - `skillCalls` and `attemptedSkillCalls` are heuristic and based on command text, not model-internal skill routing events.

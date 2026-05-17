@@ -8,9 +8,10 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import { formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -79,6 +80,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
+    // GPT-5.5 models
+    'gpt-5.5',
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-2026-03-05',
@@ -88,11 +94,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // Audio models
-    'gpt-audio',
-    'gpt-audio-2025-08-28',
-    'gpt-audio-mini',
-    'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
     'computer-use-preview-2025-03-11',
@@ -132,16 +133,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
       modelName: this.modelName,
       providerType: 'openai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateOpenAICost(modelName, config, usage?.input_tokens, usage?.output_tokens, 0, 0) ??
-        0,
+      costCalculator: () => undefined,
     });
   }
 
@@ -169,6 +168,79 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
+  }
+
+  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+    return data.usage;
+  }
+
+  protected applyBilling(
+    result: ProviderResponse,
+    data: any,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): ProviderResponse {
+    const serviceTier =
+      (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
+    const billingModelName = this.getBillingModelName(config);
+    const responseCost = calculateOpenAIUsageCost(
+      billingModelName,
+      config,
+      this.getBillingUsage(data, config),
+      {
+        cachedResponse: cached,
+        serviceTier,
+      },
+    );
+    const observableToolCost = cached
+      ? 0
+      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+
+    return {
+      ...result,
+      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
+    };
+  }
+
+  private isAzureOpenAiEndpoint(value: string | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const hostname = new URL(endpoint).hostname.toLowerCase();
+      return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
+    } catch {
+      return false;
+    }
+  }
+
+  private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+    const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
+      (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
+    );
+    const isAzureResponsesDeploymentWithReasoningConfig =
+      hasAzureCustomDeploymentHost &&
+      (config.reasoning !== undefined || config.reasoning_effort !== undefined);
+    const isAzureResponsesDeploymentWithVerbosityConfig =
+      hasAzureCustomDeploymentHost && config.verbosity !== undefined;
+    // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
+    // should promote a custom deployment to "reasoning model" status, otherwise
+    // max_output_tokens defaults change unexpectedly.
+    const isReasoningModel =
+      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
+    const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
+
+    return {
+      isAzureResponsesDeploymentWithReasoningConfig,
+      isReasoningModel,
+      isGPT5Model,
+    };
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -191,7 +263,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       input = prompt;
     }
 
-    const isReasoningModel = this.isReasoningModel();
+    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, isGPT5Model } =
+      this.getDeploymentCapabilities(config);
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -203,17 +276,29 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       config.max_output_tokens ??
       (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
+    const renderedReasoning = renderVarsInObject(
+      config.reasoning,
+      context?.vars,
+    ) as typeof config.reasoning;
+    const renderedReasoningEffort = isReasoningModel
+      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+      : undefined;
+    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
+    const hasAzureReasoningEffort =
+      isAzureResponsesDeploymentWithReasoningConfig &&
+      effectiveReasoningEffort !== undefined &&
+      effectiveReasoningEffort !== 'none';
+
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
-      : undefined;
-    const reasoningEffort = isReasoningModel
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
+    const temperature =
+      this.supportsTemperature() && !hasAzureReasoningEffort
+        ? (config.temperature ?? temperatureDefault)
+        : undefined;
+    const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
 
     const instructions = config.instructions;
 
@@ -255,7 +340,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // Add verbosity for GPT-5 models if configured
-    if (this.isGPT5Model() && config.verbosity) {
+    if (isGPT5Model && config.verbosity) {
       textFormat = { ...textFormat, verbosity: config.verbosity };
     }
 
@@ -279,6 +364,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
+      ...(config.include === undefined ? {} : { include: config.include }),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
@@ -291,20 +377,39 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
     };
 
     // Handle reasoning parameters for o-series and gpt-5 models
     // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
-    if (config.reasoning && this.isReasoningModel()) {
-      body.reasoning = config.reasoning;
+    // Merge with existing body.reasoning (from reasoning_effort) so that
+    // config.reasoning extra fields (e.g. summary) don't silently drop effort.
+    if (renderedReasoning && isReasoningModel) {
+      body.reasoning = { ...body.reasoning, ...renderedReasoning };
+    }
+
+    // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
+    }
+
+    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
+    // The responses API uses max_output_tokens, never max_tokens.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
     }
 
     return {
       body,
       config: {
         ...config,
-        tools: loadedTools, // Include loaded tools for downstream validation
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
         response_format: responseFormat,
       },
     };
@@ -345,7 +450,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
-    let timeout = REQUEST_TIMEOUT_MS;
+    let timeout = getRequestTimeoutMs();
     const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {
@@ -475,12 +580,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached);
+    const billedResult = this.applyBilling(result, data, config, cached);
 
     // Merge HTTP metadata with any existing metadata from the processor
     return {
-      ...result,
+      ...billedResult,
       metadata: {
-        ...result.metadata,
+        ...billedResult.metadata,
         http: {
           status,
           statusText,

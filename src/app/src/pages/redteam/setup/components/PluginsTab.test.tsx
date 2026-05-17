@@ -168,7 +168,15 @@ vi.mock('./PresetCard', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
     <button type="button" {...props}>
       {children ?? 'Generate test case'}
     </button>
@@ -794,6 +802,33 @@ describe('PluginsTab', () => {
         expect(
           screen.getByTestId('selected-plugin-needs-config-indirect-prompt-injection'),
         ).toBeInTheDocument();
+      });
+
+      test('labels plugin action buttons in the list and selected sidebar', async () => {
+        const testPlugins = ['indirect-prompt-injection', 'aegis'];
+
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: testPlugins,
+            },
+          });
+        });
+
+        renderComponent();
+
+        expect(
+          screen.getAllByRole('button', { name: 'Configure Indirect Prompt Injection' }),
+        ).toHaveLength(2);
+        expect(
+          screen.getByRole('button', { name: 'View documentation for Aegis Dataset' }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole('button', { name: 'Remove Indirect Prompt Injection' }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Aegis Dataset' })).toBeInTheDocument();
       });
     });
   });
@@ -1698,6 +1733,17 @@ describe('PluginsTab', () => {
     });
 
     describe('Selected Plugins', () => {
+      test('selected plugins summary stacks below the list on narrow screens', () => {
+        renderComponent();
+
+        expect(screen.getByTestId('plugins-tab-container')).toHaveClass('flex-col', 'lg:flex-row');
+        expect(screen.getByTestId('selected-plugins-sidebar')).toHaveClass(
+          'w-full',
+          'lg:sticky',
+          'lg:w-80',
+        );
+      });
+
       test('"Clear All" button clears all selected plugins', async () => {
         const user = userEvent.setup();
 

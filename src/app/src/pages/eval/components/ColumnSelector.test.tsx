@@ -1,5 +1,6 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ColumnSelector } from './ColumnSelector';
 
@@ -49,6 +50,7 @@ describe('ColumnSelector', () => {
   });
 
   it('opens dialog when button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -58,7 +60,7 @@ describe('ColumnSelector', () => {
     );
 
     const button = screen.getByRole('button', { name: /columns/i });
-    fireEvent.click(button);
+    await user.click(button);
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -66,7 +68,8 @@ describe('ColumnSelector', () => {
     });
   });
 
-  it('displays columns grouped by their group property', async () => {
+  it('lets the dialog header stack before the small breakpoint', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -75,7 +78,22 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
+
+    expect(screen.getByText('Select Columns').parentElement).toHaveClass('flex-col', 'sm:flex-row');
+  });
+
+  it('displays columns grouped by their group property', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ColumnSelector
+        columnData={sampleColumns}
+        selectedColumns={['col1']}
+        onChange={mockOnChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Group A')).toBeInTheDocument();
@@ -86,6 +104,7 @@ describe('ColumnSelector', () => {
   });
 
   it('shows correct checkbox states for selected columns', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -94,7 +113,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       const checkboxes = screen.getAllByRole('checkbox');
@@ -108,6 +127,7 @@ describe('ColumnSelector', () => {
   });
 
   it('toggles column selection when checkbox is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -116,7 +136,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Column 2')).toBeInTheDocument();
@@ -124,7 +144,7 @@ describe('ColumnSelector', () => {
 
     // Click on col2 to select it
     const col2Label = screen.getByText('Column 2');
-    fireEvent.click(col2Label);
+    await user.click(col2Label);
 
     await waitFor(() => {
       expect(mockOnChange).toHaveBeenCalledWith(['col1', 'col2']);
@@ -132,6 +152,7 @@ describe('ColumnSelector', () => {
   });
 
   it('deselects a column when clicking an already selected column', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -140,7 +161,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Column 1')).toBeInTheDocument();
@@ -148,7 +169,7 @@ describe('ColumnSelector', () => {
 
     // Click on col1 to deselect it
     const col1Label = screen.getByText('Column 1');
-    fireEvent.click(col1Label);
+    await user.click(col1Label);
 
     await waitFor(() => {
       expect(mockOnChange).toHaveBeenCalledWith(['col2']);
@@ -156,6 +177,7 @@ describe('ColumnSelector', () => {
   });
 
   it('shows "Show All" button and selects all columns when clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -164,14 +186,14 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Show All' })).toBeInTheDocument();
     });
 
     const showAllButton = screen.getByRole('button', { name: 'Show All' });
-    fireEvent.click(showAllButton);
+    await user.click(showAllButton);
 
     expect(mockOnChange).toHaveBeenCalledWith([
       'col1',
@@ -184,6 +206,7 @@ describe('ColumnSelector', () => {
   });
 
   it('shows Variables toggle button when variable columns exist', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -192,7 +215,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /variables/i })).toBeInTheDocument();
@@ -200,6 +223,7 @@ describe('ColumnSelector', () => {
   });
 
   it('does not show Variables toggle when no variable columns exist', async () => {
+    const user = userEvent.setup();
     const nonVariableColumns = sampleColumns.filter((col) => !col.value.startsWith('Variable'));
 
     renderWithProviders(
@@ -210,7 +234,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Select Columns')).toBeInTheDocument();
@@ -220,6 +244,7 @@ describe('ColumnSelector', () => {
   });
 
   it('toggles all variable columns when Variables button is clicked (show)', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -228,7 +253,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       const variablesButton = screen.getByRole('button', { name: /variables/i });
@@ -236,12 +261,13 @@ describe('ColumnSelector', () => {
     });
 
     const variablesButton = screen.getByRole('button', { name: /variables/i });
-    fireEvent.click(variablesButton);
+    await user.click(variablesButton);
 
     expect(mockOnChange).toHaveBeenCalledWith(['col1', 'Variable.foo', 'Variable.bar']);
   });
 
   it('toggles all variable columns when Variables button is clicked (hide)', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -250,7 +276,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       const variablesButton = screen.getByRole('button', { name: /variables/i });
@@ -258,12 +284,13 @@ describe('ColumnSelector', () => {
     });
 
     const variablesButton = screen.getByRole('button', { name: /variables/i });
-    fireEvent.click(variablesButton);
+    await user.click(variablesButton);
 
     expect(mockOnChange).toHaveBeenCalledWith(['col1']);
   });
 
   it('closes dialog when Close button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -272,7 +299,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -281,7 +308,7 @@ describe('ColumnSelector', () => {
     // Get the footer Close button (not the X button)
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
-    fireEvent.click(footerCloseButton!);
+    await user.click(footerCloseButton!);
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -298,6 +325,7 @@ describe('ColumnSelector', () => {
   });
 
   it('groups columns without a group property into "Other"', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -306,7 +334,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Other')).toBeInTheDocument();
@@ -315,6 +343,7 @@ describe('ColumnSelector', () => {
   });
 
   it('handles variable columns that are partially selected', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -323,7 +352,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       const variablesButton = screen.getByRole('button', { name: /variables/i });
@@ -332,12 +361,13 @@ describe('ColumnSelector', () => {
 
     // When variables are partially selected, clicking should show all
     const variablesButton = screen.getByRole('button', { name: /variables/i });
-    fireEvent.click(variablesButton);
+    await user.click(variablesButton);
 
     expect(mockOnChange).toHaveBeenCalledWith(['col1', 'Variable.foo', 'Variable.bar']);
   });
 
   it('preserves order when adding variables', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -346,7 +376,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /variables/i })).toBeInTheDocument();
@@ -354,13 +384,14 @@ describe('ColumnSelector', () => {
 
     // Click to add Variable.bar
     const variablesButton = screen.getByRole('button', { name: /variables/i });
-    fireEvent.click(variablesButton);
+    await user.click(variablesButton);
 
     // Should add Variable.bar to the end
     expect(mockOnChange).toHaveBeenCalledWith(['col1', 'col2', 'Variable.foo', 'Variable.bar']);
   });
 
   it('maintains dialog state when toggling columns', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -369,7 +400,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -377,13 +408,14 @@ describe('ColumnSelector', () => {
 
     // Toggle a column
     const col2Label = screen.getByText('Column 2');
-    fireEvent.click(col2Label);
+    await user.click(col2Label);
 
     // Dialog should still be open
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('handles column data with no groups correctly', async () => {
+    const user = userEvent.setup();
     const ungroupedColumns = [
       { value: 'col1', label: 'Column 1' },
       { value: 'col2', label: 'Column 2' },
@@ -397,7 +429,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByText('Other')).toBeInTheDocument();
@@ -407,6 +439,7 @@ describe('ColumnSelector', () => {
   });
 
   it('displays all columns in their respective groups', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -415,7 +448,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       // Group A
@@ -432,6 +465,7 @@ describe('ColumnSelector', () => {
   });
 
   it('does not call onChange with duplicate values', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <ColumnSelector
         columnData={sampleColumns}
@@ -440,7 +474,7 @@ describe('ColumnSelector', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /columns/i }));
+    await user.click(screen.getByRole('button', { name: /columns/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /variables/i })).toBeInTheDocument();
@@ -448,7 +482,7 @@ describe('ColumnSelector', () => {
 
     // All variables are already selected, clicking Variables button should hide them
     const variablesButton = screen.getByRole('button', { name: /variables/i });
-    fireEvent.click(variablesButton);
+    await user.click(variablesButton);
 
     expect(mockOnChange).toHaveBeenCalledWith(['col1']);
     // Verify no duplicates in the call

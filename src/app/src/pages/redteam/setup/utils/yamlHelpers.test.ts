@@ -179,6 +179,8 @@ describe('yamlHelpers', () => {
         description: 'Ordered config',
         redteam: {
           numTests: 3,
+          maxCharsPerMessage: 120,
+          maxConcurrency: 4,
           sharing: true,
           strategies: ['strategy-1'],
           plugins: [{ id: 'plugin-1' }],
@@ -216,6 +218,8 @@ describe('yamlHelpers', () => {
         'strategies',
         'language',
         'numTests',
+        'maxCharsPerMessage',
+        'maxConcurrency',
         'sharing',
       ]);
       expect((dumpedConfig.redteam as Record<string, unknown>).purpose).toBe('Security testing');

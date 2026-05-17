@@ -23,6 +23,10 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
+### Models
+
+- `grok-voice-think-fast-1.0` - The voice model documented by xAI's [Voice Agent API guide](https://docs.x.ai/docs/guides/voice). The model is selected via the `?model=` query parameter on the realtime WebSocket URL.
+
 ### Voices
 
 xAI Voice supports 5 different voices:
