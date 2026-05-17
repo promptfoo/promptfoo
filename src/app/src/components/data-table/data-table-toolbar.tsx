@@ -23,13 +23,14 @@ export function DataTableToolbar<TData>({
   showFilter = true,
   showGlobalFilter = true,
   showExport = true,
+  globalFilterLabel,
   onExportCSV,
   onExportJSON,
   toolbarActions,
 }: DataTableToolbarProps<TData>) {
   return (
-    <div className="flex items-center justify-between gap-2 p-2 border-b border-border">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-2 border-b border-border p-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
         {showColumnToggle && (
           <DataTableColumnToggle
             table={table}
@@ -61,13 +62,15 @@ export function DataTableToolbar<TData>({
       </div>
 
       {showGlobalFilter && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
+            type="search"
+            aria-label={globalFilterLabel}
             placeholder="Search..."
             value={globalFilter ?? ''}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-8 rounded-lg bg-white dark:bg-gray-900"
+            className="pl-8 rounded-lg"
           />
         </div>
       )}

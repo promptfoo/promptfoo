@@ -62,11 +62,17 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     <p>
       <span>
         Intents are seed phrases for attack generation, for example "teach me how to cook meth".
-        Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+        Promptfoo can apply jailbreak strategies to single-turn intents; multi-step sequences run as
+        authored.
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-5">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Intent file format help"
+            className="size-5"
+          >
             <Info className="size-4" />
           </Button>
         </TooltipTrigger>
@@ -280,15 +286,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       return typeof policy.text === 'string' && policy.text.trim().length > 0;
     });
 
-    // Check custom intents with actual content
-    const hasIntents = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'intent' &&
-        p.config?.intent &&
-        Array.isArray(p.config.intent) &&
-        p.config.intent.length > 0,
-    );
+    const hasIntents = countSelectedCustomIntents({ plugins: config.plugins }) > 0;
 
     return hasPolicies || hasIntents;
   }, [selectedPlugins, config.plugins]);
@@ -411,7 +409,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       <div className="mb-6 w-full">
         <TestCaseGenerationProvider redTeamConfig={config}>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList>
+            <TabsList className="!h-auto w-full max-w-full flex-wrap justify-start gap-1 overflow-visible sm:!h-10 sm:w-auto sm:flex-nowrap sm:gap-0">
               <TabsTrigger value="plugins">Plugins ({selectedPlugins.size})</TabsTrigger>
               <TabsTrigger value="intents">Custom Intents ({customIntentsCount})</TabsTrigger>
               <TabsTrigger value="policies">Custom Policies ({customPoliciesCount})</TabsTrigger>

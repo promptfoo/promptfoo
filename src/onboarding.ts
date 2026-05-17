@@ -1,8 +1,8 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
@@ -10,6 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
+import { pathExists } from './util/file';
 import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
@@ -327,7 +328,7 @@ async function askForPermissionToOverwrite({
   relativePath: string;
   required: boolean;
 }): Promise<boolean> {
-  if (!fs.existsSync(absolutePath)) {
+  if (!(await pathExists(absolutePath))) {
     return true;
   }
 
@@ -373,7 +374,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       }
     }
 
-    fs.writeFileSync(absolutePath, contents);
+    await fs.writeFile(absolutePath, contents);
     logger.info(`📝 Wrote ${relativePath}`);
   }
 
@@ -382,9 +383,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   let action: string;
   let language: string;
 
-  if (!fs.existsSync(outDirAbsolute)) {
-    fs.mkdirSync(outDirAbsolute, { recursive: true });
-  }
+  await fs.mkdir(outDirAbsolute, { recursive: true });
 
   if (interactive) {
     recordOnboardingStep('start');
@@ -731,7 +730,7 @@ export async function initializeProject(directory: string | null, interactive: b
 
     return telemetryDetails;
   } catch (err) {
-    if (err instanceof ExitPromptError) {
+    if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
       const runCommand = promptfooCommand('init');
       logger.info(
         '\n' +
@@ -743,7 +742,8 @@ export async function initializeProject(directory: string | null, interactive: b
           chalk.green('https://www.promptfoo.dev/contact/'),
       );
       await recordOnboardingStep('early exit');
-      process.exit(130);
+      process.exitCode = 130;
+      return;
     } else {
       throw err;
     }
