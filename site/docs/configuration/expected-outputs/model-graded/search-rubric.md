@@ -104,7 +104,7 @@ Google's Gemini models support web search through the `googleSearch` tool:
 
 ```yaml
 grading:
-  provider: google:gemini-3-pro-preview
+  provider: google:gemini-3.1-pro-preview
   providerOptions:
     config:
       tools:
@@ -113,15 +113,15 @@ grading:
 
 ### 5. xAI Grok
 
-xAI's Grok models have built-in web search capabilities:
+xAI's Grok models can use server-side web search tools through the Responses API:
 
 ```yaml
 grading:
-  provider: xai:grok-4-1-fast-reasoning
+  provider: xai:responses:grok-4.3
   providerOptions:
     config:
-      search_parameters:
-        mode: 'on'
+      tools:
+        - type: web_search
 ```
 
 ## Use Cases
