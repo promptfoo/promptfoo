@@ -4354,4 +4354,58 @@ describe('ResultsTable default column sizing', () => {
       (bodyCols[2] as HTMLElement).style.width,
     );
   });
+
+  it('sizes injected prompt columns from the rendered provider prompt', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {
+        redteam: {
+          injectVar: 'prompt',
+        },
+      },
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                text: 'test output',
+                response: {
+                  prompt: 'provider rewritten prompt '.repeat(24),
+                },
+              },
+            ],
+            test: {},
+            vars: ['{{prompt}}'],
+          },
+        ],
+        head: {
+          prompts: [{ provider: 'test-provider' }],
+          vars: ['prompt'],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const promptHeader = screen.getByText('prompt').closest('th') as HTMLElement | null;
+    const promptWidth = Number.parseFloat(promptHeader?.style.width || '0');
+
+    expect(promptHeader).not.toBeNull();
+    expect(promptWidth).toBeGreaterThan(160);
+    expect(promptWidth).toBeLessThanOrEqual(360);
+  });
 });

@@ -1438,7 +1438,6 @@ function ResultsTableHeader({
   maxTextLength,
   wordBreak,
   headerScrollRef,
-  theadRef,
   stickyHeader,
   setStickyHeader,
   hasMinimalScrollRoom,
@@ -1449,7 +1448,6 @@ function ResultsTableHeader({
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
   headerScrollRef: React.RefObject<HTMLDivElement | null>;
-  theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
   hasMinimalScrollRoom: boolean;
@@ -1488,7 +1486,7 @@ function ResultsTableHeader({
           }}
         >
           <ResultsTableColumnGroup reactTable={reactTable} />
-          <thead ref={theadRef}>
+          <thead>
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
                 {headerGroup.headers.map((header) => {
@@ -1687,15 +1685,24 @@ function ResultsTable({
     [body],
   );
 
+  const injectVarName = config?.redteam?.injectVar || 'prompt';
+
   const variableColumnSizes = React.useMemo(
     () =>
       head.vars.map((varName, idx) =>
         estimateMetadataColumnSize(
           varName,
-          tableBody.map((row) => row.vars[idx]),
+          tableBody.map((row) =>
+            getVariableCellValue({
+              row,
+              varName,
+              injectVarName,
+              fallbackValue: row.vars[idx],
+            }),
+          ),
         ),
       ),
-    [head.vars, tableBody],
+    [head.vars, injectVarName, tableBody],
   );
 
   const transformDisplayVarColumnSizes = React.useMemo(() => {
@@ -1869,8 +1876,6 @@ function ResultsTable({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
-      const injectVarName = config?.redteam?.injectVar || 'prompt';
-
       return [
         columnHelper.group({
           id: 'vars',
@@ -1907,7 +1912,7 @@ function ResultsTable({
     renderMarkdown,
     lightboxOpen,
     lightboxImage,
-    config,
+    injectVarName,
     variableColumnSizes,
   ]);
 
@@ -2233,7 +2238,6 @@ function ResultsTable({
 
   // Keep the standalone header and the scrollable table body aligned in both directions.
   const headerScrollRef = useRef<HTMLDivElement>(null);
-  const theadRef = useRef<HTMLTableSectionElement>(null);
 
   // Detect if there's minimal scroll room - in this case, disable height collapse
   // to prevent jitter feedback loop (height change affects scroll position)
@@ -2320,7 +2324,6 @@ function ResultsTable({
         maxTextLength={maxTextLength}
         wordBreak={wordBreak}
         headerScrollRef={headerScrollRef}
-        theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
         hasMinimalScrollRoom={hasMinimalScrollRoom}
@@ -2362,7 +2365,7 @@ function ResultsTable({
                 row={row}
                 pageSize={pagination.pageSize}
                 headVars={head.vars}
-                injectVarName={config?.redteam?.injectVar || 'prompt'}
+                injectVarName={injectVarName}
                 maxTextLength={maxTextLength}
                 lightboxOpen={lightboxOpen}
                 lightboxImage={lightboxImage}
