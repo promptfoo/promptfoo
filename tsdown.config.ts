@@ -48,7 +48,6 @@ export default defineConfig([
     format: ['esm'],
     target: 'node20',
     outDir: 'dist/src',
-    splitting: false,
     shims: true,
     sourcemap: true,
     clean: false,
@@ -102,7 +101,6 @@ export default defineConfig([
     format: ['esm'],
     target: 'node20',
     outDir: 'dist/src',
-    splitting: false,
     treeshake: true,
     sourcemap: true,
     shims: true, // Ensure library ESM build has shims

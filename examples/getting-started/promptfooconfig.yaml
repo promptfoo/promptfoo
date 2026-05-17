@@ -8,7 +8,7 @@ prompts:
   - 'Convert the following English text to {{language}}: {{input}}'
 
 providers:
-  - openai:chat:gpt-5.4
+  - openai:chat:gpt-5.5
   - openai:chat:gpt-5.4-mini
   # Or setup models from other providers
   # - anthropic:messages:claude-sonnet-4-6

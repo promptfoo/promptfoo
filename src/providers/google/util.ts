@@ -5,10 +5,17 @@ import { z } from 'zod';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { calculateCost, type ProviderConfig, parseChatPrompt } from '../shared';
+import {
+  calculateCost,
+  type ProviderConfig,
+  parseChatPrompt,
+  transformToolChoice,
+} from '../shared';
 import { loadCredentials } from './auth';
 import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
@@ -31,6 +38,177 @@ export function normalizeSafetySettings(
     category,
     threshold: threshold || probability || '',
   }));
+}
+
+type GoogleToolConfig = NonNullable<CompletionOptions['toolConfig']>;
+
+function normalizeGoogleToolMode(
+  mode: unknown,
+): NonNullable<NonNullable<GoogleToolConfig['functionCallingConfig']>['mode']> | undefined {
+  if (typeof mode !== 'string') {
+    return undefined;
+  }
+
+  switch (mode.toUpperCase()) {
+    case 'MODE_UNSPECIFIED':
+    case 'AUTO':
+    case 'VALIDATED':
+    case 'ANY':
+    case 'NONE':
+      return mode.toUpperCase() as NonNullable<
+        NonNullable<GoogleToolConfig['functionCallingConfig']>['mode']
+      >;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeExplicitGoogleToolConfig(
+  config: CompletionOptions,
+): GoogleToolConfig | undefined {
+  if (config.toolConfig?.functionCallingConfig) {
+    const {
+      mode: rawMode,
+      allowedFunctionNames,
+      ...restFunctionCallingConfig
+    } = config.toolConfig.functionCallingConfig;
+    const mode = normalizeGoogleToolMode(rawMode);
+    const functionCallingConfig = {
+      ...restFunctionCallingConfig,
+      ...(mode ? { mode } : {}),
+      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+    };
+    if (Object.keys(functionCallingConfig).length === 0) {
+      return undefined;
+    }
+    return {
+      functionCallingConfig,
+    };
+  }
+
+  if (config.tool_config?.function_calling_config) {
+    const {
+      mode: rawMode,
+      allowed_function_names: allowedFunctionNames,
+      stream_function_call_arguments: streamFunctionCallArguments,
+    } = config.tool_config.function_calling_config;
+    const mode = normalizeGoogleToolMode(rawMode);
+    const functionCallingConfig = {
+      ...(mode ? { mode } : {}),
+      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+      ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
+    };
+    if (Object.keys(functionCallingConfig).length === 0) {
+      return undefined;
+    }
+    return {
+      functionCallingConfig,
+    };
+  }
+
+  return undefined;
+}
+
+export function resolveGoogleToolConfig(config: CompletionOptions): {
+  toolConfig?: GoogleToolConfig;
+  toolsDisabled: boolean;
+} {
+  const explicitConfig = normalizeExplicitGoogleToolConfig(config);
+  const transformedToolChoice = transformToolChoice(config.tool_choice, 'google');
+  const toolChoiceConfig =
+    transformedToolChoice && typeof transformedToolChoice === 'object'
+      ? (transformedToolChoice as GoogleToolConfig)
+      : undefined;
+  const explicitMode = normalizeGoogleToolMode(explicitConfig?.functionCallingConfig?.mode);
+  const camelCaseMode = normalizeGoogleToolMode(config.toolConfig?.functionCallingConfig?.mode);
+  const snakeCaseMode = normalizeGoogleToolMode(config.tool_config?.function_calling_config?.mode);
+  const toolChoiceMode = normalizeGoogleToolMode(toolChoiceConfig?.functionCallingConfig?.mode);
+
+  if (
+    explicitMode === 'NONE' ||
+    camelCaseMode === 'NONE' ||
+    snakeCaseMode === 'NONE' ||
+    toolChoiceMode === 'NONE'
+  ) {
+    return {
+      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolsDisabled: true,
+    };
+  }
+
+  return {
+    ...(explicitConfig
+      ? { toolConfig: explicitConfig }
+      : toolChoiceConfig
+        ? { toolConfig: toolChoiceConfig }
+        : {}),
+    toolsDisabled: false,
+  };
+}
+
+export function mergeGoogleCompletionOptions(
+  baseConfig: CompletionOptions,
+  promptConfig?: Partial<CompletionOptions>,
+): CompletionOptions {
+  const mergedConfig = {
+    ...baseConfig,
+    ...promptConfig,
+  };
+
+  // When the prompt explicitly sets any tool-policy field, replace the entire
+  // base policy so semantics from base (e.g. allowedFunctionNames) don't leak
+  // through under a different field name. We treat `undefined` as "not set" so
+  // a defaulted variable like `{ tool_choice: undefined }` doesn't blank the base.
+  const promptHasToolChoice = promptConfig?.tool_choice !== undefined;
+  const promptHasToolConfig = promptConfig?.toolConfig !== undefined;
+  const promptHasSnakeToolConfig = promptConfig?.tool_config !== undefined;
+
+  if (promptHasToolChoice || promptHasToolConfig || promptHasSnakeToolConfig) {
+    delete mergedConfig.tool_choice;
+    delete mergedConfig.toolConfig;
+    delete mergedConfig.tool_config;
+
+    if (promptHasToolChoice) {
+      mergedConfig.tool_choice = promptConfig!.tool_choice;
+    }
+    if (promptHasToolConfig) {
+      mergedConfig.toolConfig = promptConfig!.toolConfig;
+    }
+    if (promptHasSnakeToolConfig) {
+      mergedConfig.tool_config = promptConfig!.tool_config;
+    }
+  }
+
+  return mergedConfig;
+}
+
+export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
+  return tools.flatMap(({ functionDeclarations, ...tool }) =>
+    functionDeclarations && Object.keys(tool).length === 0 ? [] : [tool as Tool],
+  );
+}
+
+function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
+  if (typeof tools === 'string' && tools.startsWith('file://')) {
+    const { filePath } = parseFileUrl(tools);
+    if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
+      return undefined;
+    }
+  }
+  if (Array.isArray(tools)) {
+    return tools.flatMap((tool) => {
+      const strippedTool = stripExecutableToolFileReferencesFromValue(tool);
+      return strippedTool === undefined ? [] : [strippedTool];
+    });
+  }
+  return tools;
+}
+
+export function stripExecutableToolFileReferences(
+  tools: unknown,
+  vars?: Record<string, VarValue>,
+): unknown {
+  return stripExecutableToolFileReferencesFromValue(renderVarsInObject(tools, vars));
 }
 
 /**
