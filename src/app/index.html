@@ -7,6 +7,31 @@
     <title>promptfoo</title>
     <meta name="description" content="LLM testing and evaluation" />
     <meta property="og:image" content="https://www.promptfoo.dev/img/thumbnail.png" />
+    <script>
+      (() => {
+        let savedMode = null;
+        let systemPrefersDark = false;
+
+        try {
+          systemPrefersDark =
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+        } catch {}
+
+        try {
+          savedMode = localStorage.getItem('darkMode');
+        } catch {}
+
+        const resolvedTheme =
+          savedMode === 'true' || (savedMode !== 'false' && systemPrefersDark) ? 'dark' : 'light';
+
+        document.documentElement.style.colorScheme = resolvedTheme;
+
+        if (resolvedTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

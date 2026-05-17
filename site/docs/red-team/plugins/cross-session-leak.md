@@ -49,4 +49,4 @@ These examples demonstrate how the plugin tests for information leaks across dif
 
 ## Related Concepts
 
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

@@ -13,15 +13,17 @@ vi.mock('recharts', () => ({
     <div data-testid="sankey-chart">
       {props.data.nodes.map((node: any, index: number) => (
         <div key={index}>
-          {React.cloneElement(props.node, {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
-            index,
-            payload: node,
-            containerWidth: 500,
-          })}
+          <svg>
+            {React.cloneElement(props.node, {
+              x: 0,
+              y: 0,
+              width: 10,
+              height: 10,
+              index,
+              payload: node,
+              containerWidth: 500,
+            })}
+          </svg>
         </div>
       ))}
       {props.data.links.map((_link: any, index: number) => (
@@ -104,6 +106,13 @@ describe('PluginStrategyFlow', () => {
 
       expect(screen.queryByText(/No data available/)).not.toBeInTheDocument();
       expect(screen.getByTestId('sankey-chart')).toBeInTheDocument();
+      expect(screen.getByTestId('responsive-container').parentElement).toHaveClass(
+        'h-[400px]',
+        'min-w-[520px]',
+      );
+      expect(screen.getByTestId('responsive-container').parentElement?.parentElement).toHaveClass(
+        'overflow-x-auto',
+      );
 
       expect(screen.getByText('plugin-A (3)')).toBeInTheDocument();
       expect(screen.getByText('plugin-B (1)')).toBeInTheDocument();

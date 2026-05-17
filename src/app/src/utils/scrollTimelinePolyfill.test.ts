@@ -1,5 +1,9 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
-import { loadScrollTimelinePolyfill, supportsScrollTimeline } from './scrollTimelinePolyfill';
+import {
+  initializeScrollTimelinePolyfill,
+  loadScrollTimelinePolyfill,
+  supportsScrollTimeline,
+} from './scrollTimelinePolyfill';
 
 vi.mock('../polyfills/scroll-timeline.js', () => ({
   default: {},
@@ -87,10 +91,12 @@ describe('supportsScrollTimeline', () => {
 
 describe('loadScrollTimelinePolyfill', () => {
   let consoleDebugSpy: MockInstance;
+  let consoleErrorSpy: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
     consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     (global as any).CSS = {
       supports: vi.fn(),
@@ -102,6 +108,7 @@ describe('loadScrollTimelinePolyfill', () => {
 
   afterEach(() => {
     consoleDebugSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
     delete (global as any).CSS;
   });
 
@@ -129,5 +136,52 @@ describe('loadScrollTimelinePolyfill', () => {
       'Browser supports scroll-timeline natively, skipping polyfill',
     );
     expect(consoleDebugSpy).not.toHaveBeenCalledWith('Loading scroll-timeline polyfill...');
+  });
+});
+
+describe('initializeScrollTimelinePolyfill', () => {
+  let consoleDebugSpy: MockInstance;
+  let consoleErrorSpy: MockInstance;
+  const originalWindow = global.window;
+  const originalCSS = global.CSS;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    consoleDebugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Create a clean window object without ScrollTimeline or ViewTimeline
+    const cleanWindow = {} as Window & typeof globalThis;
+    global.window = cleanWindow;
+
+    global.CSS = {
+      supports: vi.fn(() => false),
+    } as unknown as typeof CSS;
+  });
+
+  afterEach(() => {
+    consoleDebugSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
+    global.window = originalWindow;
+    global.CSS = originalCSS;
+  });
+
+  it('should call loadScrollTimelinePolyfill when in browser environment', async () => {
+    vi.mocked(CSS.supports).mockReturnValue(false);
+
+    initializeScrollTimelinePolyfill();
+
+    // Wait a bit for the async operation to complete
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(consoleDebugSpy).toHaveBeenCalledWith('Loading scroll-timeline polyfill...');
+  });
+
+  it('should not call loadScrollTimelinePolyfill when not in browser environment', () => {
+    global.window = undefined as any;
+
+    initializeScrollTimelinePolyfill();
+
+    expect(consoleDebugSpy).not.toHaveBeenCalled();
   });
 });

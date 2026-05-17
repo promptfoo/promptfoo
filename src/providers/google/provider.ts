@@ -19,7 +19,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
@@ -29,7 +29,10 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type {
@@ -283,10 +286,10 @@ export class GoogleProvider extends GoogleGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
@@ -295,8 +298,12 @@ export class GoogleProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExecutableToolFiles: toolsDisabled,
+    });
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
 
     const body: Record<string, any> = {
       contents,
@@ -309,8 +316,8 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...config.generationConfig,
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
-      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
       ...(systemInstruction
         ? this.isVertexMode
@@ -362,7 +369,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           url,
           method: 'POST',
           data: body,
-          timeout: REQUEST_TIMEOUT_MS,
+          timeout: getRequestTimeoutMs(),
         });
         data = res.data as GeminiApiResponse;
       } else if (this.isVertexMode && this.isExpressMode()) {
@@ -374,7 +381,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           method: 'POST',
           headers: await this.getAuthHeaders(),
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          signal: AbortSignal.timeout(getRequestTimeoutMs()),
         });
 
         if (!res.ok) {
@@ -400,7 +407,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             // Include auth discriminator in cache key to prevent cross-tenant cache sharing
             ...(authDiscriminator && { _authHash: authDiscriminator }),
           } as RequestInit,
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           false,
         );
@@ -435,6 +442,8 @@ export class GoogleProvider extends GoogleGenericProvider {
     _context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
+      const { toolsDisabled } = resolveGoogleToolConfig(config);
+
       // Normalize response: non-streaming returns single object, streaming returns array
       const normalizedData = Array.isArray(data) ? data : [data];
 
@@ -577,9 +586,9 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        tokenUsage.completion != null
-          ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
-          : undefined;
+        tokenUsage.completion == null
+          ? undefined
+          : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
         : calculateGoogleCost(
@@ -614,7 +623,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       };
 
       // Handle function tool callbacks
-      if (config.functionToolCallbacks && typeof output === 'string') {
+      if (!toolsDisabled && config.functionToolCallbacks && typeof output === 'string') {
         try {
           const parsed = JSON.parse(output);
           if (parsed.functionCall) {

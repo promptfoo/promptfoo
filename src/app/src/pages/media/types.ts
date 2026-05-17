@@ -4,6 +4,7 @@
 
 // Import and re-export MediaKind from the shared utility to avoid duplication
 import type { MediaKind } from '@app/utils/media';
+
 export type { MediaKind };
 
 export interface GraderResult {

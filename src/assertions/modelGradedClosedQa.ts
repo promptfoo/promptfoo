@@ -1,4 +1,4 @@
-import { matchesClosedQa } from '../matchers';
+import { matchesClosedQa } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

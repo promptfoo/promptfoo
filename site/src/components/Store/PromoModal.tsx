@@ -39,18 +39,20 @@ export function PromoModal({ open, onClose }: PromoModalProps) {
       open={open}
       onClose={onClose}
       maxWidth={false}
-      PaperProps={{
-        sx: {
-          width: { xs: '100vw', sm: '90vw' },
-          maxWidth: { xs: '100vw', sm: '500px' },
-          height: { xs: '100vh', sm: 'auto' },
-          maxHeight: { xs: '100vh', sm: '90vh' },
-          m: 0,
-          borderRadius: { xs: 0, sm: '8px' },
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          color: 'var(--ifm-font-color-base, #1c1e21)',
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: '100vw', sm: '90vw' },
+            maxWidth: { xs: '100vw', sm: '500px' },
+            height: { xs: '100vh', sm: 'auto' },
+            maxHeight: { xs: '100vh', sm: '90vh' },
+            m: 0,
+            borderRadius: { xs: 0, sm: '8px' },
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            color: 'var(--ifm-font-color-base, #1c1e21)',
+          },
         },
       }}
     >
