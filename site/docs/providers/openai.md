@@ -1803,7 +1803,7 @@ The Realtime API allows for real-time communication with models like `gpt-realti
 
 ### Supported Realtime Models
 
-- `gpt-realtime-2` - Reasoning-capable realtime model (pricing not yet published)
+- `gpt-realtime-2` - Reasoning-capable realtime model ($4/$24 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime-1.5` - Flagship realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime` - General-availability realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`
@@ -1852,6 +1852,8 @@ The Realtime API configuration supports these parameters in addition to standard
 | `reasoning`                  | Reasoning config for `gpt-realtime-2`                                           | None                   | `{ effort: 'minimal' \| 'low' \| 'medium' \| 'high' \| 'xhigh' }`   |
 | `tools`                      | Array of tool definitions for function calling                                  | []                     | Array of tool objects                                               |
 | `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | Follow the OpenAI Realtime API schema                               |
+| `toolCallTimeout`            | Per-call timeout for `functionCallHandler`                                      | 30000                  | Milliseconds                                                        |
+| `maxToolIterations`          | Maximum tool-to-follow-up rounds allowed in one turn                            | 8                      | Integer from 1-64                                                   |
 
 Promptfoo accepts the configuration names above for backward compatibility, then sends the current GA Realtime wire shape to OpenAI: `type: 'realtime'`, native `output_modalities`, nested `audio.input` / `audio.output`, and the documented top-level tool fields.
 
@@ -1901,7 +1903,7 @@ Realtime function tools use top-level `name`, `description`, and `parameters` fi
 
 For compatibility with shared Chat Completions configs, promptfoo also accepts nested Chat-style function tool objects such as `type: function` plus `function: { ... }` and converts only those legacy shapes into the native Realtime format before sending them.
 
-When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. `toolCallTimeout` bounds each handler invocation, and `maxToolIterations` stops runaway tool-follow-up loops within a single turn. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
 
 ### Complete Example
 
@@ -1916,7 +1918,7 @@ This example includes:
 - Basic single-turn interactions with the Realtime API
 - Multi-turn conversations with persistent context
 - Conversation threading with separate conversation IDs
-- Function tool configuration examples, with a custom `functionCallHandler` required to complete tool round trips
+- A runnable JavaScript function-calling example with a custom `functionCallHandler`
 - JavaScript prompt function for properly formatting messages
 - Detailed documentation on handling content types correctly
 
@@ -1990,10 +1992,6 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.4-nano-2026-03-17` - Dated snapshot of gpt-5.4-nano
 - `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
 - `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
-- `gpt-5.5` - GPT-5.5 model
-- `gpt-5.5-2026-04-23` - Dated snapshot of gpt-5.5
-- `gpt-5.5-pro` - Premium GPT-5.5 pro model
-- `gpt-5.5-pro-2026-04-23` - Dated snapshot of gpt-5.5-pro
 - `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model
