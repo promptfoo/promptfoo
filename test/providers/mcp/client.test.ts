@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
@@ -119,6 +121,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import cliState from '../../../src/cliState';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
@@ -151,6 +154,7 @@ describe('MCPClient', () => {
       accessToken: 'mock-oauth-token',
       expiresAt: Date.now() + 3600000, // 1 hour from now
     });
+    cliState.basePath = undefined;
   });
 
   describe('initialize', () => {
@@ -213,6 +217,29 @@ describe('MCPClient', () => {
 
       expect(StdioClientTransport).toHaveBeenCalledTimes(2);
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
+    });
+
+    it('should resolve local server paths relative to the config base path', async () => {
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      cliState.basePath = '/tmp/simple-mcp';
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          path: './example-server.js',
+        },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: process.execPath,
+        args: [path.resolve(cliState.basePath, './example-server.js')],
+        env: process.env as Record<string, string>,
+      });
     });
 
     it('should throw error for unsupported file type', async () => {
@@ -617,7 +644,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', { arg: 'value' });
 
-      expect(result).toEqual({ content: 'result' });
+      expect(result).toEqual({ content: 'result', raw: { content: 'result' } });
       expect(mockClient.callTool).toHaveBeenCalledWith(
         {
           name: 'tool1',
@@ -648,7 +675,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', { arg: 'value' });
 
-      expect(result).toEqual({ content: 'result' });
+      expect(result).toEqual({ content: 'result', raw: { content: 'result' } });
       expect(mockClient.callTool).toHaveBeenCalledWith(
         {
           name: 'tool1',
@@ -682,7 +709,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', { arg: 'value' });
 
-      expect(result).toEqual({ content: 'result' });
+      expect(result).toEqual({ content: 'result', raw: { content: 'result' } });
       expect(mockClient.callTool).toHaveBeenCalledWith(
         {
           name: 'tool1',
@@ -797,7 +824,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
 
-      expect(result).toEqual({ content: 'buffered-result' });
+      expect(result).toEqual({ content: 'buffered-result', raw: { content: contentBuffer } });
     });
 
     it('should return empty string if result content is falsy', async () => {
@@ -819,7 +846,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
 
-      expect(result).toEqual({ content: '' });
+      expect(result).toEqual({ content: '', raw: {} });
     });
 
     it('should parse JSON-stringified content correctly', async () => {
@@ -841,7 +868,7 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
 
-      expect(result).toEqual({ content: 'Hello World' });
+      expect(result).toEqual({ content: 'Hello World', raw: { content: '"Hello World"' } });
     });
 
     it('should handle non-JSON string content correctly', async () => {
@@ -863,7 +890,10 @@ describe('MCPClient', () => {
       await mcpClient.initialize();
       const result = await mcpClient.callTool('tool1', {});
 
-      expect(result).toEqual({ content: 'Plain text response' });
+      expect(result).toEqual({
+        content: 'Plain text response',
+        raw: { content: 'Plain text response' },
+      });
     });
   });
 
@@ -977,7 +1007,10 @@ describe('MCPClient', () => {
         }
       ).clients.delete('server1');
 
-      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({ content: 'result' });
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: 'result',
+        raw: { content: 'result' },
+      });
       expect(mockClient.callTool).toHaveBeenCalledTimes(1);
     });
 
@@ -1027,6 +1060,7 @@ describe('MCPClient', () => {
 
       await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
         content: 'server2 result',
+        raw: { content: 'server2 result' },
       });
       expect(server1Client.callTool).not.toHaveBeenCalled();
       expect(server2Client.callTool).toHaveBeenCalledTimes(1);
@@ -1380,7 +1414,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({ content: 'result' });
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: 'result',
+        raw: { content: 'result' },
+      });
       expect(oldClient.callTool).not.toHaveBeenCalled();
       expect(refreshedClient.callTool).toHaveBeenCalledTimes(1);
     });
@@ -1440,8 +1477,8 @@ describe('MCPClient', () => {
       reconnectContinue.resolve(undefined);
 
       await expect(Promise.all([call1, call2])).resolves.toEqual([
-        { content: 'refreshed-result' },
-        { content: 'refreshed-result' },
+        { content: 'refreshed-result', raw: { content: 'refreshed-result' } },
+        { content: 'refreshed-result', raw: { content: 'refreshed-result' } },
       ]);
       expect(oldClient.callTool).toHaveBeenCalledTimes(1);
       expect(refreshedClient.callTool).toHaveBeenCalledTimes(2);

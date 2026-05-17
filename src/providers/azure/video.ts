@@ -433,7 +433,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
     const cost = calculateAzureVideoCost(seconds, false);
 
     // Store cache mapping for future lookups
-    storeCacheMapping(cacheKey, storageRef.key, undefined, undefined, PROVIDER_NAME);
+    await storeCacheMapping(cacheKey, storageRef.key, undefined, undefined, PROVIDER_NAME);
 
     // Build output
     const videoUrl = buildStorageRefUrl(storageRef.key);

@@ -279,6 +279,17 @@ describe('testProviderConnectivity', () => {
     expect(vars).not.toHaveProperty('sessionId');
   });
 
+  it('should set sessionId var when provider has no sessionParser config', async () => {
+    const provider = createMockProvider();
+
+    await testProviderConnectivity({ provider });
+
+    expect(mockEvaluate).toHaveBeenCalled();
+    const callArgs = mockEvaluate.mock.calls[0];
+    const vars = callArgs[0].tests[0].vars;
+    expect(vars).toHaveProperty('sessionId');
+  });
+
   it('should use default prompt when none provided', async () => {
     const provider = createMockProvider();
     await testProviderConnectivity({ provider });
@@ -398,6 +409,38 @@ describe('testProviderSession', () => {
     const firstContext = callApi.mock.calls[0][1];
     expect(firstContext.vars).toHaveProperty('context', 'test_context');
     expect(firstContext.vars).toHaveProperty('user_message', 'What can you help me with?');
+  });
+
+  it('should materialize typed main input variables during session tests', async () => {
+    const callApi = vi.fn().mockResolvedValue({
+      output: 'Response',
+      sessionId: 'session-123',
+    });
+    const provider = createMockProvider({ callApi });
+
+    await testProviderSession({
+      provider,
+      inputs: {
+        document: {
+          description: 'Uploaded document',
+          type: 'docx',
+        },
+        question: 'Question',
+      },
+      mainInputVariable: 'document',
+    });
+
+    expect(callApi).toHaveBeenCalledTimes(2);
+    const firstContext = callApi.mock.calls[0][1];
+    const secondContext = callApi.mock.calls[1][1];
+    expect(firstContext.vars.document).toMatch(
+      /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+    );
+    expect(secondContext.vars.document).toMatch(
+      /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+    );
+    expect(firstContext.vars.document).not.toBe('What can you help me with?');
+    expect(secondContext.vars.document).not.toBe('What was the last thing I asked you?');
   });
 
   it('should handle errors thrown during session test', async () => {
