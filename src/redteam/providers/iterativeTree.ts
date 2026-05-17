@@ -59,6 +59,7 @@ import {
 } from './shared';
 import type { Environment } from 'nunjucks';
 
+import type { TransformFunction } from '../../contracts/transform';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -498,6 +499,672 @@ interface RedteamTreeResponse extends ProviderResponse {
   metadata: TreeIterativeMetadata;
 }
 
+interface TreeParams {
+  maxDepth?: number;
+  maxAttempts?: number;
+  maxWidth?: number;
+  branchingFactor?: number;
+  maxNoImprovement?: number;
+}
+
+interface ResolvedTreeParams {
+  maxDepth: number;
+  maxAttempts: number;
+  maxWidth: number;
+  branchingFactor: number;
+  maxNoImprovement: number;
+}
+
+interface TreeConversationParams {
+  context: CallApiContextParams;
+  filters: NunjucksFilterMap | undefined;
+  injectVar: string;
+  options: CallApiOptionsParams;
+  prompt: Prompt;
+  redteamProvider: ApiProvider;
+  gradingProvider: ApiProvider;
+  targetProvider: ApiProvider;
+  test?: AtomicTestCase;
+  vars: Record<string, VarValue>;
+  excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  perTurnLayers: LayerConfig[];
+  inputs?: Inputs;
+  treeParams: ResolvedTreeParams;
+}
+
+interface IterativeTreeRunState {
+  currentBestNodes: TreeNode[];
+  bestNode: TreeNode;
+  attempts: number;
+  bestScore: number;
+  maxScore: number;
+  noImprovementCount: number;
+  storedGraderResult?: GradingResult;
+  totalTokenUsage: TokenUsage;
+  bestResponse: string;
+  stoppingReason?: StopReason;
+  treeOutputs: TreeSearchOutput[];
+  lastTransformDisplayVars?: Record<string, string>;
+  bestTransformDisplayVars?: Record<string, string>;
+  lastFinalAttackPrompt?: string;
+  bestFinalAttackPrompt?: string;
+  redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[];
+}
+
+interface TreeAttemptResult {
+  nextNode?: TreeNode;
+  response?: RedteamTreeResponse;
+}
+
+function buildTreeResponse({
+  output,
+  state,
+  guardrails,
+}: {
+  output: string;
+  state: IterativeTreeRunState;
+  guardrails?: GuardrailResponse;
+}): RedteamTreeResponse {
+  return {
+    output,
+    prompt: state.bestNode.prompt,
+    metadata: {
+      highestScore: state.maxScore,
+      redteamFinalPrompt:
+        state.bestFinalAttackPrompt || state.lastFinalAttackPrompt || state.bestNode.prompt,
+      messages: state.treeOutputs as Record<string, any>[],
+      attempts: state.attempts,
+      redteamTreeHistory: state.treeOutputs,
+      stopReason: state.stoppingReason ?? 'MAX_DEPTH',
+      storedGraderResult: state.storedGraderResult,
+      sessionIds: extractSessionIds(state.treeOutputs),
+      ...((state.bestTransformDisplayVars || state.lastTransformDisplayVars) && {
+        transformDisplayVars: state.bestTransformDisplayVars || state.lastTransformDisplayVars,
+      }),
+    },
+    tokenUsage: state.totalTokenUsage,
+    guardrails,
+  };
+}
+
+function buildTreeOutput({
+  depth,
+  parentId,
+  prompt,
+  output,
+  score,
+  targetResponse,
+  transformResult,
+  graderPassed,
+  improvement,
+  wasSelected,
+  sessionId,
+}: {
+  depth: number;
+  parentId?: string;
+  prompt: string;
+  output: string;
+  score: number;
+  targetResponse: ProviderResponse;
+  transformResult?: TransformResult;
+  graderPassed?: boolean;
+  improvement?: string;
+  wasSelected: boolean;
+  sessionId?: string;
+}): TreeSearchOutput {
+  return {
+    id: crypto.randomUUID(),
+    prompt,
+    promptAudio: transformResult?.audio,
+    promptImage: transformResult?.image,
+    output,
+    outputAudio:
+      targetResponse.audio?.data && targetResponse.audio?.format
+        ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+        : undefined,
+    score,
+    depth,
+    parentId,
+    improvement,
+    wasSelected,
+    graderPassed,
+    guardrails: targetResponse?.guardrails,
+    sessionId,
+  };
+}
+
+async function applyIterativeTreeTransforms({
+  prompt,
+  injectVar,
+  perTurnLayers,
+  context,
+  test,
+  depth,
+  attempt,
+  state,
+}: {
+  prompt: string;
+  injectVar: string;
+  perTurnLayers: LayerConfig[];
+  context: CallApiContextParams;
+  test?: AtomicTestCase;
+  depth: number;
+  attempt: number;
+  state: IterativeTreeRunState;
+}) {
+  if (perTurnLayers.length === 0) {
+    state.lastFinalAttackPrompt = prompt;
+    return { finalInjectVar: prompt, transformResult: undefined };
+  }
+
+  logger.debug('[IterativeTree] Applying per-turn transforms', {
+    depth,
+    attempt,
+    layers: perTurnLayers.map((layer) => (typeof layer === 'string' ? layer : layer.id)),
+  });
+  const transformResult = await applyRuntimeTransforms(prompt, injectVar, perTurnLayers, Strategies, {
+    evaluationId: context.evaluationId,
+    testCaseId: test?.metadata?.testCaseId as string | undefined,
+    purpose: test?.metadata?.purpose as string | undefined,
+    goal: test?.metadata?.goal as string | undefined,
+  });
+  if (transformResult.error) {
+    logger.warn('[IterativeTree] Transform failed, skipping attempt', {
+      depth,
+      attempt,
+      error: transformResult.error,
+    });
+    return null;
+  }
+  if (transformResult.displayVars) {
+    state.lastTransformDisplayVars = transformResult.displayVars;
+  }
+  state.lastFinalAttackPrompt = transformResult.prompt;
+  return { finalInjectVar: transformResult.prompt, transformResult };
+}
+
+async function buildIterativeUpdatedVars({
+  newInjectVar,
+  finalInjectVar,
+  iterationVars,
+  inputs,
+  inputMaterialization,
+  materializationHandled,
+  materializedVars,
+  attempts,
+  test,
+  redteamProvider,
+  injectVar,
+}: {
+  newInjectVar: string;
+  finalInjectVar: string;
+  iterationVars: Record<string, VarValue>;
+  inputs?: Inputs;
+  inputMaterialization?: Record<string, unknown>;
+  materializationHandled?: boolean;
+  materializedVars?: Record<string, string>;
+  attempts: number;
+  test?: AtomicTestCase;
+  redteamProvider: ApiProvider;
+  injectVar: string;
+}) {
+  const updatedVars: Record<string, VarValue> = {
+    ...iterationVars,
+    [injectVar]: finalInjectVar,
+  };
+  if (!inputs || Object.keys(inputs).length === 0) {
+    return updatedVars;
+  }
+  try {
+    const parsed = JSON.parse(newInjectVar);
+    if (shouldGenerateRemote()) {
+      Object.assign(
+        updatedVars,
+        buildRemoteMaterializedInputVariables(
+          { inputMaterialization, materializationHandled, materializedVars },
+          parsed,
+          inputs,
+        ).vars,
+      );
+      return updatedVars;
+    }
+    const { vars: localMaterializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
+      parsed,
+      inputs,
+      {
+        materializationIndex: attempts - 1,
+        pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+        provider: redteamProvider,
+        purpose: test?.metadata?.purpose as string | undefined,
+      },
+    );
+    Object.assign(updatedVars, localMaterializedVars);
+  } catch {
+    // If parsing fails, it's plain text - keep original vars.
+  }
+  return updatedVars;
+}
+
+async function buildIterativeGradingContext({
+  transformResult,
+  targetResponse,
+  context,
+}: {
+  transformResult?: TransformResult;
+  targetResponse: ProviderResponse;
+  context: CallApiContextParams;
+}) {
+  let gradingContext:
+    | {
+        wasExfiltrated?: boolean;
+        exfilCount?: number;
+        exfilRecords?: Array<{
+          timestamp: string;
+          ip: string;
+          userAgent: string;
+          queryParams: Record<string, string>;
+        }>;
+      }
+    | undefined;
+  const webPageUuid = transformResult?.metadata?.webPageUuid as string | undefined;
+  if (webPageUuid) {
+    const webPageUrl = transformResult?.metadata?.webPageUrl as string | undefined;
+    const evalId =
+      context.evaluationId ??
+      (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+    try {
+      const exfilData = await checkExfilTracking(webPageUuid, evalId);
+      if (exfilData) {
+        gradingContext = {
+          wasExfiltrated: exfilData.wasExfiltrated,
+          exfilCount: exfilData.exfilCount,
+          exfilRecords: exfilData.exfilRecords,
+        };
+      }
+    } catch (error) {
+      logger.warn('[IterativeTree] Failed to fetch exfil tracking from server', {
+        error,
+        webPageUuid,
+      });
+    }
+  }
+  if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+    gradingContext = {
+      wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
+      exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
+      exfilRecords: [],
+    };
+  }
+  return gradingContext;
+}
+
+async function gradeIterativeAttempt({
+  newInjectVar,
+  targetResponse,
+  iterationVars,
+  test,
+  gradingProvider,
+  additionalRubric,
+  transformResult,
+  context,
+  state,
+}: {
+  newInjectVar: string;
+  targetResponse: ProviderResponse;
+  iterationVars: Record<string, VarValue>;
+  test?: AtomicTestCase;
+  gradingProvider: ApiProvider;
+  additionalRubric: string;
+  transformResult?: TransformResult;
+  context: CallApiContextParams;
+  state: IterativeTreeRunState;
+}) {
+  if (!test) {
+    return undefined;
+  }
+  const { getGraderById } = await import('../graders');
+  const assertToUse =
+    test.assert?.find((assertion: { type: string }) =>
+      assertion.type && assertion.type.includes(test.metadata?.pluginId),
+    ) ?? test.assert?.find((assertion: { type: string }) => assertion.type);
+  if (!assertToUse) {
+    return undefined;
+  }
+  const grader = getGraderById(assertToUse.type);
+  if (!grader) {
+    return undefined;
+  }
+  const gradingContext = await buildIterativeGradingContext({
+    transformResult,
+    targetResponse,
+    context,
+  });
+  const { grade, rubric } = await grader.getResult(
+    newInjectVar,
+    targetResponse.output,
+    { ...test, vars: iterationVars },
+    gradingProvider,
+    getGraderAssertionValue(assertToUse),
+    additionalRubric,
+    undefined,
+    gradingContext,
+  );
+  state.storedGraderResult = {
+    ...grade,
+    assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+  };
+  return grade;
+}
+
+async function runTreeAttempt({
+  depth,
+  node,
+  params,
+  state,
+  judgeSystemPrompt,
+  additionalRubric,
+  goal,
+  originalVars,
+  transformVarsConfig,
+}: {
+  depth: number;
+  node: TreeNode;
+  params: TreeConversationParams;
+  state: IterativeTreeRunState;
+  judgeSystemPrompt: string;
+  additionalRubric: string;
+  goal: string;
+  originalVars: Record<string, VarValue>;
+  transformVarsConfig?: string | TransformFunction;
+}): Promise<TreeAttemptResult> {
+  const iterationContext = await createIterationContext({
+    originalVars,
+    transformVarsConfig,
+    context: params.context,
+    iterationNumber: state.attempts + 1,
+    loggerTag: '[IterativeTree]',
+  });
+  const iterationVars = iterationContext?.vars || {};
+  let {
+    improvement,
+    inputMaterialization,
+    materializationHandled,
+    materializedVars,
+    prompt: newInjectVar,
+  } = await getNewPrompt(
+    params.redteamProvider,
+    [...state.redteamHistory, { role: 'assistant', content: node.prompt }],
+    shouldGenerateRemote()
+      ? {
+          inputs: params.inputs,
+          materializationIndex: state.attempts,
+          pluginId: String(params.test?.metadata?.pluginId || 'unknown-plugin'),
+          purpose: params.test?.metadata?.purpose as string | undefined,
+        }
+      : undefined,
+  );
+  if (params.inputs && shouldGenerateRemote()) {
+    assertRemoteMaterializationHandled(
+      { inputMaterialization, materializationHandled, materializedVars },
+      'Iterative Tree multi-input generation',
+    );
+  }
+  state.attempts += 1;
+  newInjectVar = extractPromptFromTags(newInjectVar) || newInjectVar;
+
+  logger.debug(
+    `[Depth ${depth}, Attempt ${state.attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${state.maxScore}`,
+  );
+
+  const transform = await applyIterativeTreeTransforms({
+    prompt: newInjectVar,
+    injectVar: params.injectVar,
+    perTurnLayers: params.perTurnLayers,
+    context: params.context,
+    test: params.test,
+    depth,
+    attempt: state.attempts,
+    state,
+  });
+  if (!transform) {
+    return {};
+  }
+
+  const updatedVars = await buildIterativeUpdatedVars({
+    newInjectVar,
+    finalInjectVar: transform.finalInjectVar,
+    iterationVars,
+    inputs: params.inputs,
+    inputMaterialization,
+    materializationHandled,
+    materializedVars,
+    attempts: state.attempts,
+    test: params.test,
+    redteamProvider: params.redteamProvider,
+    injectVar: params.injectVar,
+  });
+  const targetPrompt = await renderPrompt(
+    params.prompt,
+    updatedVars,
+    params.filters,
+    params.targetProvider,
+    [params.injectVar],
+  );
+  let targetResponse = await getTargetResponse(
+    params.targetProvider,
+    targetPrompt,
+    iterationContext,
+    params.options,
+  );
+  targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+    evalId: params.context.evaluationId,
+    testIdx: params.context.testIdx,
+    promptIdx: params.context.promptIdx,
+  });
+  accumulateResponseTokenUsage(state.totalTokenUsage, targetResponse);
+  if (targetResponse.error) {
+    logger.info(
+      `[IterativeTree] Target error at depth ${depth}, attempt ${state.attempts}: ${targetResponse.error}`,
+      { targetResponse },
+    );
+    state.treeOutputs.push(
+      buildTreeOutput({
+        depth,
+        parentId: node.id,
+        prompt: targetPrompt,
+        output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
+        score: 0,
+        targetResponse,
+        transformResult: transform.transformResult,
+        wasSelected: false,
+        improvement,
+        sessionId: getSessionId(targetResponse, iterationContext),
+      }),
+    );
+    return {};
+  }
+  invariant(
+    Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+    '[IterativeTree] Target did not return an output property',
+  );
+  const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
+  const { score, explanation } = await evaluateResponse(
+    params.gradingProvider,
+    judgeSystemPrompt,
+    targetResponse.output,
+    state.bestResponse,
+    containsPenalizedPhrase,
+  );
+  const nextNode = createTreeNode(newInjectVar, score, depth + 1, undefined, {
+    inputMaterialization,
+    materializationHandled,
+    materializedVars,
+  });
+
+  if (score > state.maxScore) {
+    state.maxScore = score;
+    state.bestResponse = targetResponse.output;
+    state.bestNode.prompt = newInjectVar;
+    state.bestNode.inputMaterialization = inputMaterialization;
+    state.bestNode.materializationHandled = materializationHandled;
+    state.bestNode.materializedVars = materializedVars;
+    state.bestFinalAttackPrompt = transform.finalInjectVar;
+    state.bestTransformDisplayVars = state.lastTransformDisplayVars;
+  } else if (score > state.bestScore) {
+    state.bestScore = score;
+    state.noImprovementCount = 0;
+  } else {
+    state.noImprovementCount += 1;
+  }
+
+  const grade = await gradeIterativeAttempt({
+    newInjectVar,
+    targetResponse,
+    iterationVars,
+    test: params.test,
+    gradingProvider: params.gradingProvider,
+    additionalRubric,
+    transformResult: transform.transformResult,
+    context: params.context,
+    state,
+  });
+  if (grade?.pass === false) {
+    state.stoppingReason = 'GRADER_FAILED';
+    state.treeOutputs.push(
+      buildTreeOutput({
+        depth,
+        parentId: node.id,
+        prompt: targetPrompt,
+        output: targetResponse.output,
+        score,
+        targetResponse,
+        transformResult: transform.transformResult,
+        graderPassed: grade.pass,
+        wasSelected: false,
+        sessionId: getSessionId(targetResponse, iterationContext),
+      }),
+    );
+    return {
+      response: buildTreeResponse({
+        output: targetResponse.output,
+        state,
+        guardrails: targetResponse?.guardrails,
+      }),
+    };
+  }
+  if (state.noImprovementCount >= params.treeParams.maxNoImprovement) {
+    state.stoppingReason = 'NO_IMPROVEMENT';
+    state.treeOutputs.push(
+      buildTreeOutput({
+        depth,
+        parentId: node.id,
+        prompt: targetPrompt,
+        output: state.bestResponse,
+        score,
+        targetResponse,
+        transformResult: transform.transformResult,
+        graderPassed: grade?.pass,
+        wasSelected: false,
+        sessionId: getSessionId(targetResponse, iterationContext),
+      }),
+    );
+    return { response: buildTreeResponse({ output: state.bestResponse, state, guardrails: targetResponse.guardrails }) };
+  }
+  if (state.attempts >= params.treeParams.maxAttempts) {
+    state.stoppingReason = 'MAX_ATTEMPTS';
+    state.treeOutputs.push(
+      buildTreeOutput({
+        depth,
+        parentId: node.id,
+        prompt: targetPrompt,
+        output: state.bestResponse,
+        score,
+        targetResponse,
+        transformResult: transform.transformResult,
+        graderPassed: grade?.pass,
+        wasSelected: false,
+        sessionId: getSessionId(targetResponse, iterationContext),
+      }),
+    );
+    return { response: buildTreeResponse({ output: state.bestResponse, state, guardrails: targetResponse.guardrails }) };
+  }
+
+  state.redteamHistory.push(
+    updateRedteamHistory(
+      targetResponse.output,
+      goal,
+      score,
+      containsPenalizedPhrase,
+      params.excludeTargetOutputFromAgenticAttackGeneration,
+      explanation,
+    ),
+  );
+  state.treeOutputs.push(
+    buildTreeOutput({
+      depth,
+      parentId: node.id,
+      prompt: targetPrompt,
+      output: targetResponse.output,
+      score,
+      targetResponse,
+      transformResult: transform.transformResult,
+      graderPassed: grade?.pass,
+      improvement,
+      wasSelected: true,
+      sessionId: getSessionId(targetResponse, iterationContext),
+    }),
+  );
+  return { nextNode };
+}
+
+async function runTreeDepth({
+  depth,
+  params,
+  state,
+  judgeSystemPrompt,
+  additionalRubric,
+  goal,
+  originalVars,
+  transformVarsConfig,
+}: {
+  depth: number;
+  params: TreeConversationParams;
+  state: IterativeTreeRunState;
+  judgeSystemPrompt: string;
+  additionalRubric: string;
+  goal: string;
+  originalVars: Record<string, VarValue>;
+  transformVarsConfig?: string | TransformFunction;
+}) {
+  const nextLevelNodes: TreeNode[] = [];
+  for (const node of state.currentBestNodes) {
+    for (let i = 0; i < params.treeParams.branchingFactor; i++) {
+      const result = await runTreeAttempt({
+        depth,
+        node,
+        params: {
+          ...params,
+          perTurnLayers: params.perTurnLayers ?? [],
+        },
+        state,
+        judgeSystemPrompt,
+        additionalRubric,
+        goal,
+        originalVars,
+        transformVarsConfig,
+      });
+      if (result.response) {
+        return result.response;
+      }
+      if (result.nextNode) {
+        nextLevelNodes.push(result.nextNode);
+      }
+    }
+  }
+  state.currentBestNodes = await selectNodes(nextLevelNodes, params.treeParams?.maxWidth ?? DEFAULT_MAX_WIDTH);
+  return undefined;
+}
+
 /**
  * Runs the red team conversation process.
  * @param params - The parameters for the red team conversation.
@@ -518,50 +1185,19 @@ async function runRedteamConversation({
   perTurnLayers = [],
   inputs,
   treeParams,
-}: {
-  context: CallApiContextParams;
-  filters: NunjucksFilterMap | undefined;
-  injectVar: string;
-  options: CallApiOptionsParams;
-  prompt: Prompt;
-  redteamProvider: ApiProvider;
-  gradingProvider: ApiProvider;
-  targetProvider: ApiProvider;
-  test?: AtomicTestCase;
-  vars: Record<string, VarValue>;
-  excludeTargetOutputFromAgenticAttackGeneration: boolean;
+}: Omit<TreeConversationParams, 'perTurnLayers' | 'treeParams'> & {
   perTurnLayers?: LayerConfig[];
-  inputs?: Inputs;
-  treeParams?: {
-    maxDepth?: number;
-    maxAttempts?: number;
-    maxWidth?: number;
-    branchingFactor?: number;
-    maxNoImprovement?: number;
-  };
+  treeParams?: TreeParams;
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
-
-  // Store the original vars and transformVars config
   const originalVars = { ...vars };
   const transformVarsConfig = test?.options?.transformVars;
-  // Generate goal-specific evaluation rubric
   const additionalRubric = getIterativeTreeGoalRubric(goal);
-
-  // Resolve tree parameters from config, with defaults
   const MAX_DEPTH = treeParams?.maxDepth ?? DEFAULT_MAX_DEPTH;
-  const BRANCHING_FACTOR = treeParams?.branchingFactor ?? DEFAULT_BRANCHING_FACTOR;
-  const MAX_ATTEMPTS = treeParams?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-  const MAX_WIDTH = treeParams?.maxWidth ?? DEFAULT_MAX_WIDTH;
-  const MAX_NO_IMPROVEMENT = treeParams?.maxNoImprovement ?? DEFAULT_MAX_NO_IMPROVEMENT;
-
-  let maxScore = 0;
-
   logger.debug(
-    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS} Goal: "${goal.substring(0, 50)}...".`,
+    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${treeParams?.branchingFactor ?? DEFAULT_BRANCHING_FACTOR}, MAX_ATTEMPTS=${treeParams?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS} Goal: "${goal.substring(0, 50)}...".`,
   );
-
   const { redteamSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
     nunjucks,
     goal,
@@ -569,671 +1205,108 @@ async function runRedteamConversation({
     excludeTargetOutputFromAgenticAttackGeneration,
     test?.metadata?.modifiers,
   );
-
-  const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
-    {
-      role: 'system',
-      content: redteamSystemPrompt,
-    },
-  ];
-
-  let currentBestNodes: TreeNode[] = [createTreeNode(goal, 0, 0)];
-
-  const bestNode: TreeNode = createTreeNode(goal, 0, 0);
-
-  let attempts = 0;
-  let bestScore = 0;
-  let noImprovementCount = 0;
-  let storedGraderResult: GradingResult | undefined = undefined;
-
-  const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
-
-  let bestResponse = '';
-
-  let stoppingReason: StopReason;
-
-  const treeOutputs: TreeSearchOutput[] = [];
-
-  // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
-  let lastTransformDisplayVars: Record<string, string> | undefined;
-  let bestTransformDisplayVars: Record<string, string> | undefined;
-
-  // Track transformed prompts for UI display (e.g., fetchPrompt for indirect-web-pwn)
-  // - lastFinalAttackPrompt: the most recent transform (for fallback)
-  // - bestFinalAttackPrompt: the transform from the BEST scoring turn (what we want to show)
-  let lastFinalAttackPrompt: string | undefined;
-  let bestFinalAttackPrompt: string | undefined;
-
-  for (let depth = 0; depth < MAX_DEPTH; depth++) {
-    logger.debug(
-      `[Depth ${depth}] Starting exploration. Nodes to explore: ${currentBestNodes.length}. Max score so far: ${maxScore}`,
-    );
-
-    const nextLevelNodes: TreeNode[] = [];
-
-    for (const node of currentBestNodes) {
-      logger.debug(
-        `[Depth ${depth}] Exploring node: prompt="${node.prompt.substring(0, 30)}...", score=${node.score}, branches=${BRANCHING_FACTOR}. Max score so far: ${maxScore}`,
-      );
-
-      for (let i = 0; i < BRANCHING_FACTOR; i++) {
-        // Use the shared utility function to create iteration context
-        const iterationContext = await createIterationContext({
-          originalVars,
-          transformVarsConfig,
-          context,
-          iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
-          loggerTag: '[IterativeTree]',
-        });
-        const iterationVars = iterationContext?.vars || {};
-
-        let {
-          improvement,
-          inputMaterialization,
-          materializationHandled,
-          materializedVars,
-          prompt: newInjectVar,
-        } = await getNewPrompt(
-          redteamProvider,
-          [...redteamHistory, { role: 'assistant', content: node.prompt }],
-          shouldGenerateRemote()
-            ? {
-                inputs,
-                materializationIndex: attempts,
-                pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-                purpose: test?.metadata?.purpose as string | undefined,
-              }
-            : undefined,
-        );
-        if (inputs && shouldGenerateRemote()) {
-          assertRemoteMaterializationHandled(
-            { inputMaterialization, materializationHandled, materializedVars },
-            'Iterative Tree multi-input generation',
-          );
-        }
-
-        attempts++;
-
-        // Extract JSON from <Prompt> tags if present (multi-input mode)
-        const extractedPrompt = extractPromptFromTags(newInjectVar);
-        if (extractedPrompt) {
-          newInjectVar = extractedPrompt;
-        }
-
-        logger.debug(
-          `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
-        );
-
-        // ═══════════════════════════════════════════════════════════════════════
-        // Apply per-turn layer transforms if configured (e.g., audio, base64)
-        // This enables: layer: { steps: [jailbreak:tree, audio] }
-        // For tree iterative, we just transform the attack and send directly
-        // ═══════════════════════════════════════════════════════════════════════
-        let lastTransformResult: TransformResult | undefined;
-        let finalInjectVar = newInjectVar;
-        if (perTurnLayers.length > 0) {
-          logger.debug('[IterativeTree] Applying per-turn transforms', {
-            depth,
-            attempt: attempts,
-            layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
-          });
-          lastTransformResult = await applyRuntimeTransforms(
-            newInjectVar,
-            injectVar,
-            perTurnLayers,
-            Strategies,
-            {
-              evaluationId: context?.evaluationId,
-              testCaseId: test?.metadata?.testCaseId as string | undefined,
-              purpose: test?.metadata?.purpose as string | undefined,
-              goal: test?.metadata?.goal as string | undefined,
-            },
-          );
-
-          if (lastTransformResult.error) {
-            logger.warn('[IterativeTree] Transform failed, skipping attempt', {
-              depth,
-              attempt: attempts,
-              error: lastTransformResult.error,
-            });
-            continue;
-          }
-
-          finalInjectVar = lastTransformResult.prompt;
-          logger.debug('[IterativeTree] Per-turn transforms applied', {
-            depth,
-            attempt: attempts,
-            originalLength: newInjectVar.length,
-            transformedLength: finalInjectVar.length,
-            hasAudio: !!lastTransformResult.audio,
-            hasImage: !!lastTransformResult.image,
-          });
-
-          // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
-          if (lastTransformResult.displayVars) {
-            lastTransformDisplayVars = lastTransformResult.displayVars;
-          }
-        }
-
-        // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
-        lastFinalAttackPrompt = finalInjectVar;
-
-        // Build updated vars - handle multi-input mode
-        const updatedVars: Record<string, VarValue> = {
-          ...iterationVars,
-          [injectVar]: finalInjectVar,
-        };
-
-        // If inputs is defined, extract individual keys from the attack prompt JSON
-        if (inputs && Object.keys(inputs).length > 0) {
-          if (shouldGenerateRemote()) {
-            try {
-              const parsed = JSON.parse(newInjectVar);
-              Object.assign(
-                updatedVars,
-                buildRemoteMaterializedInputVariables(
-                  { inputMaterialization, materializationHandled, materializedVars },
-                  parsed,
-                  inputs,
-                ).vars,
-              );
-            } catch {
-              // If parsing fails, it's plain text - keep original vars
-            }
-          } else {
-            try {
-              // Use the original newInjectVar (before escaping) for parsing
-              const parsed = JSON.parse(newInjectVar);
-              const { vars: localMaterializedVars } =
-                await extractMaterializedVariablesFromJsonWithMetadata(parsed, inputs, {
-                  materializationIndex: attempts - 1,
-                  pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-                  provider: redteamProvider,
-                  purpose: test?.metadata?.purpose as string | undefined,
-                });
-              Object.assign(updatedVars, localMaterializedVars);
-            } catch {
-              // If parsing fails, it's plain text - keep original vars
-            }
-          }
-        }
-
-        const targetPrompt = await renderPrompt(
-          prompt,
-          updatedVars,
-          filters,
-          targetProvider,
-          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-        );
-
-        let targetResponse = await getTargetResponse(
-          targetProvider,
-          targetPrompt,
-          iterationContext,
-          options,
-        );
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
-        // Count the target request even when the target returns an error.
-        accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
-        // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
-        if (targetResponse.error) {
-          logger.info(
-            `[IterativeTree] Target error at depth ${depth}, attempt ${attempts}: ${targetResponse.error}`,
-            { targetResponse },
-          );
-          // Push a node to history with the output we have, then skip scoring for this branch
-          treeOutputs.push({
-            depth,
-            graderPassed: undefined,
-            id: crypto.randomUUID(),
-            improvement,
-            output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
-            outputAudio:
-              targetResponse.audio?.data && targetResponse.audio?.format
-                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-                : undefined,
-            parentId: node.id,
-            prompt: targetPrompt,
-            promptAudio: lastTransformResult?.audio,
-            promptImage: lastTransformResult?.image,
-            score: 0,
-            wasSelected: false,
-            guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
-          });
-          continue;
-        }
-        invariant(
-          Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
-          '[IterativeTree] Target did not return an output property',
-        );
-
-        const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
-
-        const { score, explanation } = await evaluateResponse(
-          gradingProvider,
-          judgeSystemPrompt,
-          targetResponse.output,
-          bestResponse,
-          containsPenalizedPhrase,
-        );
-
-        logger.debug(
-          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
-        );
-
-        // Create new node for the next level
-        nextLevelNodes.push(
-          createTreeNode(newInjectVar, score, depth + 1, undefined, {
-            inputMaterialization,
-            materializationHandled,
-            materializedVars,
-          }),
-        );
-
-        if (score > maxScore) {
-          maxScore = score;
-          bestResponse = targetResponse.output;
-          bestNode.prompt = newInjectVar;
-          bestNode.inputMaterialization = inputMaterialization;
-          bestNode.materializationHandled = materializationHandled;
-          bestNode.materializedVars = materializedVars;
-          // Track the transformed prompt for the best scoring turn (e.g., fetchPrompt)
-          bestFinalAttackPrompt = finalInjectVar;
-          bestTransformDisplayVars = lastTransformDisplayVars;
-          logger.debug(`[Depth ${depth}, Attempt ${attempts}] New max score: ${maxScore}`);
-        } else if (score > bestScore) {
-          bestScore = score;
-          noImprovementCount = 0;
-          logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] New best score: ${score}. Max score: ${maxScore}`,
-          );
-        } else {
-          noImprovementCount++;
-          if (noImprovementCount % 5 === 0) {
-            logger.debug(
-              `[Depth ${depth}, Attempt ${attempts}] No improvement for ${noImprovementCount} consecutive iterations. Max score: ${maxScore}`,
-            );
-          }
-        }
-
-        const { getGraderById } = await import('../graders');
-        let graderPassed: boolean | undefined;
-        let assertToUse = test?.assert?.find(
-          (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-        );
-
-        // Fallback: if no assertion matches the pluginId, use the first assertion with a type
-        if (!assertToUse) {
-          assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-        }
-
-        if (test && assertToUse) {
-          const grader = getGraderById(assertToUse.type);
-          if (grader) {
-            // Create test object with iteration-specific vars
-            const iterationTest = {
-              ...test,
-              vars: iterationVars,
-            };
-
-            // Build grading context with exfil tracking data
-            let gradingContext:
-              | {
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
-
-            // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
-            // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
-            // (set by indirect-web-pwn strategy during applyRuntimeTransforms)
-            const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
-            if (webPageUuid) {
-              // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
-              const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
-              const evalId =
-                context?.evaluationId ??
-                (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
-
-              logger.debug('[IterativeTree] Fetching exfil tracking from server API', {
-                webPageUuid,
-                evalId,
-                source: 'lastTransformResult.metadata',
-              });
-
-              try {
-                const exfilData = await checkExfilTracking(webPageUuid, evalId);
-                if (exfilData) {
-                  gradingContext = {
-                    wasExfiltrated: exfilData.wasExfiltrated,
-                    exfilCount: exfilData.exfilCount,
-                    exfilRecords: exfilData.exfilRecords,
-                  };
-                }
-              } catch (error) {
-                logger.warn('[IterativeTree] Failed to fetch exfil tracking from server', {
-                  error,
-                  webPageUuid,
-                });
-              }
-            }
-
-            // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-            if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
-              logger.debug(
-                '[IterativeTree] Using exfil data from provider response metadata (fallback)',
-              );
-              gradingContext = {
-                wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
-                exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              };
-            }
-
-            const { grade, rubric } = await grader.getResult(
-              newInjectVar,
-              targetResponse.output,
-              iterationTest,
-              gradingProvider,
-              getGraderAssertionValue(assertToUse),
-              additionalRubric,
-              undefined, // skipRefusalCheck
-              gradingContext,
-            );
-            storedGraderResult = {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
-            graderPassed = grade.pass;
-          }
-        }
-
-        if (graderPassed === false) {
-          stoppingReason = 'GRADER_FAILED';
-
-          treeOutputs.push({
-            depth,
-            graderPassed,
-            id: crypto.randomUUID(),
-            output: targetResponse.output,
-            outputAudio:
-              targetResponse.audio?.data && targetResponse.audio?.format
-                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-                : undefined,
-            parentId: node.id,
-            prompt: targetPrompt,
-            promptAudio: lastTransformResult?.audio,
-            promptImage: lastTransformResult?.image,
-            score,
-            wasSelected: false,
-            guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
-          });
-          return {
-            output: targetResponse.output,
-            prompt: bestNode.prompt,
-            metadata: {
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: stoppingReason,
-              storedGraderResult,
-              sessionIds: extractSessionIds(treeOutputs),
-              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
-            },
-            tokenUsage: totalTokenUsage,
-            guardrails: targetResponse?.guardrails,
-          };
-        }
-
-        if (noImprovementCount >= MAX_NO_IMPROVEMENT) {
-          logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] No improvement for ${MAX_NO_IMPROVEMENT} consecutive iterations. Max score: ${maxScore}. Stopping.`,
-          );
-          stoppingReason = 'NO_IMPROVEMENT';
-          treeOutputs.push({
-            id: crypto.randomUUID(),
-            prompt: targetPrompt,
-            promptAudio: lastTransformResult?.audio,
-            promptImage: lastTransformResult?.image,
-            output: bestResponse,
-            outputAudio:
-              targetResponse.audio?.data && targetResponse.audio?.format
-                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-                : undefined,
-            score,
-            depth,
-            parentId: node.id,
-            wasSelected: false,
-            guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
-          });
-          return {
-            output: bestResponse,
-            prompt: bestNode.prompt,
-            metadata: {
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: stoppingReason,
-              storedGraderResult,
-              sessionIds: extractSessionIds(treeOutputs),
-              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
-            },
-            tokenUsage: totalTokenUsage,
-            guardrails: targetResponse?.guardrails,
-          };
-        }
-
-        if (attempts >= MAX_ATTEMPTS) {
-          logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] Reached maximum attempts (${MAX_ATTEMPTS}). Max score: ${maxScore}. Stopping.`,
-          );
-          stoppingReason = 'MAX_ATTEMPTS';
-          treeOutputs.push({
-            depth,
-            graderPassed,
-            id: crypto.randomUUID(),
-            output: bestResponse,
-            outputAudio:
-              targetResponse.audio?.data && targetResponse.audio?.format
-                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-                : undefined,
-            parentId: node.id,
-            prompt: targetPrompt,
-            promptAudio: lastTransformResult?.audio,
-            promptImage: lastTransformResult?.image,
-            score,
-            wasSelected: false,
-            guardrails: targetResponse?.guardrails,
-            sessionId: getSessionId(targetResponse, iterationContext),
-          });
-          return {
-            output: bestResponse,
-            prompt: bestNode.prompt,
-            metadata: {
-              highestScore: maxScore,
-              redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-              messages: treeOutputs as Record<string, any>[],
-              attempts,
-              redteamTreeHistory: treeOutputs,
-              stopReason: stoppingReason,
-              storedGraderResult,
-              sessionIds: extractSessionIds(treeOutputs),
-              ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-                transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-              }),
-            },
-            tokenUsage: totalTokenUsage,
-            guardrails: targetResponse?.guardrails,
-          };
-        }
-
-        redteamHistory.push(
-          updateRedteamHistory(
-            targetResponse.output,
-            goal,
-            score,
-            containsPenalizedPhrase,
-            excludeTargetOutputFromAgenticAttackGeneration,
-            explanation,
-          ),
-        );
-
-        treeOutputs.push({
-          depth,
-          graderPassed,
-          id: crypto.randomUUID(),
-          improvement,
-          output: targetResponse.output,
-          outputAudio:
-            targetResponse.audio?.data && targetResponse.audio?.format
-              ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
-              : undefined,
-          parentId: node.id,
-          prompt: targetPrompt,
-          promptAudio: lastTransformResult?.audio,
-          promptImage: lastTransformResult?.image,
-          score,
-          wasSelected: true,
-          guardrails: targetResponse?.guardrails,
-          sessionId: getSessionId(targetResponse, iterationContext),
-        });
-      }
-    }
-
-    currentBestNodes = await selectNodes(nextLevelNodes, MAX_WIDTH);
-    logger.debug(
-      `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
-    );
-  }
-
-  // Extract JSON from <Prompt> tags if present (multi-input mode)
-  let bestPrompt = bestNode.prompt;
-  const extractedBestPrompt = extractPromptFromTags(bestPrompt);
-  if (extractedBestPrompt) {
-    bestPrompt = extractedBestPrompt;
-  }
-
-  // Build final vars - handle multi-input mode
-  const finalUpdatedVars: Record<string, VarValue> = {
-    ...vars,
-    [injectVar]: bestPrompt,
+  const state: IterativeTreeRunState = {
+    currentBestNodes: [createTreeNode(goal, 0, 0)],
+    bestNode: createTreeNode(goal, 0, 0),
+    attempts: 0,
+    bestScore: 0,
+    maxScore: 0,
+    noImprovementCount: 0,
+    storedGraderResult: undefined,
+    totalTokenUsage: createEmptyTokenUsage(),
+    bestResponse: '',
+    stoppingReason: undefined,
+    treeOutputs: [],
+    lastTransformDisplayVars: undefined,
+    bestTransformDisplayVars: undefined,
+    lastFinalAttackPrompt: undefined,
+    bestFinalAttackPrompt: undefined,
+    redteamHistory: [{ role: 'system', content: redteamSystemPrompt }],
   };
 
-  // If inputs is defined, extract individual keys from the best prompt JSON
-  if (inputs && Object.keys(inputs).length > 0) {
-    try {
-      const parsed = JSON.parse(bestPrompt);
-      if (shouldGenerateRemote()) {
-        const remoteBestNodeMaterialization = {
-          inputMaterialization: bestNode.inputMaterialization,
-          materializationHandled: bestNode.materializationHandled,
-          materializedVars: bestNode.materializedVars,
-        };
-        if (remoteBestNodeMaterialization.materializationHandled) {
-          Object.assign(
-            finalUpdatedVars,
-            buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed, inputs)
-              .vars,
-          );
-        }
-      } else {
-        const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
-          parsed,
-          inputs,
-          {
-            materializationIndex: attempts,
-            pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
-            provider: redteamProvider,
-            purpose: test?.metadata?.purpose as string | undefined,
-          },
-        );
-        Object.assign(finalUpdatedVars, materializedVars);
-      }
-    } catch {
-      // If parsing fails, it's plain text - keep original vars
+  const resolvedParams: TreeConversationParams = {
+    context,
+    filters,
+    injectVar,
+    options,
+    prompt,
+    redteamProvider,
+    gradingProvider,
+    targetProvider,
+    test,
+    vars,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    perTurnLayers,
+    inputs,
+    treeParams: {
+      maxDepth: MAX_DEPTH,
+      maxAttempts: treeParams?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+      maxWidth: treeParams?.maxWidth ?? DEFAULT_MAX_WIDTH,
+      branchingFactor: treeParams?.branchingFactor ?? DEFAULT_BRANCHING_FACTOR,
+      maxNoImprovement: treeParams?.maxNoImprovement ?? DEFAULT_MAX_NO_IMPROVEMENT,
+    },
+  };
+  for (let depth = 0; depth < MAX_DEPTH; depth++) {
+    logger.debug(
+      `[Depth ${depth}] Starting exploration. Nodes to explore: ${state.currentBestNodes.length}. Max score so far: ${state.maxScore}`,
+    );
+    const response = await runTreeDepth({
+      depth,
+      params: resolvedParams,
+      state,
+      judgeSystemPrompt,
+      additionalRubric,
+      goal,
+      originalVars,
+      transformVarsConfig,
+    });
+    if (response) {
+      return response;
     }
   }
 
-  const finalTargetPrompt = await renderPrompt(
-    prompt,
-    finalUpdatedVars,
-    filters,
-    targetProvider,
-    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-  );
-
-  const finalTargetResponse = await getTargetResponse(
-    targetProvider,
-    finalTargetPrompt,
-    context,
-    options,
-  );
-  if (finalTargetResponse.tokenUsage) {
-    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
-  }
-
-  logger.debug(
-    `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,
-  );
-
-  stoppingReason = 'MAX_DEPTH';
-  treeOutputs.push({
-    id: crypto.randomUUID(),
-    prompt: finalTargetPrompt,
-    // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
-    output: bestResponse,
-    outputAudio:
-      finalTargetResponse.audio?.data && finalTargetResponse.audio?.format
-        ? { data: finalTargetResponse.audio.data, format: finalTargetResponse.audio.format }
-        : undefined,
-    score: maxScore,
-    depth: MAX_DEPTH - 1,
-    parentId: bestNode.id,
-    wasSelected: false,
-    guardrails: finalTargetResponse?.guardrails,
-    sessionId: getSessionId(finalTargetResponse, context),
+  const bestPrompt = extractPromptFromTags(state.bestNode.prompt) || state.bestNode.prompt;
+  const finalUpdatedVars = await buildIterativeUpdatedVars({
+    newInjectVar: bestPrompt,
+    finalInjectVar: bestPrompt,
+    iterationVars: vars,
+    inputs,
+    inputMaterialization: state.bestNode.inputMaterialization,
+    materializationHandled: state.bestNode.materializationHandled,
+    materializedVars: state.bestNode.materializedVars,
+    attempts: state.attempts + 1,
+    test,
+    redteamProvider,
+    injectVar,
   });
+  const finalTargetPrompt = await renderPrompt(prompt, finalUpdatedVars, filters, targetProvider, [
+    injectVar,
+  ]);
+  const finalTargetResponse = await getTargetResponse(targetProvider, finalTargetPrompt, context, options);
+  if (finalTargetResponse.tokenUsage) {
+    accumulateResponseTokenUsage(state.totalTokenUsage, finalTargetResponse);
+  }
+  state.stoppingReason = 'MAX_DEPTH';
+  state.treeOutputs.push(
+    buildTreeOutput({
+      depth: MAX_DEPTH - 1,
+      parentId: state.bestNode.id,
+      prompt: finalTargetPrompt,
+      output: state.bestResponse,
+      score: state.maxScore,
+      targetResponse: finalTargetResponse,
+      wasSelected: false,
+      sessionId: getSessionId(finalTargetResponse, context),
+    }),
+  );
   return {
-    output:
-      bestResponse ||
-      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-    prompt: bestNode.prompt,
-    metadata: {
-      highestScore: maxScore,
-      redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-      messages: treeOutputs as Record<string, any>[],
-      attempts,
-      redteamTreeHistory: treeOutputs,
-      stopReason: stoppingReason,
-      storedGraderResult,
-      sessionIds: extractSessionIds(treeOutputs),
-      ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-        transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-      }),
-    },
-    tokenUsage: totalTokenUsage,
-    guardrails: finalTargetResponse?.guardrails,
+    ...buildTreeResponse({
+      output:
+        state.bestResponse ||
+        (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+      state,
+      guardrails: finalTargetResponse.guardrails,
+    }),
     ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
   };
 }
