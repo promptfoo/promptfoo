@@ -73,5 +73,4 @@ The strategy action function receives:
 - [Custom Strategy](custom-strategy.md) - Built-in customizable strategy using text-based instructions
 - **Strategy Development** - Build custom approaches using JavaScript for maximum flexibility
 - **Test Case Transformation** - Programmatically modify test cases to create unique attack vectors
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
