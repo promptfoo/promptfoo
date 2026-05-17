@@ -613,7 +613,7 @@ describe('OpenAiImageProvider', () => {
       });
     });
 
-    it('should preserve gpt-image-2 API token usage without inventing cost', async () => {
+    it('should price gpt-image-2 from exact API token usage when available', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         ...mockGptImage2Response,
         data: {
@@ -649,7 +649,7 @@ describe('OpenAiImageProvider', () => {
           },
         },
       });
-      expect(result).not.toHaveProperty('cost');
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
     });
 
     it('should handle gpt-image-2 parameters and custom sizes', async () => {
@@ -1255,7 +1255,7 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.064, // Default cost for gpt-image-1.5 low 1024x1024
+        cost: 0.009, // Default cost for gpt-image-1.5 low 1024x1024
       });
     });
 
@@ -1377,7 +1377,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const resultLow = await providerLow.callApi('test prompt');
-      expect(resultLow.cost).toBe(0.064); // low_1024x1024
+      expect(resultLow.cost).toBe(0.009); // low_1024x1024
 
       // Test medium quality
       const providerMedium = new OpenAiImageProvider('gpt-image-1.5', {
@@ -1385,7 +1385,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const resultMedium = await providerMedium.callApi('test prompt');
-      expect(resultMedium.cost).toBe(0.128); // medium_1024x1024
+      expect(resultMedium.cost).toBe(0.034); // medium_1024x1024
 
       // Test high quality with different size
       const providerHigh = new OpenAiImageProvider('gpt-image-1.5', {
@@ -1393,7 +1393,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const resultHigh = await providerHigh.callApi('test prompt');
-      expect(resultHigh.cost).toBe(0.288); // high_1024x1536
+      expect(resultHigh.cost).toBe(0.2); // high_1024x1536
     });
 
     it('should support dated model variant gpt-image-1.5-2025-12-16', async () => {
@@ -1420,7 +1420,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const result = await provider.callApi('test prompt');
-      expect(result.cost).toBe(0.192); // high_1024x1024 for GPT Image 1.5
+      expect(result.cost).toBe(0.133); // high_1024x1024 for GPT Image 1.5
     });
   });
 });

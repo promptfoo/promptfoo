@@ -3,9 +3,9 @@ import { groqSupportsTemperature, isGroqReasoningModel } from '../../../src/prov
 
 describe('Groq utility functions', () => {
   describe('isGroqReasoningModel', () => {
-    it('should identify deepseek-r1 models as reasoning', () => {
-      expect(isGroqReasoningModel('deepseek-r1-distill-llama-70b')).toBe(true);
-      expect(isGroqReasoningModel('deepseek-r1')).toBe(true);
+    it('should not identify retired deepseek-r1 models as reasoning', () => {
+      expect(isGroqReasoningModel('deepseek-r1-distill-llama-70b')).toBe(false);
+      expect(isGroqReasoningModel('deepseek-r1')).toBe(false);
     });
 
     it('should identify gpt-oss models as reasoning', () => {
@@ -17,6 +17,7 @@ describe('Groq utility functions', () => {
     it('should identify qwen models as reasoning', () => {
       expect(isGroqReasoningModel('qwen/qwen3-32b')).toBe(true);
       expect(isGroqReasoningModel('qwen-2.5')).toBe(true);
+      expect(isGroqReasoningModel('deepseek-r1-distill-qwen-32b')).toBe(true);
     });
 
     it('should not identify regular models as reasoning', () => {
@@ -28,7 +29,6 @@ describe('Groq utility functions', () => {
 
   describe('groqSupportsTemperature', () => {
     it('should return true for groq reasoning models', () => {
-      expect(groqSupportsTemperature('deepseek-r1-distill-llama-70b')).toBe(true);
       expect(groqSupportsTemperature('openai/gpt-oss-120b')).toBe(true);
       expect(groqSupportsTemperature('qwen/qwen3-32b')).toBe(true);
     });
@@ -37,6 +37,7 @@ describe('Groq utility functions', () => {
       // Note: groqSupportsTemperature returns false for non-reasoning models
       // because it only checks if it's a Groq reasoning model.
       // Regular models still support temperature via the parent class.
+      expect(groqSupportsTemperature('deepseek-r1-distill-llama-70b')).toBe(false);
       expect(groqSupportsTemperature('llama-3.3-70b-versatile')).toBe(false);
       expect(groqSupportsTemperature('mixtral-8x7b-32768')).toBe(false);
     });
