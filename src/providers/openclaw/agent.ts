@@ -17,7 +17,8 @@ import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types
 import type { OpenClawDeviceIdentity } from './device-auth';
 import type { OpenClawConfig } from './types';
 
-const OPENCLAW_PROTOCOL_VERSION = 3;
+const MIN_OPENCLAW_PROTOCOL_VERSION = 3;
+const MAX_OPENCLAW_PROTOCOL_VERSION = 4;
 const CLIENT_ID = 'gateway-client';
 const CLIENT_MODE = 'cli';
 const CLIENT_ROLE = 'operator';
@@ -534,8 +535,8 @@ export class OpenClawAgentProvider implements ApiProvider {
   private buildConnectParams(frame: OpenClawWsFrame, authState: ConnectAuthState) {
     const nonce = this.extractChallengeNonce(frame);
     const params: Record<string, unknown> = {
-      minProtocol: OPENCLAW_PROTOCOL_VERSION,
-      maxProtocol: OPENCLAW_PROTOCOL_VERSION,
+      minProtocol: MIN_OPENCLAW_PROTOCOL_VERSION,
+      maxProtocol: MAX_OPENCLAW_PROTOCOL_VERSION,
       client: {
         id: CLIENT_ID,
         displayName: 'promptfoo',
