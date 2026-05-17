@@ -5,7 +5,8 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: file://provider.js
+  - id: echo
+    label: context-override-echo-target
 
 defaultTest:
   vars:

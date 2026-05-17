@@ -16,6 +16,8 @@ It models a support assistant that runs in different tenant/user contexts:
 - `tenant-support`: omits `purpose`, so it inherits the root `redteam.purpose` and renders it with that context's vars.
 - `admin-console`: sets its own `purpose`, so it overrides the root purpose and renders with admin-specific vars.
 
+The example uses the built-in `echo` provider so the target is deterministic and does not need a custom provider script.
+
 To generate a small red team config:
 
 ```bash
