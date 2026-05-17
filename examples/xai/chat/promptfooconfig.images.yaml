@@ -4,7 +4,7 @@ prompts:
   - 'In the style of {{artist}}: {{subject}}'
 
 providers:
-  - xai:image:grok-2-image
+  - xai:image:grok-imagine-image
 
 tests:
   - vars:

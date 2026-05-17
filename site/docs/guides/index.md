@@ -16,6 +16,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Preventing Hallucinations](/docs/guides/prevent-llm-hallucinations) — Measure and reduce hallucination rates with perplexity, RAG, and controlled decoding
 - [Evaluating JSON Outputs](/docs/guides/evaluate-json) — Validate structured LLM outputs against schemas
 - [Evaluating Coding Agents](/docs/guides/evaluate-coding-agents) — Test AI coding assistants
+- [Evaluating OSWorld with Inspect](/docs/guides/evaluate-osworld-with-inspect) — Run desktop computer-use benchmark tasks through Inspect
 - [Testing Agent Skills](/docs/guides/test-agent-skills) — Compare Claude and Codex skill versions with routing, quality, cost, latency, and trace checks
 - [Evaluating Factuality](/docs/guides/factuality-eval) — Score responses for factual accuracy
 - [LLM as a Judge](/docs/guides/llm-as-a-judge) — Build reliable model-graded evals with rubrics, calibration, and multi-judge checks
@@ -48,4 +49,5 @@ Use promptfoo with popular frameworks and services.
 - [Evaluating OpenAI Assistants](/docs/guides/evaluate-openai-assistants) — Evaluate OpenAI's Assistants API
 - [Evaluating CrewAI Agents](/docs/guides/evaluate-crewai) — Red team and evaluate CrewAI multi-agent workflows
 - [Evaluating LangGraph](/docs/guides/evaluate-langgraph) — Test LangGraph agent applications
+- [Evaluating Google ADK Agents](/docs/guides/evaluate-google-adk) — Trace sessions, tools, callbacks, plugins, and workflow agents
 - [Evaluating ElevenLabs Voice AI](/docs/guides/evaluate-elevenlabs) — Test text-to-speech and voice AI outputs

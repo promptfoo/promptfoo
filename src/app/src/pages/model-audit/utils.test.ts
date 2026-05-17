@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getIssueFilePath, getSeverityLabel, getSeverityValue } from './utils';
+import {
+  getIssueFilePath,
+  getSeverityLabel,
+  getSeverityValue,
+  hasModelAuditFindings,
+} from './utils';
 
 describe('getSeverityLabel', () => {
   it('should return "critical" for "error" severity', () => {
@@ -106,5 +111,18 @@ describe('getIssueFilePath', () => {
     expect(getIssueFilePath({ location: undefined })).toBe('Unknown');
     expect(getIssueFilePath({ details: { path: undefined } })).toBe('Unknown');
     expect(getIssueFilePath({ details: { files: undefined } })).toBe('Unknown');
+  });
+});
+
+describe('hasModelAuditFindings', () => {
+  it('treats warning rows and failed checks as findings', () => {
+    expect(hasModelAuditFindings({ issues: [{ severity: 'warning' }] })).toBe(true);
+    expect(hasModelAuditFindings({ checks: [{ status: 'failed' }] })).toBe(true);
+  });
+
+  it('keeps informational-only rows clean', () => {
+    expect(hasModelAuditFindings({ issues: [{ severity: 'info' }, { severity: 'debug' }] })).toBe(
+      false,
+    );
   });
 });
