@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
@@ -72,7 +72,7 @@ export function importCommand(program: Command) {
       const db = getDb();
       let evalId: string;
       try {
-        const fileContent = fs.readFileSync(file, 'utf-8');
+        const fileContent = await fs.readFile(file, 'utf-8');
         const evalData = JSON.parse(fileContent);
 
         // Extract fields from correct locations (v3 export format)

@@ -362,6 +362,19 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('stacks command copy controls on narrow screens', () => {
+    renderDownloadDialog();
+
+    const copyButton = screen.getAllByLabelText('Copy command')[0];
+    expect(copyButton.parentElement).toHaveClass(
+      'flex-col',
+      'items-stretch',
+      'sm:flex-row',
+      'sm:items-center',
+    );
+    expect(copyButton).toHaveClass('self-end', 'sm:self-auto');
+  });
+
   it('shows an error toast when clipboard API fails', async () => {
     vi.mocked(navigator.clipboard.writeText).mockImplementationOnce(() =>
       Promise.reject(new Error('Clipboard write failed')),

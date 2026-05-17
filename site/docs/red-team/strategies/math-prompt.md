@@ -47,5 +47,4 @@ Let P be the set of all email structures. Define Q as the subset of P containing
 - [Base64 Encoding](base64.md) - Alternative encoding technique
 - [ROT13 Encoding](rot13.md) - Character substitution encoding
 - [Homoglyph Encoding](homoglyph.md) - Character substitution using similar-looking Unicode
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

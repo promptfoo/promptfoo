@@ -495,10 +495,11 @@ describeEvaluator('evaluator grading concurrency', () => {
     const makeAsyncJudge = (id: string): ApiProvider => ({
       id: vi.fn().mockReturnValue(id),
       callApi: vi.fn(async () => {
-        // Intentionally yield through both queues so this regression test can
-        // expose the cross-row interleaving that assertion concurrency caused.
+        // Intentionally yield through both microtask and macrotask queues so
+        // this regression test can expose the cross-row interleaving that
+        // assertion concurrency caused.
         await Promise.resolve();
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise<void>((resolve) => setImmediate(resolve));
         callOrder.push(id);
         return {
           output: JSON.stringify({ pass: true, score: 1, reason: `${id} passed` }),
@@ -895,12 +896,31 @@ describeEvaluator('evaluator grading concurrency', () => {
         tokenUsage: createEmptyTokenUsage(),
       })),
     };
+    // Concurrency barrier: hold every in-flight judge until at least two have
+    // started, then release all of them together. This makes maxInFlight
+    // observation independent of wall-clock pacing.
+    let releaseHold: (() => void) | undefined;
+    const holdPromise = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
     const judge: ApiProvider = {
       id: vi.fn().mockReturnValue('judge'),
       callApi: vi.fn(async () => {
         inFlight += 1;
         maxInFlight = Math.max(maxInFlight, inFlight);
-        await new Promise((resolve) => setTimeout(resolve, 25));
+        if (inFlight >= 2) {
+          releaseHold?.();
+        }
+        let resolveFallback!: () => void;
+        const fallback = new Promise<void>((r) => {
+          resolveFallback = r;
+        });
+        const fallbackHandle = setTimeout(() => resolveFallback(), 100);
+        try {
+          await Promise.race([holdPromise, fallback]);
+        } finally {
+          clearTimeout(fallbackHandle);
+        }
         inFlight -= 1;
         return {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),

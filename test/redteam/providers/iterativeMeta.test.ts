@@ -342,6 +342,62 @@ describe('RedteamIterativeMetaProvider', () => {
       // Should complete without throwing error
       expect(result.metadata.redteamHistory).toHaveLength(1);
     });
+
+    it('should fail closed when remote multi-input generation returns an invalid prompt format', async () => {
+      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+        materializationHandled: true,
+        output: {
+          result: 'document: malicious content\nquestion: summarize it',
+        },
+        tokenUsage: {
+          total: 100,
+          prompt: 50,
+          completion: 50,
+        },
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: {
+            query: 'test',
+            document: 'stale document',
+            question: 'stale question',
+          },
+          prompt: { raw: '{{document}} {{question}}', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: '{{document}} {{question}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: {
+          query: 'test',
+          document: 'stale document',
+          question: 'stale question',
+        },
+      });
+
+      expect(result.error).toBe(
+        'Iterative Meta remote multi-input generation returned an invalid prompt format',
+      );
+      expect(result.metadata.redteamHistory).toHaveLength(0);
+      expect(mockGetTargetResponse).not.toHaveBeenCalled();
+    });
   });
 
   describe('perTurnLayers configuration', () => {

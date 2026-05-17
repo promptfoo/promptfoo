@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useModelAuditHistoryStore } from '../model-audit/stores';
+import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditResult from './ModelAuditResult';
 
 vi.mock('../model-audit/stores');
@@ -56,8 +56,10 @@ const createMockScan = (id: string, name: string) => ({
 
 describe('ModelAuditResult', () => {
   const mockUseHistoryStore = vi.mocked(useModelAuditHistoryStore);
+  const mockUseConfigStore = vi.mocked(useModelAuditConfigStore);
   const mockFetchScanById = vi.fn();
   const mockDeleteHistoricalScan = vi.fn();
+  const mockStartNewScan = vi.fn();
 
   const getDefaultHistoryState = () => ({
     historicalScans: [],
@@ -81,6 +83,9 @@ describe('ModelAuditResult', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
+    mockUseConfigStore.mockImplementation((selector: any) =>
+      selector({ startNewScan: mockStartNewScan }),
+    );
   });
 
   const renderComponent = (scanId: string = 'test-scan-id') => {
@@ -138,6 +143,21 @@ describe('ModelAuditResult', () => {
     await waitFor(() => {
       expect(screen.getByText('Scan not found')).toBeInTheDocument();
     });
+  });
+
+  it('should reset the draft before starting a new scan from the error state', async () => {
+    const user = userEvent.setup();
+    mockFetchScanById.mockResolvedValue(null);
+
+    renderComponent('missing-scan');
+
+    await waitFor(() => {
+      expect(screen.getByText('Scan not found')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('New Scan'));
+
+    expect(mockStartNewScan).toHaveBeenCalledTimes(1);
   });
 
   it('should display model path in scan details', async () => {
