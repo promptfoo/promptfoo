@@ -22,7 +22,7 @@ The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack t
 
 ### Hydra Multi-Turn: Best for Multi-Turn
 
-[Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide memory. It pivots across conversation branches to uncover hidden vulnerabilities, especially in stateful applications like chatbots and agents.
+[Hydra](/docs/red-team/strategies/hydra/) runs adaptive multi-turn conversations with persistent scan-wide attacker memory. It can either replay the full transcript to a stateless target or use target-managed session memory for applications that persist prior turns.
 
 ### Quick Start
 

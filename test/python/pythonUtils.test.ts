@@ -22,18 +22,30 @@ import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
+const fsMock = vi.hoisted(() => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+}));
+
 // Mock setup
 vi.mock('fs', () => {
-  const fsMock = {
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn(),
-    unlinkSync: vi.fn(),
-  };
   return {
     ...fsMock,
     default: fsMock,
   };
 });
+
+vi.mock('fs/promises', () => ({
+  default: {
+    writeFile: fsMock.writeFileSync,
+    readFile: fsMock.readFileSync,
+    unlink: fsMock.unlinkSync,
+  },
+  writeFile: fsMock.writeFileSync,
+  readFile: fsMock.readFileSync,
+  unlink: fsMock.unlinkSync,
+}));
 
 vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),
@@ -407,8 +419,9 @@ describe('Python Utils', () => {
     describe('concurrent validation', () => {
       it('should share validation promise between concurrent calls', async () => {
         mockExecFileAsync.mockImplementation(async () => {
-          // Add delay to simulate slow execution
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Yield control so concurrent callers can register on the shared
+          // validation promise before resolution.
+          await Promise.resolve();
           return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
 
@@ -433,8 +446,9 @@ describe('Python Utils', () => {
         pythonUtils.state.cachedPythonPath = null;
 
         mockExecFileAsync.mockImplementation(async () => {
-          // Delay to simulate slow execution
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          // Yield control so concurrent callers can race onto the shared
+          // validation promise before resolution.
+          await Promise.resolve();
           return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
 
