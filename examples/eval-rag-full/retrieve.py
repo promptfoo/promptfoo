@@ -1,15 +1,17 @@
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import AIMessage, HumanMessage
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Constants
-CHROMA_PATH: str = "db"
+EXAMPLE_DIR: Path = Path(__file__).resolve().parent
+CHROMA_PATH: str = str(EXAMPLE_DIR / "db")
 OPENAI_AI_MODEL: str = "gpt-4.1-mini"
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
 OPENAI_AI_EMBEDDING_MODEL: str = "text-embedding-3-large"
