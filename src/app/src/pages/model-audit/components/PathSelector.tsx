@@ -4,6 +4,7 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
   ClearIcon,
   CloudIcon,
@@ -19,6 +20,7 @@ import {
   UploadIcon,
 } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -226,43 +228,58 @@ export default function PathSelector({
   return (
     <div className="space-y-6">
       <Tabs defaultValue="local" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="local" className="flex items-center gap-2">
+        <TabsList className="grid !h-auto w-full grid-cols-2 gap-1 sm:!h-10 sm:grid-cols-4 sm:gap-0">
+          <TabsTrigger value="local" aria-label="Local Files" className="flex items-center gap-2">
             <ComputerIcon className="size-4" />
-            <span className="hidden sm:inline">Local Files</span>
+            <span>Local Files</span>
           </TabsTrigger>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TabsTrigger value="cloud" disabled className="flex items-center gap-2 opacity-60">
+              <TabsTrigger
+                value="cloud"
+                aria-label="Cloud"
+                disabled
+                className="flex items-center gap-2 opacity-60"
+              >
                 <div className="relative">
                   <CloudIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
-                <span className="hidden sm:inline">Cloud</span>
+                <span>Cloud</span>
               </TabsTrigger>
             </TooltipTrigger>
             <TooltipContent>Cloud storage is available in Enterprise</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TabsTrigger value="github" disabled className="flex items-center gap-2 opacity-60">
+              <TabsTrigger
+                value="github"
+                aria-label="GitHub"
+                disabled
+                className="flex items-center gap-2 opacity-60"
+              >
                 <div className="relative">
                   <GitHubIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
-                <span className="hidden sm:inline">GitHub</span>
+                <span>GitHub</span>
               </TabsTrigger>
             </TooltipTrigger>
             <TooltipContent>GitHub integration is available in Enterprise</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TabsTrigger value="registry" disabled className="flex items-center gap-2 opacity-60">
+              <TabsTrigger
+                value="registry"
+                aria-label="Registry"
+                disabled
+                className="flex items-center gap-2 opacity-60"
+              >
                 <div className="relative">
                   <StorageIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
-                <span className="hidden sm:inline">Registry</span>
+                <span>Registry</span>
               </TabsTrigger>
             </TooltipTrigger>
             <TooltipContent>Model registries are available in Enterprise</TooltipContent>
@@ -275,7 +292,8 @@ export default function PathSelector({
             <Alert variant="info">
               <AlertContent>
                 <AlertDescription>
-                  <strong>Current directory:</strong> {currentWorkingDir}
+                  <strong>Current directory:</strong>
+                  <span className="block break-all">{currentWorkingDir}</span>
                   <span className="block text-xs text-muted-foreground mt-1">
                     Relative paths will be resolved from this directory
                   </span>
@@ -286,9 +304,9 @@ export default function PathSelector({
 
           {/* Drag and Drop Zone */}
           <div>
-            <label htmlFor="model-path-input" className="text-sm text-muted-foreground mb-2 block">
+            <Label htmlFor="model-path-input" className="text-muted-foreground block">
               Add model path
-            </label>
+            </Label>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -346,7 +364,11 @@ export default function PathSelector({
               {isChecking ? 'Checking...' : 'Add'}
             </Button>
           </div>
-          {error && <p className="text-sm text-destructive -mt-4">{error}</p>}
+          {error && (
+            <HelperText error className="-mt-4">
+              {error}
+            </HelperText>
+          )}
 
           {/* Recent Paths */}
           {recentPaths.length > 0 && (

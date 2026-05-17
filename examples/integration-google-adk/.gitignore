@@ -1,0 +1,15 @@
+# Promptfoo result files
+*-results.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Environment variables
+.env

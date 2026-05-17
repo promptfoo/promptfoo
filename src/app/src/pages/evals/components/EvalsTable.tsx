@@ -174,7 +174,11 @@ export default function EvalsTable({
         cell: ({ getValue }) => {
           const evalId = getValue<string>();
           if (evalId === focusedEvalId) {
-            return <span className="font-mono text-sm">{evalId}</span>;
+            return (
+              <span title={evalId} className="block truncate font-mono text-sm">
+                {evalId}
+              </span>
+            );
           }
           return (
             <Link
@@ -183,7 +187,8 @@ export default function EvalsTable({
                 e.preventDefault();
                 onEvalSelected(evalId);
               }}
-              className="text-primary hover:underline font-mono text-sm"
+              title={evalId}
+              className="block truncate font-mono text-sm text-primary hover:underline"
             >
               {evalId}
             </Link>
@@ -270,22 +275,20 @@ export default function EvalsTable({
                 ? 'text-amber-600 dark:text-amber-400'
                 : 'text-red-600 dark:text-red-400';
           return (
-            <span className={cn('font-mono text-sm tabular-nums text-right block', colorClass)}>
-              {rate.toFixed(2)}%
-            </span>
+            <span className={cn('font-mono tabular-nums', colorClass)}>{rate.toFixed(2)}%</span>
           );
         },
-        size: 100,
+        size: 120,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'numTests',
         header: '# Tests',
         cell: ({ getValue }) => (
-          <span className="font-mono text-sm tabular-nums text-right block">
-            {getValue<number>()}
-          </span>
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
         size: 80,
+        meta: { align: 'right' },
       },
     ],
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
@@ -323,7 +326,7 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={50}
+        globalFilterLabel="Search evaluations"
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}

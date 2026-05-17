@@ -86,11 +86,12 @@ export default function VerticalSuiteCard({
   const someSelected = selectedCount > 0 && !allSelected;
 
   const severityCounts = useMemo(() => {
-    const counts = {
+    const counts: Record<Severity, number> = {
       [Severity.Critical]: 0,
       [Severity.High]: 0,
       [Severity.Medium]: 0,
       [Severity.Low]: 0,
+      [Severity.Informational]: 0,
     };
     suite.plugins.forEach((plugin) => {
       const severity = riskCategorySeverityMap[plugin];
@@ -269,6 +270,19 @@ export default function VerticalSuiteCard({
                   <TooltipContent>Low severity</TooltipContent>
                 </Tooltip>
               )}
+              {severityCounts[Severity.Informational] > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-blue-400" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.Informational]} Info
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Informational</TooltipContent>
+                </Tooltip>
+              )}
             </div>
 
             {/* Actions */}
@@ -409,6 +423,7 @@ export default function VerticalSuiteCard({
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label={`Configure ${displayNameOverrides[plugin] || plugin}`}
                                     className={cn(
                                       'size-8',
                                       requiresConfig && !isPluginConfigured(plugin)
@@ -452,6 +467,8 @@ export default function VerticalSuiteCard({
                                         'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400',
                                       severity === Severity.Low &&
                                         'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400',
+                                      severity === Severity.Informational &&
+                                        'border-sky-200 bg-sky-500/10 text-sky-600 dark:border-sky-800 dark:text-sky-400',
                                     )}
                                   >
                                     {severity}
@@ -471,6 +488,9 @@ export default function VerticalSuiteCard({
                                   <Button
                                     variant="ghost"
                                     size="icon"
+                                    aria-label={`View documentation for ${
+                                      displayNameOverrides[plugin] || plugin
+                                    }`}
                                     className="size-8 text-muted-foreground"
                                     onClick={(e) => {
                                       e.stopPropagation();

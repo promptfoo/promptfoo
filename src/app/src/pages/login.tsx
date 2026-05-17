@@ -3,6 +3,7 @@ import { useActionState, useCallback, useEffect, useState } from 'react';
 import logoPanda from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
   KeyIcon,
   OpenInNewIcon,
@@ -112,7 +113,7 @@ export default function LoginPage() {
     }
   }, [isLoading, email, handleRedirect]);
 
-  if (isLoading || (!isLoading && email)) {
+  if (isLoading || email) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
@@ -147,7 +148,7 @@ export default function LoginPage() {
                     href="https://promptfoo.app/welcome"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                    className="text-primary underline underline-offset-2 hover:no-underline"
                   >
                     Generate your token here
                   </a>
@@ -192,7 +193,7 @@ export default function LoginPage() {
                     )}
                   </button>
                 </div>
-                {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+                {state.error && <HelperText error>{state.error}</HelperText>}
               </div>
 
               {/* API Host Field */}

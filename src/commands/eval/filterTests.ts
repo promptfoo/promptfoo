@@ -18,6 +18,8 @@
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
 import { getTestCaseDeduplicationKey } from '../../util/comparison';
+import { filterByRange } from '../../util/filterRange';
+import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
 
 import type { TestSuite } from '../../types/index';
@@ -47,10 +49,12 @@ export interface FilterOptions {
   failingOnly?: string;
   /** Number of tests to take from the beginning */
   firstN?: number | string;
-  /** Key-value pair (format: "key=value") to filter tests by metadata */
-  metadata?: string;
+  /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use AND logic. */
+  metadata?: string | string[];
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
+  /** Zero-based test index range in start:end format. End is exclusive. */
+  range?: string;
   /** Number of random tests to sample */
   sample?: number | string;
 }
@@ -104,8 +108,9 @@ async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise
  * 2. Failing tests filter
  * 3. Error tests filter
  * 4. Pattern filter
- * 5. First N filter
- * 6. Random sample filter
+ * 5. Range filter
+ * 6. First N filter
+ * 7. Random sample filter
  *
  * @param testSuite - The test suite containing all tests
  * @param options - Configuration options for filtering
@@ -124,11 +129,23 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.metadata) {
-    const [key, value] = options.metadata.split('=');
-    if (!key || value === undefined) {
-      throw new Error('--filter-metadata must be specified in key=value format');
+    // Normalize to array for consistent handling
+    const metadataFilters = Array.isArray(options.metadata) ? options.metadata : [options.metadata];
+
+    // Validate all filters first
+    const parsedFilters: Array<{ key: string; value: string }> = [];
+    for (const filter of metadataFilters) {
+      const [key, ...valueParts] = filter.split('=');
+      const value = valueParts.join('='); // Rejoin in case value contains '='
+      if (!key || value === undefined || value === '') {
+        throw new Error('--filter-metadata must be specified in key=value format');
+      }
+      parsedFilters.push({ key, value });
     }
-    logger.debug(`Filtering for metadata ${key}=${value}`);
+
+    logger.debug(
+      `Filtering for metadata conditions (AND logic): ${parsedFilters.map((f) => `${f.key}=${f.value}`).join(', ')}`,
+    );
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
     tests = tests.filter((test) => {
@@ -136,23 +153,29 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
         return false;
       }
-      const testValue = test.metadata[key];
-      let matches = false;
 
-      if (Array.isArray(testValue)) {
-        // For array metadata, check if any value includes the search term
-        matches = testValue.some((v) => v.toString().includes(value));
-      } else if (testValue !== undefined) {
-        // For single value metadata, check if it includes the search term
-        matches = testValue.toString().includes(value);
+      // ALL conditions must match (AND logic)
+      for (const { key, value } of parsedFilters) {
+        const testValue = test.metadata[key];
+        let matches = false;
+
+        if (Array.isArray(testValue)) {
+          // For array metadata, check if any value includes the search term
+          matches = testValue.some((v) => v.toString().includes(value));
+        } else if (testValue !== undefined) {
+          // For single value metadata, check if it includes the search term
+          matches = testValue.toString().includes(value);
+        }
+
+        if (!matches) {
+          logger.debug(
+            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
+          );
+          return false;
+        }
       }
 
-      if (!matches) {
-        logger.debug(
-          `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
-        );
-      }
-      return matches;
+      return true;
     });
 
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
@@ -224,6 +247,10 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       );
     }
     tests = tests.filter((test) => test.description && pattern.test(test.description));
+  }
+
+  if (options.range !== undefined) {
+    tests = filterByRange(tests, options.range, warnEmptyFilterRange);
   }
 
   if (options.firstN !== undefined) {

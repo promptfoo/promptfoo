@@ -153,10 +153,9 @@ describe('GoogleGenericProvider', () => {
       });
 
       // Wait for MCP initialization
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      // Verify initialization was called on the mock instance
-      expect(mockMcpInstance.initialize).toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(mockMcpInstance.initialize).toHaveBeenCalled();
+      });
     });
 
     it('should not initialize MCP when not configured', () => {
@@ -289,7 +288,9 @@ describe('GoogleGenericProvider', () => {
       });
 
       // Wait for MCP initialization to complete
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await vi.waitFor(() => {
+        expect(mockMcpInstance.initialize).toHaveBeenCalled();
+      });
 
       const tools = await provider['getAllTools']();
 
@@ -426,7 +427,9 @@ describe('GoogleGenericProvider', () => {
       });
 
       // Wait for MCP initialization
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await vi.waitFor(() => {
+        expect(mockMcpInstance.initialize).toHaveBeenCalled();
+      });
 
       await provider.cleanup();
 

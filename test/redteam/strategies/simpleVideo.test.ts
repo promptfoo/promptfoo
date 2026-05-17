@@ -4,13 +4,14 @@
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
 
-import fs from 'fs';
+import fsPromises from 'fs/promises';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
   addVideoToBase64,
   createProgressBar,
+  escapeDrawtextString,
   getFallbackBase64,
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
@@ -42,16 +43,16 @@ vi.mock('../../../src/cliState', () => ({
   },
 }));
 
-const mockWriteFileSync = vi.hoisted(() => vi.fn());
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
+const mockWriteFile = vi.hoisted(() => vi.fn());
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
   return {
     ...actual,
     default: {
       ...actual,
-      writeFileSync: mockWriteFileSync,
+      writeFile: mockWriteFile,
     },
-    writeFileSync: mockWriteFileSync,
+    writeFile: mockWriteFile,
   };
 });
 
@@ -72,9 +73,56 @@ vi.mock('cli-progress', async (importOriginal) => {
   };
 });
 
+describe('escapeDrawtextString', () => {
+  it('passes plain text through unchanged', () => {
+    expect(escapeDrawtextString('hello world')).toBe('hello world');
+  });
+
+  it('escapes backslashes first', () => {
+    expect(escapeDrawtextString('a\\b')).toBe('a\\\\b');
+  });
+
+  it('escapes single quotes using close-escape-reopen pattern', () => {
+    // "it's" → it'\''s  (no shell involved — FFmpeg filter parser handles \' as literal ')
+    expect(escapeDrawtextString("it's")).toBe("it'\\''s");
+  });
+
+  it('escapes colons as option separators', () => {
+    expect(escapeDrawtextString('10:30')).toBe('10\\:30');
+  });
+
+  it('escapes newlines as \\n', () => {
+    expect(escapeDrawtextString('line1\nline2')).toBe('line1\\nline2');
+  });
+
+  it('escapes percent signs as %% for drawtext expansion safety', () => {
+    expect(escapeDrawtextString('100%')).toBe('100%%');
+  });
+
+  it('double-escapes a backslash immediately before a single quote', () => {
+    // Input runtime string: it\'s  (backslash + apostrophe + s)
+    // Step 1: backslash → \\   gives: it\\'s
+    // Step 2: '        → '\'' gives: it\\'\''s
+    expect(escapeDrawtextString("it\\'s")).toBe("it\\\\'\\''s");
+  });
+
+  it('handles adversarial input with multiple special characters', () => {
+    // Input: ';%{pts}\n[overlay]=value  (apostrophe, semicolon, percent, backslash+n, brackets, equals)
+    const input = "';%{pts}\\n[overlay]=value";
+    const result = escapeDrawtextString(input);
+    // Single quote becomes '\'' pattern
+    expect(result).toContain("'\\''");
+    // Percent becomes %%
+    expect(result).toContain('%%');
+    // Backslash is doubled
+    expect(result).toContain('\\\\');
+  });
+});
+
 describe('simpleVideo strategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWriteFile.mockReset();
     mockVideoGenerator.mockClear();
   });
 
@@ -126,15 +174,13 @@ describe('simpleVideo strategy', () => {
     it('writes a base64 video to a file', async () => {
       await writeVideoFile(DUMMY_VIDEO_BASE64, 'test.mp4');
 
-      expect(fs.writeFileSync).toHaveBeenCalledWith('test.mp4', expect.any(Buffer));
+      expect(fsPromises.writeFile).toHaveBeenCalledWith('test.mp4', expect.any(Buffer));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Video file written to'));
     });
 
     it('throws an error if writing fails', async () => {
       const mockError = new Error('Write failed');
-      vi.mocked(fs.writeFileSync).mockImplementationOnce(function () {
-        throw mockError;
-      });
+      vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(mockError);
 
       await expect(writeVideoFile(DUMMY_VIDEO_BASE64, 'test.mp4')).rejects.toThrow('Write failed');
       expect(logger.error).toHaveBeenCalledWith(

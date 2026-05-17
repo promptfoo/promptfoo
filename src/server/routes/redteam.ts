@@ -3,27 +3,22 @@ import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import {
-  ALL_PLUGINS,
-  ALL_STRATEGIES,
+  DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
+  MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  type Plugin,
   REDTEAM_MODEL,
-  type Strategy,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import {
-  ConversationMessageSchema,
-  PluginConfigSchema,
-  StrategyConfigSchema,
-} from '../../redteam/types';
 import { TestCaseWithPlugin } from '../../types';
+import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sanitizeObject } from '../../util/sanitizer';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
@@ -35,41 +30,14 @@ import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 
-const TestCaseGenerationSchema = z.object({
-  plugin: z.object({
-    id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
-      message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
-    }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.optional().prefault({}),
-  }),
-  strategy: z.object({
-    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
-      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().prefault({}),
-  }),
-  config: z.object({
-    applicationDefinition: z.object({
-      purpose: z.string().nullable(),
-    }),
-  }),
-  turn: z.int().min(0).optional().prefault(0),
-  maxTurns: z.int().min(1).optional(),
-  history: z.array(ConversationMessageSchema).optional().prefault([]),
-  goal: z.string().optional(),
-  stateful: z.boolean().optional(),
-  // Batch generation: number of test cases to generate (1-10, default 1)
-  count: z.int().min(1).max(10).optional().prefault(1),
-});
-
 /**
  * Generates a test case for a given plugin/strategy combination.
  */
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   try {
-    const parsedBody = TestCaseGenerationSchema.safeParse(req.body);
+    const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
     if (!parsedBody.success) {
-      res.status(400).json({ error: 'Invalid request body', details: parsedBody.error.message });
+      res.status(400).json({ error: z.prettifyError(parsedBody.error) });
       return;
     }
 
@@ -89,6 +57,18 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     if (pluginConfigurationError) {
       res.status(400).json({ error: pluginConfigurationError });
       return;
+    }
+
+    // In multi-input mode, some plugins don't support dynamic generation
+    const hasMultiInput =
+      plugin.config.inputs && Object.keys(plugin.config.inputs as object).length > 0;
+    if (hasMultiInput) {
+      const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
+      if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
+        logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
+        res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
+        return;
+      }
     }
 
     // For multi-turn strategies, force count to 1 (each turn depends on previous response)
@@ -143,10 +123,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           finalTestCases = strategyTestCases;
         }
       } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}: ${error}`);
+        logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({
           error: `Failed to apply strategy ${strategy.id}`,
-          details: error instanceof Error ? error.message : String(error),
         });
         return;
       }
@@ -181,11 +160,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           stateful,
         });
 
-        res.json({
-          prompt: multiTurnResult.prompt,
-          context,
-          metadata: multiTurnResult.metadata,
-        });
+        res.json(
+          RedteamSchemas.GenerateTest.Response.parse({
+            prompt: multiTurnResult.prompt,
+            context,
+            metadata: multiTurnResult.metadata,
+          }),
+        );
         return;
       } catch (error) {
         if (error instanceof RemoteGenerationDisabledError) {
@@ -199,7 +180,6 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         });
         res.status(500).json({
           error: 'Failed to generate multi-turn prompt',
-          details: error instanceof Error ? error.message : String(error),
         });
         return;
       }
@@ -214,10 +194,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         return { prompt, context, metadata };
       });
 
-      res.json({
-        testCases: batchResults,
-        count: batchResults.length,
-      });
+      res.json(
+        RedteamSchemas.GenerateTest.Response.parse({
+          testCases: batchResults,
+          count: batchResults.length,
+        }),
+      );
       return;
     }
 
@@ -227,16 +209,17 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const baseMetadata =
       testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
 
-    res.json({
-      prompt: generatedPrompt,
-      context,
-      metadata: baseMetadata,
-    });
+    res.json(
+      RedteamSchemas.GenerateTest.Response.parse({
+        prompt: generatedPrompt,
+        context,
+        metadata: baseMetadata,
+      }),
+    );
   } catch (error) {
-    logger.error(`Error generating test case: ${error}`);
+    logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
-      details: error instanceof Error ? error.message : String(error),
     });
   }
 });
@@ -246,6 +229,12 @@ let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
+  const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+
   // If there's a current job running, abort it
   if (currentJobId) {
     if (currentAbortController) {
@@ -258,7 +247,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = req.body;
+  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -276,16 +265,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Set web UI mode
   cliState.webUI = true;
 
-  // Validate and normalize maxConcurrency
-  const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
-
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
-    delay: Number(delay || '0'),
-    maxConcurrency: normalizedMaxConcurrency,
+    ...(delay === undefined ? {} : { delay }),
+    ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
     logCallback: (message: string) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);
@@ -327,7 +313,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     });
 
-  res.json({ id });
+  res.json(RedteamSchemas.Run.Response.parse({ id }));
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
@@ -356,7 +342,7 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   // Wait a moment to ensure cleanup
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  res.json({ message: 'Job cancelled' });
+  res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));
 });
 
 /**
@@ -370,15 +356,29 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
  * Cloud's task registry (See server/src/routes/task.ts).
  */
 redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void> => {
-  const { taskId } = req.params;
+  const paramsResult = RedteamSchemas.Task.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+  const bodyResult = RedteamSchemas.Task.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+
+  const { taskId } = paramsResult.data;
+  if (neverGenerateRemote()) {
+    res.status(400).json({ success: false, error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
   const cloudFunctionUrl = getRemoteGenerationUrl();
-  logger.debug(
-    `Received ${taskId} task request: ${JSON.stringify({
-      method: req.method,
-      url: req.url,
-      body: req.body,
-    })}`,
-  );
+  logger.debug(`Received ${taskId} task request`, {
+    method: req.method,
+    url: req.url,
+    body: sanitizeObject(bodyResult.data, { context: 'request body' }),
+  });
 
   try {
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
@@ -388,8 +388,8 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        ...bodyResult.data,
         task: taskId,
-        ...req.body,
       }),
     });
 
@@ -400,7 +400,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 
     const data = await response.json();
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
-    res.json(data);
+    res.json(RedteamSchemas.Task.Response.parse(data));
   } catch (error) {
     logger.error(`Error in ${taskId} task: ${error}`);
     res.status(500).json({ error: `Failed to process ${taskId} task` });
@@ -408,8 +408,10 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 });
 
 redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void> => {
-  res.json({
-    hasRunningJob: currentJobId !== null,
-    jobId: currentJobId,
-  });
+  res.json(
+    RedteamSchemas.Status.Response.parse({
+      hasRunningJob: currentJobId !== null,
+      jobId: currentJobId,
+    }),
+  );
 });

@@ -10,6 +10,7 @@ import { fetchOAuthToken, TOKEN_REFRESH_BUFFER_MS } from '../../src/util/oauth';
 describe('oauth utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchWithProxy.mockReset();
   });
 
   describe('TOKEN_REFRESH_BUFFER_MS', () => {

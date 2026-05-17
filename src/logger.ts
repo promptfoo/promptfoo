@@ -19,6 +19,12 @@ export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
+export function clearLogCallbackIfOwned(callback: LogCallback | null) {
+  if (callback && globalLogCallback === callback) {
+    globalLogCallback = null;
+  }
+}
+
 // Global configuration for structured logging
 let useStructuredLogging = false;
 
@@ -49,6 +55,7 @@ export interface SanitizedLogContext {
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
+let sourceMapSupportInitializationPromise: Promise<void> | null = null;
 
 // Shutdown state tracking - prevents writes once logger closure begins
 let isLoggerShuttingDown = false;
@@ -64,15 +71,23 @@ export function getLoggerShuttingDown(): boolean {
 }
 
 export async function initializeSourceMapSupport(): Promise<void> {
-  if (!sourceMapSupportInitialized) {
+  if (sourceMapSupportInitialized) {
+    return;
+  }
+
+  sourceMapSupportInitializationPromise ??= (async () => {
     try {
       const sourceMapSupport = await import('source-map-support');
       sourceMapSupport.install();
       sourceMapSupportInitialized = true;
     } catch {
       // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
+    } finally {
+      sourceMapSupportInitializationPromise = null;
     }
-  }
+  })();
+
+  await sourceMapSupportInitializationPromise;
 }
 
 /**

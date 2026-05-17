@@ -1,8 +1,9 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
   getGoogleClient,
@@ -175,7 +176,7 @@ export class GoogleImageProvider implements ApiProvider {
               ...(this.config.headers || {}),
             },
             data: body,
-            timeout: REQUEST_TIMEOUT_MS,
+            timeout: getRequestTimeoutMs(),
           }),
         'Vertex AI API call',
       )) as { data: ImageGenerationResponse };
@@ -245,7 +246,7 @@ export class GoogleImageProvider implements ApiProvider {
               body: JSON.stringify(body),
               ...(authDiscriminator && { _authHash: authDiscriminator }),
             } as RequestInit,
-            REQUEST_TIMEOUT_MS,
+            getRequestTimeoutMs(),
             'json',
           ),
         'Google AI Studio API call',
@@ -280,7 +281,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    const imageOutputs = [];
+    const imageOutputs: { data: string; mimeType: string }[] = [];
     let totalCost = 0;
 
     // Get cost per image from model prices
@@ -293,8 +294,10 @@ export class GoogleImageProvider implements ApiProvider {
       const mimeType = imageData.mimeType || 'image/png';
 
       if (base64Image) {
-        // Return as markdown image with data URL
-        imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+        imageOutputs.push({
+          data: toDataUri(mimeType, base64Image),
+          mimeType,
+        });
         totalCost += costPerImage;
       }
     }
@@ -306,7 +309,10 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     return {
-      output: imageOutputs.join('\n\n'),
+      // First image as raw data URI for blob externalization
+      output: imageOutputs[0].data,
+      // All images in structured field for UI rendering
+      images: imageOutputs,
       cached,
       latencyMs,
       cost: totalCost,

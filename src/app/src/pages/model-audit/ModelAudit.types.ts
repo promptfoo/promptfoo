@@ -44,7 +44,17 @@ export interface ScanOptions {
   progress?: boolean;
   sbom?: string;
   output?: string;
+  scanners?: string[];
+  excludeScanner?: string[];
   author?: string;
+}
+
+export interface ScannerCatalogEntry {
+  id: string;
+  class: string;
+  description: string;
+  extensions: string[];
+  dependencies: string[];
 }
 
 export interface ScanIssue {
@@ -102,4 +112,10 @@ export interface HistoricalScan {
   passedChecks?: number | null;
   failedChecks?: number | null;
   metadata?: Record<string, unknown> | null;
+  modelId?: string | null;
+  revisionSha?: string | null;
+  contentHash?: string | null;
+  modelSource?: string | null;
+  sourceLastModified?: number | null;
+  scannerVersion?: string | null;
 }
