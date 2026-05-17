@@ -81,6 +81,7 @@ redteam:
     - id: jailbreak:hydra
       config:
         maxTurns: 10
+        stateful: false # Replays the full conversation history by default
     - id: goat
       config:
         maxTurns: 5
@@ -97,7 +98,7 @@ Increasing the number of turns (and backtracks for strategies that expose that o
 Since multi-turn strategies are relatively high cost, we recommend running it on a smaller number of tests and plugins, with a cheaper provider, or prefer a simpler [iterative](iterative.md) strategy.
 
 :::info
-If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
+If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. Configure session handling in the provider too: use [HTTP session management](/docs/providers/http/#server-side-session-management) for HTTP targets or [stateful OpenAI Agents sessions](/docs/providers/openai-agents/#stateful-red-team-runs) for the built-in Agents SDK provider.
 :::
 
 ### Continue After Success

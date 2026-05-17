@@ -37,9 +37,11 @@ Now we're ready to go.
 - Edit `retrieve.py` to control how context is loaded and questions are answered.
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Promptfoo is a Node.js CLI, but the `file://retrieve.py` provider runs inside Python. Keep the virtual environment active when running the eval, or set `PROMPTFOO_PYTHON=./venv/bin/python` so Promptfoo can import the packages from `requirements.txt`.
 
-See `promptfooconfig.with-asserts.yaml` for a more complete example that compares the performance of two RAG configurations.
+Afterwards, you can view the results by running `npx promptfoo@latest view`
+
+See `promptfooconfig.with-asserts.yaml` for a more complete example that compares the performance of two RAG configurations. The smaller retrieval configuration is intentionally expected to miss a couple of details so the comparison view demonstrates failures as well as passes.
