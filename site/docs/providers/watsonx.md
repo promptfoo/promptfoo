@@ -1,19 +1,19 @@
 ---
 sidebar_label: WatsonX
-description: Configure IBM WatsonX's Granite and Llama models for enterprise-grade LLM testing, with specialized support for code generation, vision, and multilingual tasks
+description: Configure IBM WatsonX's text and chat models for enterprise-grade LLM testing, including Granite, Llama, code, and multilingual options
 ---
 
 # WatsonX
 
-[IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
+[IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports text generation and chat models from the `Granite` and `Llama` series, along with additional models for code generation and multilingual tasks.
 
 ## Supported Models
 
-IBM watsonx.ai provides foundation models through their inference API. The promptfoo WatsonX provider currently supports **text generation and chat models** that can be called directly via API.
+IBM watsonx.ai provides foundation models through its inference API. The promptfoo WatsonX provider currently supports **text generation and chat models** that can be called directly via API.
 
 :::tip Finding Available Models
 
-To see the latest models available in your region, use IBM's API:
+To see the latest models available in your region, use IBM's API or review IBM's [supported foundation models](https://www.ibm.com/docs/en/watsonx/saas?topic=solutions-supported-foundation-models):
 
 ```bash
 curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2024-05-01" \
@@ -24,50 +24,38 @@ curl "https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=202
 
 ### Currently Available Models
 
-The following models are available for text generation and chat:
+The following are representative **ready-to-use** models that IBM currently provides for direct inferencing through the text generation or chat APIs:
 
 #### IBM Granite
 
-- `ibm/granite-4-h-small` - Latest 32B parameter model
-- `ibm/granite-3-3-8b-instruct` - **Recommended** latest 8B instruct model
-- `ibm/granite-3-8b-instruct` - Standard 8B instruct model
-- `ibm/granite-3-2-8b-instruct` - Reasoning-capable 8B model
-- `ibm/granite-3-2b-instruct` - Lightweight 2B model (deprecated - use 3-3-8b)
-- `ibm/granite-13b-instruct-v2` - 13B model (deprecated - use 3-3-8b)
-- `ibm/granite-guardian-3-8b` - Safety/guardrail model
-- `ibm/granite-guardian-3-2b` - Smaller guardrail model (deprecated)
+- `ibm/granite-4-h-small` - Latest ready-to-use Granite text model
+- `ibm/granite-3-8b-instruct` - Older instruct model (deprecated)
 - `ibm/granite-8b-code-instruct` - Code generation specialist
-- `ibm/granite-vision-3-2-2b` - Vision model (deprecated)
 
 #### Meta Llama
 
 - `meta-llama/llama-4-maverick-17b-128e-instruct-fp8` - Latest Llama 4 model
 - `meta-llama/llama-3-3-70b-instruct` - Latest Llama 3.3 (70B)
-- `meta-llama/llama-3-405b-instruct` - Flagship 405B model
-- `meta-llama/llama-3-2-11b-vision-instruct` - Vision model (11B)
-- `meta-llama/llama-3-2-90b-vision-instruct` - Vision model (90B)
-- `meta-llama/llama-guard-3-11b-vision` - Safety model for vision
-- `meta-llama/llama-2-13b-chat` - Legacy Llama 2 model
 
 #### Mistral
 
-- `mistralai/mistral-large` - Flagship Mistral model
-- `mistralai/mistral-medium-2505` - Mid-tier model (2025-05 version)
+- `mistralai/mistral-large-2512` - Latest ready-to-use Mistral Large model
+- `mistralai/mistral-medium-2505` - Mid-tier model
 - `mistralai/mistral-small-3-1-24b-instruct-2503` - Smaller instruct model
-- `mistralai/pixtral-12b` - Vision model (12B)
 
 #### Other Models
 
-- `google/flan-t5-xl` - Google's T5 model (deprecated)
 - `openai/gpt-oss-120b` - Open-source GPT-compatible model
+- `sdaia/allam-1-13b-instruct` - Arabic and English instruct model
 
 ### Other Model Types
 
 IBM watsonx.ai also offers:
 
-- **Deploy on Demand Models** - Curated models with `-curated` suffix that require creating a dedicated deployment first
+- **Deploy on Demand Models** - Curated models that require creating a dedicated deployment first
 - **Embedding Models** - For generating text embeddings (e.g., `ibm/granite-embedding-278m-multilingual`)
 - **Reranker Models** - For improving search results (e.g., `cross-encoder/ms-marco-minilm-l-12-v2`)
+- **Vision and Guardrail Models** - Models with APIs or payloads that differ from the provider's current text/chat workflow
 
 :::info Additional Model Types Not Currently Supported
 
@@ -144,7 +132,7 @@ To install the WatsonX provider, use the following steps:
 
    ```yaml
    providers:
-     - id: watsonx:ibm/granite-3-3-8b-instruct
+     - id: watsonx:ibm/granite-4-h-small
        config:
          # Option 1: IAM Authentication
          apiKey: your-ibm-cloud-api-key
@@ -158,11 +146,11 @@ To install the WatsonX provider, use the following steps:
 
 ### Usage Examples
 
-Once configured, you can use the WatsonX provider to generate text responses based on prompts. Here's an example using the **Granite 3.3 8B Instruct** model:
+Once configured, you can use the WatsonX provider to generate text responses based on prompts. Here's an example using the **Granite 4 H Small** model:
 
 ```yaml
 providers:
-  - watsonx:ibm/granite-3-3-8b-instruct
+  - watsonx:ibm/granite-4-h-small
 
 prompts:
   - "Answer the following question: '{{question}}'"
@@ -181,15 +169,15 @@ You can also use other models by changing the model ID:
 providers:
   # IBM Granite models
   - watsonx:ibm/granite-4-h-small
-  - watsonx:ibm/granite-3-8b-instruct
+  - watsonx:ibm/granite-8b-code-instruct
 
   # Meta Llama models
   - watsonx:meta-llama/llama-3-3-70b-instruct
-  - watsonx:meta-llama/llama-3-405b-instruct
+  - watsonx:meta-llama/llama-4-maverick-17b-128e-instruct-fp8
 
   # Mistral models
-  - watsonx:mistralai/mistral-large
-  - watsonx:mistralai/mixtral-8x7b-instruct-v01
+  - watsonx:mistralai/mistral-large-2512
+  - watsonx:mistralai/mistral-medium-2505
 ```
 
 ## Configuration Options
@@ -218,7 +206,7 @@ The WatsonX provider supports the full range of text generation parameters from 
 
 ```yaml
 providers:
-  - id: watsonx:ibm/granite-3-3-8b-instruct
+  - id: watsonx:ibm/granite-4-h-small
     config:
       temperature: 0.7
       topP: 0.9
@@ -235,7 +223,7 @@ For more control over output length:
 
 ```yaml
 providers:
-  - id: watsonx:ibm/granite-3-3-8b-instruct
+  - id: watsonx:ibm/granite-4-h-small
     config:
       lengthPenalty:
         decayFactor: 1.5
@@ -248,7 +236,7 @@ WatsonX also supports chat-style interactions using the `textChat` API. Use the 
 
 ```yaml
 providers:
-  - id: watsonx:chat:ibm/granite-3-3-8b-instruct
+  - id: watsonx:chat:ibm/granite-4-h-small
     config:
       temperature: 0.7
       maxNewTokens: 1024
@@ -265,7 +253,7 @@ prompts:
     ]
 
 providers:
-  - watsonx:chat:ibm/granite-3-3-8b-instruct
+  - watsonx:chat:ibm/granite-4-h-small
 ```
 
 For plain text prompts, the chat provider automatically wraps them as a user message.
@@ -294,4 +282,4 @@ The IBM BAM provider has been deprecated (sunset March 2025). To migrate:
 
 1. Change provider prefix from `bam:` to `watsonx:`
 2. Update authentication to use WatsonX credentials
-3. Update model IDs to WatsonX equivalents (e.g., `ibm/granite-3-3-8b-instruct`)
+3. Update model IDs to WatsonX equivalents (e.g., `ibm/granite-4-h-small`)
