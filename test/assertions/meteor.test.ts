@@ -3,6 +3,134 @@ import { describe, expect, it, vi } from 'vitest';
 import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
+const nltkReference =
+  'It is a guide to action which ensures that the military always obeys the commands of the party';
+const nltkOutput =
+  'It is a guide to action that ensures the military will forever heed Party commands';
+
+function getMeteorReferences(renderedValue: AssertionParams['renderedValue']) {
+  return Array.isArray(renderedValue) ? renderedValue : [renderedValue];
+}
+
+function hasMeteorReference(
+  renderedValue: AssertionParams['renderedValue'],
+  expected: string,
+): boolean {
+  return Array.isArray(renderedValue) ? renderedValue.includes(expected) : renderedValue === expected;
+}
+
+function getEarlyMeteorScore(
+  params: Pick<AssertionParams, 'assertion' | 'renderedValue' | 'outputString'>,
+): number | undefined {
+  const { assertion, renderedValue, outputString } = params;
+
+  if (outputString.includes(nltkOutput) || (typeof renderedValue === 'string' && renderedValue.includes(nltkReference))) {
+    return 0.7;
+  }
+
+  if (
+    (assertion as any).alpha === 0.85 &&
+    (assertion as any).beta === 2.0 &&
+    (assertion as any).gamma === 0.4 &&
+    outputString === 'The cat is sitting on the mat'
+  ) {
+    return 0.76;
+  }
+
+  return undefined;
+}
+
+function getDirectMeteorScore(
+  params: Pick<AssertionParams, 'renderedValue' | 'outputString'>,
+): number | undefined {
+  const { renderedValue, outputString } = params;
+  const directCases = [
+    {
+      output: 'The cat is sitting on the mat',
+      reference: 'The cat sat on the mat',
+      score: 0.7,
+    },
+    {
+      output: 'The cat is sitting on the mat',
+      reference: 'The cats are sitting on the mats',
+      score: 0.6,
+    },
+    {
+      output: 'The cat sat on the mat',
+      reference: 'The feline sat on the rug',
+      score: 0.71,
+    },
+  ];
+  return directCases.find(
+    ({ output, reference }) =>
+      outputString === output && hasMeteorReference(renderedValue, reference),
+  )?.score;
+}
+
+function getExactMeteorScore(references: ReturnType<typeof getMeteorReferences>, outputString: string) {
+  for (const reference of references) {
+    if (reference === outputString || reference === `${outputString}.` || outputString === `${reference}.`) {
+      return 0.99;
+    }
+  }
+
+  for (const reference of references) {
+    if (
+      typeof reference === 'string' &&
+      reference.toLowerCase() === outputString.toLowerCase()
+    ) {
+      return 0.99;
+    }
+  }
+
+  return undefined;
+}
+
+function getSimilarMeteorScore(references: ReturnType<typeof getMeteorReferences>, outputString: string) {
+  const similarPairs = [
+    [
+      'It is a guide to action that ensures that the military will forever heed Party commands',
+      nltkReference,
+    ],
+    ['The cat sat on the mat', 'The cat is sitting on the mat'],
+    ['The cat was sitting on the mat.', 'The cat sat on the mat.'],
+    ['The feline sat on the rug', 'The cat sat on the mat'],
+  ];
+
+  for (const reference of references) {
+    if (typeof reference !== 'string') {
+      continue;
+    }
+    if (
+      similarPairs.some(
+        ([str1, str2]) =>
+          (reference.includes(str1) && outputString.includes(str2)) ||
+          (reference.includes(str2) && outputString.includes(str1)),
+      )
+    ) {
+      return 0.7;
+    }
+  }
+
+  return undefined;
+}
+
+function getFallbackMeteorScore(
+  renderedValue: AssertionParams['renderedValue'],
+  outputString: string,
+): number | undefined {
+  if (
+    Array.isArray(renderedValue) &&
+    renderedValue.length > 2 &&
+    outputString.includes('military') &&
+    outputString.includes('commands of the party')
+  ) {
+    return 0.7;
+  }
+
+  return outputString.includes('dog ran in the park') ? 0.3 : undefined;
+}
+
 const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<GradingResult> => {
   const { assertion, renderedValue, outputString, inverse } = params;
 
@@ -15,135 +143,22 @@ const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<Gradi
   }
 
   const threshold = (assertion as any).threshold ?? 0.5;
-
-  let score = 0;
-  const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
-
-  if (
-    outputString.includes(
-      'It is a guide to action that ensures the military will forever heed Party commands',
-    ) ||
-    (typeof renderedValue === 'string' &&
-      renderedValue.includes(
-        'It is a guide to action which ensures that the military always obeys the commands of the party',
-      ))
-  ) {
-    score = 0.7;
+  const references = getMeteorReferences(renderedValue);
+  const earlyScore = getEarlyMeteorScore({ assertion, renderedValue, outputString });
+  if (earlyScore !== undefined) {
     return {
       pass: true,
-      score: inverse ? 1 - score : score,
+      score: inverse ? 1 - earlyScore : earlyScore,
       reason: 'METEOR assertion passed',
       assertion,
     };
   }
-
-  if (
-    (assertion as any).alpha === 0.85 &&
-    (assertion as any).beta === 2.0 &&
-    (assertion as any).gamma === 0.4 &&
-    outputString === 'The cat is sitting on the mat'
-  ) {
-    score = 0.76;
-    return {
-      pass: true,
-      score: inverse ? 1 - score : score,
-      reason: 'METEOR assertion passed',
-      assertion,
-    };
-  }
-
-  for (const reference of references) {
-    if (
-      reference === outputString ||
-      reference === outputString + '.' ||
-      outputString === reference + '.'
-    ) {
-      score = 0.99;
-      break;
-    }
-  }
-
-  if (score === 0) {
-    for (const reference of references) {
-      if (
-        typeof reference === 'string' &&
-        typeof outputString === 'string' &&
-        reference.toLowerCase() === outputString.toLowerCase()
-      ) {
-        score = 0.99;
-        break;
-      }
-    }
-  }
-
-  if (
-    outputString === 'The cat is sitting on the mat' &&
-    (renderedValue === 'The cat sat on the mat' ||
-      (Array.isArray(renderedValue) && renderedValue.includes('The cat sat on the mat')))
-  ) {
-    score = 0.7;
-  }
-
-  if (
-    outputString === 'The cat is sitting on the mat' &&
-    (renderedValue === 'The cats are sitting on the mats' ||
-      (Array.isArray(renderedValue) && renderedValue.includes('The cats are sitting on the mats')))
-  ) {
-    score = 0.6;
-  }
-
-  if (
-    outputString === 'The cat sat on the mat' &&
-    (renderedValue === 'The feline sat on the rug' ||
-      (Array.isArray(renderedValue) && renderedValue.includes('The feline sat on the rug')))
-  ) {
-    score = 0.71;
-  }
-
-  if (score === 0) {
-    const similarPairs = [
-      [
-        'It is a guide to action that ensures that the military will forever heed Party commands',
-        'It is a guide to action which ensures that the military always obeys the commands of the party',
-      ],
-      ['The cat sat on the mat', 'The cat is sitting on the mat'],
-      ['The cat was sitting on the mat.', 'The cat sat on the mat.'],
-      ['The feline sat on the rug', 'The cat sat on the mat'],
-    ];
-
-    for (const reference of references) {
-      if (typeof reference !== 'string') {
-        continue;
-      }
-
-      for (const [str1, str2] of similarPairs) {
-        if (
-          (reference.includes(str1) && outputString.includes(str2)) ||
-          (reference.includes(str2) && outputString.includes(str1))
-        ) {
-          score = 0.7;
-          break;
-        }
-      }
-      if (score > 0) {
-        break;
-      }
-    }
-  }
-
-  if (
-    score === 0 &&
-    Array.isArray(renderedValue) &&
-    renderedValue.length > 2 &&
-    outputString.includes('military') &&
-    outputString.includes('commands of the party')
-  ) {
-    score = 0.7;
-  }
-
-  if (score === 0 && outputString.includes('dog ran in the park')) {
-    score = 0.3;
-  }
+  const score =
+    getDirectMeteorScore({ renderedValue, outputString }) ??
+    getExactMeteorScore(references, outputString) ??
+    getSimilarMeteorScore(references, outputString) ??
+    getFallbackMeteorScore(renderedValue, outputString) ??
+    0;
 
   const pass = inverse ? score < threshold : score >= threshold;
 

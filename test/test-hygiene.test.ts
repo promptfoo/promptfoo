@@ -418,12 +418,7 @@ function hasSleepPromise(source: string) {
   return found;
 }
 
-function hasModuleScopePersistentMockWithoutReset(source: string) {
-  if (globalMockResetPattern.test(source)) {
-    return false;
-  }
-  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
-
+function collectModuleFactories(sourceFile: ts.SourceFile) {
   // Build a lookup for module-scope variable / function declarations whose
   // value is a function literal, so that `vi.mock('x', factory)` with a
   // factory passed by identifier can be resolved back to its body and scanned.
@@ -443,50 +438,59 @@ function hasModuleScopePersistentMockWithoutReset(source: string) {
       moduleFactoryByName.set(stmt.name.text, stmt);
     }
   }
+  return moduleFactoryByName;
+}
 
-  function resolveViMockFactoryArg(arg: ts.Expression): ts.Node {
-    if (ts.isIdentifier(arg) && moduleFactoryByName.has(arg.text)) {
-      return moduleFactoryByName.get(arg.text) as ts.Node;
-    }
-    return arg;
+function resolveViMockFactoryArg(arg: ts.Expression, moduleFactoryByName: Map<string, ts.Node>): ts.Node {
+  if (ts.isIdentifier(arg) && moduleFactoryByName.has(arg.text)) {
+    return moduleFactoryByName.get(arg.text) as ts.Node;
   }
+  return arg;
+}
+
+function expressionStatementHasPersistentMockSetter(
+  stmt: ts.ExpressionStatement,
+  moduleFactoryByName: Map<string, ts.Node>,
+) {
+  if (ts.isCallExpression(stmt.expression) && isViMockCall(stmt.expression)) {
+    if (stmt.expression.arguments.length < 2) {
+      return false;
+    }
+    const factoryNode = resolveViMockFactoryArg(stmt.expression.arguments[1], moduleFactoryByName);
+    return evaluatesPersistentMockSetter(factoryNode, { enterRootFunction: true });
+  }
+  return evaluatesPersistentMockSetter(stmt.expression);
+}
+
+function variableStatementHasPersistentMockSetter(stmt: ts.VariableStatement) {
+  return stmt.declarationList.declarations.some(
+    (decl) => decl.initializer && evaluatesPersistentMockSetter(decl.initializer),
+  );
+}
+
+function classDeclarationHasPersistentMockSetter(stmt: ts.ClassDeclaration) {
+  return stmt.members.some(
+    (member) =>
+      ts.isClassStaticBlockDeclaration(member) && evaluatesPersistentMockSetter(member.body),
+  );
+}
+
+function hasModuleScopePersistentMockWithoutReset(source: string) {
+  if (globalMockResetPattern.test(source)) {
+    return false;
+  }
+  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  const moduleFactoryByName = collectModuleFactories(sourceFile);
 
   for (const stmt of sourceFile.statements) {
-    if (ts.isExpressionStatement(stmt)) {
-      if (ts.isCallExpression(stmt.expression) && isViMockCall(stmt.expression)) {
-        // vi.mock(path, factory): the factory body runs at module load. Resolve
-        // identifier-style factories back to their declaration first.
-        if (stmt.expression.arguments.length >= 2) {
-          const factoryNode = resolveViMockFactoryArg(stmt.expression.arguments[1]);
-          if (evaluatesPersistentMockSetter(factoryNode, { enterRootFunction: true })) {
-            return true;
-          }
-        }
-        continue;
-      }
-      if (evaluatesPersistentMockSetter(stmt.expression)) {
-        return true;
-      }
-    }
-    if (
-      ts.isVariableStatement(stmt) &&
-      stmt.declarationList.declarations.some(
-        (decl) => decl.initializer && evaluatesPersistentMockSetter(decl.initializer),
-      )
-    ) {
+    if (ts.isExpressionStatement(stmt) && expressionStatementHasPersistentMockSetter(stmt, moduleFactoryByName)) {
       return true;
     }
-    // Class declarations: static blocks execute at module load when the class
-    // is evaluated, so any persistent setter inside one leaks across tests.
-    if (ts.isClassDeclaration(stmt)) {
-      for (const member of stmt.members) {
-        if (
-          ts.isClassStaticBlockDeclaration(member) &&
-          evaluatesPersistentMockSetter(member.body)
-        ) {
-          return true;
-        }
-      }
+    if (ts.isVariableStatement(stmt) && variableStatementHasPersistentMockSetter(stmt)) {
+      return true;
+    }
+    if (ts.isClassDeclaration(stmt) && classDeclarationHasPersistentMockSetter(stmt)) {
+      return true;
     }
   }
 

@@ -365,6 +365,21 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
         'items',
       ]);
 
+      const checkSchemaProperties = (schema: any, path: string) => {
+        if (!schema.properties || typeof schema.properties !== 'object') {
+          return;
+        }
+        for (const [propName, propSchema] of Object.entries(schema.properties)) {
+          checkSchema(propSchema, `${path}.properties.${propName}`);
+        }
+      };
+
+      const checkSchemaItems = (schema: any, path: string) => {
+        if (schema.items && typeof schema.items === 'object') {
+          checkSchema(schema.items, `${path}.items`);
+        }
+      };
+
       // Check all tools recursively for unsupported properties
       const checkSchema = (schema: any, path: string = 'root') => {
         if (!schema || typeof schema !== 'object') {
@@ -375,17 +390,10 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
           if (!allowedProperties.has(key)) {
             throw new Error(`Unsupported property "${key}" found at ${path}`);
           }
-
-          // Recurse into nested schemas
-          if (key === 'properties' && typeof schema[key] === 'object') {
-            for (const [propName, propSchema] of Object.entries(schema[key])) {
-              checkSchema(propSchema, `${path}.properties.${propName}`);
-            }
-          }
-          if (key === 'items' && typeof schema[key] === 'object') {
-            checkSchema(schema[key], `${path}.items`);
-          }
         }
+
+        checkSchemaProperties(schema, path);
+        checkSchemaItems(schema, path);
       };
 
       // This should not throw
