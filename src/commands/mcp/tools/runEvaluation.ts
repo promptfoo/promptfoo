@@ -11,7 +11,8 @@ import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../types/index';
+import type { CommandLineOptions } from '../../../types/index';
+import type { InternalEvaluateOptions } from '../../../types/internal';
 
 /**
  * Run an eval from a promptfoo config with optional test case filtering
@@ -62,9 +63,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe(
           dedent`
             Specify which test cases to run:
-            - Single index: 0
+            - Single zero-based index: 0
             - Multiple indices: [0, 2, 5]  
-            - Range: {"start": 0, "end": 3}
+            - Range with inclusive start and exclusive end: {"start": 0, "end": 3}
             If not specified, runs all test cases.
           `,
         ),
@@ -409,7 +410,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           };
 
           // Prepare evaluate options
-          const evaluateOptions: EvaluateOptions = {
+          const evaluateOptions: InternalEvaluateOptions = {
             maxConcurrency,
             eventSource: 'mcp',
             showProgressBar: false, // Disable for MCP usage

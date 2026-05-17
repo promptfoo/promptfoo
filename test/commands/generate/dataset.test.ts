@@ -10,7 +10,32 @@ import { resolveConfigs } from '../../../src/util/config/load';
 
 import type { TestSuite, VarMapping } from '../../../src/types/index';
 
-vi.mock('fs');
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  existsSync: vi.fn(),
+}));
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: fsMocks.readFileSync,
+    writeFile: fsMocks.writeFileSync,
+  },
+  readFile: fsMocks.readFileSync,
+  writeFile: fsMocks.writeFileSync,
+}));
 vi.mock('js-yaml');
 vi.mock('../../../src/testCase/synthesis');
 vi.mock('../../../src/util/config/load', () => ({

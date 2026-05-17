@@ -1,6 +1,6 @@
 ---
 sidebar_label: Cohere
-description: Configure Cohere's Command-R and Command models for RAG-optimized chat inference, with built-in web search connectors and flexible prompt truncation controls
+description: Configure Cohere chat models for RAG-optimized inference, with current Command A, Aya, and Command R variants plus flexible prompt truncation controls
 ---
 
 # Cohere
@@ -13,22 +13,32 @@ First, set the `COHERE_API_KEY` environment variable with your Cohere API key.
 
 Next, edit the promptfoo configuration file to point to the Cohere provider.
 
-- `cohere:<model name>` - uses the specified Cohere model (e.g., `command`, `command-light`).
+- `cohere:<model name>` - uses the specified Cohere model (for example, `command-a-03-2025`).
 
 The following models are confirmed supported. For an up-to-date list of supported models, see [Cohere Models](https://docs.cohere.com/docs/models).
 
-- command-light
-- command-light-nightly
-- command
-- command-nightly
-- command-r
-- command-r-plus
+- `command-a-03-2025`
+- `command-r7b-12-2024`
+- `command-a-translate-08-2025`
+- `command-a-reasoning-08-2025`
+- `command-a-vision-07-2025`
+- `command-r-08-2024`
+- `command-r-plus-08-2024`
+- `tiny-aya-global`
+- `tiny-aya-earth`
+- `tiny-aya-fire`
+- `tiny-aya-water`
+- `c4ai-aya-expanse-32b`
+- `c4ai-aya-vision-32b`
+
+Legacy aliases such as `command`, `command-r`, and `command-r-plus` are still accepted for
+existing configs, but new configurations should use the current IDs above.
 
 Here's an example configuration:
 
 ```yaml
 providers:
-  - id: cohere:command
+  - id: cohere:command-a-03-2025
     config:
       temperature: 0.5
       max_tokens: 256
@@ -46,7 +56,7 @@ prompts:
   - 'Write a tweet about {{topic}}'
 
 providers:
-  - cohere:command
+  - cohere:command-a-03-2025
 
 tests:
   - vars:
@@ -60,7 +70,7 @@ prompts:
   - file://prompt1.yaml
 
 providers:
-  - cohere:command
+  - cohere:command-a-03-2025
 
 tests:
   - vars:
