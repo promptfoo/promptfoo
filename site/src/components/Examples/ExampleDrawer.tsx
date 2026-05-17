@@ -40,8 +40,10 @@ export default function ExampleDrawer({
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{
-        className: styles.paper,
+      slotProps={{
+        paper: {
+          className: styles.paper,
+        },
       }}
     >
       <div className={styles.drawer}>
@@ -76,7 +78,7 @@ export default function ExampleDrawer({
           <div className={styles.commandSection}>
             <span className={styles.commandLabel}>Get started</span>
             <p className={styles.installHint}>
-              Don't have promptfoo yet? <a href="/docs/installation">See installation options</a>.
+              Don't have promptfoo yet? <a href="/docs/installation/">See installation options</a>.
             </p>
             <div className={styles.commandBox}>
               <code className={styles.commandText}>{command}</code>

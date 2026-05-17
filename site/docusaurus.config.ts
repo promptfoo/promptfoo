@@ -296,7 +296,7 @@ const config: Config = {
           items: [
             {
               label: 'Examples',
-              to: '/docs/examples',
+              to: '/docs/examples/',
             },
             {
               label: 'API Reference',

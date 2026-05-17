@@ -43,6 +43,7 @@ export default function ExampleFilters({
           <input
             type="text"
             className={styles.searchInput}
+            aria-label="Search examples"
             placeholder="Search examples..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}

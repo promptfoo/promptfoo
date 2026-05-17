@@ -28,7 +28,9 @@ export default function ExampleCard({ example, onClick }: ExampleCardProps): Rea
       </div>
 
       <div className={styles.content}>
-        <h3 className={styles.name}>{example.humanName}</h3>
+        <span className={styles.name} role="heading" aria-level={3}>
+          {example.humanName}
+        </span>
         {example.description && <p className={styles.description}>{example.description}</p>}
         <code className={styles.slug}>{example.slug}</code>
       </div>

@@ -71,12 +71,10 @@ function getFirstParagraph(readmeContent) {
       }
       foundContent = true;
     }
-    if (foundContent) {
-      if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('```')) {
-        break;
-      }
-      paragraphLines.push(trimmed);
+    if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('```')) {
+      break;
     }
+    paragraphLines.push(trimmed);
   }
   return paragraphLines.join(' ');
 }

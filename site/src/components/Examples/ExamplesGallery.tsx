@@ -1,12 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import Link from '@docusaurus/Link';
-import { useLocation } from '@docusaurus/router';
+import { useHistory, useLocation } from '@docusaurus/router';
 import { type ExampleData, searchExamples, tags, totalCount } from '../../data/examples';
+import ExampleCard from './ExampleCard';
+import ExampleDrawer from './ExampleDrawer';
+import ExampleFilters from './ExampleFilters';
 import styles from './ExamplesGallery.module.css';
-import { ExampleCard, ExampleDrawer, ExampleFilters } from './index';
 
 export default function ExamplesGallery(): React.ReactElement {
+  const history = useHistory();
   const location = useLocation();
 
   const [searchQuery, setSearchQuery] = useState(() => {
@@ -29,9 +32,11 @@ export default function ExamplesGallery(): React.ReactElement {
       params.set('tag', selectedTag);
     }
     const search = params.toString();
-    const newUrl = search ? `${location.pathname}?${search}` : location.pathname;
-    window.history.replaceState(null, '', newUrl);
-  }, [searchQuery, selectedTag, location.pathname]);
+    history.replace({
+      ...location,
+      search: search ? `?${search}` : '',
+    });
+  }, [history, location, searchQuery, selectedTag]);
 
   const filteredExamples = useMemo(
     () => searchExamples(searchQuery, selectedTag),

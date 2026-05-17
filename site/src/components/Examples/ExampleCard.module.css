@@ -75,6 +75,7 @@
 }
 
 .name {
+  display: block;
   font-size: 1.0625rem;
   font-weight: 650;
   margin: 0 0 0.5rem 0;
