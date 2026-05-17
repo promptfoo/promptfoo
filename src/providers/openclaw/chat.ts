@@ -1,16 +1,24 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { buildOpenClawProviderOptions, DEFAULT_GATEWAY_HOST, DEFAULT_GATEWAY_PORT } from './shared';
+import {
+  buildOpenClawModelName,
+  buildOpenClawProviderOptions,
+  DEFAULT_GATEWAY_HOST,
+  DEFAULT_GATEWAY_PORT,
+  resolveOpenClawBillingModelName,
+} from './shared';
 
 import type { ProviderOptions } from '../../types/providers';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 /**
  * OpenClaw chat provider extends OpenAI chat completion provider.
  *
  * OpenClaw exposes an OpenAI-compatible HTTP API at /v1/chat/completions.
- * This provider auto-detects gateway URL and auth token from:
- *   1. Explicit config (gateway_url, auth_token)
- *   2. Environment variables (OPENCLAW_GATEWAY_URL, OPENCLAW_GATEWAY_TOKEN)
- *   3. ~/.openclaw/openclaw.json
+ * This provider auto-detects gateway URL and bearer auth from:
+ *   1. Explicit config (gateway_url, auth_token, auth_password)
+ *   2. Environment variables (OPENCLAW_GATEWAY_URL, OPENCLAW_GATEWAY_TOKEN, OPENCLAW_GATEWAY_PASSWORD)
+ *   3. The active OpenClaw config file (OPENCLAW_CONFIG_PATH or ~/.openclaw/openclaw.json),
+ *      including gateway.remote.url and gateway.tls.enabled
  *
  * Usage:
  *   openclaw              - default agent (main)
@@ -21,7 +29,7 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   private agentId: string;
 
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(`openclaw:${agentId}`, buildOpenClawProviderOptions(agentId, providerOptions));
+    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
     this.agentId = agentId;
   }
 
@@ -45,5 +53,9 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   // Prevent fallback to OPENAI_API_HOST / OPENAI_BASE_URL
   getApiUrl(): string {
     return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
+
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    return resolveOpenClawBillingModelName(config) || this.modelName;
   }
 }

@@ -4,14 +4,17 @@ import { doValidate, doValidateTarget, validateCommand } from '../../src/command
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
-import { resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';
-import type { ApiProvider } from '../../src/types/providers';
 
 vi.mock('../../src/logger');
-vi.mock('../../src/util/config/load');
+vi.mock('../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/config/load')>()),
+  resolveConfigs: vi.fn(),
+}));
 vi.mock('../../src/providers/index');
 vi.mock('../../src/validators/testProvider');
 vi.mock('../../src/util/cloud');
@@ -34,41 +37,30 @@ describe('Validate Command Provider Tests', () => {
   const defaultConfig = {} as UnifiedConfig;
   const defaultConfigPath = 'config.yaml';
 
-  // Mock provider objects
-  const mockHttpProvider: ApiProvider = {
-    id: () => 'http://example.com',
-    callApi: vi.fn(),
-    constructor: { name: 'HttpProvider' },
-  } as any;
-
-  const mockEchoProvider: ApiProvider = {
-    id: () => 'echo',
-    callApi: vi.fn(),
-    constructor: { name: 'EchoProvider' },
-  } as any;
-
-  const mockOpenAIProvider: ApiProvider = {
-    id: 'openai:gpt-4',
-    callApi: vi.fn(),
-    constructor: { name: 'OpenAIProvider' },
-  } as any;
+  // Mock provider objects. isHttpProvider() only checks provider.id / config.url,
+  // so createMockProvider with the right id is sufficient. These must be rebuilt in
+  // beforeEach because this file's afterEach calls vi.resetAllMocks(), which wipes
+  // the id mock implementation.
+  let mockHttpProvider: MockApiProvider;
+  let mockEchoProvider: MockApiProvider;
+  let mockOpenAIProvider: MockApiProvider;
 
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
     process.exitCode = 0;
 
-    // Default mock for successful basic connectivity
-    (mockEchoProvider.callApi as Mock).mockResolvedValue({
-      output: 'Hello, world!',
+    mockHttpProvider = createMockProvider({
+      id: 'http://example.com',
+      response: { output: 'Test response' },
     });
-
-    (mockHttpProvider.callApi as Mock).mockResolvedValue({
-      output: 'Test response',
+    mockEchoProvider = createMockProvider({
+      id: 'echo',
+      response: { output: 'Hello, world!' },
     });
-
-    (mockOpenAIProvider.callApi as Mock).mockResolvedValue({
-      output: 'OpenAI response',
+    mockOpenAIProvider = createMockProvider({
+      id: 'openai:gpt-4',
+      response: { output: 'OpenAI response' },
     });
   });
 
@@ -136,12 +128,10 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should skip session test when target is not stateful (stateful=false)', async () => {
-      const mockNonStatefulHttpProvider: ApiProvider = {
-        id: () => 'http://example.com',
-        callApi: vi.fn(),
+      const mockNonStatefulHttpProvider = createMockProvider({
+        id: 'http://example.com',
         config: { stateful: false },
-        constructor: { name: 'HttpProvider' },
-      } as any;
+      });
 
       vi.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
       vi.mocked(testProviderConnectivity).mockResolvedValue({
@@ -211,8 +201,8 @@ describe('Validate Command Provider Tests', () => {
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
         providers: [
-          { id: () => 'echo', label: 'echo', callApi: () => Promise.resolve({}) },
-          { id: () => 'openai:gpt-4', label: 'openai', callApi: () => Promise.resolve({}) },
+          createMockProvider({ id: 'echo', label: 'echo', response: {} }),
+          createMockProvider({ id: 'openai:gpt-4', label: 'openai', response: {} }),
         ],
         tests: [],
       };
@@ -317,11 +307,10 @@ describe('Validate Command Provider Tests', () => {
 
   describe('HTTP provider detection with target flag', () => {
     it('should detect HTTP provider by url in id when using target', async () => {
-      const mockHttpProviderById: ApiProvider = {
-        id: () => 'http://custom-api.com',
-        callApi: vi.fn().mockResolvedValue({ output: 'HTTP response' }),
-        constructor: { name: 'HttpProvider' },
-      } as any;
+      const mockHttpProviderById = createMockProvider({
+        id: 'http://custom-api.com',
+        response: { output: 'HTTP response' },
+      });
 
       vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
       vi.mocked(testProviderConnectivity).mockResolvedValue({
@@ -419,6 +408,25 @@ describe('Validate Command Provider Tests', () => {
       );
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to load configuration: Config not found'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should preserve config resolution warning level when loading config fails', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(
+        new ConfigResolutionError('No promptfooconfig found', {
+          cliMessage: 'No promptfooconfig found in this directory.',
+          logLevel: 'warn',
+        }),
+      );
+
+      await doValidateTarget({ config: 'missing.yaml' }, defaultConfig);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Failed to load configuration: No promptfooconfig found in this directory.',
+      );
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration'),
       );
       expect(process.exitCode).toBe(1);
     });

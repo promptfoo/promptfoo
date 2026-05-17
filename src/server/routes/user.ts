@@ -12,6 +12,7 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { UserSchemas } from '../../types/api/user';
+import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -46,8 +47,14 @@ userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
 });
 
 userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
+  const bodyResult = UserSchemas.Update.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    replyValidationError(res, bodyResult.error);
+    return;
+  }
+
+  const { email } = bodyResult.data;
   try {
-    const { email } = UserSchemas.Update.Request.parse(req.body);
     setUserEmail(email);
     res.json(
       UserSchemas.Update.Response.parse({
@@ -65,18 +72,14 @@ userRouter.post('/email', async (req: Request, res: Response): Promise<void> => 
     });
   } catch (error) {
     logger.error(`Error setting email: ${error}`);
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-    } else {
-      res.status(500).json({ error: String(error) });
-    }
+    res.status(500).json({ error: 'Failed to update email' });
   }
 });
 
 userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<void> => {
   try {
     clearUserEmail();
-    res.json({ success: true, message: 'Email cleared' });
+    res.json(UserSchemas.ClearEmail.Response.parse({ success: true, message: 'Email cleared' }));
   } catch (error) {
     logger.error(`Error clearing email: ${error}`);
     res.status(500).json({ error: 'Failed to clear email' });
@@ -84,9 +87,14 @@ userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<voi
 });
 
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
+  const queryResult = UserSchemas.EmailStatus.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    replyValidationError(res, queryResult.error);
+    return;
+  }
+
   try {
-    // Extract validate query parameter
-    const validate = req.query.validate === 'true';
+    const { validate } = queryResult.data;
     const result = await checkEmailStatus({ validate });
 
     res.json(
@@ -99,19 +107,20 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     );
   } catch (error) {
     logger.error(`Error checking email status: ${error}`);
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-    } else {
-      res.status(500).json({ error: 'Failed to check email status' });
-    }
+    res.status(500).json({ error: 'Failed to check email status' });
   }
 });
 
 // New API key authentication endpoint that mirrors CLI behavior
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { apiKey, apiHost } = UserSchemas.Login.Request.parse(req.body);
+  const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    replyValidationError(res, bodyResult.error);
+    return;
+  }
 
+  const { apiKey, apiHost } = bodyResult.data;
+  try {
     const host = apiHost || cloudConfig.getApiHost();
 
     // Use the same validation logic as CLI
@@ -155,12 +164,8 @@ userRouter.post('/login', async (req: Request, res: Response): Promise<void> => 
     logger.error(
       `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: z.prettifyError(error) });
-    } else {
-      // Don't expose internal error details to client
-      res.status(401).json({ error: 'Invalid API key or authentication failed' });
-    }
+    // Don't expose internal error details to client
+    res.status(401).json({ error: 'Invalid API key or authentication failed' });
   }
 });
 

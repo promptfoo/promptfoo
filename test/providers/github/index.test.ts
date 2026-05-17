@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGitHubProvider } from '../../../src/providers/github/index';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { createMockProvider } from '../../factories/provider';
 
 const mockOpenAiChatCompletionProvider = vi.hoisted(() =>
   vi.fn(function (this: unknown) {
@@ -22,7 +23,7 @@ describe('createGitHubProvider', () => {
   });
 
   it('should create provider with default model when no model specified', () => {
-    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-5') };
+    const mockProvider = createMockProvider({ id: 'github:openai/gpt-5' });
     mockOpenAiChatCompletionProvider.mockImplementation(function () {
       return mockProvider as any;
     });
@@ -39,7 +40,7 @@ describe('createGitHubProvider', () => {
   });
 
   it('should create provider with specified model', () => {
-    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-4.1-mini') };
+    const mockProvider = createMockProvider({ id: 'github:openai/gpt-4.1-mini' });
     mockOpenAiChatCompletionProvider.mockImplementation(function () {
       return mockProvider as any;
     });
@@ -56,7 +57,7 @@ describe('createGitHubProvider', () => {
   });
 
   it('should handle models with colons in their names', () => {
-    const mockProvider = { id: vi.fn().mockReturnValue('github:anthropic/claude-3.5:sonnet') };
+    const mockProvider = createMockProvider({ id: 'github:anthropic/claude-3.5:sonnet' });
     mockOpenAiChatCompletionProvider.mockImplementation(function () {
       return mockProvider as any;
     });
@@ -73,7 +74,7 @@ describe('createGitHubProvider', () => {
   });
 
   it('should merge existing config with GitHub-specific config', () => {
-    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-4.1') };
+    const mockProvider = createMockProvider({ id: 'github:openai/gpt-4.1' });
     mockOpenAiChatCompletionProvider.mockImplementation(function () {
       return mockProvider as any;
     });
@@ -103,7 +104,7 @@ describe('createGitHubProvider', () => {
   });
 
   it('should pass through all provider options', () => {
-    const mockProvider = { id: vi.fn().mockReturnValue('github:openai/gpt-4.1') };
+    const mockProvider = createMockProvider({ id: 'github:openai/gpt-4.1' });
     mockOpenAiChatCompletionProvider.mockImplementation(function () {
       return mockProvider as any;
     });

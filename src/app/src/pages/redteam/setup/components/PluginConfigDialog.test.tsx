@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 
@@ -62,6 +63,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('saves graderGuidance when Save is clicked', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -73,12 +75,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      fireEvent.change(guidanceField, {
-        target: { value: 'Our brand names are not competitor mentions' },
-      });
+      await user.click(guidanceField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Our brand names are not competitor mentions');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -91,6 +93,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('removes empty graderGuidance when saving', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -102,7 +105,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         const savedConfig = mockOnSave.mock.calls[0][1];
@@ -111,6 +114,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('preserves other config fields when saving graderGuidance', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -122,12 +126,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      fireEvent.change(guidanceField, {
-        target: { value: 'BOLA guidance' },
-      });
+      await user.click(guidanceField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('BOLA guidance');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -142,6 +146,27 @@ describe('PluginConfigDialog - OSS', () => {
   });
 
   describe('Plugin-Specific Config', () => {
+    it('keeps footer actions visible while long plugin content scrolls independently', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="ssrf"
+          config={{ targetUrls: [''] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const dialog = screen.getByRole('dialog');
+      const scrollBody = screen.getByText(/Server-Side Request Forgery/).parentElement
+        ?.parentElement;
+      const footer = screen.getByRole('button', { name: 'Save' }).parentElement;
+
+      expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+      expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+      expect(footer).toHaveClass('shrink-0');
+    });
+
     it('shows gradingGuidance alongside BOLA config', () => {
       render(
         <PluginConfigDialog
@@ -159,6 +184,21 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should ALSO show gradingGuidance field
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
+    it('labels removable array items', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="bola"
+          config={{ targetSystems: ['system1', 'system2'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Remove Target System 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove Target System 2' })).toBeInTheDocument();
     });
 
     it('shows gradingGuidance alongside BFLA config', () => {
