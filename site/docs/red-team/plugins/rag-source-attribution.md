@@ -101,5 +101,4 @@ By incorporating the RAG Source Attribution plugin in your LLM red teaming strat
 
 - [RAG Document Exfiltration](/docs/red-team/plugins/rag-document-exfiltration) - Tests for unauthorized document exposure
 - [Hallucination](/docs/red-team/plugins/hallucination) - Tests for general information fabrication
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

@@ -50,6 +50,7 @@ interface ModelAuditConfigState {
   setScanResults: (results: ScanResult | null) => void;
   setError: (error: string | null) => void;
   clearScanState: () => void;
+  startNewScan: () => void;
 
   // Actions - Installation status
   setInstallationStatus: (status: Partial<InstallationStatus>) => void;
@@ -68,9 +69,11 @@ const MAX_RECENT_SCANS = 10;
 // Singleton promise for request deduplication
 let checkInstallationPromise: Promise<{ installed: boolean; cwd: string }> | null = null;
 
-const DEFAULT_SCAN_OPTIONS: ScanOptions = {
+export const DEFAULT_SCAN_OPTIONS: ScanOptions = {
   blacklist: [],
   timeout: 3600,
+  scanners: [],
+  excludeScanner: [],
 };
 
 export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
@@ -153,6 +156,7 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       setScanResults: (scanResults) => set({ scanResults, error: null }),
       setError: (error) => set({ error }),
       clearScanState: () => set({ scanResults: null, error: null, isScanning: false }),
+      startNewScan: () => set({ paths: [], scanResults: null, error: null, isScanning: false }),
 
       // Actions - Installation status
       setInstallationStatus: (status) => {

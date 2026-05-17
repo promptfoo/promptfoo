@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Atlas Cloud Provider Example
+
+prompts:
+  - |
+    You are a helpful assistant. Answer the following question concisely:
+    {{question}}
+
+providers:
+  - id: atlascloud:deepseek-ai/DeepSeek-V3-0324
+    label: 'DeepSeek V3 0324 via Atlas Cloud'
+    config:
+      temperature: 0.7
+      max_tokens: 500
+
+  - id: atlascloud:qwen/qwen3-32b
+    label: 'Qwen 3 32B via Atlas Cloud'
+    config:
+      temperature: 0.3
+      max_tokens: 500
+
+tests:
+  - description: 'Basic knowledge test'
+    vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  - description: 'Technical explanation'
+    vars:
+      question: 'Explain machine learning in simple terms'
+    assert:
+      - type: icontains
+        value: 'machine learning'

@@ -70,31 +70,29 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
   };
 
   // Group columns by their group property
-  const groupedColumns = columnData.reduce(
-    (acc, column) => {
-      const group = column?.group || 'Other';
-      if (!acc[group]) {
-        acc[group] = [];
-      }
-      acc[group].push(column);
-      return acc;
-    },
-    {} as Record<string, ColumnData[]>,
-  );
+  const groupedColumns = columnData.reduce<Record<string, ColumnData[]>>((acc, column) => {
+    const group = column?.group || 'Other';
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(column);
+    return acc;
+  }, {});
 
   return (
     <>
       <Button onClick={handleOpen} variant="outline" size="sm">
         <Columns3 className="size-4 mr-2" />
-        Columns ({selectedColumns.length})
+        Columns ({selectedColumns.length}
+        {selectedColumns.length < columnData.length && `/${columnData.length}`})
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <div className="flex justify-between items-center pr-8">
+            <div className="flex flex-col items-start gap-3 pr-8 sm:flex-row sm:items-center sm:justify-between">
               <DialogTitle>Select Columns</DialogTitle>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={handleShowAll} variant="outline">
                   Show All
                 </Button>

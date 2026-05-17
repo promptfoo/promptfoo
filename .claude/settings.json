@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx block-no-verify@1.1.2"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -11,5 +22,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true
   }
 }
