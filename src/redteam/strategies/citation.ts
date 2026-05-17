@@ -4,7 +4,7 @@ import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -70,7 +70,7 @@ async function generateCitations(
           },
           body: JSON.stringify(payload),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       logger.debug(

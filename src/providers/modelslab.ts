@@ -17,7 +17,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch';
 import { ellipsize } from '../util/text';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -145,7 +145,7 @@ export class ModelsLabImageProvider implements ApiProvider {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         true,
       );
@@ -244,7 +244,7 @@ export class ModelsLabImageProvider implements ApiProvider {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key: this.apiKey }),
           },
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           true,
         );
