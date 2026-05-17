@@ -3,6 +3,7 @@ import { getDb } from '../database/index';
 import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
 import { randomSequence } from '../util/createHash';
+import { getModelAuditVerdict } from '../util/modelAuditResults';
 
 import type { MODEL_AUDIT_SORT_FIELDS } from '../types/api/modelAudit';
 import type { ModelAuditScanResults } from '../types/modelAudit';
@@ -82,18 +83,16 @@ export default class ModelAudit {
     this.checks = data.checks || data.results?.checks || null;
     this.issues = data.issues || data.results?.issues || null;
 
-    // Ensure hasErrors is properly set based on actual critical/error findings
+    // Preserve non-clean scan outcomes for callers that still read the legacy hasErrors field.
     const issues = data.issues || data.results?.issues;
-    const resultsHasErrors = data.results?.has_errors ?? false;
+    const verdict = getModelAuditVerdict({
+      ...(data.results ?? {}),
+      issues: issues ?? data.results?.issues,
+    });
 
     // If hasErrors is explicitly provided, use it; otherwise compute from results and issues
     if (data.hasErrors === undefined) {
-      const hasActualErrors =
-        resultsHasErrors ||
-        (issues &&
-          issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) ||
-        false;
-      this.hasErrors = hasActualErrors;
+      this.hasErrors = verdict.hasFindings;
     } else {
       this.hasErrors = data.hasErrors;
     }
@@ -132,14 +131,8 @@ export default class ModelAudit {
     const createdAtDate = new Date(now);
     const id = createScanId(createdAtDate);
 
-    // Ensure hasErrors is properly set based on actual critical/error findings
-    const hasActualErrors = Boolean(
-      params.results.has_errors ||
-        (params.results.issues &&
-          params.results.issues.some(
-            (issue) => issue.severity === 'critical' || issue.severity === 'error',
-          )),
-    );
+    // Preserve non-clean scan outcomes for callers that still read the legacy hasErrors field.
+    const hasFindings = getModelAuditVerdict(params.results).hasFindings;
 
     const data = {
       id,
@@ -152,7 +145,7 @@ export default class ModelAudit {
       results: params.results,
       checks: params.results.checks || null,
       issues: params.results.issues || null,
-      hasErrors: hasActualErrors,
+      hasErrors: hasFindings,
       totalChecks: params.results.total_checks || null,
       passedChecks: params.results.passed_checks || null,
       failedChecks: params.results.failed_checks || null,
@@ -260,6 +253,17 @@ export default class ModelAudit {
 
     logger.debug(`Found existing scan for ${modelId} (id: ${result.id})`);
     return new ModelAudit({ ...result, persisted: true });
+  }
+
+  static async findLatestByModelId(modelId: string): Promise<ModelAudit | null> {
+    const result = await getDb()
+      .select()
+      .from(modelAuditsTable)
+      .where(eq(modelAuditsTable.modelId, modelId))
+      .orderBy(desc(modelAuditsTable.createdAt))
+      .get();
+
+    return result ? new ModelAudit({ ...result, persisted: true }) : null;
   }
 
   /**
@@ -448,6 +452,12 @@ export default class ModelAudit {
       passedChecks: this.passedChecks,
       failedChecks: this.failedChecks,
       metadata: this.metadata,
+      modelId: this.modelId,
+      revisionSha: this.revisionSha,
+      contentHash: this.contentHash,
+      modelSource: this.modelSource,
+      sourceLastModified: this.sourceLastModified,
+      scannerVersion: this.scannerVersion,
     };
   }
 }

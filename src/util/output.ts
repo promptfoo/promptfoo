@@ -10,8 +10,10 @@ import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
-import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
+import { type CsvRow, type OutputFile, ResultFailureReason } from '../types';
 import invariant from './invariant';
+import { writeJunitXmlOutput } from './junit';
+import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
 import { sanitizeObject } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
@@ -141,12 +143,10 @@ export async function writeOutput(
     return;
   }
 
-  const { data: outputExtension } = OutputFileExtension.safeParse(
-    path.extname(outputPath).slice(1).toLowerCase(),
-  );
+  const outputExtension = getOutputFileFormat(outputPath);
   invariant(
     outputExtension,
-    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+    `Unsupported output file format ${path.extname(outputPath).slice(1).toLowerCase()}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
   );
 
   // Ensure the directory exists (mkdir with recursive is idempotent)
@@ -155,7 +155,9 @@ export async function writeOutput(
 
   const metadata = createOutputMetadata(evalRecord);
 
-  if (outputExtension === 'csv') {
+  if (outputExtension === 'junit.xml') {
+    await writeJunitXmlOutput(outputPath, evalRecord);
+  } else if (outputExtension === 'csv') {
     // Use streamEvalCsv for memory-efficient CSV generation
     // This produces the same format as WebUI CSV exports
     const fileHandle = await fsPromises.open(outputPath, 'w');
