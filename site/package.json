@@ -51,7 +51,7 @@
     "framer-motion": "^12.34.3",
     "gray-matter": "^4.0.3",
     "jsdom": "^29.0.0",
-    "langium": "4.2.2",
+    "langium": "4.2.4",
     "lucide-react": "^1.0.0",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.2.4",
@@ -89,7 +89,7 @@
     "@mui/system": "^9.0.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "dompurify": "^3.4.0",
+    "dompurify": "^3.4.1",
     "react-countup": "^6.5.3",
     "swiper": "^12.1.2"
   }

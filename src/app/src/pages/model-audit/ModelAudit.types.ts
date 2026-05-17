@@ -112,4 +112,10 @@ export interface HistoricalScan {
   passedChecks?: number | null;
   failedChecks?: number | null;
   metadata?: Record<string, unknown> | null;
+  modelId?: string | null;
+  revisionSha?: string | null;
+  contentHash?: string | null;
+  modelSource?: string | null;
+  sourceLastModified?: number | null;
+  scannerVersion?: string | null;
 }

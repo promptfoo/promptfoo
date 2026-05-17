@@ -119,8 +119,8 @@ describe('matchesModeration', () => {
     setTestEnv({ OPENAI_API_KEY: 'test-key' });
     vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue({
       flags: [
-        { code: 'violence', description: 'Violence' },
-        { code: 'hate', description: 'Hate' },
+        { code: 'violence', description: 'Violence', confidence: 1 },
+        { code: 'hate', description: 'Hate', confidence: 1 },
       ],
     });
 
@@ -140,7 +140,7 @@ describe('matchesModeration', () => {
   it('should pass when flags do not match the requested categories', async () => {
     setTestEnv({ OPENAI_API_KEY: 'test-key' });
     vi.spyOn(OpenAiModerationProvider.prototype, 'callModerationApi').mockResolvedValue({
-      flags: [{ code: 'violence', description: 'Violence' }],
+      flags: [{ code: 'violence', description: 'Violence', confidence: 1 }],
     });
 
     await expect(

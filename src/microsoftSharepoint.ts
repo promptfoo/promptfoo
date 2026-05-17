@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { getEnvString } from './envars';
 import logger from './logger';
@@ -92,7 +92,7 @@ async function getConfidentialClient(): Promise<ConfidentialClientApplication> {
 
     let pemContent: string;
     try {
-      pemContent = fs.readFileSync(certPath, 'utf8');
+      pemContent = await fs.readFile(certPath, 'utf8');
     } catch (error) {
       throw new Error(`Failed to read certificate from path: ${certPath}. Error: ${error}`);
     }

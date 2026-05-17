@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import WebSocket from 'ws';
 import { VERSION } from '../../constants';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   buildSignedOpenClawDevice,
   clearOpenClawDeviceAuthToken,
@@ -155,7 +155,7 @@ export class OpenClawAgentProvider implements ApiProvider {
     const authSecret = resolveAuthSecret(this.openclawConfig, env);
     this.authKind = authSecret?.kind;
     this.authSecret = authSecret?.value;
-    this.timeoutMs = this.openclawConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    this.timeoutMs = this.openclawConfig.timeoutMs ?? getRequestTimeoutMs();
     this.scopes = normalizeScopes(this.openclawConfig.scopes);
     this.hasExplicitScopes = this.scopes.length > 0;
     if (!this.hasExplicitScopes) {

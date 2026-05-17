@@ -45,19 +45,19 @@ Promptfoo's flexible architecture allows for easy integration with new or custom
 
 ### Does Promptfoo forward calls to an intermediate server?
 
-No, the source code runs on your machine. Calls to LLM APIs are sent directly to the respective provider. The Promptfoo team does not have access to these requests or responses.
+By default, no — the open-source eval runner runs on your machine, and configured provider calls are sent directly to that provider. Promptfoo-operated services may receive data when you opt into a Cloud-backed feature, including hosted generation or grading, red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, hosted reports, telemetry, and account/license checks.
 
 ### Does Promptfoo store API keys?
 
-No, API keys are stored as local environment variables and are never transmitted anywhere besides directly to the LLM API.
+By default, no — API keys are read from local environment variables and are not transmitted on their own. If you paste credentials directly into configs, request examples, red team target/provider setup forms, or shareable eval data, those values are treated like any other config field and may be saved in local artifacts or sent to configured providers, sharing endpoints, or Promptfoo-hosted features that process that data.
 
 ### Does Promptfoo store LLM inputs and outputs?
 
-No, Promptfoo operates locally, and all data remains on your machine. The only exception is when you explicitly use the [share command](/docs/usage/sharing), which stores inputs and outputs in Cloudflare KV for two weeks.
+By default, eval results are stored locally. Inputs and outputs may leave your machine when you use hosted generation or grading, sharing, Cloud sync, hosted reports, red team target/provider setup helpers, red team target/provider test requests, or other Cloud-backed features.
 
 ### Do you collect any PII?
 
-No, we do not collect any personally identifiable information (PII).
+We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, invoke a Cloud-backed feature, or set `PROMPTFOO_DISABLE_TELEMETRY` (which records a one-time opt-out acknowledgment so opt-out usage can be measured). See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
 
 ### How do I configure Promptfoo for corporate networks or proxies?
 
@@ -111,7 +111,7 @@ Promptfoo can be integrated into CI/CD pipelines via [GitHub Action](https://git
 
 ### How can I use Promptfoo in a completely offline environment?
 
-Set the following environment variables before running the CLI to disable all outbound network requests:
+Set the following environment variables before running the CLI to turn off common hosted features:
 
 ```bash
 export PROMPTFOO_DISABLE_TELEMETRY=1
@@ -122,6 +122,8 @@ export PROMPTFOO_SELF_HOSTED=1
 ```
 
 Only configure local or self-hosted LLM providers (e.g., Ollama) so the CLI does not attempt to reach external APIs.
+
+These settings are not a network firewall. For strict offline or air-gapped use, combine local/self-hosted providers with network egress controls or use Promptfoo Enterprise On-Prem.
 
 ### Do you publish an LLMs.txt?
 

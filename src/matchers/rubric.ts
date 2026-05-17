@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
@@ -13,7 +13,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { fail, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   Assertion,
@@ -63,10 +63,14 @@ export async function loadRubricPrompt(
       // to allow Nunjucks templating before JSON/YAML parsing.
       // This fixes the issue where .json files with Nunjucks templates
       // would fail to parse before rendering.
-      if (!fs.existsSync(resolvedPath)) {
-        throw new Error(`File does not exist: ${resolvedPath}`);
+      try {
+        rubricPrompt = await fs.readFile(resolvedPath, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new Error(`File does not exist: ${resolvedPath}`);
+        }
+        throw error;
       }
-      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
     }
   } else {
     // Load from external file if needed (for non file:// references)
@@ -134,21 +138,18 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
+  const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
+
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
       if (jsonObjects.length === 0) {
-        return {
-          failure: fail(`Could not extract JSON from ${label} response`, resp.tokenUsage),
-        };
+        return { failure: failWithTokens(`Could not extract JSON from ${label} response`) };
       }
     } catch (err) {
       return {
-        failure: fail(
-          `${label} produced malformed response: ${err}\n\n${resp.output}`,
-          resp.tokenUsage,
-        ),
+        failure: failWithTokens(`${label} produced malformed response: ${err}\n\n${resp.output}`),
       };
     }
   } else if (
@@ -159,9 +160,8 @@ function parseJsonGradingResponse(
     jsonObjects = [resp.output];
   } else {
     return {
-      failure: fail(
+      failure: failWithTokens(
         `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
       ),
     };
   }
@@ -169,9 +169,8 @@ function parseJsonGradingResponse(
   const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
-      failure: fail(
+      failure: failWithTokens(
         `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
       ),
     };
   }
@@ -221,7 +220,7 @@ export async function runJsonGradingPrompt({
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {

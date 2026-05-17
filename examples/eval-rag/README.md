@@ -16,7 +16,9 @@ Next, edit promptfooconfig.yaml.
 Then run:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Afterwards, you can view the results by running `npx promptfoo@latest view`.
+
+The config intentionally includes a couple of unsupported `context-recall` facts so the results show both successful and failing RAG metrics. Other model-graded scores can vary with the grading model.

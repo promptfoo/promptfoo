@@ -63,6 +63,4 @@ The plugin tests against multiple conversation formats:
 - [ASCII Smuggling](ascii-smuggling.md)
 - [Indirect Prompt Injection](indirect-prompt-injection.md)
 - [System Prompt Override](system-prompt-override.md)
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
