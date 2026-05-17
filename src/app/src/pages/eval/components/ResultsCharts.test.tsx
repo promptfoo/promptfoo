@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
@@ -98,8 +98,67 @@ describe('ResultsCharts', () => {
     });
 
     const { container } = render(<ResultsCharts scores={scores} />);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: /close/i })).toBeNull();
     expect(container.querySelectorAll('canvas').length).toBeGreaterThan(0);
+  });
+
+  it('exposes chart regions, text summaries, and a keyboard-reachable scatter comparison control', () => {
+    const mockTable = {
+      head: {
+        prompts: [
+          { provider: 'test-provider-1', metrics: { namedScores: {} } },
+          { provider: 'test-provider-2', metrics: { namedScores: {} } },
+        ],
+        vars: [],
+      },
+      body: [
+        {
+          outputs: [
+            { score: 0.8, pass: true, text: 'valid output' },
+            { score: 0.9, pass: true, text: 'valid output' },
+          ],
+          vars: [],
+        },
+        {
+          outputs: [
+            { score: 0.6, pass: true, text: 'another valid' },
+            { score: 0.7, pass: true, text: 'another valid' },
+          ],
+          vars: [],
+        },
+      ],
+    };
+
+    const scores = calculateScores(mockTable);
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    render(<ResultsCharts scores={scores} />);
+
+    expect(
+      screen.getByRole('region', { name: 'Evaluation result visualizations' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Pass rate chart' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Score distribution chart' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: 'Prompt score comparison chart' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Pass rates by provider\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Comparing test-provider-1 with test-provider-2 across 2 paired scores\./),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Compare prompt outputs' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByLabelText('X-axis prompt')).toBeInTheDocument();
+    expect(screen.getByLabelText('Y-axis prompt')).toBeInTheDocument();
   });
 
   it('should render without errors with a large number of providers', () => {

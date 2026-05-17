@@ -1,6 +1,6 @@
 // PluginStrategyFlow.tsx
 
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
@@ -158,6 +158,9 @@ const CustomLink = (props: SankeyLinkOptions) => {
 };
 
 const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategyFlowProps) => {
+  const titleId = useId();
+  const summaryId = useId();
+
   // Extract plugin -> strategy -> outcome mappings from the test records
   const data = useMemo(() => {
     // We'll aggregate counts of tests by (plugin, strategy, outcome)
@@ -214,6 +217,16 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
       }
       return acc + strategyFails;
     }, 0);
+
+    const flowRows = plugins.flatMap((plugin) =>
+      Object.entries(linkCounts[plugin]).map(([strategy, counts]) => ({
+        plugin,
+        strategy,
+        defended: counts.pass,
+        vulnerable: counts.fail,
+        total: counts.pass + counts.fail,
+      })),
+    );
 
     // Build nodes array with labels
     const nodes = [
@@ -316,61 +329,116 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
       }
     }
 
-    return { nodes, links };
+    return {
+      nodes,
+      links,
+      flowRows,
+      totalDefended: totalPasses,
+      totalVulnerable: totalFails,
+      totalTests: totalPasses + totalFails,
+    };
   }, [failuresByPlugin, passesByPlugin]);
 
   if (data.nodes.length === 0 || data.links.length === 0) {
     return (
-      <div className="mt-4 text-center">
-        <p className="text-muted-foreground">No data available to display the strategy flow.</p>
-      </div>
+      <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
+        <h4 id={titleId} className="sr-only">
+          Plugin strategy outcome flow
+        </h4>
+        <div className="mt-4 text-center">
+          <p id={summaryId} className="text-muted-foreground">
+            No data available to display the strategy flow.
+          </p>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <div className="h-[400px] min-w-[520px]">
-        <ResponsiveContainer>
-          <Sankey
-            data={data}
-            nodePadding={50}
-            nodeWidth={15}
-            margin={{ top: 20, bottom: 20, left: 100, right: 100 }}
-            link={<CustomLink />}
-            node={<CustomNode />}
-          >
-            <Tooltip
-              content={({ payload }) => {
-                if (!payload?.[0]) {
-                  return null;
-                }
-                const entry = payload[0];
-                const entryPayload: Record<string, unknown> | undefined = entry.payload;
-                const source = entryPayload?.source;
-                const target = entryPayload?.target;
-                // Link hover: source and target are resolved SankeyNode objects
-                if (isNode(source) && isNode(target)) {
+    <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
+      <h4 id={titleId} className="sr-only">
+        Plugin strategy outcome flow
+      </h4>
+      <p id={summaryId} className="mb-3 text-sm text-muted-foreground">
+        {data.totalTests} tests across {data.flowRows.length} plugin-strategy paths:{' '}
+        {data.totalDefended} defended and {data.totalVulnerable} vulnerable.
+      </p>
+      <div
+        role="img"
+        aria-labelledby={titleId}
+        aria-describedby={summaryId}
+        className="overflow-x-auto"
+      >
+        <div className="h-[400px] min-w-[520px]">
+          <ResponsiveContainer>
+            <Sankey
+              data={data}
+              nodePadding={50}
+              nodeWidth={15}
+              margin={{ top: 20, bottom: 20, left: 100, right: 100 }}
+              link={<CustomLink />}
+              node={<CustomNode />}
+            >
+              <Tooltip
+                content={({ payload }) => {
+                  if (!payload?.[0]) {
+                    return null;
+                  }
+                  const entry = payload[0];
+                  const entryPayload: Record<string, unknown> | undefined = entry.payload;
+                  const source = entryPayload?.source;
+                  const target = entryPayload?.target;
+                  // Link hover: source and target are resolved SankeyNode objects
+                  if (isNode(source) && isNode(target)) {
+                    return (
+                      <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                        <strong>
+                          {getDisplayName(source.name)} → {getDisplayName(target.name)}
+                        </strong>
+                        : {entry.value} tests
+                      </div>
+                    );
+                  }
+                  // Node hover
                   return (
                     <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                      <strong>
-                        {getDisplayName(source.name)} → {getDisplayName(target.name)}
-                      </strong>
-                      : {entry.value} tests
+                      <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
                     </div>
                   );
-                }
-                // Node hover
-                return (
-                  <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                    <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
-                  </div>
-                );
-              }}
-            />
-          </Sankey>
-        </ResponsiveContainer>
+                }}
+              />
+            </Sankey>
+          </ResponsiveContainer>
+        </div>
       </div>
-    </div>
+      <div className="mt-4 overflow-hidden rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <caption className="sr-only">
+            Plugin and strategy flow counts equivalent to the diagram.
+          </caption>
+          <thead className="bg-muted/50">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Plugin</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Strategy</th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Defended</th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Vulnerable</th>
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {data.flowRows.map((row) => (
+              <tr key={`${row.plugin}-${row.strategy}`}>
+                <td className="px-4 py-3 font-medium">{getDisplayName(row.plugin)}</td>
+                <td className="px-4 py-3">{getDisplayName(row.strategy)}</td>
+                <td className="px-4 py-3 text-right">{row.defended}</td>
+                <td className="px-4 py-3 text-right">{row.vulnerable}</td>
+                <td className="px-4 py-3 text-right">{row.total}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 };
 

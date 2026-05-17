@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -45,6 +46,16 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   const handleClose = () => {
     setDialogState((prev) => ({ ...prev, open: false }));
   };
+
+  const openDatasetDetails = useCallback(
+    (dataset: DatasetRow) => {
+      const index = data.findIndex((entry) => entry.id === dataset.id);
+      if (index !== -1) {
+        setDialogState({ open: true, selectedIndex: index });
+      }
+    },
+    [data],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -141,16 +152,30 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
         },
         size: 150,
       },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        size: 140,
+        cell: ({ row }) => (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto px-0"
+            aria-label={`View dataset ${row.original.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              openDatasetDetails(row.original);
+            }}
+          >
+            View dataset
+          </Button>
+        ),
+      },
     ],
-    [],
+    [openDatasetDetails],
   );
-
-  const handleRowClick = (dataset: DatasetRow) => {
-    const index = data.findIndex((d) => d.id === dataset.id);
-    if (index !== -1) {
-      handleClickOpen(index);
-    }
-  };
 
   return (
     <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
@@ -170,7 +195,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
               data={data}
               isLoading={isLoading}
               error={error}
-              onRowClick={handleRowClick}
+              onRowClick={openDatasetDetails}
               emptyMessage="Create a dataset to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
               globalFilterLabel="Search datasets"

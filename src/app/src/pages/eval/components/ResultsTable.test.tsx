@@ -1,5 +1,8 @@
 import { act } from 'react';
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
@@ -2306,7 +2309,18 @@ describe('ResultsTable Pagination', () => {
     expect(container.querySelector('#results-table-container')).toHaveStyle({
       minHeight: '0px',
     });
-    expect(container.querySelector('.pagination')).toHaveClass('sticky', 'bottom-0', 'shrink-0');
+    const paginationFooter = container.querySelector('.pagination');
+    expect(paginationFooter).toHaveClass('sticky', 'bottom-0', 'shrink-0', '-mx-4', 'px-4');
+    expect(paginationFooter).not.toHaveClass('w-screen');
+  });
+
+  it('should keep sticky results headers below the dynamic update banner offset', () => {
+    const css = readFileSync(
+      resolve(process.cwd(), 'src/pages/eval/components/ResultsTable.css'),
+      'utf8',
+    );
+
+    expect(css).toContain('top: calc(var(--nav-height) + var(--update-banner-height, 0px));');
   });
 });
 

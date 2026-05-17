@@ -223,6 +223,7 @@ describe('DataTable', () => {
     render(<DataTable columns={columns} data={[]} isLoading />);
 
     expect(screen.getByText('Loading data...')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading data...');
   });
 
   it('should display error state when error is provided', () => {
@@ -230,6 +231,7 @@ describe('DataTable', () => {
 
     expect(screen.getByText('Error loading data')).toBeInTheDocument();
     expect(screen.getByText('Failed to load data')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to load data');
   });
 
   it('should hide toolbar when showToolbar is false', () => {
@@ -1212,6 +1214,8 @@ describe('DataTable', () => {
         'sm:pointer-events-none',
         'sm:group-hover:opacity-100',
         'sm:group-hover:pointer-events-auto',
+        'sm:group-focus-within:opacity-100',
+        'sm:group-focus-within:pointer-events-auto',
       );
       expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
 

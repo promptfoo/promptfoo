@@ -21,6 +21,7 @@ import {
 import { ArrowBackIcon, DeleteIcon, DownloadIcon, MoreVertIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
+import { usePageMeta } from '@app/hooks/usePageMeta';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
@@ -120,6 +121,11 @@ export default function ModelAuditResult() {
 
   const severityCounts = useSeverityCounts(scan?.results?.issues);
   const hasFindings = scan ? scan.hasErrors || hasModelAuditFindings(scan.results) : false;
+
+  usePageMeta({
+    title: scan?.name || id || 'Model Audit Result',
+    description: 'View model audit scan results',
+  });
 
   if (isLoading) {
     return (

@@ -835,6 +835,8 @@ export default function ResultsView({
                         debouncedUpdate(value);
                       }}
                       onClear={handleClearSearch}
+                      aria-label="Search evaluation results"
+                      clearLabel="Clear evaluation results search"
                       containerClassName="w-[200px]"
                       className="h-8 text-xs"
                     />

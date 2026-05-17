@@ -128,6 +128,16 @@ describe('Prompts', () => {
     expect(within(dialog).queryByText('This is the first sample prompt.')).not.toBeInTheDocument();
   });
 
+  it('should expose an explicit row action that opens prompt details', async () => {
+    const user = userEvent.setup();
+    renderWithProviders({ data: mockPrompts });
+
+    await user.click(screen.getByRole('button', { name: 'View prompt prompt:fedcba987654' }));
+
+    const dialog = await screen.findByTestId('mock-prompt-dialog');
+    expect(within(dialog).getByText('This is the second sample prompt.')).toBeInTheDocument();
+  });
+
   it('should open the PromptDialog with the correct prompt details when a later virtualized row is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders({ data: mockPromptsLarge });

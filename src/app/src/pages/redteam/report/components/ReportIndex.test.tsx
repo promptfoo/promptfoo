@@ -25,11 +25,15 @@ vi.mock('@app/components/data-table/data-table', () => ({
     error,
     onRowClick,
     columns,
+    getRowId,
+    rowDisplayMode,
   }: {
     data: EvalSummary[];
     isLoading: boolean;
     error: string | null;
     onRowClick: (row: EvalSummary) => void;
+    getRowId?: (row: EvalSummary) => string;
+    rowDisplayMode?: 'client-virtualized' | 'server-virtualized';
     columns: {
       accessorKey: string;
       header: string;
@@ -49,7 +53,12 @@ vi.mock('@app/components/data-table/data-table', () => ({
     }
 
     return (
-      <div data-testid="data-table" role="grid">
+      <div
+        data-testid="data-table"
+        role="grid"
+        data-row-display-mode={rowDisplayMode}
+        data-first-row-id={data[0] ? getRowId?.(data[0]) : undefined}
+      >
         {/* Render toolbar button for test */}
         <button>Select columns</button>
         {data.map((row) => (
@@ -149,6 +158,43 @@ describe('ReportIndex', () => {
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Select columns' })).toBeInTheDocument();
       });
+    });
+
+    it('should keep the reports grid inside a bounded flex layout', async () => {
+      mockCallApiResponse({ data: mockData });
+
+      const { container } = render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
+
+      const dataTable = await screen.findByTestId('data-table');
+      const card = dataTable.parentElement;
+      const contentShell = card?.parentElement;
+
+      expect(container.firstElementChild).toHaveClass(
+        'flex',
+        'flex-col',
+        'overflow-hidden',
+        'min-h-0',
+      );
+      expect(contentShell).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
+      expect(card).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
+    });
+
+    it('should configure client virtualization with stable report row ids', async () => {
+      mockCallApiResponse({ data: mockData });
+
+      render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
+
+      const dataTable = await screen.findByTestId('data-table');
+      expect(dataTable).toHaveAttribute('data-row-display-mode', 'client-virtualized');
+      expect(dataTable).toHaveAttribute('data-first-row-id', 'eval-1');
     });
 
     it('should render "No target" when providers array is empty', async () => {

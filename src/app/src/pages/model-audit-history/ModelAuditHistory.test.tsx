@@ -235,6 +235,23 @@ describe('ModelAuditHistory', () => {
     }
   });
 
+  it('should expose scan details as an explicit row link', () => {
+    const mockScans = [createMockScan('scan-123', 'Test Scan')];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: mockScans,
+      totalCount: 1,
+    } as any);
+
+    renderComponent();
+
+    expect(screen.getByRole('link', { name: 'View scan scan-123' })).toHaveAttribute(
+      'href',
+      '/model-audit/scan-123',
+    );
+  });
+
   it('should show empty state when no scans exist', () => {
     renderComponent();
 

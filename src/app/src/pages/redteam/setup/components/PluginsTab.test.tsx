@@ -380,6 +380,12 @@ describe('PluginsTab', () => {
       expect(screen.queryByTestId('plugin-list-item-harmful:hate')).not.toBeInTheDocument();
     });
 
+    test('Plugin search exposes a durable accessible label', () => {
+      renderComponent();
+
+      expect(screen.getByRole('textbox', { name: 'Search plugins' })).toBeInTheDocument();
+    });
+
     describe('Category Filtering', () => {
       beforeEach(() => {
         // Reset stores before each category filtering test

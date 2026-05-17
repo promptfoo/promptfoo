@@ -1,5 +1,6 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import {
   Select,
@@ -52,6 +53,12 @@ const COLOR_PALETTE = [
   '#8bd3c7',
 ];
 
+const getPromptLabel = (prompt: { provider?: string } | undefined, promptIdx: number): string =>
+  prompt?.provider || `Prompt ${promptIdx + 1}`;
+
+const formatSummaryScore = (score: number): string =>
+  Number.isInteger(score) ? String(score) : score.toFixed(2);
+
 Chart.register(
   BarController,
   LineController,
@@ -68,6 +75,22 @@ Chart.register(
 function HistogramChart({ table }: ChartProps) {
   const histogramCanvasRef = useRef(null);
   const histogramChartInstance = useRef<Chart | null>(null);
+  const titleId = useId();
+  const summaryId = useId();
+
+  const summary = useMemo(() => {
+    const scores = table.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+
+    if (scores.length === 0) {
+      return 'No scored outputs are available for the score distribution chart.';
+    }
+
+    const minScore = Math.min(...scores);
+    const maxScore = Math.max(...scores);
+    return `Score distribution across ${scores.length} scored outputs from ${table.head.prompts.length} prompts. Scores range from ${formatSummaryScore(minScore)} to ${formatSummaryScore(maxScore)}.`;
+  }, [table]);
 
   useEffect(() => {
     if (!histogramCanvasRef.current) {
@@ -161,13 +184,42 @@ function HistogramChart({ table }: ChartProps) {
     });
   }, [table]);
 
-  return <canvas ref={histogramCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
+  return (
+    <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
+      <h3 id={titleId} className="sr-only">
+        Score distribution chart
+      </h3>
+      <p id={summaryId} className="sr-only">
+        {summary}
+      </p>
+      <canvas
+        ref={histogramCanvasRef}
+        role="img"
+        aria-labelledby={titleId}
+        aria-describedby={summaryId}
+        style={{ maxHeight: '300px' }}
+      ></canvas>
+    </section>
+  );
 }
 
 function PassRateChart({ table }: ChartProps) {
   const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
+  const titleId = useId();
+  const summaryId = useId();
+
+  const summary = useMemo(() => {
+    const providerSummaries = table.head.prompts.map((prompt, promptIdx) => {
+      const label = getPromptLabel(prompt, promptIdx);
+      return `${label}: ${(passRates[promptIdx]?.total ?? 0).toFixed(2)}%`;
+    });
+
+    return providerSummaries.length > 0
+      ? `Pass rates by provider. ${providerSummaries.join('; ')}.`
+      : 'No provider pass rates are available.';
+  }, [passRates, table.head.prompts]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -213,7 +265,23 @@ function PassRateChart({ table }: ChartProps) {
     });
   }, [table]);
 
-  return <canvas ref={passRateCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
+  return (
+    <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
+      <h3 id={titleId} className="sr-only">
+        Pass rate chart
+      </h3>
+      <p id={summaryId} className="sr-only">
+        {summary}
+      </p>
+      <canvas
+        ref={passRateCanvasRef}
+        role="img"
+        aria-labelledby={titleId}
+        aria-describedby={summaryId}
+        style={{ maxHeight: '300px' }}
+      ></canvas>
+    </section>
+  );
 }
 
 function ScatterChart({ table }: ChartProps) {
@@ -222,6 +290,36 @@ function ScatterChart({ table }: ChartProps) {
   const [xAxisPrompt, setXAxisPrompt] = useState(0);
   const [yAxisPrompt, setYAxisPrompt] = useState(1);
   const [open, setOpen] = useState(false);
+  const titleId = useId();
+  const summaryId = useId();
+
+  const comparisonSummary = useMemo(() => {
+    const promptXLabel = getPromptLabel(table.head.prompts[xAxisPrompt], xAxisPrompt);
+    const promptYLabel = getPromptLabel(table.head.prompts[yAxisPrompt], yAxisPrompt);
+    const pairs = table.body
+      .map((row) => ({
+        x: row.outputs[xAxisPrompt]?.score,
+        y: row.outputs[yAxisPrompt]?.score,
+      }))
+      .filter(
+        (
+          point,
+        ): point is {
+          x: number;
+          y: number;
+        } =>
+          typeof point.x === 'number' &&
+          !Number.isNaN(point.x) &&
+          typeof point.y === 'number' &&
+          !Number.isNaN(point.y),
+      );
+
+    const xHigher = pairs.filter((point) => point.x > point.y).length;
+    const yHigher = pairs.filter((point) => point.y > point.x).length;
+    const ties = pairs.length - xHigher - yHigher;
+
+    return `Comparing ${promptXLabel} with ${promptYLabel} across ${pairs.length} paired scores. ${promptYLabel} is higher in ${yHigher} rows, ${promptXLabel} is higher in ${xHigher} rows, and ${ties} rows tie.`;
+  }, [table, xAxisPrompt, yAxisPrompt]);
 
   useEffect(() => {
     if (!scatterCanvasRef.current) {
@@ -363,7 +461,7 @@ function ScatterChart({ table }: ChartProps) {
               value={String(xAxisPrompt)}
               onValueChange={(val) => setXAxisPrompt(Number(val))}
             >
-              <SelectTrigger className="w-32">
+              <SelectTrigger aria-label="X-axis prompt" className="w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -378,7 +476,7 @@ function ScatterChart({ table }: ChartProps) {
               value={String(yAxisPrompt)}
               onValueChange={(val) => setYAxisPrompt(Number(val))}
             >
-              <SelectTrigger className="w-32">
+              <SelectTrigger aria-label="Y-axis prompt" className="w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -392,11 +490,27 @@ function ScatterChart({ table }: ChartProps) {
           </div>
         </DialogContent>
       </Dialog>
-      <canvas
-        ref={scatterCanvasRef}
-        style={{ maxHeight: '300px', cursor: 'pointer' }}
-        onClick={() => setOpen(true)}
-      ></canvas>
+      <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
+        <h3 id={titleId} className="sr-only">
+          Prompt score comparison chart
+        </h3>
+        <p id={summaryId} className="sr-only">
+          {comparisonSummary}
+        </p>
+        <canvas
+          ref={scatterCanvasRef}
+          role="img"
+          aria-labelledby={titleId}
+          aria-describedby={summaryId}
+          style={{ maxHeight: '300px', cursor: 'pointer' }}
+          onClick={() => setOpen(true)}
+        ></canvas>
+        <div className="mt-2 flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+            Compare prompt outputs
+          </Button>
+        </div>
+      </section>
     </>
   );
 }
@@ -404,6 +518,15 @@ function ScatterChart({ table }: ChartProps) {
 function MetricChart({ table }: ChartProps) {
   const metricCanvasRef = useRef(null);
   const metricChartInstance = useRef<Chart | null>(null);
+  const titleId = useId();
+  const summaryId = useId();
+
+  const summary = useMemo(() => {
+    const metricCount = Object.keys(table.head.prompts[0].metrics?.namedScores || {}).length;
+    return metricCount > 0
+      ? `Normalized metric comparison for ${metricCount} named scores across ${table.head.prompts.length} prompts.`
+      : 'No named-score metrics are available for the metric chart.';
+  }, [table]);
 
   useEffect(() => {
     if (!metricCanvasRef.current) {
@@ -474,7 +597,23 @@ function MetricChart({ table }: ChartProps) {
     metricChartInstance.current = new Chart(metricCanvasRef.current, config);
   }, [table]);
 
-  return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
+  return (
+    <section role="region" aria-labelledby={titleId} aria-describedby={summaryId}>
+      <h3 id={titleId} className="sr-only">
+        Named score metric chart
+      </h3>
+      <p id={summaryId} className="sr-only">
+        {summary}
+      </p>
+      <canvas
+        ref={metricCanvasRef}
+        role="img"
+        aria-labelledby={titleId}
+        aria-describedby={summaryId}
+        style={{ maxHeight: '300px' }}
+      ></canvas>
+    </section>
+  );
 }
 
 interface ProgressData {
@@ -711,7 +850,10 @@ function ResultsCharts({ scores }: ResultsChartsProps) {
 
   return (
     <ErrorBoundary fallback={null}>
-      <div className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm">
+      <section
+        aria-label="Evaluation result visualizations"
+        className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm"
+      >
         <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
@@ -733,7 +875,7 @@ function ResultsCharts({ scores }: ResultsChartsProps) {
             </div>
           )}
         </div>
-      </div>
+      </section>
     </ErrorBoundary>
   );
 }

@@ -2253,7 +2253,7 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
+      <div className="pagination sticky bottom-0 z-10 -mx-4 flex shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}
           {filteredResultsCount === 0 ? (

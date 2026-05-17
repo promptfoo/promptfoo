@@ -113,7 +113,7 @@ function renderDataTableHeaderActions<TData, TValue>({
     <span
       className={cn(
         'flex shrink-0 items-center gap-0.5',
-        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
+        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-focus-within:pointer-events-auto',
         (sortDirection || isFiltered) &&
           'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
       )}
@@ -718,7 +718,11 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3">
+        <div
+          className="flex flex-col items-center justify-center h-[400px] gap-3"
+          role="status"
+          aria-live="polite"
+        >
           <Spinner className="size-8" />
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading data...</p>
         </div>
@@ -744,7 +748,10 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20">
+        <div
+          className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-destructive/10 border border-destructive/20"
+          role="alert"
+        >
           <AlertTriangle className="size-12 text-destructive" />
           <h3 className="text-lg font-semibold text-destructive">Error loading data</h3>
           <p className="text-sm text-muted-foreground max-w-md text-center">{error}</p>
@@ -774,7 +781,11 @@ export function DataTable<TData, TValue = unknown>({
             toolbarActions={toolbarActions}
           />
         )}
-        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-zinc-100/50 dark:bg-zinc-800/50">
+        <div
+          className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-zinc-100/50 dark:bg-zinc-800/50"
+          role="status"
+          aria-live="polite"
+        >
           <Search className="size-12 text-zinc-400 dark:text-zinc-500" />
           <h3 className="text-lg font-semibold">No data found</h3>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-md text-center">
@@ -943,7 +954,11 @@ export function DataTable<TData, TValue = unknown>({
   const renderNoResultsRow = () => (
     <tr>
       <td colSpan={visibleColumnCount} className="h-[200px] text-center">
-        <div className="flex flex-col items-center justify-center gap-2">
+        <div
+          className="flex flex-col items-center justify-center gap-2"
+          role="status"
+          aria-live="polite"
+        >
           <Search className="size-8 text-zinc-400 dark:text-zinc-500" />
           <p className="text-sm text-zinc-500 dark:text-zinc-400">No results match your search</p>
         </div>

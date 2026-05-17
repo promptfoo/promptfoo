@@ -507,7 +507,7 @@ table.results-table,
 
 .results-table-sticky {
   position: sticky;
-  top: var(--nav-height); /* Navigation height defined in index.css */
+  top: calc(var(--nav-height) + var(--update-banner-height, 0px));
   z-index: 10;
   transition: transform 0.2s ease-out;
   background: rgb(250 250 249); /* zinc-50 */

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -44,6 +45,16 @@ export default function Prompts({
   const handleClose = () => {
     setDialogState((prev) => ({ ...prev, open: false }));
   };
+
+  const openPromptDetails = useCallback(
+    (prompt: ServerPromptWithMetadata) => {
+      const index = data.findIndex((entry) => entry.id === prompt.id);
+      if (index !== -1) {
+        setDialogState({ open: true, selectedIndex: index });
+      }
+    },
+    [data],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -112,16 +123,30 @@ export default function Prompts({
         size: 120,
         meta: { align: 'right' },
       },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        size: 130,
+        cell: ({ row }) => (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto px-0"
+            aria-label={`View prompt ${row.original.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              openPromptDetails(row.original);
+            }}
+          >
+            View prompt
+          </Button>
+        ),
+      },
     ],
-    [],
+    [openPromptDetails],
   );
-
-  const handleRowClick = (prompt: ServerPromptWithMetadata) => {
-    const index = data.findIndex((p) => p.id === prompt.id);
-    if (index !== -1) {
-      handleClickOpen(index);
-    }
-  };
 
   return (
     <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
@@ -141,7 +166,7 @@ export default function Prompts({
               data={data}
               isLoading={isLoading}
               error={error}
-              onRowClick={handleRowClick}
+              onRowClick={openPromptDetails}
               emptyMessage="Create a prompt to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
               globalFilterLabel="Search prompts"
