@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -91,7 +93,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should include all generated URL images in images array', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = new OpenAiImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', n: 2 },
       });
 
@@ -116,7 +118,7 @@ describe('OpenAiImageProvider', () => {
           { data: 'https://example.com/image-2.png', mimeType: 'image/png' },
         ],
         cached: false,
-        cost: 0.08, // DALL-E 3 standard 1024x1024 with n=2
+        cost: 0.04, // DALL-E 2 1024x1024 with n=2
       });
     });
 
@@ -143,7 +145,7 @@ describe('OpenAiImageProvider', () => {
       // Save original environment variable
       const originalEnv = process.env.OPENAI_API_KEY;
       // Clear the environment variable so we can test the error
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         // Create provider with no API key in config or environment
@@ -156,11 +158,36 @@ describe('OpenAiImageProvider', () => {
 
         // Attempt to call the API should throw an error
         await expect(provider.callApi('Generate a cat')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        // Restore the original environment variable
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      const originalCustomEnv = process.env.CUSTOM_IMAGE_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_IMAGE_API_KEY: undefined });
+
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_IMAGE_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_IMAGE_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('Generate a cat')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_IMAGE_API_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnvVar('CUSTOM_IMAGE_API_KEY', originalCustomEnv);
       }
     });
   });
@@ -350,6 +377,19 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('Invalid size "512x512" for DALL-E 3');
     });
 
+    it('should reject DALL-E 3 n values above 1 before calling the API', async () => {
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key', n: 2 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'n must be 1 for DALL-E 3.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should validate size for DALL-E 2', async () => {
       const provider = new OpenAiImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', size: '1792x1024' },
@@ -471,7 +511,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should merge prompt config with provider config', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = new OpenAiImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', n: 1 },
       });
 
@@ -513,6 +553,341 @@ describe('OpenAiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
       );
+    });
+  });
+
+  describe('GPT Image 2 support', () => {
+    const mockGptImage2Response = {
+      data: {
+        data: [{ b64_json: 'base64EncodedImageData' }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockResolvedValue(mockGptImage2Response);
+    });
+
+    it('should not send response_format parameter for gpt-image-2', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).not.toHaveProperty('response_format');
+      expect(body.model).toBe('gpt-image-2');
+    });
+
+    it('should always treat gpt-image-2 response as b64_json', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
+        cached: false,
+        isBase64: true,
+        format: 'json',
+      });
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it('should report gpt-image-2 cost for explicit table sizes and qualities', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', size: '1024x1024', quality: 'low' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        cost: 0.006,
+      });
+    });
+
+    it('should price gpt-image-2 from exact API token usage when available', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockGptImage2Response,
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+          },
+        },
+      });
+
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        tokenUsage: {
+          prompt: 12,
+          completion: 34,
+          total: 46,
+          numRequests: 1,
+        },
+        metadata: {
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+          },
+        },
+      });
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('should handle gpt-image-2 parameters and custom sizes', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: {
+          apiKey: 'test-key',
+          size: '2048x1152',
+          quality: 'high',
+          background: 'opaque',
+          output_format: 'webp',
+          output_compression: 80,
+          moderation: 'low',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).toMatchObject({
+        model: 'gpt-image-2',
+        size: '2048x1152',
+        quality: 'high',
+        background: 'opaque',
+        output_format: 'webp',
+        output_compression: 80,
+        moderation: 'low',
+      });
+      expect(result).toMatchObject({
+        output: 'data:image/webp;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/webp;base64,base64EncodedImageData', mimeType: 'image/webp' }],
+      });
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it('should pass user through for gpt-image-2 requests', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', user: 'promptfoo-user-123' } as any,
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body.user).toBe('promptfoo-user-123');
+    });
+
+    it('should reject invalid gpt-image-2 custom sizes', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', size: '512x512' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Invalid size "512x512" for GPT Image 2');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid gpt-image-2 quality values', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', quality: 'ultra' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'Invalid quality "ultra" for GPT Image 2. Valid qualities are: low, medium, high, auto.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid gpt-image-2 output formats', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', output_format: 'avif' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'Invalid output_format "avif" for GPT Image 2. Valid output formats are: png, jpeg, webp.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid gpt-image-2 moderation values', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', moderation: 'strict' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'Invalid moderation "strict" for GPT Image 2. Valid moderation values are: auto, low.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject invalid n values before calling the API', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', n: 0 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'n must be a positive integer.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject n values above the image API limit before calling the API', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', n: 11 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'n must be between 1 and 10.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject transparent background for gpt-image-2', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', background: 'transparent' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'background: "transparent" is not supported for GPT Image 2. Use "opaque" or "auto".',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject unknown background values for gpt-image-2', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', background: 'clear' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'Invalid background "clear" for GPT Image 2. Valid backgrounds are: opaque, auto.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject output_compression unless output_format is jpeg or webp', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', output_format: 'png', output_compression: 80 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'output_compression is only supported when output_format is "jpeg" or "webp". Set output_format to "jpeg" or "webp", or remove output_compression.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject output_compression values outside 0-100', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', output_format: 'webp', output_compression: 101 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'output_compression must be a number between 0 and 100.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject streaming options because the provider expects a normal response body', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', stream: true } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'Streaming image generation is not supported by the openai:image provider yet. Remove stream, or use a provider that supports streaming image events.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject partial_images because streaming is unsupported', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', partial_images: 2 } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'partial_images is only supported for streaming image generation, which the openai:image provider does not support yet.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject edit/reference image inputs because edits are unsupported', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', image: 'file://input.png' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'Image edit/reference inputs are not implemented in the openai:image provider yet; only text-to-image generation is supported.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should support dated model variant gpt-image-2-2026-04-21', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2-2026-04-21', {
+        config: { apiKey: 'test-key', quality: 'medium', size: '1024x1024' },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body.model).toBe('gpt-image-2-2026-04-21');
+      expect(body).not.toHaveProperty('response_format');
+      expect(body.quality).toBe('medium');
     });
   });
 
@@ -592,6 +967,20 @@ describe('OpenAiImageProvider', () => {
         }),
         expect.any(Number),
       );
+    });
+
+    it('should reject transparent background with jpeg for gpt-image-1', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1', {
+        config: { apiKey: 'test-key', background: 'transparent', output_format: 'jpeg' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'background: "transparent" is not supported with output_format: "jpeg". Use "png" or "webp", or choose "opaque" or "auto" background.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
     it('should handle gpt-image-1 output_format parameter', async () => {
@@ -866,7 +1255,7 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
-        cost: 0.064, // Default cost for gpt-image-1.5 low 1024x1024
+        cost: 0.009, // Default cost for gpt-image-1.5 low 1024x1024
       });
     });
 
@@ -988,7 +1377,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const resultLow = await providerLow.callApi('test prompt');
-      expect(resultLow.cost).toBe(0.064); // low_1024x1024
+      expect(resultLow.cost).toBe(0.009); // low_1024x1024
 
       // Test medium quality
       const providerMedium = new OpenAiImageProvider('gpt-image-1.5', {
@@ -996,7 +1385,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const resultMedium = await providerMedium.callApi('test prompt');
-      expect(resultMedium.cost).toBe(0.128); // medium_1024x1024
+      expect(resultMedium.cost).toBe(0.034); // medium_1024x1024
 
       // Test high quality with different size
       const providerHigh = new OpenAiImageProvider('gpt-image-1.5', {
@@ -1004,7 +1393,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const resultHigh = await providerHigh.callApi('test prompt');
-      expect(resultHigh.cost).toBe(0.288); // high_1024x1536
+      expect(resultHigh.cost).toBe(0.2); // high_1024x1536
     });
 
     it('should support dated model variant gpt-image-1.5-2025-12-16', async () => {
@@ -1031,7 +1420,7 @@ describe('OpenAiImageProvider', () => {
       });
 
       const result = await provider.callApi('test prompt');
-      expect(result.cost).toBe(0.192); // high_1024x1024 for GPT Image 1.5
+      expect(result.cost).toBe(0.133); // high_1024x1024 for GPT Image 1.5
     });
   });
 });

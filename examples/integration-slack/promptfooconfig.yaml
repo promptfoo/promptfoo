@@ -6,16 +6,16 @@ description: Human feedback via Slack
 # 2. Set SLACK_BOT_TOKEN environment variable
 # 3. Replace C_YOUR_CHANNEL_ID with your actual Slack channel ID
 
-providers:
-  # AI model for comparison
-  - openai:gpt-5-nano
-
-  # Human feedback via Slack
-  - slack:C_YOUR_CHANNEL_ID # Replace with your channel ID
-
 prompts:
   - 'Write a haiku about {{topic}}'
   - 'Explain {{concept}} in simple terms'
+
+providers:
+  # AI model for comparison
+  - openai:chat:gpt-5.4-nano
+
+  # Human feedback via Slack
+  - slack:C_YOUR_CHANNEL_ID # Replace with your channel ID
 
 tests:
   - vars:

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: JavaScript assertion params via test vars
+
+prompts:
+  - '{{reply}}'
+
+providers:
+  - echo
+
+tests:
+  - description: Test-wide vars force assertion-specific param names
+    vars:
+      reply: hello world from promptfoo
+      shortMinLength: 5
+      longMinLength: 20
+    assert:
+      - type: javascript
+        value: output.length >= context.vars.shortMinLength
+      - type: javascript
+        value: output.length >= context.vars.longMinLength

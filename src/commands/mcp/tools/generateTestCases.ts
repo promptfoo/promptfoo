@@ -147,10 +147,10 @@ export function registerGenerateTestCasesTool(server: McpServer) {
 
         // Save to file if outputPath is provided
         if (outputPath) {
-          const fs = await import('fs');
+          const fs = await import('fs/promises');
           const yaml = await import('js-yaml');
           const yamlContent = yaml.dump({ tests });
-          fs.writeFileSync(outputPath, yamlContent);
+          await fs.writeFile(outputPath, yamlContent);
         }
 
         // Analyze the generated test cases

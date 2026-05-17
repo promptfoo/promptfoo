@@ -1,6 +1,33 @@
-import * as fs from 'fs';
-
 import type { CsvRow } from '../types/index';
+
+function getSheetIndex(sheetSpecifier: string | undefined, sheetNames: string[]): number {
+  if (!sheetSpecifier) {
+    // Use the first sheet by default (1-based index)
+    return 1;
+  }
+
+  // Check if it's a numeric index (1-based)
+  const parsedSheetIndex = parseInt(sheetSpecifier, 10);
+  if (isNaN(parsedSheetIndex)) {
+    // It's a sheet name
+    const sheetIndex = sheetNames.indexOf(sheetSpecifier) + 1;
+    if (sheetIndex === 0) {
+      throw new Error(
+        `Sheet "${sheetSpecifier}" not found. Available sheets: ${sheetNames.join(', ')}`,
+      );
+    }
+    return sheetIndex;
+  }
+
+  // Validate 1-based index
+  if (parsedSheetIndex < 1 || parsedSheetIndex > sheetNames.length) {
+    throw new Error(
+      `Sheet index ${parsedSheetIndex} is out of range. Available sheets: ${sheetNames.length} (1-${sheetNames.length})`,
+    );
+  }
+
+  return parsedSheetIndex;
+}
 
 export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
   try {
@@ -8,18 +35,11 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
     const [actualFilePath, sheetSpecifier] = filePath.split('#');
 
-    // Check if file exists before attempting to read it
-    if (!fs.existsSync(actualFilePath)) {
-      throw new Error(`File not found: ${actualFilePath}`);
-    }
-
     // Try to import read-excel-file first to give proper error if not installed
     let readXlsxFile: typeof import('read-excel-file/node').default;
-    let readSheetNames: typeof import('read-excel-file/node').readSheetNames;
     try {
       const module = await import('read-excel-file/node');
       readXlsxFile = module.default;
-      readSheetNames = module.readSheetNames;
     } catch {
       throw new Error(
         'read-excel-file is not installed. Please install it with: npm install read-excel-file\n' +
@@ -28,7 +48,13 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // Get all sheet names to validate and determine which sheet to use
-    const sheetNames = await readSheetNames(actualFilePath);
+    const sheets = await readXlsxFile(actualFilePath).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`File not found: ${actualFilePath}`);
+      }
+      throw error;
+    });
+    const sheetNames = sheets.map((sheet) => sheet.sheet);
 
     // Validate that the workbook has at least one sheet
     if (!sheetNames || sheetNames.length === 0) {
@@ -36,38 +62,13 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // Determine which sheet to use
-    let sheetOption: string | number;
-
-    if (sheetSpecifier) {
-      // Check if it's a numeric index (1-based)
-      const sheetIndex = parseInt(sheetSpecifier, 10);
-      if (isNaN(sheetIndex)) {
-        // It's a sheet name
-        if (!sheetNames.includes(sheetSpecifier)) {
-          throw new Error(
-            `Sheet "${sheetSpecifier}" not found. Available sheets: ${sheetNames.join(', ')}`,
-          );
-        }
-        sheetOption = sheetSpecifier;
-      } else {
-        // Validate 1-based index
-        if (sheetIndex < 1 || sheetIndex > sheetNames.length) {
-          throw new Error(
-            `Sheet index ${sheetIndex} is out of range. Available sheets: ${sheetNames.length} (1-${sheetNames.length})`,
-          );
-        }
-        sheetOption = sheetIndex;
-      }
-    } else {
-      // Use the first sheet by default (1-based index)
-      sheetOption = 1;
-    }
+    const sheetIndex = getSheetIndex(sheetSpecifier, sheetNames);
 
     // Get the sheet name for error messages
-    const sheetName = typeof sheetOption === 'number' ? sheetNames[sheetOption - 1] : sheetOption;
+    const sheetName = sheetNames[sheetIndex - 1];
 
     // Read the sheet - returns array of arrays
-    const rows = await readXlsxFile(actualFilePath, { sheet: sheetOption });
+    const rows = sheets[sheetIndex - 1].data;
 
     // Check if the sheet is empty
     if (rows.length === 0) {
@@ -75,7 +76,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // First row should be headers
-    const headers = rows[0].map((cell) => (cell != null ? String(cell) : ''));
+    const headers = rows[0].map((cell) => (cell == null ? '' : String(cell)));
 
     // Check if the first row has any headers
     if (headers.length === 0 || headers.every((h) => h === '')) {
@@ -93,7 +94,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
       headers.forEach((header, index) => {
         // Use empty string as default value (like xlsx's defval: '')
         const cellValue = row[index];
-        obj[header] = cellValue != null ? String(cellValue) : '';
+        obj[header] = cellValue == null ? '' : String(cellValue);
       });
       return obj;
     });

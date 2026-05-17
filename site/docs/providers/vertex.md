@@ -19,11 +19,12 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 **Gemini 3.1 (Preview):**
 
 - `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
+- `vertex:gemini-3.1-pro-preview-customtools` - Custom-tools variant with the same pricing as Gemini 3.1 Pro
+- `vertex:gemini-3.1-flash-lite-preview` - Cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output)
 
 **Gemini 3.0 (Preview):**
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
-- `vertex:gemini-3-pro-preview` - Advanced reasoning, multimodal understanding, and agentic capabilities
 
 **Gemini 2.5:**
 
@@ -39,12 +40,16 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.0-flash-001` - Multimodal model for daily tasks with strong performance and real-time streaming
 - `vertex:gemini-2.0-flash-exp` - Experimental: Enhanced capabilities
 - `vertex:gemini-2.0-flash-thinking-exp` - Experimental: Reasoning with thinking process in responses
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
-- `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
+- `vertex:gemini-2.0-flash-lite` - Cost-effective for high throughput
+- `vertex:gemini-2.0-flash-lite-001` - GA version for existing customers; discontinuation scheduled for June 1, 2026
 
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
+
+**Claude 4.7:**
+
+- `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, long-running agents, and computer use. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. See the [Google Cloud announcement](https://cloud.google.com/blog/products/ai-machine-learning/claude-opus-4-7-on-vertex-ai) for details.
 
 **Claude 4.6:**
 
@@ -135,20 +140,52 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Embedding Models
 
-- `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
-- `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
-- `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Multilingual embeddings (2,048 tokens, ≤768d)
-- `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+Reference Vertex embedding models with the `vertex:embedding:` prefix:
+
+- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
+
+Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vertex:embedding:gemini-embedding-001
+        config:
+          autoTruncate: true
+```
+
+Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
 
 ### Image Generation Models
 
 :::note
 Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
 :::
+
+### Video Generation Models
+
+Use the `vertex:video:` prefix for Veo on Vertex AI:
+
+- `vertex:video:veo-3.1-generate-preview`
+- `vertex:video:veo-3.1-fast-preview`
+- `vertex:video:veo-3-generate`
+- `vertex:video:veo-3-fast`
+- `vertex:video:veo-2-generate`
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-preview
+    config:
+      projectId: your-project-id
+      region: us-central1
+      aspectRatio: '16:9'
+      resolution: '1080p'
+      durationSeconds: 8
+```
 
 ## Model Capabilities
 
@@ -532,11 +569,13 @@ providers:
               enabled: true
               llama_guard_settings: {}
 
-  # For Claude models
+  # For Claude models (require specific regions like us-east5)
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
+      region: us-east5
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
+      systemInstruction: 'You are a helpful assistant'
 ```
 
 ### Safety Settings
@@ -578,7 +617,8 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
-- Available in multiple regions (us-east5, europe-west1, asia-southeast1)
+- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for Opus 4.7
+- Claude Opus 4.7: adaptive thinking and `xhigh` effort level; promptfoo automatically omits `temperature` (deprecated for this model) and forwards the rest of the Anthropic Messages body to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage
@@ -599,34 +639,37 @@ defaultTest:
     provider:
       # For llm-rubric and factuality assertions
       text: vertex:gemini-2.5-pro
-      # For similarity comparisons
-      embedding: vertex:embedding:text-embedding-004
+      # For similarity and answer-relevance assertions
+      embedding: vertex:embedding:gemini-embedding-001
 ```
 
 ### Configuration Reference
 
-| Option                             | Description                                            | Default                              |
-| ---------------------------------- | ------------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                       | None                                 |
-| `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                            | `v1`                                 |
-| `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
-| `projectId`                        | GCloud project ID                                      | `GOOGLE_CLOUD_PROJECT` env var       |
-| `region`                           | GCloud region                                          | `us-central1`                        |
-| `publisher`                        | Model publisher                                        | `google`                             |
-| `context`                          | Model context                                          | None                                 |
-| `examples`                         | Few-shot examples                                      | None                                 |
-| `safetySettings`                   | Content filtering                                      | None                                 |
-| `generationConfig.temperature`     | Randomness control                                     | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                                 | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                       | None                                 |
-| `generationConfig.topK`            | Sampling diversity                                     | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                               | `[]`                                 |
-| `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
-| `toolConfig`                       | Tool/function calling config                           | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
-| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key    | auto (API key → `true`)              |
-| `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
+| Option                             | Description                                                        | Default                              |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                                   | None                                 |
+| `apiHost`                          | API host override                                                  | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                                        | `v1`                                 |
+| `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
+| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
+| `region`                           | GCloud region                                                      | `us-central1`                        |
+| `publisher`                        | Model publisher                                                    | `google`                             |
+| `context`                          | Model context                                                      | None                                 |
+| `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
+| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
+| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
+| `examples`                         | Few-shot examples                                                  | None                                 |
+| `safetySettings`                   | Content filtering                                                  | None                                 |
+| `generationConfig.temperature`     | Randomness control                                                 | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                                   | None                                 |
+| `generationConfig.topK`            | Sampling diversity                                                 | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                                 |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                                 |
+| `toolConfig`                       | Tool/function calling config                                       | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                                 |
+| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)              |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                              |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -669,14 +712,21 @@ You need to:
    - Search for "Claude"
    - Click "Enable" on the specific Claude models you want to use
 
-2. Use a supported region. Claude models are only available in:
-   - `us-east5`
-   - `europe-west1`
+2. Pick a supported region. Common choices:
+   - `us-east5` and `europe-west1` for Claude 3.x / 4.x models
+   - `global` for the global endpoint (Claude Opus 4.7 and other newer models with dynamic routing)
+   - US and EU multi-region endpoints where enabled
 
 Example configuration with correct region:
 
 ```yaml
 providers:
+  - id: vertex:claude-opus-4-7
+    config:
+      region: global
+      anthropic_version: 'vertex-2023-10-16'
+      max_tokens: 1024
+
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
       region: us-east5 # or europe-west1
@@ -728,16 +778,28 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
+  # Works with Gemini models
   - id: vertex:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
 
-      # Or load from file
+  # Also works with Claude models (require specific regions like us-east5)
+  - id: vertex:claude-sonnet-4-6
+    config:
+      region: us-east5
+      systemInstruction: 'You are a helpful assistant'
+```
+
+You can also load system instructions from a file:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
       systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability. The `systemInstruction` config works across both Gemini and Claude models on Vertex AI.
 
 ### Generation Configuration
 
@@ -868,8 +930,8 @@ providers:
         thinkingConfig:
           thinkingLevel: MEDIUM # Balanced approach for moderate complexity
 
-  # Gemini 3 Pro supports: LOW, HIGH
-  - id: vertex:gemini-3-pro-preview
+  # Gemini 3.1 Pro supports: LOW, HIGH
+  - id: vertex:gemini-3.1-pro-preview
     config:
       generationConfig:
         thinkingConfig:
@@ -1071,6 +1133,7 @@ The Vertex AI provider supports core functionality for LLM evaluation:
 | Files API                | ❌        | Upload/manage files not supported      |
 | Caching API              | ❌        | Context caching not supported          |
 | Live/Realtime API        | ❌        | WebSocket-based live API not supported |
+| Video generation         | ✅        | Use `vertex:video:` provider           |
 | Image generation         | ⚠️        | Use `google:image:` provider instead   |
 
 For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.
