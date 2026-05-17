@@ -81,9 +81,7 @@ describe('MediaFilters', () => {
     it('renders the sort dropdown', () => {
       render(<MediaFilters {...defaultProps} />);
 
-      // Find by the combobox within the sort select
-      const sortTriggers = screen.getAllByRole('combobox');
-      expect(sortTriggers.length).toBeGreaterThan(0);
+      expect(screen.getByRole('combobox', { name: 'Sort media' })).toBeInTheDocument();
     });
 
     it('shows the current sort option', () => {
@@ -98,7 +96,7 @@ describe('MediaFilters', () => {
       render(<MediaFilters {...defaultProps} onSortChange={onSortChange} />);
 
       // Click the sort dropdown (first combobox)
-      const sortTrigger = screen.getAllByRole('combobox')[0];
+      const sortTrigger = screen.getByRole('combobox', { name: 'Sort media' });
       await user.click(sortTrigger);
 
       // Select "Oldest first"

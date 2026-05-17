@@ -79,6 +79,18 @@ describe('TestSuites Component', () => {
     expect(
       screen.getByText('Tests handling of hate speech and discriminatory content'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: /Show full description: Tests handling of hate speech and discriminatory content/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Explain risk score' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Explain risk score \d+\.\d{2}/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Explain attack complexity score \d+/ }),
+    ).toBeInTheDocument();
   });
 
   it('should render DataTable with categoryStats data even when plugins prop is empty', () => {

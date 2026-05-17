@@ -80,6 +80,13 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   const [searchQuery, setSearchQuery] = useState('');
   // Scroll tracking for persistent header
   const [isScrolled, setIsScrolled] = useState(false);
+  const reportSections = [
+    { id: 'report-overview', label: 'Overview' },
+    { id: 'report-attack-methods', label: 'Attack Methods' },
+    { id: 'report-risk-categories', label: 'Risk Categories' },
+    { id: 'report-vulnerabilities', label: 'Vulnerabilities' },
+    { id: 'report-frameworks', label: 'Frameworks' },
+  ];
 
   // Vulnerabilities table reference for scroll navigation
   const vulnerabilitiesDataGridRef = useRef<HTMLDivElement>(null);
@@ -792,16 +799,36 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                     </Badge>
                   )}
                   {tools.length > 0 && (
-                    <Badge
+                    <Button
+                      type="button"
                       variant="secondary"
-                      className="cursor-pointer"
+                      size="sm"
+                      className="h-auto rounded-full px-2.5 py-0.5 text-xs font-medium"
                       onClick={() => setIsToolsDialogOpen(true)}
+                      aria-label={`View ${tools.length} available tools`}
                     >
                       <strong>Tools:</strong> {tools.length} available
-                    </Badge>
+                    </Button>
                   )}
                 </div>
               </Card>
+              <nav
+                aria-label="Report sections"
+                className="print:hidden"
+                data-testid="report-section-nav"
+              >
+                <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
+                  {reportSections.map((section) => (
+                    <a
+                      key={section.id}
+                      href={`#${section.id}`}
+                      className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {section.label}
+                    </a>
+                  ))}
+                </div>
+              </nav>
             </>
           )}
 
@@ -837,7 +864,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                       value={statusFilter}
                       onValueChange={(value) => setStatusFilter(value as 'all' | 'pass' | 'fail')}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-label="Filter report results by status">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -855,7 +882,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                         setSelectedCategories(value === 'all' ? [] : [value])
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-label="Filter report results by risk category">
                         <SelectValue placeholder="Risk Categories">
                           {selectedCategories.length > 0
                             ? `${selectedCategories.length} selected`
@@ -880,7 +907,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                         setSelectedStrategies(value === 'all' ? [] : [value])
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-label="Filter report results by strategy">
                         <SelectValue placeholder="Strategies">
                           {selectedStrategies.length > 0
                             ? `${selectedStrategies.length} selected`
@@ -902,36 +929,46 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
             </Card>
           )}
 
-          <Overview
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            plugins={evalData.config.redteam.plugins || []}
-            vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-          />
-          <StrategyStats
-            strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
-            failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
-            passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
-            plugins={evalData.config.redteam.plugins || []}
-          />
-          <RiskCategories
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            evalId={evalId}
-            failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
-            passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
-          />
-          <TestSuites
-            evalId={evalId}
-            categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
-            plugins={evalData.config.redteam.plugins || []}
-            failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
-            passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
-            vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-          />
-          <FrameworkCompliance
-            evalId={evalId}
-            categoryStats={categoryStatsForFrameworkCompliance}
-            config={evalData.config}
-          />
+          <section id="report-overview" className="scroll-mt-28">
+            <Overview
+              categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+              plugins={evalData.config.redteam.plugins || []}
+              vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+            />
+          </section>
+          <section id="report-attack-methods" className="scroll-mt-28">
+            <StrategyStats
+              strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
+              failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
+              passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
+              plugins={evalData.config.redteam.plugins || []}
+            />
+          </section>
+          <section id="report-risk-categories" className="scroll-mt-28">
+            <RiskCategories
+              categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+              evalId={evalId}
+              failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
+              passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
+            />
+          </section>
+          <section id="report-vulnerabilities" className="scroll-mt-28">
+            <TestSuites
+              evalId={evalId}
+              categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
+              plugins={evalData.config.redteam.plugins || []}
+              failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
+              passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
+              vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
+            />
+          </section>
+          <section id="report-frameworks" className="scroll-mt-28">
+            <FrameworkCompliance
+              evalId={evalId}
+              categoryStats={categoryStatsForFrameworkCompliance}
+              config={evalData.config}
+            />
+          </section>
         </div>
         <ToolsDialog
           open={isToolsDialogOpen}

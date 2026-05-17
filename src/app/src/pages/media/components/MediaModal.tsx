@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { CopyButton } from '@app/components/ui/copy-button';
@@ -113,6 +113,8 @@ interface GraderItemProps {
 }
 
 function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
+  const reasonId = useId();
+
   return (
     <div
       className={cn(
@@ -123,8 +125,10 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
       )}
     >
       <button
+        type="button"
         onClick={onToggle}
         aria-expanded={isExpanded}
+        aria-controls={grader.reason ? reasonId : undefined}
         className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-left rounded-lg"
       >
         {grader.pass ? (
@@ -153,7 +157,7 @@ function GraderItem({ grader, isExpanded, onToggle }: GraderItemProps) {
         )}
       </button>
       {isExpanded && grader.reason && (
-        <div className="px-3 pb-3 pt-1">
+        <div id={reasonId} className="px-3 pb-3 pt-1">
           <div className="bg-white/80 dark:bg-black/20 rounded-md p-2.5 max-h-48 overflow-y-auto">
             <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
               {grader.reason}
@@ -192,6 +196,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
   const isInList = currentIndex >= 0;
   const hasPrevious = isInList && currentIndex > 0;
   const hasNext = isInList && currentIndex < items.length - 1;
+  const technicalDetailsId = 'media-technical-details';
 
   const handlePrevious = useCallback(() => {
     if (hasPrevious) {
@@ -608,7 +613,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               <button
                 onClick={handlePrevious}
                 className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
-                aria-label="Previous"
+                aria-label="Previous media item"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
@@ -617,7 +622,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               <button
                 onClick={handleNext}
                 className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
-                aria-label="Next"
+                aria-label="Next media item"
               >
                 <ChevronRight className="h-5 w-5" />
               </button>
@@ -811,7 +816,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
               {/* Details Toggle */}
               <div className="pt-2 border-t border-border/50">
                 <button
+                  type="button"
                   onClick={() => setShowDetails(!showDetails)}
+                  aria-expanded={showDetails}
+                  aria-controls={technicalDetailsId}
                   className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
                 >
                   <ChevronDown
@@ -823,7 +831,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                 </button>
 
                 {showDetails && (
-                  <div className="mt-3 space-y-2 text-xs bg-card rounded-lg border border-border/50 p-3">
+                  <div
+                    id={technicalDetailsId}
+                    className="mt-3 space-y-2 text-xs bg-card rounded-lg border border-border/50 p-3"
+                  >
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Cell</span>
                       <span className="font-mono">

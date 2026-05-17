@@ -716,6 +716,27 @@ describe('App component target selector rendering', () => {
     );
   });
 
+  it('exposes a section navigator for long report detail pages', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    const nav = await screen.findByTestId('report-section-nav');
+    expect(nav).toHaveAttribute('aria-label', 'Report sections');
+    expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
+      'href',
+      '#report-overview',
+    );
+    expect(screen.getByRole('link', { name: 'Vulnerabilities' })).toHaveAttribute(
+      'href',
+      '#report-vulnerabilities',
+    );
+  });
+
   it('allows embedded reports to shrink within narrow result views', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
@@ -817,8 +838,15 @@ describe('Filter panel regression tests', () => {
 
     // Verify filter controls are rendered
     expect(screen.getByPlaceholderText('Search prompts & outputs')).toBeInTheDocument();
-    expect(screen.getByText('Risk Categories')).toBeInTheDocument();
-    expect(screen.getByText('Strategies')).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Filter report results by status' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Filter report results by risk category' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Filter report results by strategy' }),
+    ).toBeInTheDocument();
   });
 
   it('should not use empty string values in Select components', async () => {

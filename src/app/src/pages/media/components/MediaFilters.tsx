@@ -225,7 +225,7 @@ export function MediaFilters({
             }
           }}
         >
-          <SelectTrigger className="w-[160px] h-9">
+          <SelectTrigger aria-label="Sort media" className="w-[160px] h-9">
             <div className="flex items-center gap-1.5">
               {sort.order === 'desc' ? (
                 <ArrowDownAZ className="h-3.5 w-3.5 text-muted-foreground" />
