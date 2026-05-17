@@ -2,13 +2,14 @@ import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { loadTools } from '../../../src/providers/openai/agents-loader';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
@@ -19,6 +20,13 @@ vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/providers/openai/agents-loader', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    loadTools: vi.fn(),
   };
 });
 
@@ -1807,6 +1815,32 @@ describe('RedteamGraderBase', () => {
       );
     });
 
+    it('should use the Agents SDK loader for openai:agents providers', async () => {
+      const agentsProvider = createMockProvider({
+        id: 'openai:agents:support-agent',
+        config: {
+          tools: 'file://./tools/support-tools.ts',
+        },
+      });
+      vi.mocked(loadTools).mockResolvedValue([{ name: 'agents-tool' } as any]);
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const toolGrader = new ToolGrader();
+      await toolGrader.getResult('test prompt', 'test output', mockTest, agentsProvider);
+
+      expect(loadTools).toHaveBeenCalledWith('file://./tools/support-tools.ts');
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('agents-tool'),
+        expect.any(String),
+        expect.any(Object),
+      );
+    });
+
     it('should handle when no tools are provided', async () => {
       const mockResult: GradingResult = {
         pass: true,
@@ -1822,6 +1856,42 @@ describe('RedteamGraderBase', () => {
       ).rejects.toThrow(/^Error rendering rubric template/);
 
       expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+
+    it('should treat string-array MCP tools config as a filter, not tool definitions', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const SimpleGrader = class extends RedteamGraderBase {
+        id = 'test-simple-grader';
+        rubric = 'Test rubric without tools';
+      };
+
+      const simpleGrader = new SimpleGrader();
+      await simpleGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        {
+          id: () => 'mcp',
+          callApi: async () => ({ output: 'unused' }),
+          config: {
+            tools: ['search_companies'],
+          },
+        },
+        undefined,
+      );
+
+      expect(maybeLoadToolsFromExternalFile).not.toHaveBeenCalledWith(['search_companies']);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Test rubric without tools'),
+        expect.any(String),
+        expect.any(Object),
+      );
     });
   });
 

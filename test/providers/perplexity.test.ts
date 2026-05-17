@@ -166,6 +166,24 @@ describe('Perplexity Provider', () => {
       expect(result.cost).toBeUndefined();
     });
 
+    it('should still calculate cost for fresh responses with cached input tokens', async () => {
+      vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({
+        output: 'Fresh output',
+        tokenUsage: {
+          total: 20,
+          prompt: 10,
+          completion: 10,
+          cached: 5,
+        },
+        cached: false,
+      });
+
+      const provider = new PerplexityProvider('sonar-pro');
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.00018);
+    });
+
     it('should pass through error responses', async () => {
       // Mock the parent class callApi method with an error
       vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValueOnce({

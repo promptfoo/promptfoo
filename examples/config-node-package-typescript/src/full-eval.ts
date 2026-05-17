@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 
-import promptfoo from '../../../dist/src/index.js';
-
-import type { EvaluateTestSuite } from '../../../dist/src/index.js';
+import promptfoo from 'promptfoo';
+import type { EvaluateTestSuite } from 'promptfoo';
 
 const prompts: EvaluateTestSuite['prompts'] = [
   // Prompts can be raw text...
@@ -88,7 +87,7 @@ const tests = [
 ];
 
 (async () => {
-  const results = await promptfoo.evaluate({
+  const evalRecord = await promptfoo.evaluate({
     prompts,
     providers,
     tests,
@@ -96,6 +95,7 @@ const tests = [
     // Persist results locally so they are visible in the promptfoo viewer
     writeLatestResults: true,
   });
+  const results = await evalRecord.toEvaluateSummary();
 
   console.log('RESULTS:');
   const resultsString = JSON.stringify(results, null, 2);

@@ -93,6 +93,7 @@ code p {
 
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
+  flex-shrink: 0;
 }
 
 /* Hide search bar on non-docs pages */
@@ -117,14 +118,42 @@ html:not(.docs-wrapper) .DocSearch {
 /* Mobile navbar adjustments */
 @media (max-width: 1100px) {
   /* Hide search box on mobile to prevent overlap */
-  .navbar__search,
-  .DocSearch {
+  .navbar__search {
     display: none !important;
   }
 
   /* Keep hamburger top-level items consistent */
+  .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link,
+  .navbar-sidebar__items .header-book-demo-link,
+  .navbar-sidebar__items .header-discord-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
   .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link {
     font-weight: 600;
+  }
+
+  .navbar-sidebar__items .header-discord-link {
+    gap: 12px;
+  }
+
+  .navbar-sidebar__items .header-discord-link::after {
+    content: 'Discord';
+  }
+
+  .docs-wrapper .DocSearch-Button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .docs-wrapper .DocSearch-Button-Placeholder,
+  .docs-wrapper .DocSearch-Button-Keys {
+    display: none;
   }
 }
 
@@ -171,6 +200,12 @@ html:not(.docs-wrapper) .DocSearch {
 .navbar__items--right > :nth-last-child(2) {
   /* Equalize the spacing to the left of the color mode toggle */
   margin-left: 4px;
+}
+
+@media (max-width: 1280px) {
+  .docs-wrapper .navbar__items--right .header-discord-link {
+    display: none;
+  }
 }
 
 .dropdown > .navbar__link:after {
@@ -395,6 +430,116 @@ html:not(.docs-wrapper) .DocSearch {
   width: 100%;
   height: auto;
   margin: 0 auto;
+}
+
+.redteamPolicyScreenshotLink {
+  display: block;
+  margin: 1rem 0 1.5rem;
+  border-radius: 8px;
+  line-height: 0;
+}
+
+.redteamPolicyScreenshotLink:hover,
+.redteamPolicyScreenshotLink:focus {
+  text-decoration: none;
+}
+
+.redteamPolicyScreenshotLink:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.redteamPolicyScreenshotLink:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
+.redteamPolicyScreenshot {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+[data-theme='dark'] .redteamPolicyScreenshot {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+}
+
+.redteamPluginScreenshotFigure {
+  margin: 1.25rem 0 1.75rem;
+}
+
+.redteamPluginScreenshotFigure figcaption {
+  margin: 0.5rem 0 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.redteamPluginScreenshotLink {
+  display: block;
+  border-radius: 8px;
+  line-height: 0;
+}
+
+.redteamPluginScreenshotLink:hover,
+.redteamPluginScreenshotLink:focus {
+  text-decoration: none;
+}
+
+.redteamPluginScreenshotLink:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.redteamPluginScreenshotLink:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
+
+.redteamPluginScreenshot {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+[data-theme='dark'] .redteamPluginScreenshot {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 768px) {
+  .redteamPolicyScreenshotLink {
+    margin: 0.75rem 0 1.25rem;
+    border-radius: 6px;
+  }
+
+  .redteamPolicyScreenshot {
+    border-radius: 6px;
+  }
+
+  .redteamPluginScreenshotFigure {
+    margin: 1rem 0 1.5rem;
+  }
+
+  .redteamPluginScreenshotLink {
+    border-radius: 6px;
+  }
+
+  .redteamPluginScreenshot {
+    border-radius: 6px;
+  }
 }
 
 /* Remove pill background from active breadcrumb item */

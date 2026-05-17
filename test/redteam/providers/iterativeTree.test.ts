@@ -316,6 +316,71 @@ describe('RedteamIterativeProvider', () => {
         }),
       );
     });
+
+    it('should pass and return remote materialization fields', async () => {
+      const mockResponse = {
+        improvement: 'Remote materialized improvement',
+        prompt: '{"document":"updated attack"}',
+      };
+      mockRedteamProvider.callApi.mockResolvedValue({
+        inputMaterialization: {
+          document: {
+            injectionPlacement: 'comment',
+          },
+        },
+        materializationHandled: true,
+        materializedVars: {
+          document:
+            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        },
+        output: JSON.stringify(mockResponse),
+      });
+
+      const result = await getNewPrompt(mockRedteamProvider, [], {
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+        },
+        materializationIndex: 3,
+        pluginId: 'iterative-tree',
+        purpose: 'Summarize uploaded documents',
+      });
+
+      expect(result).toMatchObject({
+        ...mockResponse,
+        inputMaterialization: {
+          document: {
+            injectionPlacement: 'comment',
+          },
+        },
+        materializationHandled: true,
+        materializedVars: {
+          document:
+            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        },
+      });
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledWith(
+        '[]',
+        expect.objectContaining({
+          vars: {
+            __promptfooRemoteMaterialization: {
+              injectVar: undefined,
+              inputs: {
+                document: {
+                  description: 'Uploaded planning document',
+                  type: 'docx',
+                },
+              },
+              materializationIndex: 3,
+              pluginId: 'iterative-tree',
+              purpose: 'Summarize uploaded documents',
+            },
+          },
+        }),
+      );
+    });
   });
 
   describe('Abort Signal Handling', () => {
@@ -569,6 +634,32 @@ describe('TreeNode', () => {
       const customId = crypto.randomUUID();
       const node = createTreeNode('prompt', 5, 0, customId);
       expect(node.id).toBe(customId);
+    });
+
+    it('should preserve remote materialization fields on nodes', () => {
+      const node = createTreeNode('prompt', 5, 0, 'node-id', {
+        inputMaterialization: {
+          document: {
+            injectionPlacement: 'comment',
+          },
+        },
+        materializationHandled: true,
+        materializedVars: {
+          document:
+            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        },
+      });
+
+      expect(node.inputMaterialization).toEqual({
+        document: {
+          injectionPlacement: 'comment',
+        },
+      });
+      expect(node.materializationHandled).toBe(true);
+      expect(node.materializedVars).toEqual({
+        document:
+          'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+      });
     });
   });
 });

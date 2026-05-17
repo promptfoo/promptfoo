@@ -239,6 +239,32 @@ describe('trajectory utilities', () => {
     expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'echo']));
   });
 
+  it('normalizes shell tool command arrays as one command step', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'shell-command-array',
+          name: 'tool shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'shell',
+            'tool.arguments':
+              '{"commands":["cat skills/discount-review/SKILL.md","python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo"]}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe(
+      'cat skills/discount-review/SKILL.md; python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo',
+    );
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'cat']));
+  });
+
   it('normalizes array-format command arguments from exec_command', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,

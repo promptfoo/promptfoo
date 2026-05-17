@@ -4,9 +4,11 @@ import {
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
   DEFAULT_GATEWAY_PORT,
+  resolveOpenClawBillingModelName,
 } from './shared';
 
 import type { ProviderOptions } from '../../types/providers';
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 /**
  * OpenClaw chat provider extends OpenAI chat completion provider.
@@ -51,5 +53,9 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   // Prevent fallback to OPENAI_API_HOST / OPENAI_BASE_URL
   getApiUrl(): string {
     return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
+
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    return resolveOpenClawBillingModelName(config) || this.modelName;
   }
 }
