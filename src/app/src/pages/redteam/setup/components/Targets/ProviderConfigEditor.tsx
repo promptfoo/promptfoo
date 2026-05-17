@@ -28,6 +28,15 @@ export interface ProviderConfigEditorProps {
   mode?: 'eval' | 'redteam';
 }
 
+const shouldRemoveMcpConfig = (
+  previousTargetId: string,
+  nextTargetId: string,
+  currentProviderType?: string,
+): boolean =>
+  currentProviderType === 'bedrock' &&
+  previousTargetId.startsWith('bedrock:converse:') &&
+  !nextTargetId.startsWith('bedrock:converse:');
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -66,10 +75,19 @@ function ProviderConfigEditor({
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
-    const updatedTarget = { ...provider } as ProviderOptions;
+    // Shallow-clone the config along with the target so subsequent
+    // assignments and `delete` don't mutate the original provider object
+    // by reference (which is React state owned by our parent).
+    const updatedTarget = {
+      ...provider,
+      config: { ...(provider.config ?? {}) },
+    } as ProviderOptions;
 
     if (field === 'id') {
       updatedTarget.id = value as string;
+      if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
+        delete updatedTarget.config.mcp;
+      }
     } else if (field === 'url') {
       updatedTarget.config.url = value as string;
       if (validateUrl(value as string)) {
@@ -195,6 +213,7 @@ function ProviderConfigEditor({
         'groq',
         'deepseek',
         'azure',
+        'bedrock',
         'openrouter',
         'perplexity',
         'cerebras',
@@ -318,6 +337,7 @@ function ProviderConfigEditor({
         'groq',
         'deepseek',
         'azure',
+        'bedrock',
         'openrouter',
         'perplexity',
         'cerebras',
@@ -331,7 +351,6 @@ function ProviderConfigEditor({
 
       {/* Cloud and enterprise providers - use custom config for now */}
       {[
-        'bedrock',
         'sagemaker',
         'databricks',
         'cloudflare-ai',

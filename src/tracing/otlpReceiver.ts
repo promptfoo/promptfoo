@@ -454,12 +454,17 @@ export class OTLPReceiver {
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
     for (const [traceId, info] of traceInfoById) {
+      if (!info.evaluationId || !info.testCaseId) {
+        logger.debug(`[OtlpReceiver] Skipping trace record creation for unlinked trace ${traceId}`);
+        continue;
+      }
+
       try {
         logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
         await this.traceStore.createTrace({
           traceId,
-          evaluationId: info.evaluationId || '',
-          testCaseId: info.testCaseId || '',
+          evaluationId: info.evaluationId,
+          testCaseId: info.testCaseId,
         });
       } catch (error) {
         // Trace might already exist, which is fine
@@ -478,7 +483,10 @@ export class OTLPReceiver {
               attributes: this.redactAttributes(span.attributes),
             }))
           : spans;
-      await this.traceStore.addSpans(traceId, sanitized, { skipTraceCheck: true });
+      await this.traceStore.addSpans(traceId, sanitized, {
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
+      });
     }
   }
 
@@ -932,6 +940,18 @@ export async function startOTLPReceiver(
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });
   await receiver.listen(port, host);
+}
+
+export function updateOTLPReceiverOptions(options?: {
+  acceptFormats?: OTLPFormat[];
+  redactAttributes?: string[];
+}): void {
+  if (!otlpReceiver) {
+    return;
+  }
+
+  otlpReceiver.setAcceptFormats(options?.acceptFormats);
+  otlpReceiver.setRedactAttributes(options?.redactAttributes);
 }
 
 export async function stopOTLPReceiver(): Promise<void> {
