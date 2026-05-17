@@ -299,6 +299,23 @@ describe('OpenAiResponsesProvider request building', () => {
     expect(body.max_output_tokens).toBe(512);
   });
 
+  it('should forward prompt caching and include options', async () => {
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        prompt_cache_key: 'shared-prefix',
+        prompt_cache_retention: '24h',
+        include: ['web_search_call.results', 'reasoning.encrypted_content'],
+      },
+    });
+
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.prompt_cache_key).toBe('shared-prefix');
+    expect(body.prompt_cache_retention).toBe('24h');
+    expect(body.include).toEqual(['web_search_call.results', 'reasoning.encrypted_content']);
+  });
+
   it('should handle store parameter correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

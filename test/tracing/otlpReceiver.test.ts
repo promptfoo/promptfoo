@@ -219,7 +219,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -258,7 +258,7 @@ describe('OTLPReceiver', () => {
             name: 'json-with-charset',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -360,7 +360,7 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -421,7 +421,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -581,7 +581,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -715,7 +715,42 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        skipTraceCheck: true,
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
+      });
+    });
+
+    it('stores unlinked OTLP spans without creating invalid trace rows', async () => {
+      const traceIdHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from(traceIdHex, 'hex').toString('base64'),
+                    spanId: Buffer.from('bbbbbbbbbbbbbbbb', 'hex').toString('base64'),
+                    name: 'child-span-without-linkage',
+                    startTimeUnixNano: '1000000000',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
       });
     });
   });
