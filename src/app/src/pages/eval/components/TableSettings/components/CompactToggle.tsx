@@ -61,7 +61,7 @@ const CompactToggle = ({
       <span
         id={labelId}
         className={cn(
-          'flex-1 text-[0.8125rem] leading-normal select-none whitespace-nowrap',
+          'text-[0.8125rem] leading-normal select-none whitespace-nowrap',
           disabled ? 'text-muted-foreground' : '',
         )}
       >
@@ -75,6 +75,7 @@ const CompactToggle = ({
               tabIndex={-1}
               className="p-0.5 ml-1 text-muted-foreground/40 hover:text-muted-foreground"
               aria-label={`Information about ${label}`}
+              onClick={handleStopPropagation}
             >
               <Info className="size-3.5" />
             </button>
