@@ -33,7 +33,18 @@ export interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  /** Custom per-token cost override for both input and output tokens. */
   cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
+  /** Custom per-token audio cost override for both audio input and output tokens. */
+  audioCost?: number;
+  /** Custom per-token audio input cost override. Takes precedence over audioCost. */
+  audioInputCost?: number;
+  /** Custom per-token audio output cost override. Takes precedence over audioCost. */
+  audioOutputCost?: number;
   headers?: { [key: string]: string };
   /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
   maxRetries?: number;
@@ -94,7 +105,7 @@ export interface OpenAiMCPTool {
 
 // Responses API specific tool types
 export interface OpenAiWebSearchTool {
-  type: 'web_search_preview';
+  type: 'web_search' | 'web_search_preview';
   search_context_size?: 'small' | 'medium' | 'large';
   user_location?: string;
 }
@@ -111,6 +122,8 @@ export type OpenAiResponsesTool =
   | OpenAiMCPTool
   | OpenAiWebSearchTool
   | OpenAiCodeInterpreterTool;
+
+export type OpenAiPromptCacheRetention = 'in_memory' | '24h' | null;
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
@@ -146,9 +159,11 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
-  reasoning_effort?: ReasoningEffort;
+  prompt_cache_key?: string;
+  prompt_cache_retention?: OpenAiPromptCacheRetention;
+  reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'premium') | null;
+  service_tier?: ('auto' | 'default' | 'flex' | 'priority' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -161,6 +176,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;
+  include?: OpenAI.Responses.ResponseIncludable[] | null;
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;

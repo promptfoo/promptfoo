@@ -9,6 +9,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -174,8 +175,7 @@ describe('importCommand', () => {
       // Simulate a cloud-authed importer with a different local identity. The
       // imported eval's historical author must still win — this is a
       // regression test for PR #7760.
-      const originalApiKey = process.env.PROMPTFOO_API_KEY;
-      process.env.PROMPTFOO_API_KEY = 'fake-test-api-key';
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'fake-test-api-key' });
       try {
         const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
         const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
@@ -187,11 +187,7 @@ describe('importCommand', () => {
         expect(importedEval).toBeDefined();
         expect(importedEval!.author).toBe(sampleData.metadata.author);
       } finally {
-        if (originalApiKey === undefined) {
-          delete process.env.PROMPTFOO_API_KEY;
-        } else {
-          process.env.PROMPTFOO_API_KEY = originalApiKey;
-        }
+        restoreEnv();
       }
     });
   });

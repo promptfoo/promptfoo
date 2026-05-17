@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEnvBool } from '../../src/envars';
+import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
+  getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
   isPromptfooSampleTarget,
@@ -26,6 +27,18 @@ describe('Shared Provider Functions', () => {
     vi.resetAllMocks();
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
+    });
+    vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
+      return defaultValue ?? 0;
+    });
+  });
+
+  describe('getRequestTimeoutMs', () => {
+    it('reads REQUEST_TIMEOUT_MS lazily', () => {
+      vi.mocked(getEnvInt).mockReturnValueOnce(12_345);
+
+      expect(getRequestTimeoutMs()).toBe(12_345);
+      expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
     });
   });
 
@@ -152,6 +165,37 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
+    it('should use separate config input and output costs when provided', () => {
+      const cost = calculateCost(
+        'model1',
+        { inputCost: 0.003, outputCost: 0.007 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBe(6.5);
+    });
+
+    it('should prefer separate config costs over config cost', () => {
+      const cost = calculateCost(
+        'model1',
+        { cost: 0.005, inputCost: 0.003, outputCost: 0.007 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBe(6.5);
+    });
+
+    it('should use config cost as the fallback for partial separate overrides', () => {
+      expect(calculateCost('model1', { cost: 0.005, inputCost: 0.003 }, 1000, 500, models)).toBe(
+        5.5,
+      );
+      expect(calculateCost('model1', { cost: 0.005, outputCost: 0.007 }, 1000, 500, models)).toBe(
+        8.5,
+      );
+    });
+
     it('should use long-context rates when prompt tokens exceed the model threshold', () => {
       const cost = calculateCost('model1', {}, 1_001, 500, [
         {
@@ -186,6 +230,24 @@ describe('Shared Provider Functions', () => {
         },
       ]);
       expect(cost).toBeCloseTo(7.505);
+    });
+
+    it('should prefer separate config costs over model long-context rates', () => {
+      const cost = calculateCost('model1', { inputCost: 0.005, outputCost: 0.006 }, 1_001, 500, [
+        {
+          id: 'model1',
+          cost: {
+            input: 0.001,
+            output: 0.002,
+            longContext: {
+              threshold: 1_000,
+              input: 0.003,
+              output: 0.004,
+            },
+          },
+        },
+      ]);
+      expect(cost).toBeCloseTo(8.005);
     });
 
     it('should return undefined if model not found', () => {

@@ -14,22 +14,23 @@ import {
 } from '../../src/util/json';
 import { createEvaluateResult } from '../factories/eval';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
+import { mockProcessEnv } from './utils';
 
 import type { EvaluateResult } from '../../src/types/index';
 
 describe('json utilities', () => {
   describe('getAjv', () => {
     beforeAll(() => {
-      process.env.NODE_ENV = 'test';
+      mockProcessEnv({ NODE_ENV: 'test' });
     });
 
     beforeEach(() => {
-      delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+      mockProcessEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: undefined });
       resetAjv();
     });
 
     afterEach(() => {
-      delete process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE;
+      mockProcessEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: undefined });
     });
 
     it('should create an Ajv instance with default options', () => {
@@ -39,7 +40,7 @@ describe('json utilities', () => {
     });
 
     it('should disable strict mode when PROMPTFOO_DISABLE_AJV_STRICT_MODE is set', () => {
-      process.env.PROMPTFOO_DISABLE_AJV_STRICT_MODE = 'true';
+      mockProcessEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'true' });
       const ajv = getAjv();
       expect(ajv.opts.strictSchema).toBe(false);
     });
@@ -66,10 +67,10 @@ describe('json utilities', () => {
     it('should only allow resetAjv to be called in test environment', () => {
       const originalNodeEnv = process.env.NODE_ENV;
       try {
-        process.env.NODE_ENV = 'production';
+        mockProcessEnv({ NODE_ENV: 'production' });
         expect(() => resetAjv()).toThrow('resetAjv can only be called in test environment');
       } finally {
-        process.env.NODE_ENV = originalNodeEnv;
+        mockProcessEnv({ NODE_ENV: originalNodeEnv });
       }
     });
   });

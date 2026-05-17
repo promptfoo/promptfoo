@@ -34,7 +34,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5.4-2026-03-05');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5.5-2026-04-23');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
@@ -65,6 +65,7 @@ describe('constants', () => {
       'realestate',
       'guardrails-eval',
       'coding-agent:core',
+      'coding-agent:all',
     ]);
   });
 
@@ -129,7 +130,8 @@ describe('constants', () => {
     });
   });
 
-  it('CODING_AGENT_CORE_PLUGINS should keep the MVP collection focused', () => {
+  it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
+    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
     expect(CODING_AGENT_CORE_PLUGINS).toEqual([
       'coding-agent:repo-prompt-injection',
       'coding-agent:terminal-output-injection',
@@ -191,9 +193,9 @@ describe('constants', () => {
         'Compliance & Legal',
         'Trust & Safety',
         'Brand',
-        'Datasets',
-        'Domain-Specific Risks',
         'Coding Agent Security',
+        'Domain-Specific Risks',
+        'Datasets',
       ];
       expectedKeys.forEach((key) => {
         expect(categoryDescriptions).toHaveProperty(key);
@@ -203,6 +205,18 @@ describe('constants', () => {
   });
 
   describe('riskCategories', () => {
+    it('should keep categories in display order', () => {
+      expect(Object.keys(riskCategories)).toEqual([
+        'Security & Access Control',
+        'Compliance & Legal',
+        'Trust & Safety',
+        'Brand',
+        'Coding Agent Security',
+        'Domain-Specific Risks',
+        'Datasets',
+      ]);
+    });
+
     it('should have brand risks', () => {
       expect(riskCategories.Brand).toBeDefined();
       expect(riskCategories.Brand).toContain('competitors');

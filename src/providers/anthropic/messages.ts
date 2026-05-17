@@ -21,12 +21,13 @@ import {
   CLAUDE_CODE_X_APP,
   isCredentialExpired,
 } from './claudeCodeAuth';
-import { AnthropicGenericProvider } from './generic';
+import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isClaudeOpus47Model,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -56,10 +57,63 @@ function isThinkingEnabled(thinking: Anthropic.Messages.ThinkingConfigParam | un
   return thinking?.type === 'enabled' || thinking?.type === 'adaptive';
 }
 
+function normalizeHeadersForCacheKey(headers: Record<string, string>) {
+  if (Object.keys(headers).length === 0) {
+    return undefined;
+  }
+
+  return Object.entries(headers)
+    .map(([name, value]) => ({
+      name: name.toLowerCase(),
+      valueHash: hashAnthropicCacheValue(value),
+    }))
+    .sort((headerA, headerB) => {
+      const nameComparison = headerA.name.localeCompare(headerB.name);
+      return nameComparison === 0
+        ? headerA.valueHash.localeCompare(headerB.valueHash)
+        : nameComparison;
+    });
+}
+
+function getMessagesRequestMetadata(params: Anthropic.Messages.MessageCreateParams) {
+  const mcpServers = (params as { mcp_servers?: unknown }).mcp_servers;
+  return {
+    model: params.model,
+    max_tokens: params.max_tokens,
+    messageCount: params.messages.length,
+    stream: params.stream,
+    temperature: params.temperature,
+    hasSystem: params.system !== undefined,
+    stopSequenceCount: Array.isArray(params.stop_sequences)
+      ? params.stop_sequences.length
+      : undefined,
+    thinkingEnabled: isThinkingEnabled(params.thinking),
+    toolCount: Array.isArray(params.tools) ? params.tools.length : undefined,
+    hasToolChoice: params.tool_choice !== undefined,
+    hasMetadata: params.metadata !== undefined,
+    hasMcpServers: Array.isArray(mcpServers) && mcpServers.length > 0,
+    hasOutputConfig: params.output_config !== undefined,
+  };
+}
+
+function getMessagesResponseMetadata(response: Anthropic.Messages.Message) {
+  return {
+    model: response.model,
+    type: response.type,
+    contentBlockCount: Array.isArray(response.content) ? response.content.length : undefined,
+    stopReason: response.stop_reason,
+    inputTokens: response.usage?.input_tokens,
+    outputTokens: response.usage?.output_tokens,
+    cacheReadInputTokens: response.usage?.cache_read_input_tokens,
+    cacheCreationInputTokens: response.usage?.cache_creation_input_tokens,
+  };
+}
+
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private opus47TemperatureWarned = false;
 
   // Messages is the only Anthropic subclass wired to Claude Code OAuth —
   // the legacy text-completion endpoint does not accept OAuth tokens.
@@ -292,6 +346,29 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    // Opus 4.7 deprecated `temperature` at the model level — the API returns
+    // 400 `invalid_request_error` for any request that includes it, including
+    // promptfoo's built-in default of 0. Suppress the parameter entirely and
+    // warn once per provider instance when the user supplied an explicit
+    // temperature via config or the ANTHROPIC_TEMPERATURE env var (the
+    // built-in default stays silent to avoid spamming every request).
+    const isOpus47 = isClaudeOpus47Model(this.modelName);
+    const explicitTemperature =
+      config.temperature != null ||
+      parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
+      parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
+    if (isOpus47 && explicitTemperature && !this.opus47TemperatureWarned) {
+      logger.warn(
+        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+      );
+      this.opus47TemperatureWarned = true;
+    }
+
+    // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
+    // and on Opus 4.7 (deprecated at the model level). Collapse all three cases
+    // into one predicate so the params spread stays readable.
+    const omitTemperature = resolvedTopP != null || thinkingEnabled || isOpus47;
+
     // When authenticating via a Claude Code OAuth token, Anthropic's API
     // requires the Claude Code identity as the first system block — as of
     // 2025-Q4, sending any other leading system block returns HTTP 400
@@ -311,8 +388,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
       messages: extractedMessages,
       stream: shouldStream,
-      // Anthropic: temperature is incompatible with both top_p and extended thinking
-      ...(resolvedTopP != null || thinkingEnabled
+      ...(omitTemperature
         ? {}
         : {
             temperature:
@@ -341,7 +417,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
 
-    logger.debug('Calling Anthropic Messages API', { params });
+    logger.debug('Calling Anthropic Messages API', {
+      params: getMessagesRequestMetadata(params),
+    });
 
     const headers: Record<string, string> = {
       ...(config.headers || {}),
@@ -396,13 +474,19 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     const cache = await getCache();
     const { metadata: _metadata, ...cacheKeyParams } = params;
-    const cacheKey = `anthropic:${JSON.stringify(cacheKeyParams)}`;
+    const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
+    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+      {
+        ...cacheKeyParams,
+        ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
+      },
+    )}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
+        logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
         try {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
@@ -455,7 +539,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
         // Wait for the stream to complete and get the final message
         const finalMessage = await stream.finalMessage();
-        logger.debug(`Anthropic Messages API streaming complete`, { finalMessage });
+        logger.debug(`Anthropic Messages API streaming complete`, {
+          finalMessage: getMessagesResponseMetadata(finalMessage),
+        });
 
         if (isCacheEnabled()) {
           try {
@@ -501,7 +587,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         const response = (await this.anthropic.messages.create(params, {
           ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
         })) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, { response });
+        logger.debug(`Anthropic Messages API response`, {
+          response: getMessagesResponseMetadata(response),
+        });
 
         if (isCacheEnabled()) {
           try {

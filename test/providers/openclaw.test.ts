@@ -15,6 +15,7 @@ import {
   resolveGatewayUrl,
   resolveGatewayWsUrl,
 } from '../../src/providers/openclaw';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
@@ -33,14 +34,17 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-const websocketMocks = vi.hoisted(() => {
-  let factory: (() => any) | null = null;
+type WebSocketMockInstance = Record<string, unknown>;
+type WebSocketFactory = () => WebSocketMockInstance;
 
-  const WebSocketMock = vi.fn(function (_url: string, ..._args: any[]) {
+const websocketMocks = vi.hoisted(() => {
+  let factory: WebSocketFactory | null = null;
+
+  const WebSocketMock = vi.fn(function (_url: string, ..._args: unknown[]) {
     return factory?.() ?? {};
   });
 
-  const setFactory = (nextFactory: () => any) => {
+  const setFactory = (nextFactory: WebSocketFactory) => {
     factory = nextFactory;
   };
 
@@ -97,19 +101,19 @@ describe('OpenClaw Provider', () => {
       nonce: params.nonce,
     }));
     deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue(undefined);
-    process.env = { ...originalEnv };
-    delete process.env.CLAWDBOT_GATEWAY_PASSWORD;
-    delete process.env.CLAWDBOT_GATEWAY_TOKEN;
-    delete process.env.CLAWDBOT_GATEWAY_URL;
-    delete process.env.OPENCLAW_CONFIG_PATH;
-    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
-    delete process.env.OPENCLAW_GATEWAY_PORT;
-    delete process.env.OPENCLAW_GATEWAY_URL;
-    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_PASSWORD: undefined });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_TOKEN: undefined });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_URL: undefined });
+    mockProcessEnv({ OPENCLAW_CONFIG_PATH: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_PASSWORD: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_PORT: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_URL: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: undefined });
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     vi.restoreAllMocks();
   });
 
@@ -120,7 +124,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should respect OPENCLAW_CONFIG_PATH when set', () => {
-      process.env.OPENCLAW_CONFIG_PATH = '/tmp/custom-openclaw.json';
+      mockProcessEnv({ OPENCLAW_CONFIG_PATH: '/tmp/custom-openclaw.json' });
       const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       readOpenClawConfig();
@@ -353,12 +357,12 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use environment variable second', () => {
-      process.env.OPENCLAW_GATEWAY_URL = 'http://env-host:8888';
+      mockProcessEnv({ OPENCLAW_GATEWAY_URL: 'http://env-host:8888' });
       expect(resolveGatewayUrl()).toBe('http://env-host:8888');
     });
 
     it('should fall back to legacy CLAWDBOT gateway URL environment variable', () => {
-      process.env.CLAWDBOT_GATEWAY_URL = 'http://legacy-host:8888';
+      mockProcessEnv({ CLAWDBOT_GATEWAY_URL: 'http://legacy-host:8888' });
       expect(resolveGatewayUrl()).toBe('http://legacy-host:8888');
     });
 
@@ -441,7 +445,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use OPENCLAW_GATEWAY_PORT for local auto-detection', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10210 } as fs.Stats);
       vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ gateway: { port: 20000 } }));
@@ -450,14 +454,14 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use OPENCLAW_GATEWAY_PORT for default local URLs', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:19999');
     });
 
     it('should ignore malformed OPENCLAW_GATEWAY_PORT values', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999x';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999x' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
@@ -486,7 +490,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should prefer per-provider env override over process env', () => {
-      process.env.OPENCLAW_GATEWAY_URL = 'http://process-env:8888';
+      mockProcessEnv({ OPENCLAW_GATEWAY_URL: 'http://process-env:8888' });
       expect(resolveGatewayUrl(undefined, { OPENCLAW_GATEWAY_URL: 'http://override:7777' })).toBe(
         'http://override:7777',
       );
@@ -535,7 +539,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use OPENCLAW_GATEWAY_PORT for default local websocket URLs', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       expect(resolveGatewayWsUrl()).toBe('ws://127.0.0.1:19999');
@@ -563,12 +567,12 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use environment variable second', () => {
-      process.env.OPENCLAW_GATEWAY_TOKEN = 'env-token';
+      mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: 'env-token' });
       expect(resolveAuthToken()).toBe('env-token');
     });
 
     it('should use password environment variable when token is unset', () => {
-      process.env.OPENCLAW_GATEWAY_PASSWORD = 'env-password';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PASSWORD: 'env-password' });
       expect(resolveAuthToken()).toBe('env-password');
     });
 
@@ -643,7 +647,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should prefer per-provider env override over process env', () => {
-      process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
+      mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: 'process-token' });
       expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(
         'override-token',
       );
@@ -654,8 +658,25 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should fall back to legacy CLAWDBOT token environment variables', () => {
-      process.env.CLAWDBOT_GATEWAY_TOKEN = 'legacy-token';
+      mockProcessEnv({ CLAWDBOT_GATEWAY_TOKEN: 'legacy-token' });
       expect(resolveAuthToken()).toBe('legacy-token');
+    });
+
+    it('should ignore SecretRef-shaped config tokens when env token is unavailable', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12180 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: {
+            auth: {
+              mode: 'token',
+              token: { source: 'env', provider: 'default', id: 'OPENCLAW_GATEWAY_TOKEN' },
+            },
+          },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBeUndefined();
     });
 
     it('should return undefined when no token available', () => {
@@ -728,13 +749,13 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('should not fall back to OPENAI_BASE_URL', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      mockProcessEnv({ OPENAI_BASE_URL: 'https://api.openai.com/v1' });
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
@@ -782,6 +803,30 @@ describe('OpenClaw Provider', () => {
       });
 
       expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+    });
+
+    it('should price usage from an explicit OpenAI backend model override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'priced' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawChatProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('price me');
+
+      expect(result.cost).toBeGreaterThan(0);
     });
   });
 
@@ -839,13 +884,13 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('should not fall back to OPENAI_BASE_URL', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      mockProcessEnv({ OPENAI_BASE_URL: 'https://api.openai.com/v1' });
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
@@ -883,6 +928,230 @@ describe('OpenClaw Provider', () => {
       expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/responses');
       expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
     });
+
+    it('should leave cost unset when the backend model is not known', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it('should price usage from an explicit OpenAI backend model override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should infer hidden cached input from OpenClaw Responses totals', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 8,
+        completion: 2,
+        total: 10,
+        completionDetails: { cacheReadInputTokens: 4 },
+      });
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should not double count explicit cached input from OpenClaw Responses usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            input_tokens_details: { cached_tokens: 4 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        completionDetails: { cacheReadInputTokens: 4 },
+      });
+    });
+
+    it('should preserve hosted tool cost when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+            {
+              type: 'file_search_call',
+              status: 'completed',
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0.0025);
+    });
+
+    it('should use effective passthrough tools when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-4o',
+          gateway_url: 'http://test:18789',
+          tools: [{ type: 'web_search_preview' }],
+          passthrough: { tools: [{ type: 'web_search' }] },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0.01);
+      expect(result.cost).toBeLessThan(0.011);
+    });
+
+    it('should preserve zero cost for cached responses when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBe(0);
+    });
   });
 
   describe('OpenClawEmbeddingProvider', () => {
@@ -908,7 +1177,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawEmbeddingProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
@@ -959,6 +1228,30 @@ describe('OpenClaw Provider', () => {
       expect(mockFetchWithCache.mock.calls[0][1].headers['x-openclaw-model']).toBe(
         'openai/text-embedding-3-small',
       );
+    });
+
+    it('should price usage from an explicit OpenAI backend embedding override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          data: [{ embedding: [1] }],
+          usage: { prompt_tokens: 10, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawEmbeddingProvider('main', {
+        config: {
+          backend_model: 'openai/text-embedding-3-small',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callEmbeddingApi('embed this');
+
+      expect(result.cost).toBeGreaterThan(0);
     });
   });
 
@@ -1244,14 +1537,47 @@ describe('OpenClaw Provider', () => {
   });
 
   describe('OpenClawAgentProvider', () => {
+    type AgentTestMessageHandler = (data: Buffer) => void;
+    type AgentTestErrorHandler = (error: Error) => void;
+    type AgentTestCloseHandler = () => void;
+    type AgentTestEventHandler =
+      | AgentTestMessageHandler
+      | AgentTestErrorHandler
+      | AgentTestCloseHandler;
+
+    interface ConnectResponsePayload {
+      type: string;
+      [key: string]: unknown;
+    }
+
     let mockWs: any;
-    let messageHandlers: Map<string, Function>;
+    let messageHandlers: Map<string, AgentTestEventHandler>;
+
+    function getWebSocketHandler<T extends AgentTestEventHandler>(event: string): T {
+      const handler = messageHandlers.get(event);
+      if (!handler) {
+        throw new Error(`Expected WebSocket ${event} handler to be registered`);
+      }
+      return handler as T;
+    }
+
+    function getMessageHandler() {
+      return getWebSocketHandler<AgentTestMessageHandler>('message');
+    }
+
+    function getErrorHandler() {
+      return getWebSocketHandler<AgentTestErrorHandler>('error');
+    }
+
+    function getCloseHandler() {
+      return getWebSocketHandler<AgentTestCloseHandler>('close');
+    }
 
     beforeEach(() => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       messageHandlers = new Map();
       mockWs = {
-        on: vi.fn((event: string, handler: Function) => {
+        on: vi.fn((event: string, handler: AgentTestEventHandler) => {
           messageHandlers.set(event, handler);
         }),
         send: vi.fn(),
@@ -1273,8 +1599,8 @@ describe('OpenClaw Provider', () => {
 
     /** Helper: simulate challenge → connect → agent accepted flow, return agent req ID */
     function simulateHandshake(
-      onMessage: Function,
-      connectPayload: Record<string, unknown> = { type: 'hello-ok' },
+      onMessage: AgentTestMessageHandler,
+      connectPayload: ConnectResponsePayload = { type: 'hello-ok' },
     ) {
       // Challenge
       onMessage(
@@ -1324,7 +1650,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello agent');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { connectReq, agentReq, waitReq } = simulateHandshake(onMessage);
 
       // Verify connect request
@@ -1399,7 +1725,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Streaming events — text is accumulated (full text so far), not incremental
@@ -1451,7 +1777,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       onMessage(
@@ -1501,7 +1827,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage, {
         type: 'hello-ok',
         auth: {
@@ -1534,7 +1860,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Event from a different run should be ignored
@@ -1588,7 +1914,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Challenge
       onMessage(
@@ -1624,7 +1950,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Challenge → connect
       onMessage(
@@ -1664,7 +1990,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       onMessage(
         Buffer.from(
@@ -1703,7 +2029,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onError = messageHandlers.get('error')!;
+      const onError = getErrorHandler();
       onError(new Error('Connection refused'));
 
       const result = await promise;
@@ -1738,7 +2064,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.sessionKey).toBe('my-session');
@@ -1766,7 +2092,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.agentId).toBe('dev');
@@ -1787,7 +2113,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.agentId).toBe('dev');
@@ -1812,7 +2138,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.channel).toBe('slack');
@@ -1842,7 +2168,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { connectReq, waitReq } = simulateHandshake(onMessage);
 
       expect(connectReq.params.client.deviceFamily).toBe('promptfoo-e2e');
@@ -1873,7 +2199,7 @@ describe('OpenClaw Provider', () => {
       });
 
       void provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       onMessage(
         Buffer.from(
@@ -1900,7 +2226,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       onMessage(
         Buffer.from(
@@ -1916,7 +2242,7 @@ describe('OpenClaw Provider', () => {
       expect(connectReq.params.device).toBeUndefined();
       expect(deviceAuthMocks.loadOrCreateOpenClawDeviceIdentity).not.toHaveBeenCalled();
 
-      const onError = messageHandlers.get('error')!;
+      const onError = getErrorHandler();
       onError(new Error('test cleanup'));
       await promise;
     });
@@ -1933,12 +2259,15 @@ describe('OpenClaw Provider', () => {
       const promise = provider.callApi('Hello');
 
       const wsConstructorCall = websocketMocks.WebSocketMock.mock.calls[0];
-      expect(wsConstructorCall[1].headers).toEqual({
+      const wsConstructorOptions = wsConstructorCall[1] as {
+        headers?: Record<string, string>;
+      };
+      expect(wsConstructorOptions.headers).toEqual({
         'x-trusted-user': 'alice',
         'x-openclaw-account-id': 'work',
       });
 
-      const onError = messageHandlers.get('error')!;
+      const onError = getErrorHandler();
       onError(new Error('test cleanup'));
       await promise;
     });
@@ -1952,7 +2281,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.extraSystemPrompt).toBe('Be terse.');
@@ -1978,7 +2307,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Wait response with error
@@ -2003,7 +2332,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       onMessage(
@@ -2027,7 +2356,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       onMessage(
@@ -2051,7 +2380,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       onMessage(
@@ -2083,7 +2412,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       onMessage(
@@ -2128,7 +2457,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onClose = messageHandlers.get('close')!;
+      const onClose = getCloseHandler();
 
       // Server closes connection unexpectedly
       onClose();
@@ -2169,7 +2498,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Challenge
       onMessage(
@@ -2187,7 +2516,47 @@ describe('OpenClaw Provider', () => {
       expect(connectReq.params.device.signature).toBe('signature:abc:');
 
       // Clean up: error to resolve the promise
-      const onError = messageHandlers.get('error')!;
+      const onError = getErrorHandler();
+      onError(new Error('test cleanup'));
+      await promise;
+    });
+
+    it('should preserve required agent write scopes when reusing a read-only cached device token', async () => {
+      deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue({
+        token: 'read-only-device-token',
+        role: 'operator',
+        scopes: ['operator.read'],
+        updatedAtMs: 1,
+      });
+
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'abc', ts: Date.now() },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(connectReq.params.auth.deviceToken).toBe('read-only-device-token');
+      expect(connectReq.params.scopes).toEqual(['operator.read', 'operator.write']);
+      expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: ['operator.read', 'operator.write'],
+          token: 'read-only-device-token',
+        }),
+      );
+
+      const onError = getErrorHandler();
       onError(new Error('test cleanup'));
       await promise;
     });
@@ -2268,7 +2637,7 @@ describe('OpenClaw Provider', () => {
       );
       const secondConnectReq = JSON.parse(wsInstances[1].send.mock.calls[0][0]);
       expect(secondConnectReq.params.auth.deviceToken).toBe('cached-device-token');
-      expect(secondConnectReq.params.scopes).toEqual(['operator.read']);
+      expect(secondConnectReq.params.scopes).toEqual(['operator.read', 'operator.write']);
       expect(secondConnectReq.params.device.signature).toBe('signature:second:cached-device-token');
 
       secondOnMessage(
@@ -2313,7 +2682,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Send malformed JSON — should be silently ignored
       onMessage(Buffer.from('not valid json {{{'));
@@ -2347,7 +2716,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Non-assistant stream events should be ignored
@@ -2388,7 +2757,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Wait response with no streaming events
@@ -2405,7 +2774,7 @@ describe('OpenClaw Provider', () => {
     /** Helper: simulate challenge → connect mismatch error, return the resolved promise */
     async function simulateDeviceTokenMismatch(provider: OpenClawAgentProvider) {
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       onMessage(
         Buffer.from(

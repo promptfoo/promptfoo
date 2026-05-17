@@ -9,13 +9,14 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('teen safety plugins', () => {
   const originalDisableRemoteGeneration = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
   let provider: MockApiProvider;
 
   beforeEach(() => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
     provider = createMockProvider({
       id: 'mock-provider',
@@ -27,9 +28,11 @@ describe('teen safety plugins', () => {
 
   afterEach(() => {
     if (originalDisableRemoteGeneration === undefined) {
-      delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
+      mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined });
     } else {
-      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalDisableRemoteGeneration;
+      mockProcessEnv({
+        PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: originalDisableRemoteGeneration,
+      });
     }
   });
 

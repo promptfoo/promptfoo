@@ -128,17 +128,14 @@ describe('Prompts', () => {
     expect(within(dialog).queryByText('This is the first sample prompt.')).not.toBeInTheDocument();
   });
 
-  it('should handle pagination correctly and open the PromptDialog with the correct prompt details when a row on a different page is clicked', async () => {
+  it('should open the PromptDialog with the correct prompt details when a later virtualized row is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders({ data: mockPromptsLarge });
 
-    const nextPageButton = screen.getByRole('button', { name: 'Next' });
-    await user.click(nextPageButton);
+    const laterPromptCells = await screen.findAllByText('This is prompt number 26.');
+    expect(laterPromptCells.length).toBeGreaterThan(0);
 
-    const promptsOnSecondPage = screen.getAllByText('This is prompt number 26.');
-    expect(promptsOnSecondPage.length).toBeGreaterThan(0);
-
-    await user.click(promptsOnSecondPage[0]);
+    await user.click(laterPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
@@ -296,6 +293,31 @@ describe('Prompts', () => {
 
     // Should appear in both Label column and Prompt column
     expect(cells.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps fallback labels compact when raw prompt text is long', () => {
+    const longRawPrompt =
+      'You are an internal corporate chatbot. Respond to this query using only the supplied context.';
+    const mockPromptsWithLongFallbackLabel: ServerPromptWithMetadata[] = [
+      {
+        id: 'prompt:long-fallback-label',
+        prompt: {
+          raw: longRawPrompt,
+          label: '',
+        },
+        count: 1,
+        recentEvalDate: '2023-10-27T10:00:00.000Z',
+        recentEvalId: 'eval-123',
+        evals: [],
+      },
+    ];
+
+    renderWithProviders({ data: mockPromptsWithLongFallbackLabel });
+
+    const matchingCells = screen.getAllByText(longRawPrompt);
+    const fallbackLabel = matchingCells.find((cell) => cell.classList.contains('line-clamp-2'));
+
+    expect(fallbackLabel).toHaveClass('line-clamp-2', 'break-words');
   });
 
   it('should render the Label column in DataGrid on very narrow viewport widths', () => {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -9,19 +9,59 @@ import {
 import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
+import {
+  type InputConfig,
+  type InputDefinition,
+  type Inputs,
+  type InputType,
+  normalizeInputDefinition,
+} from '@promptfoo/types';
 import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 
 interface InputsEditorProps {
-  inputs?: Record<string, string>;
-  onChange: (inputs: Record<string, string> | undefined) => void;
+  inputs?: Inputs;
+  onChange: (inputs: Inputs | undefined) => void;
   /** When true, renders without the outer collapsible wrapper */
   compact?: boolean;
   /** When true, disables adding new variables */
   disabled?: boolean;
   /** Tooltip text shown when disabled */
   disabledReason?: string;
+}
+
+type Variable = {
+  config?: InputConfig;
+  name: string;
+  description: string;
+  type: InputType;
+};
+
+const INPUT_TYPE_OPTIONS: Array<{ value: InputType; label: string }> = [
+  { value: 'text', label: 'Text' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'docx', label: 'DOCX' },
+  { value: 'image', label: 'Image' },
+];
+
+function toStoredInputDefinition(variable: Variable): InputDefinition {
+  if (variable.type === 'text' && !variable.config) {
+    return variable.description;
+  }
+
+  return {
+    ...(variable.config ? { config: variable.config } : {}),
+    description: variable.description,
+    type: variable.type,
+  };
 }
 
 export default function InputsEditor({
@@ -34,13 +74,28 @@ export default function InputsEditor({
   const [isExpanded, setIsExpanded] = useState(() => {
     return inputs ? Object.keys(inputs).length > 0 : false;
   });
+  const variableKeysRef = useRef(new Map<string, string>());
+  const nextVariableKeyRef = useRef(0);
+
+  const getVariableKey = (name: string) => {
+    let key = variableKeysRef.current.get(name);
+    if (!key) {
+      key = `input-variable-${nextVariableKeyRef.current}`;
+      nextVariableKeyRef.current += 1;
+      variableKeysRef.current.set(name, key);
+    }
+    return key;
+  };
 
   // Derive variables from inputs prop
   const variables = useMemo(() => {
     if (!inputs) {
       return [];
     }
-    return Object.entries(inputs).map(([name, description]) => ({ name, description }));
+    return Object.entries(inputs).map(([name, definition]) => ({
+      name,
+      ...normalizeInputDefinition(definition),
+    }));
   }, [inputs]);
 
   // Check for duplicate names
@@ -73,8 +128,13 @@ export default function InputsEditor({
     if (!inputs) {
       return;
     }
+    const existingKey = variableKeysRef.current.get(oldName);
+    if (existingKey) {
+      variableKeysRef.current.delete(oldName);
+      variableKeysRef.current.set(newName, existingKey);
+    }
     // Build new object preserving order, replacing the old key with new key
-    const newInputs: Record<string, string> = {};
+    const newInputs: Inputs = {};
     for (const [key, value] of Object.entries(inputs)) {
       if (key === oldName) {
         newInputs[newName] = value;
@@ -89,13 +149,41 @@ export default function InputsEditor({
     if (!inputs) {
       return;
     }
-    onChange({ ...inputs, [name]: description });
+    const currentInput = inputs[name];
+    const normalizedInput = currentInput ? normalizeInputDefinition(currentInput) : undefined;
+    onChange({
+      ...inputs,
+      [name]: toStoredInputDefinition({
+        config: normalizedInput?.config,
+        name,
+        description,
+        type: normalizedInput?.type ?? 'text',
+      }),
+    });
+  };
+
+  const updateVariableType = (name: string, type: InputType) => {
+    if (!inputs) {
+      return;
+    }
+    const currentInput = inputs[name];
+    const normalizedInput = currentInput ? normalizeInputDefinition(currentInput) : undefined;
+    onChange({
+      ...inputs,
+      [name]: toStoredInputDefinition({
+        config: normalizedInput?.config,
+        name,
+        description: normalizedInput?.description ?? '',
+        type,
+      }),
+    });
   };
 
   const removeVariable = (name: string) => {
     if (!inputs) {
       return;
     }
+    variableKeysRef.current.delete(name);
     const { [name]: _, ...rest } = inputs;
     onChange(Object.keys(rest).length > 0 ? rest : undefined);
   };
@@ -123,12 +211,12 @@ export default function InputsEditor({
     <>
       {variables.length > 0 ? (
         <div className="flex flex-col gap-3">
-          {variables.map((variable, index) => {
+          {variables.map((variable) => {
             const isDuplicate = duplicateNames.has(variable.name.trim());
-            const inputId = `input-${index}`;
+            const inputId = getVariableKey(variable.name);
             return (
               <div
-                key={index}
+                key={inputId}
                 className="flex items-start gap-3 rounded-lg border border-border p-3"
               >
                 <div className="flex flex-1 flex-col gap-3 sm:flex-row">
@@ -155,6 +243,28 @@ export default function InputsEditor({
                       value={variable.description}
                       onChange={(e) => updateVariableDescription(variable.name, e.target.value)}
                     />
+                  </div>
+                  <div className="sm:w-40">
+                    <Label htmlFor={`${inputId}-type`} className="mb-1.5 block text-sm">
+                      Variable Type
+                    </Label>
+                    <Select
+                      value={variable.type}
+                      onValueChange={(value) =>
+                        updateVariableType(variable.name, value as InputType)
+                      }
+                    >
+                      <SelectTrigger id={`${inputId}-type`}>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INPUT_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <Button
@@ -214,6 +324,7 @@ export default function InputsEditor({
                 The LLM generates contextual values based on your description (e.g., realistic user
                 IDs, session tokens, roles)
               </li>
+              <li>PDF, DOCX, and image variables are wrapped into real file payloads at runtime</li>
               <li>
                 Values are generated fresh for each test case alongside the adversarial prompt
               </li>

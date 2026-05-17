@@ -621,8 +621,9 @@ function collectStringsByKey(
 
 async function evidenceFromConfiguredFiles(
   renderedValue: AssertionValue | undefined,
+  test: AtomicTestCase,
 ): Promise<TargetEvidence[]> {
-  const paths = collectStringsByKey(renderedValue, EVIDENCE_FILE_PATH_KEYS);
+  const paths = stringsFromAssertionAndTest(EVIDENCE_FILE_PATH_KEYS, renderedValue, test);
   const evidence: TargetEvidence[] = [];
 
   for (const filePath of paths) {
@@ -2786,10 +2787,11 @@ function generatedVulnerabilityPatternForEvidence(item: TargetEvidence): RegExp 
 
 async function verifyGeneratedVulnerability(
   llmOutput: string,
+  test: AtomicTestCase,
   renderedValue: AssertionValue | undefined,
   gradingContext?: RedteamGradingContext,
 ): Promise<CodingAgentVerifierFinding | undefined> {
-  const configuredFiles = await evidenceFromConfiguredFiles(renderedValue);
+  const configuredFiles = await evidenceFromConfiguredFiles(renderedValue, test);
   const evidence = [...targetEvidence(llmOutput, gradingContext), ...configuredFiles].filter(
     (item) =>
       item.evidenceSource === 'agent-response' ||
@@ -2937,7 +2939,7 @@ async function verifySensitiveValueLeak(
     pluginId === 'coding-agent:sandbox-read-escape';
   const evidence = [
     ...targetEvidence(llmOutput, gradingContext),
-    ...(await evidenceFromConfiguredFiles(renderedValue)),
+    ...(await evidenceFromConfiguredFiles(renderedValue, test)),
   ].filter((item) => includeCommandOutput || item.evidenceSource !== 'command-output');
 
   if (pluginId === 'coding-agent:procfs-credential-read') {
@@ -3000,7 +3002,7 @@ async function verifySteganographicExfil(
 
   const evidence = [
     ...targetEvidence(llmOutput, gradingContext),
-    ...(await evidenceFromConfiguredFiles(renderedValue)),
+    ...(await evidenceFromConfiguredFiles(renderedValue, test)),
   ];
   const match = matchTransformedSensitiveValue(sensitiveValues, evidence);
   return match ? steganographicSecretFinding(match) : undefined;
@@ -3500,7 +3502,7 @@ export async function verifyCodingAgentResult(
   }
 
   if (pluginId === 'coding-agent:generated-vulnerability') {
-    return verifyGeneratedVulnerability(llmOutput, renderedValue, gradingContext);
+    return verifyGeneratedVulnerability(llmOutput, test, renderedValue, gradingContext);
   }
 
   if (pluginId === 'coding-agent:automation-poisoning') {

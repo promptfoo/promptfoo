@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -19,30 +20,22 @@ vi.mock('../../src/logger', () => ({
 }));
 
 describe('AI21ChatCompletionProvider', () => {
-  let originalApiKey: string | undefined;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    // Save original environment variable
-    originalApiKey = process.env.AI21_API_KEY;
-    // Ensure clean state for environment
-    delete process.env.AI21_API_KEY;
+    restoreEnv = mockProcessEnv({ AI21_API_KEY: undefined });
   });
 
   afterEach(() => {
-    // Restore original environment variable
-    if (originalApiKey === undefined) {
-      delete process.env.AI21_API_KEY;
-    } else {
-      process.env.AI21_API_KEY = originalApiKey;
-    }
+    restoreEnv();
     vi.restoreAllMocks();
   });
 
   it('should construct with valid model name', () => {
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini');
-    expect(provider.modelName).toBe('jamba-1.5-mini');
+    const provider = new AI21ChatCompletionProvider('jamba-mini');
+    expect(provider.modelName).toBe('jamba-mini');
   });
 
   it('should warn when constructing with unknown model', () => {
@@ -53,32 +46,36 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should get API key from config', () => {
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key' },
     });
     expect(provider.getApiKey()).toBe('test-key');
   });
 
   it('should get API key from environment variable', () => {
-    process.env.AI21_API_KEY = 'env-key';
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini');
-    expect(provider.getApiKey()).toBe('env-key');
+    const restoreApiKey = mockProcessEnv({ AI21_API_KEY: 'env-key' });
+    try {
+      const provider = new AI21ChatCompletionProvider('jamba-mini');
+      expect(provider.getApiKey()).toBe('env-key');
+    } finally {
+      restoreApiKey();
+    }
   });
 
   it('should get API URL from config', () => {
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiBaseUrl: 'https://custom-api.ai21.com' },
     });
     expect(provider.getApiUrl()).toBe('https://custom-api.ai21.com');
   });
 
   it('should get default API URL when not configured', () => {
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini');
+    const provider = new AI21ChatCompletionProvider('jamba-mini');
     expect(provider.getApiUrl()).toBe('https://api.ai21.com/studio/v1');
   });
 
   it('should throw error when API key is not set', async () => {
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini');
+    const provider = new AI21ChatCompletionProvider('jamba-mini');
     await expect(provider.callApi('test prompt')).rejects.toThrow('AI21 API key is not set');
   });
 
@@ -105,7 +102,7 @@ describe('AI21ChatCompletionProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key' },
     });
 
@@ -131,7 +128,7 @@ describe('AI21ChatCompletionProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key', top_p: 0 },
     });
 
@@ -154,7 +151,7 @@ describe('AI21ChatCompletionProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key' },
     });
 
@@ -174,7 +171,7 @@ describe('AI21ChatCompletionProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key' },
     });
 
@@ -185,7 +182,7 @@ describe('AI21ChatCompletionProvider', () => {
   it('should handle network errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key' },
     });
 
@@ -216,7 +213,7 @@ describe('AI21ChatCompletionProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key' },
     });
 
@@ -247,7 +244,7 @@ describe('AI21ChatCompletionProvider', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-    const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
       config: { apiKey: 'test-key', max_tokens: 0 },
     });
 

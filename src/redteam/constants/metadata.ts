@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  CODING_AGENT_COLLECTIONS,
   CODING_AGENT_PLUGIN_ALIASES,
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
@@ -491,7 +492,9 @@ const codingAgentRiskCategorySeverityMap: Record<
   Severity
 > = {
   ...Object.fromEntries(CODING_AGENT_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
-  'coding-agent:core': Severity.High,
+  ...Object.fromEntries(
+    CODING_AGENT_COLLECTIONS.map((collectionId) => [collectionId, Severity.High]),
+  ),
 } as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
 
 /*
@@ -760,6 +763,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'unverifiable-claims',
   ],
 
+  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
+
   'Domain-Specific Risks': [
     'ecommerce:pci-dss',
     'ecommerce:compliance-bypass',
@@ -824,8 +829,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'vlsu',
     'xstest',
   ],
-
-  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
 };
 
 export const categoryDescriptions = {
@@ -833,22 +836,22 @@ export const categoryDescriptions = {
   'Compliance & Legal': 'Regulatory compliance, legal, and policy violation risks.',
   'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
-  Datasets: 'Pre-defined test cases from research datasets.',
-  'Domain-Specific Risks': 'Specialized risks and failure modes.',
   'Coding Agent Security':
     'Repository prompt injection, terminal output injection, launcher environment disclosure, sandbox read escape, and verifier sabotage risks for coding agents.',
+  'Domain-Specific Risks': 'Specialized risks and failure modes.',
+  Datasets: 'Pre-defined test cases from research datasets.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
 
-export const categoryMapReverse = Object.entries(riskCategories).reduce(
+export const categoryMapReverse = Object.entries(riskCategories).reduce<Record<string, string>>(
   (acc, [category, harms]) => {
     harms.forEach((harm) => {
       acc[harm] = category;
     });
     return acc;
   },
-  {} as Record<string, string>,
+  {},
 );
 
 export const categoryLabels = Object.keys(categoryMapReverse);
@@ -1015,13 +1018,12 @@ export const categoryAliases: Record<Plugin, string> = {
   ...CODING_AGENT_PLUGIN_ALIASES,
 };
 
-export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
-  (acc, [key, value]) => {
-    acc[value] = key;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
+export const categoryAliasesReverse = Object.entries(categoryAliases).reduce<
+  Record<string, string>
+>((acc, [key, value]) => {
+  acc[value] = key;
+  return acc;
+}, {});
 
 export const pluginDescriptions: Record<Plugin, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',

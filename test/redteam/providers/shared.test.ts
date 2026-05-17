@@ -8,16 +8,20 @@ import {
 import {
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
+  createIterationContext,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
   type Message,
   messagesToRedteamHistory,
   redteamProviderManager,
+  resetRedteamProviderLoader,
+  setRedteamProviderLoader,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
 import { sleep } from '../../../src/util/time';
 import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   ApiProvider,
@@ -99,6 +103,7 @@ function setCliStateConfig(config: typeof cliState.config) {
 
 describe('shared redteam provider utilities', () => {
   afterEach(() => {
+    resetRedteamProviderLoader();
     vi.resetAllMocks();
   });
 
@@ -116,6 +121,7 @@ describe('shared redteam provider utilities', () => {
 
     // Clear the redteam provider manager cache
     redteamProviderManager.clearProvider();
+    resetRedteamProviderLoader();
 
     // Reset cliState to default
     setCliStateConfig({
@@ -162,6 +168,77 @@ describe('shared redteam provider utilities', () => {
 
       expect(result).toBe(mockApiProvider);
       expect(mockedLoadApiProviders).toHaveBeenCalledWith(['test-provider']);
+    });
+
+    it('loads configured providers through an injected provider loader', async () => {
+      const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
+      const restoreLoader = setRedteamProviderLoader(injectedLoader);
+
+      try {
+        const result = await redteamProviderManager.getProvider({ provider: 'test-provider' });
+
+        expect(result).toBe(mockApiProvider);
+        expect(injectedLoader).toHaveBeenCalledWith(['test-provider']);
+        expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+      } finally {
+        restoreLoader();
+      }
+    });
+
+    it('setRedteamProviderLoader returns a disposer that restores the previous loader', async () => {
+      const firstLoader = vi.fn().mockResolvedValue([createMockProvider({ id: 'first' })]);
+      const secondLoader = vi.fn().mockResolvedValue([createMockProvider({ id: 'second' })]);
+
+      const restoreFirst = setRedteamProviderLoader(firstLoader);
+      const restoreSecond = setRedteamProviderLoader(secondLoader);
+
+      try {
+        // Dispose in reverse order — second disposer restores the first loader.
+        restoreSecond();
+        redteamProviderManager.clearProvider();
+        await redteamProviderManager.getProvider({ provider: 'afterSecond' });
+        expect(firstLoader).toHaveBeenCalledWith(['afterSecond']);
+        expect(secondLoader).not.toHaveBeenCalled();
+
+        // Disposing the first restores the default, which dispatches through
+        // the file-level vi.mock of '../../../src/providers/index'.
+        restoreFirst();
+        redteamProviderManager.clearProvider();
+        firstLoader.mockClear();
+        mockedLoadApiProviders.mockResolvedValueOnce([createMockProvider({ id: 'default' })]);
+        await redteamProviderManager.getProvider({ provider: 'afterFirst' });
+        expect(firstLoader).not.toHaveBeenCalled();
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['afterFirst']);
+      } finally {
+        resetRedteamProviderLoader();
+      }
+    });
+
+    it('resetRedteamProviderLoader restores the default loader path', async () => {
+      // Guards the production default-loader path, which is otherwise masked
+      // by the file-level vi.mock of '../../../src/providers/index'.
+      const injectedLoader = vi.fn().mockResolvedValue([mockApiProvider]);
+      const restoreLoader = setRedteamProviderLoader(injectedLoader);
+
+      try {
+        await redteamProviderManager.getProvider({ provider: 'injected-provider' });
+        expect(injectedLoader).toHaveBeenCalledWith(['injected-provider']);
+        expect(mockedLoadApiProviders).not.toHaveBeenCalled();
+
+        restoreLoader();
+        redteamProviderManager.clearProvider();
+
+        const secondProvider = createMockProvider({ id: 'from-default-loader' });
+        mockedLoadApiProviders.mockResolvedValueOnce([secondProvider]);
+
+        const result = await redteamProviderManager.getProvider({ provider: 'default-provider' });
+
+        expect(result).toBe(secondProvider);
+        expect(mockedLoadApiProviders).toHaveBeenCalledWith(['default-provider']);
+        expect(injectedLoader).toHaveBeenCalledTimes(1);
+      } finally {
+        resetRedteamProviderLoader();
+      }
     });
 
     it('loads provider from provider options', async () => {
@@ -915,14 +992,14 @@ describe('shared redteam provider utilities', () => {
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: undefined });
       } else {
-        process.env.PROMPTFOO_ENABLE_UNBLOCKING = originalEnv;
+        mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: originalEnv });
       }
     });
 
     it('short-circuits by default when PROMPTFOO_ENABLE_UNBLOCKING is not set', async () => {
-      delete process.env.PROMPTFOO_ENABLE_UNBLOCKING;
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: undefined });
 
       const result = await tryUnblocking({
         messages: [],
@@ -937,7 +1014,7 @@ describe('shared redteam provider utilities', () => {
     });
 
     it('checks server support when PROMPTFOO_ENABLE_UNBLOCKING=true', async () => {
-      process.env.PROMPTFOO_ENABLE_UNBLOCKING = 'true';
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
       mockedCheckServerFeatureSupport.mockResolvedValue(false);
 
       const result = await tryUnblocking({
@@ -995,6 +1072,75 @@ describe('shared redteam provider utilities', () => {
       ).toBeUndefined();
       expect(getGraderAssertionValue(assertionSet)).toBeUndefined();
       expect(getGraderAssertionValue(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('createIterationContext', () => {
+    it('returns undefined when no outer context is passed', async () => {
+      const transformSpy = vi.fn((vars) => ({
+        ...(vars as Record<string, unknown>),
+        goal: `${(vars as Record<string, unknown>).goal} (iter-1)`,
+      }));
+      const iterationContext = await createIterationContext({
+        originalVars: { goal: 'test' },
+        transformVarsConfig: transformSpy,
+        iterationNumber: 1,
+      });
+      // Without an outer context there's nothing to wrap — the transform still
+      // runs (verifies the happy path isn't short-circuited) but the function
+      // has no CallApiContextParams to return.
+      expect(iterationContext).toBeUndefined();
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy).toHaveBeenCalledWith(
+        { goal: 'test' },
+        expect.objectContaining({ prompt: {}, uuid: expect.any(String) }),
+      );
+    });
+
+    it('merges transformed vars into the iteration context', async () => {
+      const outer: CallApiContextParams = {
+        prompt: { raw: 'x', label: 'x' },
+        vars: {},
+      };
+      const iterationContext = await createIterationContext({
+        originalVars: { goal: 'test' },
+        transformVarsConfig: (vars) => ({
+          ...(vars as Record<string, unknown>),
+          goal: `${(vars as Record<string, unknown>).goal}!!`,
+        }),
+        context: outer,
+        iterationNumber: 2,
+      });
+      expect(iterationContext?.vars).toEqual({ goal: 'test!!' });
+    });
+
+    it('rethrows errors from a TransformFunction so iterations surface user bugs', async () => {
+      const throwingTransform = () => {
+        throw new Error('user function boom');
+      };
+      await expect(
+        createIterationContext({
+          originalVars: { goal: 'test' },
+          transformVarsConfig: throwingTransform,
+          iterationNumber: 1,
+        }),
+      ).rejects.toThrow('user function boom');
+    });
+
+    it('keeps legacy best-effort behavior for inline string transforms', async () => {
+      const outer: CallApiContextParams = {
+        prompt: { raw: 'x', label: 'x' },
+        vars: {},
+      };
+      // This inline expression throws because `vars.missing` is undefined.
+      // The legacy behavior is to log and continue with the original vars.
+      const iterationContext = await createIterationContext({
+        originalVars: { goal: 'test' },
+        transformVarsConfig: 'vars.missing.field',
+        context: outer,
+        iterationNumber: 1,
+      });
+      expect(iterationContext?.vars).toEqual({ goal: 'test' });
     });
   });
 });

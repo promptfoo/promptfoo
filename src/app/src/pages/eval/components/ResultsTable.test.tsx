@@ -152,10 +152,6 @@ describe('ResultsTable Metrics Display', () => {
         },
       },
     }));
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown: true,
-    }));
   });
 
   it('displays total cost with correct formatting', () => {
@@ -410,7 +406,7 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-
+        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
@@ -625,6 +621,56 @@ describe('ResultsTable Metrics Display', () => {
       expect(audioSource).toHaveAttribute('src', 'data:audio/wav;base64,base64-audio');
       expect(audioSource).toHaveAttribute('type', 'audio/wav');
       expect(screen.getByText('/path/to/input.wav (audio/wav)')).toBeInTheDocument();
+    });
+
+    it('does not render file:// audio variables as invalid base64 audio', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      audioVar: {
+                        path: 'file://assets/Armstrong_Small_Step.mp3',
+                        type: 'audio',
+                        format: 'mp3',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['file://assets/Armstrong_Small_Step.mp3'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['audioVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(container.querySelector('audio source')).toBeNull();
+      expect(screen.getByText('file://assets/Armstrong_Small_Step.mp3')).toBeInTheDocument();
     });
 
     it('renders variable images from file metadata with lightbox support', async () => {
@@ -1632,8 +1678,6 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
       },
     }));
 
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
     // Simulate calling handleRating with updated values
     const updatedIsPass = false;
     const updatedScore = 0.5;
@@ -2042,62 +2086,7 @@ describe('ResultsTable Malformed Markdown Handling', () => {
   });
 });
 
-describe('ResultsTable', () => {
-  const defaultProps = {
-    columnVisibility: {},
-    failureFilter: {},
-    filterMode: 'all' as const,
-    maxTextLength: 100,
-    onFailureFilterToggle: vi.fn(),
-    onSearchTextChange: vi.fn(),
-    searchText: '',
-    showStats: true,
-    wordBreak: 'break-word' as const,
-    setFilterMode: vi.fn(),
-    zoom: 1,
-    onResultsContainerScroll: vi.fn(),
-    atInitialVerticalScrollPosition: true,
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      setTable: vi.fn(),
-      table: {
-        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
-        body: [
-          {
-            outputs: [{ pass: true, score: 1, text: 'test output' }],
-            test: {},
-            vars: [],
-          },
-        ],
-      },
-      version: 4,
-      fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
-    }));
-  });
-
-  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
-    const debouncedSearchText = 'test search';
-    renderWithProviders(
-      <ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />,
-    );
-    const evalOutputCell = screen.getByTestId('eval-output-cell');
-    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
-  });
-});
-
-describe('ResultsTable', () => {
+describe('ResultsTable fetchEvalData pagination filters', () => {
   const defaultProps = {
     columnVisibility: {},
     failureFilter: {},
@@ -2285,6 +2274,39 @@ describe('ResultsTable Pagination', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const paginationElement = screen.getByText(/results per page/i);
     expect(paginationElement).toBeInTheDocument();
+  });
+
+  it('should keep the pagination footer pinned for short tables', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container.querySelector('#results-table-container')).toHaveStyle({
+      minHeight: '0px',
+    });
+    expect(container.querySelector('.pagination')).toHaveClass('sticky', 'bottom-0', 'shrink-0');
   });
 });
 
@@ -2607,6 +2629,13 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
+
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
+    const filteredLatencyElement = screen.getByText('(200ms filtered)');
+    expect(filteredLatencyElement).toBeInTheDocument();
+    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
   });
 });
 
@@ -2686,6 +2715,10 @@ describe('ResultsTable - No Filters Applied', () => {
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
     expect(screen.getByText('1,000')).toBeInTheDocument();
+
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
 
     const filteredMetricElements = screen.queryAllByTestId('filtered-metric');
     expect(filteredMetricElements.length).toBe(0);
@@ -3973,6 +4006,13 @@ describe('ResultsTable minimal scroll room detection', () => {
 
     const stickyContainer = screen.getByTestId('results-table-header');
     expect(stickyContainer).toHaveClass('minimal-scroll-room');
+  });
+
+  it('clips the standalone header wrapper so wide tables do not widen the page', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).toHaveClass('-mx-4', 'overflow-hidden', 'px-4');
   });
 
   it('does not add minimal-scroll-room class when scroll room is 150px or more', async () => {

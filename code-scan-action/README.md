@@ -10,6 +10,8 @@ The scanner examines code changes for common LLM security risks including prompt
 
 After scanning, the action posts findings with severity levels and suggested fixes as PR review comments.
 
+To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
+
 ## Quick Start
 
 **Recommended:** Install the [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner) for the easiest setup:
@@ -22,6 +24,38 @@ After scanning, the action posts findings with severity levels and suggested fix
 Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
 **[Read the full documentation →](https://promptfoo.dev/docs/code-scanning/github-action)** for configuration options, manual installation, and more.
+
+## Fork Pull Requests
+
+Fork pull request scanning is disabled by default for `pull_request` workflows. A maintainer can trigger a fork PR scan through the Promptfoo Scanner comment flow, or you can opt in to scanning fork PRs automatically:
+
+```yaml
+- name: Run Promptfoo Code Scan
+  id: promptfoo-code-scan
+  uses: promptfoo/code-scan-action@v1
+  with:
+    enable-fork-prs: true
+```
+
+## SARIF Output
+
+Grant `security-events: write` in the workflow job permissions, then upload the generated file.
+The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional:
+
+```yaml
+- name: Run Promptfoo Code Scan
+  id: promptfoo-code-scan
+  uses: promptfoo/code-scan-action@v1
+  with:
+    sarif-output-path: promptfoo-code-scan.sarif
+
+- name: Upload SARIF to GitHub Code Scanning
+  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+  uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
+    category: promptfoo-code-scan
+```
 
 ## Contributing
 

@@ -259,31 +259,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[0];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -306,31 +305,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[1];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -698,6 +696,38 @@ describe('App component target selector rendering', () => {
 
     const dropdown = screen.queryByRole('combobox');
     expect(dropdown).toBeNull();
+  });
+
+  it('keeps report header actions in normal flow on narrow screens', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByTestId('report-header-card')).toHaveClass('sm:pr-48');
+    expect(screen.getByTestId('report-header-actions')).toHaveClass(
+      'mb-4',
+      'justify-end',
+      'sm:absolute',
+      'sm:mb-0',
+    );
+  });
+
+  it('allows embedded reports to shrink within narrow result views', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    const { container } = renderWithProviders(<App embedded />);
+
+    await screen.findByTestId('overview-total');
+
+    expect(container.querySelector('.mx-auto.max-w-7xl')).toHaveClass('w-full', 'min-w-0');
   });
 });
 

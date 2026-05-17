@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
@@ -12,8 +12,10 @@ import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
 import { type UnifiedConfig } from '../../../src/types/index';
 import {
+  ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
+  logConfigResolutionError,
   maybeReadConfig,
   readConfig,
   resolveCliProvidersWithConfig,
@@ -23,6 +25,7 @@ import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../utils';
 
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
@@ -1381,15 +1384,13 @@ describe('dereferenceConfig', () => {
 });
 
 describe('resolveConfigs', () => {
-  let mockExit: MockInstance;
-
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+    vi.mocked(fs.existsSync).mockReset();
+    vi.mocked(fs.readFileSync).mockReset();
+    vi.mocked(globSync).mockReset();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
-    mockExit = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
-      throw new Error(`Process exited with code ${code}`);
-    });
 
     // Reset path.parse to use actual implementation (other tests may have mocked it)
     const actualPath = await vi.importActual<typeof import('path')>('path');
@@ -1398,7 +1399,6 @@ describe('resolveConfigs', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    mockExit.mockRestore();
   });
 
   it('should set cliState.basePath', async () => {
@@ -1492,27 +1492,20 @@ describe('resolveConfigs', () => {
     expect(testSuite.scenarios).toEqual(scenarios);
   });
 
-  it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
-      throw new Error(`Process exited with code ${code}`);
-    });
+  it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
     vi.mocked(isCI).mockReturnValue(false);
     vi.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
     const defaultConfig = {};
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
-    );
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toMatchObject({
+      message: 'No promptfooconfig found',
+      cliMessage: expect.stringContaining('No promptfooconfig found'),
+      logLevel: 'warn',
+    });
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Searched in'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('promptfooconfig.{yaml'));
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('npx promptfoo@latest eval -c'),
-    );
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('should throw an error if no providers are provided', async () => {
@@ -1525,13 +1518,53 @@ describe('resolveConfigs', () => {
     vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
     vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrowError(
+      new ConfigResolutionError(
+        'You must specify at least 1 provider (for example, openai:gpt-4.1)',
+      ),
     );
 
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4.1)'),
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error if assertions are provided without model outputs', async () => {
+    await expect(resolveConfigs({ assertions: 'assertions.yaml' }, {})).rejects.toThrowError(
+      new ConfigResolutionError('You must provide --model-outputs when using --assertions'),
     );
+
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error if no prompts are provided', async () => {
+    const defaultConfig = {
+      providers: ['openai:gpt-4.1'],
+    };
+
+    await expect(resolveConfigs({}, defaultConfig)).rejects.toThrowError(
+      new ConfigResolutionError('You must provide at least 1 prompt'),
+    );
+
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error if configured prompts resolve to an empty set', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const promptfooConfig = {
+      prompts: ['Act as a travel guide for {{location}}'],
+      providers: ['openai:gpt-4.1'],
+    };
+
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(readPrompts).mockResolvedValueOnce([]);
+
+    await expect(resolveConfigs(cmdObj, {})).rejects.toThrowError(
+      new ConfigResolutionError(
+        'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
+      ),
+    );
+
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('should allow dataset generation configs to omit providers', async () => {
@@ -1797,6 +1830,23 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
+  });
+});
+
+describe('ConfigResolutionError', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should fall back to error logging for invalid runtime log levels', () => {
+    const error = new ConfigResolutionError('invalid log level', {
+      logLevel: 'debug' as any,
+    });
+
+    logConfigResolutionError(error);
+
+    expect(error.logLevel).toBe('error');
+    expect(logger.error).toHaveBeenCalledWith('invalid log level');
   });
 });
 
@@ -2307,15 +2357,15 @@ describe('readConfig with environment variable substitution', () => {
     // Restore or delete environment variables to prevent test pollution
     for (const varName of testEnvVars) {
       if (originalEnv[varName] === undefined) {
-        delete process.env[varName];
+        mockProcessEnv({ [varName]: undefined });
       } else {
-        process.env[varName] = originalEnv[varName];
+        mockProcessEnv({ [varName]: originalEnv[varName] });
       }
     }
   });
 
   it('should substitute environment variables in prompts paths', async () => {
-    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/custom/prompts' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2330,7 +2380,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in providers paths', async () => {
-    process.env.TEST_PROVIDER_PATH = '/custom/providers';
+    mockProcessEnv({ TEST_PROVIDER_PATH: '/custom/providers' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: ['{{ env.TEST_PROVIDER_PATH }}/custom_provider.js'],
@@ -2345,7 +2395,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in nested config values', async () => {
-    process.env.MY_API_KEY = 'sk-test-12345';
+    mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: [
@@ -2367,7 +2417,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should preserve env templates in static _conversation vars', async () => {
-    process.env.MY_API_KEY = 'sk-test-12345';
+    mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });
     const mockConfig = {
       description: 'Test config with _conversation vars',
       providers: ['{{ env.MY_API_KEY }}'],
@@ -2407,7 +2457,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in assertion paths', async () => {
-    process.env.TEST_ASSERTION_PATH = '/custom/assertions';
+    mockProcessEnv({ TEST_ASSERTION_PATH: '/custom/assertions' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2435,7 +2485,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should preserve runtime templates like {{ vars.x }}', async () => {
-    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/custom/prompts' });
     const mockConfig = {
       description: 'Test config with mixed templates',
       providers: ['openai:gpt-4o'],
@@ -2496,7 +2546,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in JavaScript config files', async () => {
-    process.env.TEST_PROMPT_PATH = '/js/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/js/prompts' });
     const mockConfig = {
       description: 'JS config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2512,7 +2562,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in YAML config files', async () => {
-    process.env.TEST_PROMPT_PATH = '/yaml/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/yaml/prompts' });
     const mockConfig = {
       description: 'YAML config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2527,8 +2577,8 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute multiple environment variables in a single string', async () => {
-    process.env.TEST_BASE_PATH = '/base';
-    process.env.TEST_SUB_PATH = 'prompts';
+    mockProcessEnv({ TEST_BASE_PATH: '/base' });
+    mockProcessEnv({ TEST_SUB_PATH: 'prompts' });
     const mockConfig = {
       description: 'Test config with multiple env vars',
       providers: ['openai:gpt-4o'],
@@ -2543,7 +2593,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables using bracket notation', async () => {
-    process.env['TEST-PATH-WITH-DASHES'] = '/dashed/path';
+    mockProcessEnv({ ['TEST-PATH-WITH-DASHES']: '/dashed/path' });
     const mockConfig = {
       description: 'Test config with bracket notation',
       providers: ['openai:gpt-4o'],
@@ -2558,7 +2608,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in defaultTest options', async () => {
-    process.env.TEST_GRADER_PROVIDER = 'openai:gpt-4-turbo';
+    mockProcessEnv({ TEST_GRADER_PROVIDER: 'openai:gpt-4-turbo' });
     const mockConfig = {
       description: 'Test config with env vars in defaultTest',
       providers: ['openai:gpt-4o'],
@@ -2578,7 +2628,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in env config field', async () => {
-    process.env.EXTERNAL_API_KEY = 'external-key-123';
+    mockProcessEnv({ EXTERNAL_API_KEY: 'external-key-123' });
     const mockConfig = {
       description: 'Test config with env vars in env field',
       providers: ['openai:gpt-4o'],
@@ -2601,7 +2651,7 @@ describe('readConfig with environment variable substitution', () => {
 
   describe('security edge cases', () => {
     it('should handle empty string environment variables', async () => {
-      process.env.EMPTY_VAR = '';
+      mockProcessEnv({ EMPTY_VAR: '' });
       const mockConfig = {
         description: 'Test config with empty env var',
         providers: ['openai:gpt-4o'],
@@ -2617,7 +2667,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should safely handle env vars containing template-like syntax', async () => {
-      process.env.PROMPT_TEXT = 'Hello {{ vars.name }}';
+      mockProcessEnv({ PROMPT_TEXT: 'Hello {{ vars.name }}' });
       const mockConfig = {
         description: 'Test config with template-like env var',
         providers: ['openai:gpt-4o'],
@@ -2633,7 +2683,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should safely handle env vars containing Nunjucks statement syntax', async () => {
-      process.env.EVIL_VAR = '{% for i in range(100) %}x{% endfor %}';
+      mockProcessEnv({ EVIL_VAR: '{% for i in range(100) %}x{% endfor %}' });
       const mockConfig = {
         description: 'Test config with statement syntax in env var',
         providers: ['openai:gpt-4o'],
@@ -2649,7 +2699,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle env vars containing special regex characters', async () => {
-      process.env.SPECIAL_PATH = '/path/with/$pecial/chars.*[test]';
+      mockProcessEnv({ SPECIAL_PATH: '/path/with/$pecial/chars.*[test]' });
       const mockConfig = {
         description: 'Test config with special chars in env var',
         providers: ['openai:gpt-4o'],
@@ -2666,7 +2716,7 @@ describe('readConfig with environment variable substitution', () => {
     it('should handle potential path traversal in env vars', async () => {
       // Note: This test demonstrates that path traversal is possible if env vars are controlled by attackers
       // File validation should happen at file load time, not in the template renderer
-      process.env.TRAVERSAL_PATH = '../../etc';
+      mockProcessEnv({ TRAVERSAL_PATH: '../../etc' });
       const mockConfig = {
         description: 'Test config with path traversal',
         providers: ['openai:gpt-4o'],
@@ -2697,7 +2747,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle malformed template syntax gracefully', async () => {
-      process.env.MY_VAR = 'test-value';
+      mockProcessEnv({ MY_VAR: 'test-value' });
       const mockConfig = {
         description: 'Test config with malformed templates',
         providers: ['openai:gpt-4o'],
@@ -2722,7 +2772,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle env vars with newlines and special whitespace', async () => {
-      process.env.MULTILINE_VAR = 'line1\nline2\ttab';
+      mockProcessEnv({ MULTILINE_VAR: 'line1\nline2\ttab' });
       const mockConfig = {
         description: 'Test config with multiline env var',
         providers: ['openai:gpt-4o'],
@@ -2737,7 +2787,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle deeply nested objects with env vars', async () => {
-      process.env.DEEP_VAR = 'nested-value';
+      mockProcessEnv({ DEEP_VAR: 'nested-value' });
       const mockConfig = {
         description: 'Test config with deeply nested env vars',
         providers: ['openai:gpt-4o'],
@@ -2775,10 +2825,10 @@ describe('readConfig with environment variable substitution', () => {
 
   describe('provider ID with env variables (regression test for #7079)', () => {
     it('should substitute process.env variables in provider ID URLs', async () => {
-      process.env.TEST_APPLICATION = 'myapp';
-      process.env.TEST_BASE_URL = 'example.com';
-      process.env.TEST_SERVICE_NAME = 'api';
-      process.env.TEST_SERVICE_VERSION = 'v1';
+      mockProcessEnv({ TEST_APPLICATION: 'myapp' });
+      mockProcessEnv({ TEST_BASE_URL: 'example.com' });
+      mockProcessEnv({ TEST_SERVICE_NAME: 'api' });
+      mockProcessEnv({ TEST_SERVICE_VERSION: 'v1' });
       const mockConfig = {
         description: 'Test config with env vars in provider ID',
         providers: [
@@ -2828,7 +2878,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle mixed defined and undefined env vars in provider ID', async () => {
-      process.env.TEST_DEFINED_VAR = 'defined-value';
+      mockProcessEnv({ TEST_DEFINED_VAR: 'defined-value' });
       const mockConfig = {
         description: 'Test config with mixed env vars',
         providers: [
@@ -2854,8 +2904,8 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should substitute env vars in provider config headers', async () => {
-      process.env.TEST_SESSION = 'session-123';
-      process.env.TEST_TOKEN = 'token-456';
+      mockProcessEnv({ TEST_SESSION: 'session-123' });
+      mockProcessEnv({ TEST_TOKEN: 'token-456' });
       const mockConfig = {
         description: 'Test config with env vars in headers',
         providers: [
@@ -2976,7 +3026,7 @@ describe('readConfig with environment variable substitution', () => {
     it('should handle nested templates in config.env values (two-pass rendering)', async () => {
       // This test verifies that config.env values can reference process.env variables
       // and the two-pass rendering correctly resolves them before using as overrides
-      process.env.TEST_BASE_URL = 'api.example.com';
+      mockProcessEnv({ TEST_BASE_URL: 'api.example.com' });
       const mockConfig = {
         description: 'Test config with nested templates in env section',
         env: {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions/assertionsResult';
+import { mockProcessEnv } from '../util/utils';
 
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
@@ -27,7 +28,7 @@ describe('AssertionsResult', () => {
   let assertionsResult: AssertionsResult;
 
   beforeEach(() => {
-    delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
+    mockProcessEnv({ PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: undefined });
     assertionsResult = new AssertionsResult();
   });
 
@@ -56,7 +57,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', () => {
-    process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES = 'true';
+    mockProcessEnv({ PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true' });
     expect(() =>
       assertionsResult.addResult({
         index: 0,

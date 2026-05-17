@@ -74,6 +74,19 @@ cd structured-output
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
+### Permissions
+
+Session-level permission rules mixing simple and pattern-based entries. Promptfoo converts the object config into the `PermissionRuleset` array the OpenCode v2 API expects.
+
+**Location**: `./permissions/`
+
+**Usage**:
+
+```bash
+cd permissions
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+```
+
 ## Provider Configuration
 
 The provider supports these high-value options:
@@ -89,7 +102,7 @@ providers:
       apiKey: '{{env.OPENAI_API_KEY}}'
 
       # Read-only local repo access
-      working_dir: ./examples/provider-opencode-sdk/basic
+      working_dir: ./basic
       workspace: feature-branch
 
       # Structured output

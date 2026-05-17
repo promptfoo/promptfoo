@@ -40,6 +40,19 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: mockFsReadFileSync,
+    mkdir: mockFsMkdirSync,
+    writeFile: mockFsWriteFileSync,
+    stat: vi.fn(async (...args: unknown[]) => mockFsStatSync(...args)),
+  },
+  readFile: mockFsReadFileSync,
+  mkdir: mockFsMkdirSync,
+  writeFile: mockFsWriteFileSync,
+  stat: vi.fn(async (...args: unknown[]) => mockFsStatSync(...args)),
+}));
+
 const mockPathJoin = vi.hoisted(() => vi.fn());
 const mockPathRelative = vi.hoisted(() => vi.fn());
 const mockPathResolve = vi.hoisted(() => vi.fn());
@@ -63,11 +76,22 @@ vi.mock('path', async () => ({
 describe('poison command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFsReadFileSync.mockReset();
+    mockFsExistsSync.mockReset();
+    mockFsStatSync.mockReset();
+    mockFsMkdirSync.mockReset();
+    mockFsWriteFileSync.mockReset();
+    mockFsReaddirSync.mockReset();
+    mockPathJoin.mockReset();
+    mockPathRelative.mockReset();
+    mockPathResolve.mockReset();
+    mockPathDirname.mockReset();
     // Set default implementations for fs mocks
     mockFsMkdirSync.mockImplementation(() => '/mock/dir');
     mockFsWriteFileSync.mockReturnValue(undefined);
     mockFsReadFileSync.mockReturnValue('test content');
     mockFsExistsSync.mockReturnValue(true);
+    mockPathDirname.mockReturnValue('mock-dir');
   });
 
   describe('getAllFiles', () => {
