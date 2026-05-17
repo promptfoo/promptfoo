@@ -171,6 +171,31 @@ describe('EvaluationPanel', () => {
     expect(screen.queryByText('Grading Prompts')).not.toBeInTheDocument();
   });
 
+  it('renders grader output inline when graderOutputs metadata is present', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        assertion: {
+          type: 'context-relevance',
+          value: 'test context',
+        },
+        metadata: {
+          graderOutputs: {
+            final: 'Paris is the capital of France.\nFrance is in Europe.',
+          },
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Grader output')).toBeInTheDocument();
+    expect(screen.getByText(/Paris is the capital of France\./)).toBeInTheDocument();
+    expect(screen.getByText(/France is in Europe\./)).toBeInTheDocument();
+  });
+
   it('expands accordion to show full grading prompt', async () => {
     const gradingPrompt = JSON.stringify([
       { role: 'system', content: 'You are grading output' },

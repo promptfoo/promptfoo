@@ -193,7 +193,7 @@ describe('TargetConfiguration', () => {
     it('should render Custom configuration when providerType is "custom"', () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: {
-          target: { id: 'custom-provider', label: 'Custom Provider', config: {} },
+          target: { id: 'custom-provider', label: 'Custom Target', config: {} },
           extensions: [],
           prompts: [],
         },
