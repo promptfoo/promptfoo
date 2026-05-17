@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
@@ -162,6 +162,16 @@ describe('ModelAuditSetupPage', () => {
     expect(screen.getByTestId('config-tab')).toBeInTheDocument();
   });
 
+  it('stacks the header status below the title group on narrow screens', () => {
+    renderComponent();
+
+    expect(screen.getByTestId('model-audit-header')).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+      'sm:justify-between',
+    );
+  });
+
   it('should check installation on mount', async () => {
     renderComponent();
 
@@ -217,6 +227,10 @@ describe('ModelAuditSetupPage', () => {
     renderComponent();
 
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.getByText('Something went wrong').parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
   });
 
   it('should show results tab when scan results are available', () => {
@@ -435,14 +449,12 @@ describe('ModelAuditSetupPage', () => {
     });
 
     it('should cancel loading if dialog is closed before API response', async () => {
-      // Create a promise that resolves after a delay
+      let resolveResponse!: (response: {
+        ok: boolean;
+        json: () => Promise<{ scanners: Array<{ id: string }> }>;
+      }) => void;
       const delayedResponse = new Promise((resolve) => {
-        setTimeout(() => {
-          resolve({
-            ok: true,
-            json: () => Promise.resolve({ scanners: [{ id: 'test' }] }),
-          });
-        }, 100);
+        resolveResponse = resolve;
       });
 
       mockCallApi.mockReturnValue(delayedResponse as any);
@@ -487,11 +499,14 @@ describe('ModelAuditSetupPage', () => {
         </TooltipProvider>,
       );
 
-      // Wait for the API response to arrive
-      await delayedResponse;
-
-      // Give it time to potentially update state (which it shouldn't due to cancellation)
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await act(async () => {
+        resolveResponse({
+          ok: true,
+          json: () => Promise.resolve({ scanners: [{ id: 'test' }] }),
+        });
+        await delayedResponse;
+        await Promise.resolve();
+      });
 
       // Scanner count should remain at initial value since update was cancelled
       expect(screen.getByTestId('scanner-count')).toHaveTextContent('0');
