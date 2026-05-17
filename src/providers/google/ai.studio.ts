@@ -22,7 +22,6 @@ import {
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
-  ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
@@ -40,91 +39,6 @@ function usesGenerateContentApi(modelName: string): boolean {
 
 function shouldBustCache(context?: CallApiContextParams): boolean {
   return context?.bustCache ?? context?.debug ?? false;
-}
-
-class AIStudioGenericProvider implements ApiProvider {
-  modelName: string;
-
-  config: CompletionOptions;
-  env?: EnvOverrides;
-
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    const { config, id, env } = options;
-    this.env = env;
-    this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
-  }
-
-  id(): string {
-    return `google:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[Google AI Studio Provider ${this.modelName}]`;
-  }
-
-  getApiUrlDefault(): string {
-    const renderedHost = getNunjucksEngine().renderString(DEFAULT_API_HOST, {});
-    return `https://${renderedHost}`;
-  }
-
-  getApiHost(): string | undefined {
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST') ||
-      DEFAULT_API_HOST;
-    return getNunjucksEngine().renderString(apiHost, {});
-  }
-
-  getApiUrl(): string {
-    // Check for apiHost first (most specific override)
-    const apiHost =
-      this.config.apiHost ||
-      this.env?.GOOGLE_API_HOST ||
-      this.env?.PALM_API_HOST ||
-      getEnvString('GOOGLE_API_HOST') ||
-      getEnvString('PALM_API_HOST');
-    if (apiHost) {
-      const renderedHost = getNunjucksEngine().renderString(apiHost, {});
-      return `https://${renderedHost}`;
-    }
-
-    // Check for apiBaseUrl (less specific override)
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.GOOGLE_API_BASE_URL ||
-      getEnvString('GOOGLE_API_BASE_URL') ||
-      this.getApiUrlDefault()
-    );
-  }
-
-  getApiKey(): string | undefined {
-    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
-    const apiKey =
-      this.config.apiKey ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GEMINI_API_KEY ||
-      this.env?.PALM_API_KEY ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
-      getEnvString('PALM_API_KEY');
-    if (apiKey) {
-      return getNunjucksEngine().renderString(apiKey, {});
-    }
-    return undefined;
-  }
-
-  // @ts-ignore: Prompt is not used in this implementation
-  async callApi(_prompt: string): Promise<ProviderResponse> {
-    throw new Error('Not implemented');
-  }
 }
 
 /**
@@ -660,14 +574,18 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.5-pro', {
-  config: {
-    generationConfig: {
-      response_mime_type: 'application/json',
-    },
-  },
-});
-export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
-export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+
+export function getGoogleAiStudioProviders(env?: EnvOverrides) {
+  const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });
+  return {
+    gradingJsonProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, {
+      env,
+      config: { generationConfig: { response_mime_type: 'application/json' } },
+    }),
+    gradingProvider,
+    llmRubricProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env }),
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+  };
+}

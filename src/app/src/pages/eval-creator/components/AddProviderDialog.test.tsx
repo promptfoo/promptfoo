@@ -1,5 +1,30 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getProviderTypeFromId } from './AddProviderDialog';
+import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
+
+vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
+  default: ({
+    setProvider,
+  }: {
+    setProvider: (provider: { id: string; config: Record<string, never> }, type: string) => void;
+  }) => (
+    <div>
+      provider type selector
+      <button
+        type="button"
+        onClick={() => setProvider({ id: 'openai:gpt-5.5', config: {} }, 'openai')}
+      >
+        Choose OpenAI
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () => ({
+  default: () => <div>provider config editor</div>,
+}));
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -75,5 +100,41 @@ describe('getProviderTypeFromId', () => {
 
   it('returns custom for unrecognized provider ids', () => {
     expect(getProviderTypeFromId('unknown-provider')).toBe('custom');
+  });
+});
+
+describe('AddProviderDialog layout', () => {
+  it('keeps the dialog footer visible while the body scrolls', () => {
+    render(<AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} />);
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByTestId('add-provider-dialog-scroll-body');
+    const footer = screen.getByTestId('add-provider-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
+  it('resets the scroll position when moving into provider configuration', async () => {
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    const scrollBody = screen.getByTestId('add-provider-dialog-scroll-body');
+    expect(scrollBody).toBeDefined();
+
+    scrollBody!.scrollTop = 240;
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+
+    await screen.findByText('provider config editor');
+    const nextScrollBody = screen.getByTestId('add-provider-dialog-scroll-body');
+
+    expect(nextScrollBody).toBeDefined();
+    expect(nextScrollBody).not.toBe(scrollBody);
+    expect(nextScrollBody).toHaveProperty('scrollTop', 0);
   });
 });

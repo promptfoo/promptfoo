@@ -100,7 +100,6 @@ describe('AssertionSchema', () => {
 
 describe('VarsSchema', () => {
   it('should validate and transform various types of values', () => {
-    expect.assertions(9);
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
       { input: { key: 42 }, expected: { key: 42 } },
@@ -116,20 +115,22 @@ describe('VarsSchema', () => {
       },
     ];
 
+    expect.assertions(testCases.length);
+
     testCases.forEach(({ input, expected }) => {
       expect(VarsSchema.safeParse(input)).toEqual({ success: true, data: expected });
     });
   });
 
   it('should throw an error for invalid types', () => {
-    expect.assertions(4);
-
     const invalidCases = [
       { key: null },
       { key: undefined },
       { key: Symbol('test') },
       { key: () => {} },
     ];
+
+    expect.assertions(invalidCases.length);
 
     invalidCases.forEach((invalidInput) => {
       expect(() => VarsSchema.parse(invalidInput)).toThrow(z.ZodError);
