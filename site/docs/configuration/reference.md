@@ -205,7 +205,7 @@ Set default values for command-line options. These defaults will be used unless 
 | filterFailing            | string             | Only run non-passing tests (assertion failures and errors) from a previous output path or eval ID                                                                                                   |
 | filterFailingOnly        | string             | Only run assertion failures from a previous output path or eval ID, excluding errors                                                                                                                |
 | **Output & Display**     |                    |                                                                                                                                                                                                     |
-| output                   | string[]           | [Output file](/docs/configuration/outputs) paths (csv, txt, json, yaml, yml, html)                                                                                                                  |
+| output                   | string[]           | [Output file](/docs/configuration/outputs) paths (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                                                                                           |
 | table                    | boolean            | Show output table (default: true, disable with --no-table)                                                                                                                                          |
 | tableCellMaxLength       | number             | Maximum length of table cells in console output                                                                                                                                                     |
 | progressBar              | boolean            | Whether to display progress bar during evaluation                                                                                                                                                   |
@@ -1121,7 +1121,6 @@ EvaluateOptions is an object that includes options for how the evaluation should
 interface EvaluateOptions {
   cache?: boolean;
   delay?: number;
-  eventSource?: string;
   generateSuggestions?: boolean;
   suggestionsCount?: number;
   /** Deprecated: use maxConcurrency: 1 or -j 1 instead. */

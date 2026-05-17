@@ -9,18 +9,9 @@ import {
   DefaultGitHubGradingProvider,
   DefaultGitHubSuggestionsProvider,
 } from './github/defaults';
-import {
-  DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
-  DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
-  DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
-  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
-} from './google/ai.studio';
+import { getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
-import {
-  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
-  DefaultGradingProvider as GeminiGradingProvider,
-} from './google/vertex';
+import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -204,23 +195,15 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
     providers = {
-      embeddingProvider: GeminiEmbeddingProvider, // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
-      gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
-      gradingProvider: GoogleAiStudioGradingProvider,
-      llmRubricProvider: GoogleAiStudioLlmRubricProvider,
+      embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: GoogleAiStudioSuggestionsProvider,
-      synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+      ...getGoogleAiStudioProviders(env),
     };
   } else if (useGoogleVertexDefaults) {
     logger.debug('Using Google Vertex default providers');
     providers = {
-      embeddingProvider: GeminiEmbeddingProvider,
-      gradingJsonProvider: GeminiGradingProvider,
-      gradingProvider: GeminiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: GeminiGradingProvider,
-      synthesizeProvider: GeminiGradingProvider,
+      ...getGoogleVertexProviders(env),
     };
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');

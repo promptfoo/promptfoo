@@ -3118,9 +3118,6 @@
         "delay": {
           "type": "number"
         },
-        "eventSource": {
-          "type": "string"
-        },
         "generateSuggestions": {
           "type": "boolean"
         },

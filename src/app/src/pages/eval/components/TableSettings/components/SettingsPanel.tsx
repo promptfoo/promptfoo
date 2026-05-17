@@ -69,7 +69,7 @@ const SettingsPanel = () => {
   );
 
   return (
-    <div className="grid grid-cols-[1fr_1px_1fr] gap-5 p-5 pt-3">
+    <div className="grid grid-cols-1 gap-5 p-5 pt-3 sm:grid-cols-[1fr_1px_1fr]">
       {/* Left Column - Visibility */}
       <div>
         <SectionHeader>Show</SectionHeader>
@@ -112,7 +112,7 @@ const SettingsPanel = () => {
       </div>
 
       {/* Subtle Divider */}
-      <div className="bg-border/10 my-1" />
+      <div className="hidden bg-border/10 sm:my-1 sm:block" />
 
       {/* Right Column - Formatting */}
       <div>
