@@ -17,16 +17,16 @@ export default function Setup({ open, onClose }: SetupProps) {
         }
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[calc(100vh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>LLM Red Team Configuration Setup</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="min-h-0 space-y-3 overflow-y-auto py-2 pr-1 sm:space-y-4 sm:py-4">
           <p className="text-sm text-foreground">
             You are about to set up several components that define how your AI system will be
             tested:
           </p>
-          <ul className="list-disc space-y-2 pl-6 text-sm">
+          <ul className="list-disc space-y-1.5 pl-6 text-sm sm:space-y-2">
             <li>
               <strong>Application:</strong> Metadata used to tailor the adversarial inputs to your
               application.
@@ -44,20 +44,20 @@ export default function Setup({ open, onClose }: SetupProps) {
               system, including techniques like jailbreaking and prompt injection.
             </li>
           </ul>
-          <div className="flex items-center justify-between pt-4">
-            <a
-              href="https://www.promptfoo.dev/docs/red-team/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline"
-            >
-              Learn more about LLM red teaming
-            </a>
-            <Button onClick={onClose} className="px-6">
-              Get Started
-              <ChevronRight className="ml-1 size-4" />
-            </Button>
-          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+          <a
+            href="https://www.promptfoo.dev/docs/red-team/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-primary hover:underline"
+          >
+            Learn more about LLM red teaming
+          </a>
+          <Button onClick={onClose} className="shrink-0 px-6">
+            Get Started
+            <ChevronRight className="ml-1 size-4" />
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

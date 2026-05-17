@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
@@ -78,7 +78,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
@@ -115,7 +115,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
@@ -162,7 +162,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {

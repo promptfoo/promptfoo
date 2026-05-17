@@ -84,7 +84,6 @@ The iterative jailbreak strategy creates refined single-shot jailbreaks that con
 - [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Prompt Injections](prompt-injection.md) - Direct injection techniques
 - [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
 
 [^1]: Mehrotra, A., et al. (2023). "Tree of Attacks: Jailbreaking Black-Box LLMs Automatically". arXiv:2312.02119

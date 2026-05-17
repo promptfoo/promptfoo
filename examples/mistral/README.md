@@ -1,6 +1,6 @@
 # mistral (Mistral AI Chat Models)
 
-This example demonstrates Mistral AI's chat models, including their new Magistral reasoning models, traditional chat models, and shows how to use Mistral models for evaluation grading and embeddings.
+This example demonstrates Mistral AI's chat models, including Magistral reasoning models, current multimodal models, and shows how to use Mistral models for evaluation grading and embeddings.
 
 You can run this example with:
 
@@ -34,8 +34,9 @@ This example requires:
 ### Traditional Chat Models
 
 - **Mistral Large** (`mistral-large-latest`): Top-tier model for complex tasks
-- **Mistral Medium** (`mistral-medium-latest`): Balanced performance and cost
-- **Mistral Small** (`mistral-small-latest`): Efficient for simple tasks
+- **Mistral Medium** (`mistral-medium-latest`): Balanced multimodal model
+- **Mistral Small** (`mistral-small-latest`): Efficient general-purpose model
+- **Mistral Large 3** (`mistral-large-2512`): Current multimodal large model
 
 ### Evaluation Models
 
@@ -87,7 +88,7 @@ This example includes multiple configuration files for different use cases:
 
 - **`promptfooconfig.comparison.yaml`** - Compare reasoning across all Mistral models
 - **`promptfooconfig.code-generation.yaml`** - Multi-language programming with Codestral
-- **`promptfooconfig.multimodal.yaml`** - Vision and text processing with Pixtral
+- **`promptfooconfig.multimodal.yaml`** - Vision and text processing with current Mistral multimodal models
 
 ### Advanced Features
 
