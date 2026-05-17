@@ -50,6 +50,7 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
 - [`promptfooconfig.converse.yaml`](promptfooconfig.converse.yaml) - Converse API with extended thinking (ultrathink)
+- [`promptfooconfig.converse-mcp.yaml`](promptfooconfig.converse-mcp.yaml) - Converse API with Model Context Protocol (MCP) tools
 
 ## Converse API Example
 
@@ -81,6 +82,46 @@ Run the Converse API example with:
 ```bash
 promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.converse.yaml
 ```
+
+## Converse MCP Example
+
+The Converse MCP example (`promptfooconfig.converse-mcp.yaml`) demonstrates how to attach Model Context Protocol (MCP) servers to a Bedrock Converse provider. MCP tools are discovered from the configured server, converted to Bedrock Converse tool definitions, and executed when the model requests a tool call.
+
+### Configuration
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 with MCP
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      mcp:
+        enabled: true
+        servers:
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+        tools:
+          - ask_question
+      toolChoice: auto
+```
+
+Run the Converse MCP example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.converse-mcp.yaml
+```
+
+Replace the `servers` entry with a local `command`/`args`, `path`, or another remote `url` to use your own MCP server.
+
+> **Note:** When the model emits `tool_use`, the provider executes the requested
+> MCP tool and returns the **raw tool result** as the eval output. There is no
+> follow-up Converse turn that feeds the tool result back to the model for a
+> synthesized answer, so the assertions in this example match substrings present
+> in the MCP server's response. If you need a model-summarized answer, wrap the
+> provider in an agent harness or run a second eval over the captured tool
+> output.
 
 ## Knowledge Base Example
 

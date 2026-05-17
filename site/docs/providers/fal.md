@@ -59,6 +59,22 @@ Browse all models at [fal.ai/models](https://fal.ai/models?categories=text-to-im
 | --------- | ---------------------------------------- |
 | `FAL_KEY` | Your API key for authentication with fal |
 
+## Client Options
+
+Provider config values are sent to the fal model as input, except for `apiKey` and the optional `client` block. Use `client` for options that should be passed to the underlying `@fal-ai/client` SDK instead of the model endpoint.
+
+For example, `@fal-ai/client` proxy URLs are browser-only when passed as a string. To route promptfoo's Node.js CLI requests through a proxy, use the object form and set `when: always`:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: fal:image:fal-ai/flux/schnell
+    config:
+      client:
+        proxyUrl:
+          url: http://localhost:8787/api/fal/proxy
+          when: always
+```
+
 ## Configuration
 
 Configure the fal provider in your promptfoo configuration file. Here's an example using [`fal-ai/flux/schnell`](https://fal.ai/models/fal-ai/flux/schnell):
@@ -99,14 +115,15 @@ providers:
 
 ### Configuration Options
 
-| Parameter             | Type   | Description                             | Example             |
-| --------------------- | ------ | --------------------------------------- | ------------------- |
-| `apiKey`              | string | The API key for authentication with fal | `your_api_key_here` |
-| `image_size.width`    | number | The width of the generated image        | `1024`              |
-| `image_size.height`   | number | The height of the generated image       | `1024`              |
-| `num_inference_steps` | number | The number of inference steps to run    | `4` to `50`         |
-| `seed`                | number | Sets a seed for reproducible results    | `42`                |
-| `guidance_scale`      | number | Prompt adherence (model-dependent)      | `3.5` to `15`       |
+| Parameter             | Type             | Description                             | Example             |
+| --------------------- | ---------------- | --------------------------------------- | ------------------- |
+| `apiKey`              | string           | The API key for authentication with fal | `your_api_key_here` |
+| `client.proxyUrl`     | string or object | fal SDK proxy URL configuration         | `{ url, when }`     |
+| `image_size.width`    | number           | The width of the generated image        | `1024`              |
+| `image_size.height`   | number           | The height of the generated image       | `1024`              |
+| `num_inference_steps` | number           | The number of inference steps to run    | `4` to `50`         |
+| `seed`                | number           | Sets a seed for reproducible results    | `42`                |
+| `guidance_scale`      | number           | Prompt adherence (model-dependent)      | `3.5` to `15`       |
 
 ## See Also
 

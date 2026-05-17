@@ -14,7 +14,7 @@ export const REDTEAM_DEFAULTS = {
   NUM_TESTS: 10,
 } as const;
 
-export const REDTEAM_MODEL = 'openai:chat:gpt-5.4-2026-03-05';
+export const REDTEAM_MODEL = 'openai:chat:gpt-5.5-2026-04-23';
 
 // LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
 export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';

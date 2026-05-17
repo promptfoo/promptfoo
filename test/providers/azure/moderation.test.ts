@@ -174,19 +174,27 @@ describe('Azure Moderation', () => {
 
       const key = getModerationCacheKey(modelName, config, content);
 
-      expect(key).toBe(
-        'azure-moderation:test-model:{"blocklistNames":[],"haltOnBlocklistHit":false,"passthrough":{}}:"test content"',
-      );
+      expect(key).toMatch(/^azure-moderation:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(key).not.toContain(content);
+      expect(key).not.toContain('test-key');
     });
 
     it('should handle empty content', () => {
       const key = getModerationCacheKey('model', {}, '');
-      expect(key).toBe(
-        'azure-moderation:model:{"blocklistNames":[],"haltOnBlocklistHit":false,"passthrough":{}}:""',
-      );
+      expect(key).toMatch(/^azure-moderation:model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    });
+
+    it('should differentiate content without leaking it', () => {
+      const firstKey = getModerationCacheKey('model', {}, 'sensitive prompt one');
+      const secondKey = getModerationCacheKey('model', {}, 'sensitive prompt two');
+
+      expect(firstKey).not.toBe(secondKey);
+      expect(firstKey).not.toContain('sensitive prompt one');
+      expect(secondKey).not.toContain('sensitive prompt two');
     });
 
     it('should include request-shaping config in the cache key', () => {
+      const defaultKey = getModerationCacheKey('model', {}, 'content');
       const key = getModerationCacheKey(
         'model',
         {
@@ -197,9 +205,11 @@ describe('Azure Moderation', () => {
         'content',
       );
 
-      expect(key).toBe(
-        'azure-moderation:model:{"blocklistNames":["custom-list"],"haltOnBlocklistHit":true,"passthrough":{"outputType":"EightSeverityLevels"}}:"content"',
-      );
+      expect(key).toMatch(/^azure-moderation:model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(key).not.toBe(defaultKey);
+      expect(key).not.toContain('content');
+      expect(key).not.toContain('custom-list');
+      expect(key).not.toContain('EightSeverityLevels');
     });
 
     it('should include endpoint and apiVersion in the cache key', () => {
@@ -215,6 +225,8 @@ describe('Azure Moderation', () => {
       );
 
       expect(firstKey).not.toBe(secondKey);
+      expect(firstKey).not.toContain('resource-a');
+      expect(secondKey).not.toContain('resource-b');
 
       const versionKey1 = getModerationCacheKey('model', { apiVersion: '2024-09-01' }, 'content');
       const versionKey2 = getModerationCacheKey(
@@ -224,6 +236,8 @@ describe('Azure Moderation', () => {
       );
 
       expect(versionKey1).not.toBe(versionKey2);
+      expect(versionKey1).not.toContain('2024-09-01');
+      expect(versionKey2).not.toContain('2024-09-15-preview');
     });
 
     it('should ignore apiKey and apiKeyEnvar in the cache key', () => {
@@ -256,7 +270,7 @@ describe('Azure Moderation', () => {
       expect(firstKey).not.toBe(secondKey);
       expect(firstKey).not.toContain('secret-token-1');
       expect(secondKey).not.toContain('secret-token-2');
-      expect(firstKey).toContain('headersHash');
+      expect(firstKey).not.toContain('https://test.com');
     });
 
     it('should treat empty headers the same as absent headers', () => {
@@ -341,8 +355,10 @@ describe('Azure Moderation', () => {
       await provider.callModerationApi('user prompt', 'test content');
 
       const cacheKey = mockCache.get.mock.calls[0][0] as string;
-      expect(cacheKey).toContain('resolved-endpoint');
-      expect(cacheKey).toContain('2024-09-15-preview');
+      expect(cacheKey).toMatch(/^azure-moderation:text-content-safety:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain('resolved-endpoint');
+      expect(cacheKey).not.toContain('2024-09-15-preview');
+      expect(cacheKey).not.toContain('test content');
     });
   });
 });

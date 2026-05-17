@@ -170,7 +170,7 @@ describe('Recent Bug Regression Tests', () => {
         const results = parsed.results.results;
 
         expect(results).toHaveLength(2);
-        for (const [index, expectedVar] of ['hello world', 'goodbye moon'].entries()) {
+        for (const [index, expectedValue] of ['hello world', 'goodbye moon'].entries()) {
           const result = results[index];
           const componentResult = result.gradingResult.componentResults[0];
 
@@ -180,11 +180,11 @@ describe('Recent Bug Regression Tests', () => {
             'Does the output correctly reference the input: {{myVar}}?',
           );
           expect(componentResult.metadata.renderedAssertionValue).toBe(
-            `Does the output correctly reference the input: ${expectedVar}?`,
+            `Does the output correctly reference the input: ${expectedValue}?`,
           );
-          expect(componentResult.metadata.renderedGradingPrompt).toContain(expectedVar);
+          expect(componentResult.metadata.renderedGradingPrompt).toContain(expectedValue);
           expect(componentResult.metadata.renderedGradingPrompt).not.toContain('{{myVar}}');
-          expect(componentResult.reason).toContain(expectedVar);
+          expect(componentResult.reason).toContain(expectedValue);
           expect(componentResult.reason).not.toContain('{{myVar}}');
         }
       });
@@ -599,7 +599,7 @@ tests:
         // Look for a definition that has the options properties (prefix, suffix, provider, etc.)
         // and verify it's NOT using the problematic allOf pattern
         let foundOptionsSchema = false;
-        for (const [_key, def] of Object.entries(definitions)) {
+        for (const def of Object.values(definitions)) {
           const defObj = def as Record<string, unknown>;
           const props = defObj.properties as Record<string, unknown> | undefined;
 
