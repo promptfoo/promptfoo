@@ -24,11 +24,104 @@ interface DigitalSignatureAuthTabProps {
   updateCustomTarget: (field: string, value: unknown) => void;
 }
 
+function buildEnabledSignatureAuthConfig(selectedTarget: HttpProviderOptions) {
+  return {
+    enabled: true,
+    certificateType: selectedTarget.config?.signatureAuth?.certificateType || 'pem',
+    keyInputType: selectedTarget.config?.signatureAuth?.keyInputType || 'upload',
+  };
+}
+
+function buildSignatureCertificateTypeConfig(
+  selectedTarget: HttpProviderOptions,
+  certificateType: string,
+) {
+  return {
+    ...selectedTarget.config?.signatureAuth,
+    certificateType,
+    keyInputType: certificateType === 'pem' ? 'upload' : undefined,
+    privateKey: undefined,
+    privateKeyPath: undefined,
+    keystorePath: undefined,
+    keystorePassword: undefined,
+    keyAlias: undefined,
+    pfxPath: undefined,
+    pfxPassword: undefined,
+    certPath: undefined,
+    keyPath: undefined,
+    pfxMode: undefined,
+    type: certificateType,
+  };
+}
+
+function PemKeyInputMethodSelector({
+  selectedTarget,
+  updateCustomTarget,
+}: DigitalSignatureAuthTabProps) {
+  const keyInputType = selectedTarget.config?.signatureAuth?.keyInputType;
+  const options = [
+    {
+      value: 'upload',
+      label: 'Upload Key',
+      description: 'Upload PEM file',
+      icon: Upload,
+    },
+    {
+      value: 'path',
+      label: 'File Path',
+      description: 'Specify key location',
+      icon: File,
+    },
+    {
+      value: 'base64',
+      label: 'Base64 Key String',
+      description: 'Paste encoded key',
+      icon: Key,
+    },
+  ] as const;
+
+  return (
+    <div className="space-y-4">
+      <Label>PEM Key Input Method</Label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {options.map(({ value, label, description, icon: Icon }) => {
+          const selected = keyInputType === value;
+          return (
+            <div
+              key={value}
+              className={cn(
+                'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
+                selected ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50',
+              )}
+              onClick={() =>
+                updateCustomTarget('signatureAuth', {
+                  ...selectedTarget.config?.signatureAuth,
+                  keyInputType: value,
+                })
+              }
+            >
+              <Icon className={cn('size-6 mb-2', selected ? 'text-primary' : 'text-muted-foreground')} />
+              <span className="font-medium">{label}</span>
+              <span className="text-sm text-muted-foreground text-center">{description}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
   selectedTarget,
   updateCustomTarget,
 }) => {
   const { showToast } = useToast();
+  const signatureAuth = selectedTarget.config?.signatureAuth;
+  const isSignatureAuthEnabled = !!signatureAuth?.enabled;
+  const isPemCertificate = signatureAuth?.certificateType === 'pem';
+  const showPemUpload = isPemCertificate && signatureAuth?.keyInputType === 'upload';
+  const showPemPath = isPemCertificate && signatureAuth?.keyInputType === 'path';
+  const showPemBase64 = isPemCertificate && signatureAuth?.keyInputType === 'base64';
 
   return (
     <>
@@ -49,47 +142,28 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
       <div className="flex items-center gap-2">
         <Switch
           id="signature-auth-enabled"
-          checked={!!selectedTarget.config?.signatureAuth?.enabled}
+          checked={isSignatureAuthEnabled}
           onCheckedChange={(checked) => {
-            if (checked) {
-              updateCustomTarget('signatureAuth', {
-                enabled: true,
-                certificateType: selectedTarget.config?.signatureAuth?.certificateType || 'pem',
-                keyInputType: selectedTarget.config?.signatureAuth?.keyInputType || 'upload',
-              });
-            } else {
-              updateCustomTarget('signatureAuth', undefined);
-            }
+            updateCustomTarget(
+              'signatureAuth',
+              checked ? buildEnabledSignatureAuthConfig(selectedTarget) : undefined,
+            );
           }}
         />
         <Label htmlFor="signature-auth-enabled">Enable signature authentication</Label>
       </div>
 
-      {selectedTarget.config?.signatureAuth?.enabled && (
+      {isSignatureAuthEnabled && (
         <div className="mt-6 space-y-6">
           <div className="space-y-2">
             <Label>Certificate Type</Label>
             <Select
               value={selectedTarget.config?.signatureAuth?.certificateType || 'pem'}
               onValueChange={(value) => {
-                const certType = value;
-                updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config?.signatureAuth,
-                  certificateType: certType,
-                  // Clear all type-specific fields when changing certificate type
-                  keyInputType: certType === 'pem' ? 'upload' : undefined,
-                  privateKey: undefined,
-                  privateKeyPath: undefined,
-                  keystorePath: undefined,
-                  keystorePassword: undefined,
-                  keyAlias: undefined,
-                  pfxPath: undefined,
-                  pfxPassword: undefined,
-                  certPath: undefined,
-                  keyPath: undefined,
-                  pfxMode: undefined,
-                  type: certType,
-                });
+                updateCustomTarget(
+                  'signatureAuth',
+                  buildSignatureCertificateTypeConfig(selectedTarget, value),
+                );
               }}
             >
               <SelectTrigger>
@@ -103,97 +177,14 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             </Select>
           </div>
 
-          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' && (
-            <div className="space-y-4">
-              <Label>PEM Key Input Method</Label>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div
-                  className={cn(
-                    'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
-                    selectedTarget.config?.signatureAuth?.keyInputType === 'upload'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50',
-                  )}
-                  onClick={() =>
-                    updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config?.signatureAuth,
-                      keyInputType: 'upload',
-                    })
-                  }
-                >
-                  <Upload
-                    className={cn(
-                      'size-6 mb-2',
-                      selectedTarget.config?.signatureAuth?.keyInputType === 'upload'
-                        ? 'text-primary'
-                        : 'text-muted-foreground',
-                    )}
-                  />
-                  <span className="font-medium">Upload Key</span>
-                  <span className="text-sm text-muted-foreground text-center">Upload PEM file</span>
-                </div>
-
-                <div
-                  className={cn(
-                    'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
-                    selectedTarget.config?.signatureAuth?.keyInputType === 'path'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50',
-                  )}
-                  onClick={() =>
-                    updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config?.signatureAuth,
-                      keyInputType: 'path',
-                    })
-                  }
-                >
-                  <File
-                    className={cn(
-                      'size-6 mb-2',
-                      selectedTarget.config?.signatureAuth?.keyInputType === 'path'
-                        ? 'text-primary'
-                        : 'text-muted-foreground',
-                    )}
-                  />
-                  <span className="font-medium">File Path</span>
-                  <span className="text-sm text-muted-foreground text-center">
-                    Specify key location
-                  </span>
-                </div>
-
-                <div
-                  className={cn(
-                    'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
-                    selectedTarget.config?.signatureAuth?.keyInputType === 'base64'
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:bg-muted/50',
-                  )}
-                  onClick={() =>
-                    updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config?.signatureAuth,
-                      keyInputType: 'base64',
-                    })
-                  }
-                >
-                  <Key
-                    className={cn(
-                      'size-6 mb-2',
-                      selectedTarget.config?.signatureAuth?.keyInputType === 'base64'
-                        ? 'text-primary'
-                        : 'text-muted-foreground',
-                    )}
-                  />
-                  <span className="font-medium">Base64 Key String</span>
-                  <span className="text-sm text-muted-foreground text-center">
-                    Paste encoded key
-                  </span>
-                </div>
-              </div>
-            </div>
+          {isPemCertificate && (
+            <PemKeyInputMethodSelector
+              selectedTarget={selectedTarget}
+              updateCustomTarget={updateCustomTarget}
+            />
           )}
 
-          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
-            selectedTarget.config?.signatureAuth?.keyInputType === 'upload' && (
+          {showPemUpload && (
               <div className="rounded-lg border border-border p-6">
                 <input
                   type="file"
@@ -278,8 +269,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
               </div>
             )}
 
-          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
-            selectedTarget.config?.signatureAuth?.keyInputType === 'path' && (
+          {showPemPath && (
               <div className="rounded-lg border border-border p-6 space-y-4">
                 <p className="text-muted-foreground">
                   Specify the path on disk to your PEM format private key file
@@ -308,8 +298,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
               </div>
             )}
 
-          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
-            selectedTarget.config?.signatureAuth?.keyInputType === 'base64' && (
+          {showPemBase64 && (
               <div className="rounded-lg border border-border p-6 space-y-4">
                 <Textarea
                   rows={4}

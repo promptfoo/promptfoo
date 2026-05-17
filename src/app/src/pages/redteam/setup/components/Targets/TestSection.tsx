@@ -65,6 +65,34 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ label, children, maxHeight = '200
   </div>
 );
 
+function getTestResultAlertConfig(testResult: TestResult) {
+  if (testResult.changes_needed) {
+    return {
+      variant: 'warning' as const,
+      title: 'Configuration Changes Needed',
+      icon: <AlertCircle className="size-4" />,
+    };
+  }
+  if (testResult.success) {
+    return {
+      variant: 'success' as const,
+      title: 'Test Passed',
+      icon: <CheckCircle className="size-4" />,
+    };
+  }
+  return {
+    variant: 'destructive' as const,
+    title: 'Test Failed',
+    icon: <AlertCircle className="size-4" />,
+  };
+}
+
+function getRenderedRequestBody(testResult: TestResult) {
+  const rendered =
+    testResult.providerResponse?.metadata?.finalRequestBody || testResult.transformedRequest;
+  return typeof rendered === 'string' ? rendered : JSON.stringify(rendered, null, 2);
+}
+
 const TestSection: React.FC<TestSectionProps> = ({
   selectedTarget,
   isTestRunning,
@@ -75,6 +103,7 @@ const TestSection: React.FC<TestSectionProps> = ({
   onDetailsExpandedChange,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
+  const testResultAlert = testResult ? getTestResultAlertConfig(testResult) : undefined;
 
   return (
     <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
@@ -123,31 +152,11 @@ const TestSection: React.FC<TestSectionProps> = ({
           <div className="space-y-3">
             {/* Result Alert */}
             {(testResult.success || testResult.changes_needed) && (
-              <Alert
-                variant={
-                  testResult.changes_needed
-                    ? 'warning'
-                    : testResult.success
-                      ? 'success'
-                      : 'destructive'
-                }
-              >
-                {testResult.changes_needed ? (
-                  <AlertCircle className="size-4" />
-                ) : testResult.success ? (
-                  <CheckCircle className="size-4" />
-                ) : (
-                  <AlertCircle className="size-4" />
-                )}
+              <Alert variant={testResultAlert?.variant}>
+                {testResultAlert?.icon}
                 <AlertContent>
                   <AlertDescription className="text-sm">
-                    <p className="font-medium">
-                      {testResult.changes_needed
-                        ? 'Configuration Changes Needed'
-                        : testResult.success
-                          ? 'Test Passed'
-                          : 'Test Failed'}
-                    </p>
+                    <p className="font-medium">{testResultAlert?.title}</p>
                     <p className="mt-1">{testResult.message}</p>
 
                     {testResult.changes_needed_suggestions &&
@@ -227,14 +236,7 @@ const TestSection: React.FC<TestSectionProps> = ({
                         {(testResult?.providerResponse?.metadata?.finalRequestBody ||
                           testResult?.transformedRequest) && (
                           <CodeBlock label="Rendered Body">
-                            {(() => {
-                              const rendered =
-                                testResult?.providerResponse?.metadata?.finalRequestBody ||
-                                testResult?.transformedRequest;
-                              return typeof rendered === 'string'
-                                ? rendered
-                                : JSON.stringify(rendered, null, 2);
-                            })()}
+                            {getRenderedRequestBody(testResult)}
                           </CodeBlock>
                         )}
                       </div>

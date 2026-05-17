@@ -27,6 +27,197 @@ interface PromptsProps {
   onBack?: () => void;
 }
 
+const PURPOSE_SECTION_FIELDS = {
+  'Core Application Details': ['features', 'industry', 'attackConstraints'],
+  'Access & Permissions': [
+    'hasAccessTo',
+    'doesNotHaveAccessTo',
+    'userTypes',
+    'securityRequirements',
+  ],
+  'Data & Content': [
+    'sensitiveDataTypes',
+    'exampleIdentifiers',
+    'criticalActions',
+    'forbiddenTopics',
+  ],
+  'Business Context': ['competitors'],
+} as const;
+
+function getPurposeCompletionPercentage(
+  applicationDefinition: ApplicationDefinition | undefined,
+  section: string,
+) {
+  const sectionFields =
+    PURPOSE_SECTION_FIELDS[section as keyof typeof PURPOSE_SECTION_FIELDS] ?? [];
+  if (sectionFields.length === 0) {
+    return '0%';
+  }
+
+  const filledFields = sectionFields.filter((field) => {
+    const value = applicationDefinition?.[field as keyof ApplicationDefinition];
+    return typeof value === 'string' && value.trim() !== '';
+  });
+  return `${Math.round((filledFields.length / sectionFields.length) * 100)}%`;
+}
+
+function getPurposeDescription(testMode: 'application' | 'model') {
+  return testMode === 'application'
+    ? 'Describe your application so we can generate targeted security tests.'
+    : 'Describe the foundation model so we can generate targeted tests.';
+}
+
+function getExpandedSectionsForDiscovery(
+  previous: Set<string>,
+  discoveryResult: TargetPurposeDiscoveryResult,
+) {
+  const next = new Set(previous);
+  if (discoveryResult.limitations) {
+    next.add('Core Application Details');
+  }
+  if (discoveryResult.tools && discoveryResult.tools.length > 0) {
+    next.add('Access & Permissions');
+  }
+  return next;
+}
+
+function CompletionBadge({
+  applicationDefinition,
+  section,
+}: {
+  applicationDefinition: ApplicationDefinition | undefined;
+  section: string;
+}) {
+  const percentage = getPurposeCompletionPercentage(applicationDefinition, section);
+  return (
+    <>
+      <span className="text-xs font-medium text-muted-foreground">{percentage}</span>
+      {percentage === '100%' && <CheckCircle className="size-4 text-emerald-500" />}
+    </>
+  );
+}
+
+function AutoDiscoveryPanel({
+  discoveryResult,
+  isDiscovering,
+  showSlowDiscoveryMessage,
+  hasTargetConfigured,
+  apiHealthStatus,
+  discoveryError,
+  onDiscover,
+}: {
+  discoveryResult: TargetPurposeDiscoveryResult | null;
+  isDiscovering: boolean;
+  showSlowDiscoveryMessage: boolean;
+  hasTargetConfigured: boolean;
+  apiHealthStatus: string;
+  discoveryError: string | null;
+  onDiscover: () => void;
+}) {
+  if (discoveryResult) {
+    return null;
+  }
+
+  const discoveryDisabled =
+    !hasTargetConfigured ||
+    apiHealthStatus !== 'connected' ||
+    !!discoveryError ||
+    !!discoveryResult ||
+    isDiscovering;
+  const apiUnavailable = hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus);
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
+      <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
+      <div className="relative space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+            <Sparkles className="size-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
+            <p className="text-xs text-muted-foreground">
+              1-click detection of your target's capabilities
+            </p>
+          </div>
+        </div>
+
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          Automatically analyze your target to discover its purpose, tools, and limitations.{' '}
+          <a
+            href="https://promptfoo.dev/docs/red-team/discovery"
+            target="_blank"
+            className="text-primary/80 underline underline-offset-2 hover:text-primary"
+          >
+            Learn more
+          </a>
+        </p>
+
+        <Button disabled={discoveryDisabled} onClick={onDiscover} className="w-37.5">
+          {isDiscovering ? 'Discovering...' : 'Discover'}
+        </Button>
+
+        {isDiscovering && showSlowDiscoveryMessage && (
+          <Alert variant="info">
+            <Info className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                Discovery is taking a little while. This is normal for complex applications.
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+
+        {!hasTargetConfigured && (
+          <Alert variant="warning">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription>You must configure a target to run auto-discovery.</AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+
+        {apiUnavailable && (
+          <Alert variant="destructive">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription>
+                Cannot connect to Promptfoo API. Auto-discovery requires a healthy API connection.
+              </AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+
+        {discoveryError && (
+          <>
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertContent>
+                <AlertDescription>{discoveryError}</AlertDescription>
+              </AlertContent>
+            </Alert>
+            <div className="rounded-lg border border-border bg-background/80 p-4">
+              <p className="mb-3 text-[13px] text-muted-foreground">
+                To re-attempt discovery from your terminal:
+              </p>
+              <div className="space-y-1.5 text-[13px] text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">1.</span> Save Config and export as
+                  YAML
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">2.</span> Run the command:
+                </p>
+              </div>
+              <Code className="mt-2">promptfoo redteam discover -c redteam-config.yaml</Code>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Component to display auto-discovery results with copy functionality
  */
@@ -118,37 +309,6 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const isPurposePresent =
     config.applicationDefinition?.purpose && config.applicationDefinition.purpose.trim() !== '';
 
-  const getCompletionPercentage = (section: string) => {
-    const fields = {
-      'Core Application Details': ['features', 'industry', 'attackConstraints'],
-      'Access & Permissions': [
-        'hasAccessTo',
-        'doesNotHaveAccessTo',
-        'userTypes',
-        'securityRequirements',
-      ],
-      'Data & Content': [
-        'sensitiveDataTypes',
-        'exampleIdentifiers',
-        'criticalActions',
-        'forbiddenTopics',
-      ],
-      'Business Context': ['competitors'],
-    };
-
-    const sectionFields = fields[section as keyof typeof fields] || [];
-    const filledFields = sectionFields.filter((field) => {
-      const value = config.applicationDefinition?.[field as keyof ApplicationDefinition];
-      return value && value.trim() !== '';
-    });
-
-    if (sectionFields.length === 0) {
-      return '0%';
-    }
-    const percentage = Math.round((filledFields.length / sectionFields.length) * 100);
-    return `${percentage}%`;
-  };
-
   // =============================================================================
   // TARGET PURPOSE DISCOVERY ====================================================
   // =============================================================================
@@ -206,21 +366,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   // Auto-expand accordions when discovery results are available
   useEffect(() => {
     if (discoveryResult) {
-      setExpandedSections((prev) => {
-        const newSet = new Set(prev);
-
-        // Expand "Core Application Details" if limitations are discovered
-        if (discoveryResult.limitations) {
-          newSet.add('Core Application Details');
-        }
-
-        // Expand "Access & Permissions" if tools are discovered
-        if (discoveryResult.tools && discoveryResult.tools.length > 0) {
-          newSet.add('Access & Permissions');
-        }
-
-        return newSet;
-      });
+      setExpandedSections((prev) => getExpandedSectionsForDiscovery(prev, discoveryResult));
     }
   }, [discoveryResult]);
 
@@ -247,16 +393,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   return (
     <PageWrapper
       title="Application Details"
-      description={(() => {
-        switch (testMode) {
-          case 'application':
-            return 'Describe your application so we can generate targeted security tests.';
-          case 'model':
-            return 'Describe the foundation model so we can generate targeted tests.';
-          default:
-            return '';
-        }
-      })()}
+      description={getPurposeDescription(testMode)}
       onNext={onNext}
       onBack={onBack}
       nextDisabled={testMode === 'application' && !isPurposePresent}
@@ -301,113 +438,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
           {testMode === 'application' ? (
             <div className="space-y-8">
               {/* Auto-Discover Target Details */}
-              {!discoveryResult && (
-                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
-                  {/* Subtle decorative element */}
-                  <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
-
-                  <div className="relative space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
-                        <Sparkles className="size-5 text-primary" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
-                        <p className="text-xs text-muted-foreground">
-                          1-click detection of your target's capabilities
-                        </p>
-                      </div>
-                    </div>
-
-                    <p className="text-[13px] leading-relaxed text-muted-foreground">
-                      Automatically analyze your target to discover its purpose, tools, and
-                      limitations.{' '}
-                      <a
-                        href="https://promptfoo.dev/docs/red-team/discovery"
-                        target="_blank"
-                        className="text-primary/80 underline underline-offset-2 hover:text-primary"
-                      >
-                        Learn more
-                      </a>
-                    </p>
-
-                    <Button
-                      disabled={
-                        !hasTargetConfigured ||
-                        apiHealthStatus !== 'connected' ||
-                        !!discoveryError ||
-                        !!discoveryResult ||
-                        isDiscovering
-                      }
-                      onClick={handleTargetPurposeDiscovery}
-                      className="w-37.5"
-                    >
-                      {isDiscovering ? 'Discovering...' : 'Discover'}
-                    </Button>
-
-                    {isDiscovering && showSlowDiscoveryMessage && (
-                      <Alert variant="info">
-                        <Info className="size-4" />
-                        <AlertContent>
-                          <AlertDescription>
-                            Discovery is taking a little while. This is normal for complex
-                            applications.
-                          </AlertDescription>
-                        </AlertContent>
-                      </Alert>
-                    )}
-                    {!hasTargetConfigured && (
-                      <Alert variant="warning">
-                        <AlertTriangle className="size-4" />
-                        <AlertContent>
-                          <AlertDescription>
-                            You must configure a target to run auto-discovery.
-                          </AlertDescription>
-                        </AlertContent>
-                      </Alert>
-                    )}
-                    {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
-                      <Alert variant="destructive">
-                        <AlertTriangle className="size-4" />
-                        <AlertContent>
-                          <AlertDescription>
-                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                            connection.
-                          </AlertDescription>
-                        </AlertContent>
-                      </Alert>
-                    )}
-                    {discoveryError && (
-                      <>
-                        <Alert variant="destructive">
-                          <AlertTriangle className="size-4" />
-                          <AlertContent>
-                            <AlertDescription>{discoveryError}</AlertDescription>
-                          </AlertContent>
-                        </Alert>
-                        <div className="rounded-lg border border-border bg-background/80 p-4">
-                          <p className="mb-3 text-[13px] text-muted-foreground">
-                            To re-attempt discovery from your terminal:
-                          </p>
-                          <div className="space-y-1.5 text-[13px] text-muted-foreground">
-                            <p>
-                              <span className="font-medium text-foreground">1.</span> Save Config
-                              and export as YAML
-                            </p>
-                            <p>
-                              <span className="font-medium text-foreground">2.</span> Run the
-                              command:
-                            </p>
-                          </div>
-                          <Code className="mt-2">
-                            promptfoo redteam discover -c redteam-config.yaml
-                          </Code>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+              <AutoDiscoveryPanel
+                discoveryResult={discoveryResult}
+                isDiscovering={isDiscovering}
+                showSlowDiscoveryMessage={showSlowDiscoveryMessage}
+                hasTargetConfigured={hasTargetConfigured}
+                apiHealthStatus={apiHealthStatus}
+                discoveryError={discoveryError}
+                onDiscover={handleTargetPurposeDiscovery}
+              />
 
               {/* Main Purpose - Standalone Section */}
               <div className="space-y-6">
@@ -459,12 +498,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       <h3 className="text-left text-base font-semibold tracking-tight">
                         Core Application Details
                       </h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Core Application Details')}
-                      </span>
-                      {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
+                      <CompletionBadge
+                        applicationDefinition={config.applicationDefinition}
+                        section="Core Application Details"
+                      />
                     </div>
                     <ChevronDown
                       className={cn(
@@ -557,12 +594,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       <h3 className="text-left text-base font-semibold tracking-tight">
                         Access & Permissions
                       </h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Access & Permissions')}
-                      </span>
-                      {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
+                      <CompletionBadge
+                        applicationDefinition={config.applicationDefinition}
+                        section="Access & Permissions"
+                      />
                     </div>
                     <ChevronDown
                       className={cn(
@@ -674,12 +709,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       <h3 className="text-left text-base font-semibold tracking-tight">
                         Data & Content
                       </h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Data & Content')}
-                      </span>
-                      {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
+                      <CompletionBadge
+                        applicationDefinition={config.applicationDefinition}
+                        section="Data & Content"
+                      />
                     </div>
                     <ChevronDown
                       className={cn(
@@ -790,12 +823,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       <h3 className="text-left text-base font-semibold tracking-tight">
                         Business Context
                       </h3>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {getCompletionPercentage('Business Context')}
-                      </span>
-                      {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircle className="size-4 text-emerald-500" />
-                      )}
+                      <CompletionBadge
+                        applicationDefinition={config.applicationDefinition}
+                        section="Business Context"
+                      />
                     </div>
                     <ChevronDown
                       className={cn(

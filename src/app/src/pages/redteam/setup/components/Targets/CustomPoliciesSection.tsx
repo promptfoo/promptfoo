@@ -49,6 +49,36 @@ type PolicyDialogState = {
   };
 };
 
+type PolicyGenerationResponse = {
+  result: PolicyObject[];
+  error: string | null;
+  task: string;
+  details?: string;
+};
+
+async function parsePolicyGenerationResponse(response: Response) {
+  try {
+    return (await response.json()) as PolicyGenerationResponse;
+  } catch (error) {
+    throw new Error(
+      `Failed to generate policies: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function getPolicyGenerationErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return 'An unexpected error occurred while generating policies.';
+  }
+  if (error.message.includes('fetch') || error.message.includes('network')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  if (error.message.includes('timeout')) {
+    return 'Request timed out. Please try again.';
+  }
+  return error.message;
+}
+
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
@@ -394,23 +424,7 @@ export const CustomPoliciesSection = () => {
         }),
       });
 
-      // Parse the request body prior to handling success/error cases.
-      let data;
-      try {
-        data = (await response.json()) as {
-          result: PolicyObject[];
-          error: string | null;
-          task: string;
-          details?: string; // Optionally set in `logAndSendError`
-        };
-      } catch (error) {
-        // Handle JSON parsing errors
-        toast.showToast(
-          `Failed to generate policies: ${error instanceof Error ? error.message : String(error)}`,
-          'error',
-        );
-        return;
-      }
+      const data = await parsePolicyGenerationResponse(response);
 
       // Handle potential errors:
       if (!response.ok || data.error) {
@@ -435,22 +449,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage: string;
-
-      if (error instanceof Error) {
-        // Handle network errors
-        if (error.message.includes('fetch') || error.message.includes('network')) {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        } else if (error.message.includes('timeout')) {
-          errorMessage = 'Request timed out. Please try again.';
-        } else {
-          errorMessage = error.message;
-        }
-      } else {
-        errorMessage = 'An unexpected error occurred while generating policies.';
-      }
-
-      toast.showToast(errorMessage, 'error', 7500);
+      toast.showToast(getPolicyGenerationErrorMessage(error), 'error', 7500);
       setSuggestedPolicies([]);
     } finally {
       isGeneratingPoliciesRef.current = false;

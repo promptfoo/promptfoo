@@ -64,6 +64,78 @@ interface TestCaseDialogProps {
   allowPluginChange?: boolean;
 }
 
+function getPreviewContentType(strategyName: string): LoadedMessage['contentType'] {
+  if (strategyName === 'audio') {
+    return 'audio';
+  }
+  if (strategyName === 'image') {
+    return 'image';
+  }
+  if (strategyName === 'video') {
+    return 'video';
+  }
+  return 'text';
+}
+
+function getTargetResponseContent(targetResponse: TargetResponse) {
+  const output = targetResponse.output;
+  if (typeof output === 'string') {
+    return output;
+  }
+  if (output == null) {
+    return targetResponse.error ?? 'No response from target';
+  }
+  return JSON.stringify(output);
+}
+
+function buildTurnMessages({
+  generatedTestCases,
+  targetResponses,
+  maxTurns,
+  isGenerating,
+  isRunningTest,
+  strategyName,
+}: {
+  generatedTestCases: GeneratedTestCase[];
+  targetResponses: TargetResponse[];
+  maxTurns: number;
+  isGenerating: boolean;
+  isRunningTest: boolean;
+  strategyName: string;
+}): Message[] {
+  const messages: Message[] = [];
+  for (let i = 0; i < maxTurns; i++) {
+    const generatedTestCase = generatedTestCases[i];
+    if (generatedTestCase) {
+      messages.push({
+        role: 'user',
+        content: generatedTestCase.prompt,
+        contentType: getPreviewContentType(strategyName),
+      } as LoadedMessage);
+    }
+
+    const targetResponse = targetResponses[i];
+    if (targetResponse) {
+      messages.push({
+        role: 'assistant',
+        content: getTargetResponseContent(targetResponse),
+        contentType: 'text',
+      } as LoadedMessage);
+    }
+  }
+
+  if (
+    isGenerating &&
+    generatedTestCases.length === targetResponses.length &&
+    generatedTestCases.length < maxTurns
+  ) {
+    messages.push({ role: 'user', loading: true } as LoadingMessage);
+  } else if (isRunningTest) {
+    messages.push({ role: 'assistant', loading: true } as LoadingMessage);
+  }
+  return messages;
+}
+
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   open,
   onClose,
@@ -88,59 +160,18 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
-  const turnMessages = useMemo<Message[]>(() => {
-    const messages = [];
-
-    for (let i = 0; i < maxTurns; i++) {
-      const generatedTestCase = generatedTestCases[i];
-
-      if (generatedTestCase) {
-        messages.push({
-          role: 'user' as const,
-          content: generatedTestCase.prompt,
-          contentType:
-            strategyName === 'audio'
-              ? ('audio' as const)
-              : strategyName === 'image'
-                ? ('image' as const)
-                : strategyName === 'video'
-                  ? ('video' as const)
-                  : ('text' as const),
-        } as LoadedMessage);
-      }
-
-      const targetResponse = targetResponses[i];
-
-      if (targetResponse) {
-        const output = targetResponse.output;
-        const content =
-          typeof output === 'string'
-            ? output
-            : output == null
-              ? (targetResponse.error ?? 'No response from target')
-              : JSON.stringify(output);
-
-        messages.push({
-          role: 'assistant' as const,
-          content,
-          contentType: 'text' as const,
-        } as LoadedMessage);
-      }
-    }
-
-    // Indicate loading state to the user
-    if (
-      isGenerating &&
-      generatedTestCases.length === targetResponses.length &&
-      generatedTestCases.length < maxTurns
-    ) {
-      messages.push({ role: 'user' as const, loading: true } as LoadingMessage);
-    } else if (isRunningTest) {
-      messages.push({ role: 'assistant' as const, loading: true } as LoadingMessage);
-    }
-
-    return messages;
-  }, [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, strategyName]);
+  const turnMessages = useMemo(
+    () =>
+      buildTurnMessages({
+        generatedTestCases,
+        targetResponses,
+        maxTurns,
+        isGenerating,
+        isRunningTest,
+        strategyName,
+      }),
+    [generatedTestCases, targetResponses, maxTurns, isGenerating, isRunningTest, strategyName],
+  );
 
   const canAddAdditionalTurns =
     !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);

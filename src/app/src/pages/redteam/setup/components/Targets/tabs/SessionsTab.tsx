@@ -303,6 +303,67 @@ interface TestResult {
   };
 }
 
+async function requestSessionTest(
+  selectedTarget: HttpProviderOptions,
+  mainInputVariable?: string,
+): Promise<TestResult> {
+  const response = await callApi('/providers/test-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: selectedTarget,
+      sessionConfig: {
+        sessionSource: selectedTarget.config?.sessionSource,
+        sessionParser: selectedTarget.config?.sessionParser,
+      },
+      mainInputVariable,
+    }),
+  });
+
+  if (response.ok) {
+    return (await response.json()) as TestResult;
+  }
+
+  const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+  return {
+    success: false,
+    message: errorData.message || errorData.error || `Test failed with status: ${response.status}`,
+    reason: errorData.error || errorData.reason,
+    details: errorData.details,
+  };
+}
+
+function buildSessionFlowMessages(details?: TestResult['details']): Message[] {
+  if (!details) {
+    return [];
+  }
+
+  const messages: Message[] = [];
+  const appendMessage = (role: Message['role'], value: unknown) => {
+    if (!value) {
+      return;
+    }
+    messages.push({
+      role,
+      content: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
+    });
+  };
+
+  appendMessage('user', details.request1?.prompt);
+  appendMessage('assistant', details.response1);
+  appendMessage('user', details.request2?.prompt);
+  appendMessage('assistant', details.response2);
+  return messages;
+}
+
+function getSessionTestAlert(testResult: TestResult) {
+  return {
+    variant: testResult.success ? ('success' as const) : ('destructive' as const),
+    icon: testResult.success ? <CheckCircle className="size-4" /> : <AlertCircle className="size-4" />,
+    title: testResult.success ? 'Session Test Passed' : 'Session Test Failed',
+  };
+}
+
 const SessionsTab: React.FC<SessionsTabProps> = ({
   selectedTarget,
   updateCustomTarget,
@@ -317,6 +378,11 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   // Get input variables from the provider config
   const inputVariables = selectedTarget.inputs ? Object.keys(selectedTarget.inputs) : [];
   const hasMultipleInputs = inputVariables.length > 0;
+  const isStateless = selectedTarget.config?.stateful === false;
+  const showSessionManagement = !isStateless;
+  const showServerSessionConfig =
+    selectedTarget.config?.sessionSource === 'server' || selectedTarget.config?.sessionSource == null;
+  const sessionTestAlert = testResult ? getSessionTestAlert(testResult) : undefined;
 
   const handleTestSessionClick = () => {
     if (hasMultipleInputs) {
@@ -340,38 +406,10 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
     setTestResult(null);
 
     try {
-      // Test session configuration through the backend API
-      const response = await callApi('/providers/test-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: selectedTarget,
-          sessionConfig: {
-            sessionSource: selectedTarget.config?.sessionSource,
-            sessionParser: selectedTarget.config?.sessionParser,
-          },
-          // Pass the main input variable for multi-input configurations
-          mainInputVariable,
-        }),
-      });
-
-      if (response.ok) {
-        const data: TestResult = await response.json();
-        setTestResult(data);
-        setDetailsExpanded(!data.success);
-        onTestComplete?.(data.success);
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        setTestResult({
-          success: false,
-          message:
-            errorData.message || errorData.error || `Test failed with status: ${response.status}`,
-          reason: errorData.error || errorData.reason,
-          details: errorData.details,
-        });
-        setDetailsExpanded(true);
-        onTestComplete?.(false);
-      }
+      const data = await requestSessionTest(selectedTarget, mainInputVariable);
+      setTestResult(data);
+      setDetailsExpanded(!data.success);
+      onTestComplete?.(data.success);
     } catch (error) {
       setTestResult({
         success: false,
@@ -399,7 +437,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         />
 
         {/* Info alert when system is not stateful */}
-        {selectedTarget.config?.stateful === false && (
+        {isStateless && (
           <Alert variant="info" className="mt-3">
             <Info className="size-4" />
             <AlertContent>
@@ -414,7 +452,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       </div>
 
       {/* Only show session management options if the system is stateful */}
-      {selectedTarget.config?.stateful !== false && (
+      {showSessionManagement && (
         <>
           <Separator />
 
@@ -507,8 +545,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           </div>
 
           {/* Server-generated session ID configuration */}
-          {(selectedTarget.config?.sessionSource === 'server' ||
-            selectedTarget.config?.sessionSource == null) && (
+          {showServerSessionConfig && (
             <>
               <div>
                 <Label htmlFor="session-parser" className="text-sm font-medium">
@@ -648,17 +685,11 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
               {testResult && (
                 <div className="space-y-3">
                   {/* Result Alert */}
-                  <Alert variant={testResult.success ? 'success' : 'destructive'}>
-                    {testResult.success ? (
-                      <CheckCircle className="size-4" />
-                    ) : (
-                      <AlertCircle className="size-4" />
-                    )}
+                  <Alert variant={sessionTestAlert?.variant}>
+                    {sessionTestAlert?.icon}
                     <AlertContent>
                       <AlertDescription className="text-sm">
-                        <p className="font-medium">
-                          {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
-                        </p>
+                        <p className="font-medium">{sessionTestAlert?.title}</p>
                         <p className="mt-1">{testResult.message}</p>
                       </AlertDescription>
                     </AlertContent>
@@ -714,47 +745,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                             <Label className="text-sm font-medium">Conversation Flow</Label>
                             <div className="rounded-md border border-border bg-muted/30 p-3">
                               <ChatMessages
-                                messages={(() => {
-                                  const messages: Message[] = [];
-
-                                  if (testResult.details?.request1?.prompt) {
-                                    messages.push({
-                                      role: 'user',
-                                      content: testResult.details.request1.prompt,
-                                    });
-                                  }
-
-                                  if (testResult.details?.response1) {
-                                    const content =
-                                      typeof testResult.details.response1 === 'string'
-                                        ? testResult.details.response1
-                                        : JSON.stringify(testResult.details.response1, null, 2);
-                                    messages.push({
-                                      role: 'assistant',
-                                      content,
-                                    });
-                                  }
-
-                                  if (testResult.details?.request2?.prompt) {
-                                    messages.push({
-                                      role: 'user',
-                                      content: testResult.details.request2.prompt,
-                                    });
-                                  }
-
-                                  if (testResult.details?.response2) {
-                                    const content =
-                                      typeof testResult.details.response2 === 'string'
-                                        ? testResult.details.response2
-                                        : JSON.stringify(testResult.details.response2, null, 2);
-                                    messages.push({
-                                      role: 'assistant',
-                                      content,
-                                    });
-                                  }
-
-                                  return messages;
-                                })()}
+                                messages={buildSessionFlowMessages(testResult.details)}
                               />
                             </div>
                           </div>
