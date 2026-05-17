@@ -419,6 +419,127 @@ interface ProviderTypeSelectorProps {
   providerType?: string;
 }
 
+type ProviderPresetFactory = (label?: string) => ProviderOptions;
+
+const createSimpleProviderPreset =
+  (id: string): ProviderPresetFactory =>
+  (label) => ({
+    id,
+    config: {},
+    label,
+  });
+
+const providerPresetFactories: Record<string, ProviderPresetFactory> = {
+  javascript: createSimpleProviderPreset('file:///path/to/custom_provider.js'),
+  python: createSimpleProviderPreset('file:///path/to/custom_provider.py'),
+  http: (label) => ({
+    id: 'http',
+    label,
+    config: {
+      url: '',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: '{{prompt}}',
+      }),
+      stateful: true,
+    },
+  }),
+  websocket: (label) => ({
+    id: 'websocket',
+    label,
+    config: {
+      type: 'websocket',
+      url: 'wss://example.com/ws',
+      messageTemplate: '{"message": {{prompt | dump}}}',
+      transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
+      timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
+      stateful: true,
+    },
+  }),
+  browser: (label) => ({
+    id: 'browser',
+    label,
+    config: {
+      steps: [
+        {
+          action: 'navigate',
+          args: { url: 'https://example.com' },
+        },
+      ],
+    },
+  }),
+  openai: createSimpleProviderPreset(DEFAULT_OPENAI_TARGET_ID),
+  anthropic: createSimpleProviderPreset('anthropic:messages:claude-sonnet-4-5-20250929'),
+  azure: createSimpleProviderPreset('azure:chat:your-deployment-name'),
+  google: createSimpleProviderPreset('google:gemini-2.5-pro'),
+  vertex: createSimpleProviderPreset('vertex:gemini-2.5-pro'),
+  mistral: createSimpleProviderPreset('mistral:mistral-large-latest'),
+  cohere: createSimpleProviderPreset('cohere:command-a-03-2025'),
+  groq: createSimpleProviderPreset('groq:llama-3.1-70b-versatile'),
+  deepseek: createSimpleProviderPreset('deepseek:deepseek-chat'),
+  openrouter: createSimpleProviderPreset('openrouter:openai/gpt-5.4'),
+  bedrock: createSimpleProviderPreset('bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0'),
+  'bedrock-agent': createSimpleProviderPreset('bedrock:agent:your-agent-id'),
+  sagemaker: createSimpleProviderPreset('sagemaker:your-endpoint-name'),
+  huggingface: createSimpleProviderPreset('huggingface:meta-llama/Meta-Llama-3-70B-Instruct'),
+  ollama: createSimpleProviderPreset('ollama:llama3'),
+  'llama.cpp': createSimpleProviderPreset('llama.cpp:http://localhost:8080/completion'),
+  llamafile: createSimpleProviderPreset('llamafile:http://localhost:8080/v1/chat/completions'),
+  localai: createSimpleProviderPreset('localai:gpt-4'),
+  vllm: createSimpleProviderPreset('vllm:http://localhost:8000/v1'),
+  'text-generation-webui': createSimpleProviderPreset('text-generation-webui:http://localhost:5000'),
+  perplexity: createSimpleProviderPreset('perplexity:sonar'),
+  xai: createSimpleProviderPreset('xai:grok-4.20-reasoning'),
+  ai21: createSimpleProviderPreset('ai21:jamba-large'),
+  voyage: createSimpleProviderPreset('voyage:voyage-3'),
+  'cloudflare-ai': createSimpleProviderPreset('cloudflare-ai:@cf/meta/llama-3-8b-instruct'),
+  databricks: createSimpleProviderPreset('databricks:databricks-meta-llama-3-1-70b-instruct'),
+  fal: createSimpleProviderPreset('fal:fal-ai/flux/dev'),
+  github: createSimpleProviderPreset('github:gpt-4o'),
+  hyperbolic: createSimpleProviderPreset('hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct'),
+  mcp: (label) => ({
+    id: 'mcp',
+    label,
+    config: {
+      enabled: true,
+      verbose: false,
+    },
+  }),
+  aimlapi: createSimpleProviderPreset('aimlapi:gpt-4o'),
+  exec: createSimpleProviderPreset('exec:/path/to/script.sh'),
+  helicone: createSimpleProviderPreset('helicone:openai/gpt-4.1'),
+  jfrog: createSimpleProviderPreset('jfrog:llama_3_8b_instruct'),
+  go: createSimpleProviderPreset('file:///path/to/your/script.go'),
+  langchain: createSimpleProviderPreset('file:///path/to/langchain_agent.py'),
+  autogen: createSimpleProviderPreset('file:///path/to/autogen_agent.py'),
+  crewai: createSimpleProviderPreset('file:///path/to/crewai_agent.py'),
+  llamaindex: createSimpleProviderPreset('file:///path/to/llamaindex_agent.py'),
+  langgraph: createSimpleProviderPreset('file:///path/to/langgraph_agent.py'),
+  'openai-agents-sdk': createSimpleProviderPreset('file:///path/to/openai_agents.py'),
+  'pydantic-ai': createSimpleProviderPreset('file:///path/to/pydantic_ai_agent.py'),
+  'google-adk': createSimpleProviderPreset('file:///path/to/google_adk_agent.py'),
+  'claude-agent-sdk': createSimpleProviderPreset('file:///path/to/claude_agent.py'),
+  fireworks: createSimpleProviderPreset('fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct'),
+  together: createSimpleProviderPreset('together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo'),
+  cerebras: createSimpleProviderPreset('cerebras:llama3.1-70b'),
+  replicate: createSimpleProviderPreset('replicate:meta/meta-llama-3-70b-instruct'),
+  'generic-agent': createSimpleProviderPreset('file:///path/to/custom_agent.py'),
+  custom: (label) => ({
+    id: '',
+    label,
+    config: {},
+  }),
+};
+
+function buildProviderPreset(value: string, label?: string): ProviderOptions {
+  return providerPresetFactories[value]?.(label) ?? {
+    id: value,
+    config: {},
+    label,
+  };
+}
+
 export default function ProviderTypeSelector({
   provider,
   providerType,
@@ -475,536 +596,7 @@ export default function ProviderTypeSelector({
       provider_tag: selectedOption?.tag,
     });
 
-    if (value === 'javascript') {
-      setProvider(
-        {
-          id: 'file:///path/to/custom_provider.js',
-          config: {},
-          label: currentLabel,
-        },
-        'javascript',
-      );
-    } else if (value === 'python') {
-      setProvider(
-        {
-          id: 'file:///path/to/custom_provider.py',
-          config: {},
-          label: currentLabel,
-        },
-        'python',
-      );
-    } else if (value === 'http') {
-      setProvider(
-        {
-          id: 'http',
-          label: currentLabel,
-          config: {
-            url: '',
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: '{{prompt}}',
-            }),
-            stateful: true,
-          },
-        },
-        'http',
-      );
-    } else if (value === 'websocket') {
-      setProvider(
-        {
-          id: 'websocket',
-          label: currentLabel,
-          config: {
-            type: 'websocket',
-            url: 'wss://example.com/ws',
-            messageTemplate: '{"message": {{prompt | dump}}}',
-            transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
-            timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
-            stateful: true,
-          },
-        },
-        'websocket',
-      );
-    } else if (value === 'browser') {
-      setProvider(
-        {
-          id: 'browser',
-          label: currentLabel,
-          config: {
-            steps: [
-              {
-                action: 'navigate',
-                args: { url: 'https://example.com' },
-              },
-            ],
-          },
-        },
-        'browser',
-      );
-    } else if (value === 'openai') {
-      setProvider(
-        {
-          id: DEFAULT_OPENAI_TARGET_ID,
-          config: {},
-          label: currentLabel,
-        },
-        'openai',
-      );
-    } else if (value === 'anthropic') {
-      setProvider(
-        {
-          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
-          config: {},
-          label: currentLabel,
-        },
-        'anthropic',
-      );
-    } else if (value === 'azure') {
-      setProvider(
-        {
-          id: 'azure:chat:your-deployment-name',
-          config: {},
-          label: currentLabel,
-        },
-        'azure',
-      );
-    } else if (value === 'google') {
-      setProvider(
-        {
-          id: 'google:gemini-2.5-pro',
-          config: {},
-          label: currentLabel,
-        },
-        'google',
-      );
-    } else if (value === 'vertex') {
-      setProvider(
-        {
-          id: 'vertex:gemini-2.5-pro',
-          config: {},
-          label: currentLabel,
-        },
-        'vertex',
-      );
-    } else if (value === 'mistral') {
-      setProvider(
-        {
-          id: 'mistral:mistral-large-latest',
-          config: {},
-          label: currentLabel,
-        },
-        'mistral',
-      );
-    } else if (value === 'cohere') {
-      setProvider(
-        {
-          id: 'cohere:command-a-03-2025',
-          config: {},
-          label: currentLabel,
-        },
-        'cohere',
-      );
-    } else if (value === 'groq') {
-      setProvider(
-        {
-          id: 'groq:llama-3.1-70b-versatile',
-          config: {},
-          label: currentLabel,
-        },
-        'groq',
-      );
-    } else if (value === 'deepseek') {
-      setProvider(
-        {
-          id: 'deepseek:deepseek-chat',
-          config: {},
-          label: currentLabel,
-        },
-        'deepseek',
-      );
-    } else if (value === 'openrouter') {
-      setProvider(
-        {
-          id: 'openrouter:openai/gpt-5.4',
-          config: {},
-          label: currentLabel,
-        },
-        'openrouter',
-      );
-    } else if (value === 'bedrock') {
-      setProvider(
-        {
-          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
-          config: {},
-          label: currentLabel,
-        },
-        'bedrock',
-      );
-    } else if (value === 'bedrock-agent') {
-      setProvider(
-        {
-          id: 'bedrock:agent:your-agent-id',
-          config: {},
-          label: currentLabel,
-        },
-        'bedrock-agent',
-      );
-    } else if (value === 'sagemaker') {
-      setProvider(
-        {
-          id: 'sagemaker:your-endpoint-name',
-          config: {},
-          label: currentLabel,
-        },
-        'sagemaker',
-      );
-    } else if (value === 'huggingface') {
-      setProvider(
-        {
-          id: 'huggingface:meta-llama/Meta-Llama-3-70B-Instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'huggingface',
-      );
-    } else if (value === 'ollama') {
-      setProvider(
-        {
-          id: 'ollama:llama3',
-          config: {},
-          label: currentLabel,
-        },
-        'ollama',
-      );
-    } else if (value === 'llama.cpp') {
-      setProvider(
-        {
-          id: 'llama.cpp:http://localhost:8080/completion',
-          config: {},
-          label: currentLabel,
-        },
-        'llama.cpp',
-      );
-    } else if (value === 'llamafile') {
-      setProvider(
-        {
-          id: 'llamafile:http://localhost:8080/v1/chat/completions',
-          config: {},
-          label: currentLabel,
-        },
-        'llamafile',
-      );
-    } else if (value === 'localai') {
-      setProvider(
-        {
-          id: 'localai:gpt-4',
-          config: {},
-          label: currentLabel,
-        },
-        'localai',
-      );
-    } else if (value === 'vllm') {
-      setProvider(
-        {
-          id: 'vllm:http://localhost:8000/v1',
-          config: {},
-          label: currentLabel,
-        },
-        'vllm',
-      );
-    } else if (value === 'text-generation-webui') {
-      setProvider(
-        {
-          id: 'text-generation-webui:http://localhost:5000',
-          config: {},
-          label: currentLabel,
-        },
-        'text-generation-webui',
-      );
-    } else if (value === 'perplexity') {
-      setProvider(
-        {
-          id: 'perplexity:sonar',
-          config: {},
-          label: currentLabel,
-        },
-        'perplexity',
-      );
-    } else if (value === 'xai') {
-      setProvider(
-        {
-          id: 'xai:grok-4.20-reasoning',
-          config: {},
-          label: currentLabel,
-        },
-        'xai',
-      );
-    } else if (value === 'ai21') {
-      setProvider(
-        {
-          id: 'ai21:jamba-large',
-          config: {},
-          label: currentLabel,
-        },
-        'ai21',
-      );
-    } else if (value === 'voyage') {
-      setProvider(
-        {
-          id: 'voyage:voyage-3',
-          config: {},
-          label: currentLabel,
-        },
-        'voyage',
-      );
-    } else if (value === 'cloudflare-ai') {
-      setProvider(
-        {
-          id: 'cloudflare-ai:@cf/meta/llama-3-8b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'cloudflare-ai',
-      );
-    } else if (value === 'databricks') {
-      setProvider(
-        {
-          id: 'databricks:databricks-meta-llama-3-1-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'databricks',
-      );
-    } else if (value === 'fal') {
-      setProvider(
-        {
-          id: 'fal:fal-ai/flux/dev',
-          config: {},
-          label: currentLabel,
-        },
-        'fal',
-      );
-    } else if (value === 'github') {
-      setProvider(
-        {
-          id: 'github:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'github',
-      );
-    } else if (value === 'hyperbolic') {
-      setProvider(
-        {
-          id: 'hyperbolic:meta-llama/Meta-Llama-3.1-70B-Instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'hyperbolic',
-      );
-    } else if (value === 'mcp') {
-      setProvider(
-        {
-          id: 'mcp',
-          label: currentLabel,
-          config: {
-            enabled: true,
-            verbose: false,
-          },
-        },
-        'mcp',
-      );
-    } else if (value === 'aimlapi') {
-      setProvider(
-        {
-          id: 'aimlapi:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'aimlapi',
-      );
-    } else if (value === 'exec') {
-      setProvider(
-        {
-          id: 'exec:/path/to/script.sh',
-          config: {},
-          label: currentLabel,
-        },
-        'exec',
-      );
-    } else if (value === 'helicone') {
-      setProvider(
-        {
-          id: 'helicone:openai/gpt-4.1',
-          config: {},
-          label: currentLabel,
-        },
-        'helicone',
-      );
-    } else if (value === 'jfrog') {
-      setProvider(
-        {
-          id: 'jfrog:llama_3_8b_instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'jfrog',
-      );
-    } else if (value === 'go') {
-      setProvider(
-        {
-          id: 'file:///path/to/your/script.go',
-          config: {},
-          label: currentLabel,
-        },
-        'go',
-      );
-    } else if (value === 'langchain') {
-      setProvider(
-        {
-          id: 'file:///path/to/langchain_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'langchain',
-      );
-    } else if (value === 'autogen') {
-      setProvider(
-        {
-          id: 'file:///path/to/autogen_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'autogen',
-      );
-    } else if (value === 'crewai') {
-      setProvider(
-        {
-          id: 'file:///path/to/crewai_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'crewai',
-      );
-    } else if (value === 'llamaindex') {
-      setProvider(
-        {
-          id: 'file:///path/to/llamaindex_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'llamaindex',
-      );
-    } else if (value === 'langgraph') {
-      setProvider(
-        {
-          id: 'file:///path/to/langgraph_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'langgraph',
-      );
-    } else if (value === 'openai-agents-sdk') {
-      setProvider(
-        {
-          id: 'file:///path/to/openai_agents.py',
-          config: {},
-          label: currentLabel,
-        },
-        'openai-agents-sdk',
-      );
-    } else if (value === 'pydantic-ai') {
-      setProvider(
-        {
-          id: 'file:///path/to/pydantic_ai_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'pydantic-ai',
-      );
-    } else if (value === 'google-adk') {
-      setProvider(
-        {
-          id: 'file:///path/to/google_adk_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'google-adk',
-      );
-    } else if (value === 'claude-agent-sdk') {
-      setProvider(
-        {
-          id: 'file:///path/to/claude_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'claude-agent-sdk',
-      );
-    } else if (value === 'fireworks') {
-      setProvider(
-        {
-          id: 'fireworks:accounts/fireworks/models/llama-v3p1-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'fireworks',
-      );
-    } else if (value === 'together') {
-      setProvider(
-        {
-          id: 'together:meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo',
-          config: {},
-          label: currentLabel,
-        },
-        'together',
-      );
-    } else if (value === 'cerebras') {
-      setProvider(
-        {
-          id: 'cerebras:llama3.1-70b',
-          config: {},
-          label: currentLabel,
-        },
-        'cerebras',
-      );
-    } else if (value === 'replicate') {
-      setProvider(
-        {
-          id: 'replicate:meta/meta-llama-3-70b-instruct',
-          config: {},
-          label: currentLabel,
-        },
-        'replicate',
-      );
-    } else if (value === 'generic-agent') {
-      setProvider(
-        {
-          id: 'file:///path/to/custom_agent.py',
-          config: {},
-          label: currentLabel,
-        },
-        'generic-agent',
-      );
-    } else if (value === 'custom') {
-      setProvider(
-        {
-          id: '',
-          label: currentLabel,
-          config: {},
-        },
-        'custom',
-      );
-    } else {
-      setProvider(
-        {
-          id: value,
-          config: {},
-          label: currentLabel,
-        },
-        value,
-      );
-    }
+    setProvider(buildProviderPreset(value, currentLabel), value);
   };
 
   // Handle edit/change button click

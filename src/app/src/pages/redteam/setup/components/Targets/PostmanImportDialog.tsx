@@ -67,6 +67,152 @@ interface PostmanImportDialogProps {
   }) => void;
 }
 
+function findAllRequests(items: PostmanCollectionItem[], path: string = ''): PostmanRequest[] {
+  const requests: PostmanRequest[] = [];
+
+  for (const item of items) {
+    const currentPath = path ? `${path} / ${item.name}` : item.name || '';
+
+    if (item.request) {
+      requests.push({
+        name: item.name || 'Unnamed Request',
+        path: currentPath,
+        request: item.request as PostmanRequest['request'],
+      });
+    }
+
+    if (item.item && Array.isArray(item.item)) {
+      requests.push(...findAllRequests(item.item, currentPath));
+    }
+  }
+
+  return requests;
+}
+
+function parsePostmanRequests(text: string): PostmanRequest[] {
+  const parsed = JSON.parse(text) as PostmanCollection;
+  let requests: PostmanRequest[] = [];
+
+  if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
+    requests = findAllRequests(parsed.item);
+  } else if (parsed.request) {
+    requests = [
+      {
+        name: parsed.name || 'Request',
+        path: parsed.name || 'Request',
+        request: parsed.request as PostmanRequest['request'],
+      },
+    ];
+  } else {
+    throw new Error('Unable to find requests in JSON. Please paste a Postman collection or request.');
+  }
+
+  if (requests.length === 0) {
+    throw new Error('No valid requests found in the collection.');
+  }
+
+  return requests;
+}
+
+function extractRequestUrl(request: PostmanRequest['request']) {
+  if (typeof request.url === 'string') {
+    return request.url;
+  }
+  if (request.url?.raw) {
+    return request.url.raw;
+  }
+  if (!request.url) {
+    return '';
+  }
+
+  const protocol = request.url.protocol || 'https';
+  const host = Array.isArray(request.url.host) ? request.url.host.join('.') : request.url.host || '';
+  const path = Array.isArray(request.url.path) ? request.url.path.join('/') : '';
+  return `${protocol}://${host}/${path}`;
+}
+
+function extractRequestHeaders(request: PostmanRequest['request']) {
+  const headers: Record<string, string> = {};
+  if (!Array.isArray(request.header)) {
+    return headers;
+  }
+
+  for (const header of request.header) {
+    if (header.key && !header.disabled) {
+      headers[header.key] = header.value || '';
+    }
+  }
+
+  return headers;
+}
+
+function convertBodyEntriesToJson(entries: unknown) {
+  const result: Record<string, string> = {};
+  const bodyEntries = Array.isArray(entries) ? entries : [];
+
+  for (const item of bodyEntries) {
+    if (
+      typeof item === 'object' &&
+      item !== null &&
+      'key' in item &&
+      !('disabled' in item && item.disabled)
+    ) {
+      result[item.key as string] = (item.value as string) || '';
+    }
+  }
+
+  return JSON.stringify(result, null, 2);
+}
+
+function normalizePromptVariable(body: string) {
+  const variableMatches = body.match(/\{\{[^}]+\}\}/g);
+  if (variableMatches && variableMatches.length === 1) {
+    return body.replace(variableMatches[0], '{{prompt}}');
+  }
+  return body;
+}
+
+function extractRequestBody(request: PostmanRequest['request']) {
+  if (!request.body) {
+    return '';
+  }
+
+  let body = '';
+  if (request.body.mode === 'raw') {
+    body = request.body.raw || '';
+  } else if (request.body.mode === 'formdata') {
+    body = convertBodyEntriesToJson(request.body.formdata);
+  } else if (request.body.mode === 'urlencoded') {
+    body = convertBodyEntriesToJson(request.body.urlencoded);
+  }
+
+  return body ? normalizePromptVariable(body) : body;
+}
+
+function buildImportedRequestConfig(request: PostmanRequest['request']) {
+  return {
+    url: extractRequestUrl(request),
+    method: request.method || 'POST',
+    headers: extractRequestHeaders(request),
+    body: extractRequestBody(request),
+  };
+}
+
+function getMethodBadgeVariant(
+  method: string,
+): 'default' | 'secondary' | 'destructive' | 'outline' {
+  switch (method?.toUpperCase()) {
+    case 'GET':
+      return 'secondary';
+    case 'POST':
+      return 'default';
+    case 'DELETE':
+      return 'destructive';
+    default:
+      return 'outline';
+  }
+}
+
 const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogProps) => {
   const [postmanJson, setPostmanJson] = useState('');
   const [postmanError, setPostmanError] = useState('');
@@ -93,38 +239,8 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
       setPostmanJson(text);
       setPostmanError('');
 
-      // Automatically parse the collection after upload
       try {
-        const parsed = JSON.parse(text) as {
-          item?: PostmanCollectionItem[];
-          request?: unknown;
-          name?: string;
-        };
-
-        // Find all request objects
-        let requests: PostmanRequest[] = [];
-
-        if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
-          // It's a collection - recursively find all requests
-          requests = findAllRequests(parsed.item);
-        } else if (parsed.request) {
-          // It's a standalone request
-          requests = [
-            {
-              name: parsed.name || 'Request',
-              path: parsed.name || 'Request',
-              request: parsed.request as PostmanRequest['request'],
-            },
-          ];
-        } else {
-          throw new Error(
-            'Unable to find requests in JSON. Please paste a Postman collection or request.',
-          );
-        }
-
-        if (requests.length === 0) {
-          throw new Error('No valid requests found in the collection.');
-        }
+        const requests = parsePostmanRequests(text);
 
         setPostmanRequests(requests);
 
@@ -147,61 +263,13 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
     event.target.value = '';
   };
 
-  const findAllRequests = (items: PostmanCollectionItem[], path: string = ''): PostmanRequest[] => {
-    const requests: PostmanRequest[] = [];
-
-    for (const item of items) {
-      const currentPath = path ? `${path} / ${item.name}` : item.name || '';
-
-      if (item.request) {
-        requests.push({
-          name: item.name || 'Unnamed Request',
-          path: currentPath,
-          request: item.request as PostmanRequest['request'],
-        });
-      }
-
-      // Recursively search nested items (folders)
-      if (item.item && Array.isArray(item.item)) {
-        requests.push(...findAllRequests(item.item, currentPath));
-      }
-    }
-
-    return requests;
-  };
-
   const handlePostmanParse = () => {
     setPostmanError('');
     setPostmanRequests([]);
     setSelectedRequestIndex(null);
 
     try {
-      const parsed = JSON.parse(postmanJson) as PostmanCollection;
-
-      // Find all request objects
-      let requests: PostmanRequest[] = [];
-
-      if (parsed.item && Array.isArray(parsed.item) && parsed.item.length > 0) {
-        // It's a collection - recursively find all requests
-        requests = findAllRequests(parsed.item);
-      } else if (parsed.request) {
-        // It's a standalone request
-        requests = [
-          {
-            name: parsed.name || 'Request',
-            path: parsed.name || 'Request',
-            request: parsed.request as PostmanRequest['request'],
-          },
-        ];
-      } else {
-        throw new Error(
-          'Unable to find requests in JSON. Please paste a Postman collection or request.',
-        );
-      }
-
-      if (requests.length === 0) {
-        throw new Error('No valid requests found in the collection.');
-      }
+      const requests = parsePostmanRequests(postmanJson);
 
       setPostmanRequests(requests);
 
@@ -226,111 +294,15 @@ const PostmanImportDialog = ({ open, onClose, onImport }: PostmanImportDialogPro
 
     try {
       const request = postmanRequests[selectedRequestIndex].request;
-
-      // Extract URL
-      let url = '';
-      if (typeof request.url === 'string') {
-        url = request.url;
-      } else if (request.url && request.url.raw) {
-        url = request.url.raw;
-      } else if (request.url) {
-        // Reconstruct URL from parts
-        const protocol = request.url.protocol || 'https';
-        const host = Array.isArray(request.url.host)
-          ? request.url.host.join('.')
-          : request.url.host || '';
-        const path = Array.isArray(request.url.path) ? request.url.path.join('/') : '';
-        url = `${protocol}://${host}/${path}`;
-      }
-
-      // Extract method
-      const method = request.method || 'POST';
-
-      // Extract headers
-      const headersObj: Record<string, string> = {};
-      if (request.header && Array.isArray(request.header)) {
-        for (const h of request.header) {
-          if (h.key && !h.disabled) {
-            headersObj[h.key] = h.value || '';
-          }
-        }
-      }
-
-      // Extract body
-      let body = '';
-      if (request.body) {
-        if (request.body.mode === 'raw') {
-          body = request.body.raw || '';
-        } else if (request.body.mode === 'formdata' && request.body.formdata) {
-          // Convert formdata to JSON representation
-          const formObj: Record<string, string> = {};
-          const formdataArray = Array.isArray(request.body.formdata) ? request.body.formdata : [];
-          for (const item of formdataArray) {
-            if (
-              typeof item === 'object' &&
-              item !== null &&
-              'key' in item &&
-              !('disabled' in item && item.disabled)
-            ) {
-              formObj[item.key as string] = (item.value as string) || '';
-            }
-          }
-          body = JSON.stringify(formObj, null, 2);
-        } else if (request.body.mode === 'urlencoded' && request.body.urlencoded) {
-          // Convert urlencoded to JSON representation
-          const urlEncodedObj: Record<string, string> = {};
-          const urlencodedArray = Array.isArray(request.body.urlencoded)
-            ? request.body.urlencoded
-            : [];
-          for (const item of urlencodedArray) {
-            if (
-              typeof item === 'object' &&
-              item !== null &&
-              'key' in item &&
-              !('disabled' in item && item.disabled)
-            ) {
-              urlEncodedObj[item.key as string] = (item.value as string) || '';
-            }
-          }
-          body = JSON.stringify(urlEncodedObj, null, 2);
-        }
-
-        // Replace single {{variable}} with {{prompt}}
-        if (body) {
-          const variableMatches = body.match(/\{\{[^}]+\}\}/g);
-          if (variableMatches && variableMatches.length === 1) {
-            body = body.replace(variableMatches[0], '{{prompt}}');
-          }
-        }
-      }
+      const importedRequest = buildImportedRequestConfig(request);
 
       // Call the import callback
-      onImport({
-        url,
-        method,
-        headers: headersObj,
-        body,
-      });
+      onImport(importedRequest);
 
       // Close dialog and reset state
       handleClose();
     } catch (error) {
       setPostmanError(error instanceof Error ? error.message : 'Failed to import request');
-    }
-  };
-
-  const getMethodBadgeVariant = (
-    method: string,
-  ): 'default' | 'secondary' | 'destructive' | 'outline' => {
-    switch (method?.toUpperCase()) {
-      case 'GET':
-        return 'secondary';
-      case 'POST':
-        return 'default';
-      case 'DELETE':
-        return 'destructive';
-      default:
-        return 'outline';
     }
   };
 
