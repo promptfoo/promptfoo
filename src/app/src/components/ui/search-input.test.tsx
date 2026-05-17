@@ -21,9 +21,7 @@ describe('SearchInput', () => {
       screen.getByRole('searchbox', { name: 'Search evaluation results' }),
     ).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole('button', { name: 'Clear evaluation results search' }),
-    );
+    await user.click(screen.getByRole('button', { name: 'Clear evaluation results search' }));
 
     expect(handleChange).toHaveBeenCalledWith('');
   });

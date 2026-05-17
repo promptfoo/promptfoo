@@ -136,12 +136,12 @@ describe('MediaFilters', () => {
       { evalId: 'eval-3', description: 'Third Test' },
     ];
 
-    it('renders the eval filter combobox with durable accessible naming', () => {
+    it('renders the eval filter opener with durable accessible naming', () => {
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      const evalCombobox = screen.getByRole('combobox', { name: 'Filter by evaluation' });
-      expect(evalCombobox).toHaveAttribute('aria-haspopup', 'listbox');
-      expect(evalCombobox).toHaveAttribute('aria-expanded', 'false');
+      const evalFilterButton = screen.getByRole('button', { name: 'Filter by evaluation' });
+      expect(evalFilterButton).toHaveAttribute('aria-haspopup', 'listbox');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
       expect(screen.getByText('Current evaluation: All Evaluations')).toBeInTheDocument();
     });
 
@@ -162,7 +162,7 @@ describe('MediaFilters', () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      await user.click(screen.getByRole('combobox', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
 
       // The popover should show search input and eval options
       expect(await screen.findByLabelText('Search evaluations')).toHaveFocus();
@@ -179,40 +179,43 @@ describe('MediaFilters', () => {
         />,
       );
 
-      const evalCombobox = screen.getByRole('combobox', { name: 'Filter by evaluation' });
-      evalCombobox.focus();
+      const evalFilterButton = screen.getByRole('button', { name: 'Filter by evaluation' });
+      evalFilterButton.focus();
 
       await user.keyboard('{ArrowDown}');
 
-      expect(evalCombobox).toHaveAttribute('aria-expanded', 'true');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'true');
       expect(await screen.findByRole('listbox', { name: 'Evaluations' })).toBeInTheDocument();
 
+      const evalSearchCombobox = screen.getByRole('combobox', { name: 'Search evaluations' });
       await user.keyboard('{ArrowDown}');
-      expect(evalCombobox.getAttribute('aria-activedescendant')).toMatch(/-option-0$/);
+      expect(evalSearchCombobox.getAttribute('aria-activedescendant')).toMatch(/-option-0$/);
 
       await user.keyboard('{ArrowDown}');
-      expect(evalCombobox.getAttribute('aria-activedescendant')).toMatch(/-option-1$/);
+      expect(evalSearchCombobox.getAttribute('aria-activedescendant')).toMatch(/-option-1$/);
 
       await user.keyboard('{Enter}');
 
       expect(onEvalFilterChange).toHaveBeenCalledWith('eval-1');
-      expect(evalCombobox).toHaveAttribute('aria-expanded', 'false');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('closes a keyboard-open eval filter with escape', async () => {
       const user = userEvent.setup();
       render(<MediaFilters {...defaultProps} evals={mockEvals} />);
 
-      const evalCombobox = screen.getByRole('combobox', { name: 'Filter by evaluation' });
-      evalCombobox.focus();
+      const evalFilterButton = screen.getByRole('button', { name: 'Filter by evaluation' });
+      evalFilterButton.focus();
 
       await user.keyboard('{ArrowDown}');
-      expect(evalCombobox).toHaveAttribute('aria-expanded', 'true');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'true');
 
       await user.keyboard('{Escape}');
 
-      expect(evalCombobox).toHaveAttribute('aria-expanded', 'false');
-      expect(evalCombobox).not.toHaveAttribute('aria-activedescendant');
+      expect(evalFilterButton).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.queryByRole('combobox', { name: 'Search evaluations' }),
+      ).not.toBeInTheDocument();
     });
 
     it('calls onEvalSearchQueryChange when typing in search', async () => {
@@ -226,7 +229,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByRole('combobox', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
 
       const searchInput = await screen.findByLabelText('Search evaluations');
       await user.type(searchInput, 'Sec');
@@ -248,7 +251,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByRole('combobox', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
 
       const searchInput = await screen.findByLabelText('Search evaluations');
       searchInput.focus();
@@ -340,7 +343,7 @@ describe('MediaFilters', () => {
         />,
       );
 
-      await user.click(screen.getByRole('combobox', { name: 'Filter by evaluation' }));
+      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
 
       expect(await screen.findByLabelText('Search evaluations')).toBeInTheDocument();
 

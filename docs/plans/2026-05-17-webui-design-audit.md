@@ -33,24 +33,24 @@ This pass combined:
 
 ### Live top-level routes visited
 
-| Route | Observed state |
-| --- | --- |
-| `/` | Redirected to `/eval` |
-| `/eval` | Live results page with populated eval detail |
-| `/evals` | Populated evaluations table |
-| `/history` | Populated history table |
-| `/media` | Populated media library |
-| `/prompts` | Populated prompts table |
-| `/datasets` | Populated datasets table |
-| `/model-audit` | Empty-state latest page |
-| `/model-audits` | Empty-state history page |
-| `/model-audit/setup` | Setup page |
+| Route                           | Observed state                                                 |
+| ------------------------------- | -------------------------------------------------------------- |
+| `/`                             | Redirected to `/eval`                                          |
+| `/eval`                         | Live results page with populated eval detail                   |
+| `/evals`                        | Populated evaluations table                                    |
+| `/history`                      | Populated history table                                        |
+| `/media`                        | Populated media library                                        |
+| `/prompts`                      | Populated prompts table                                        |
+| `/datasets`                     | Populated datasets table                                       |
+| `/model-audit`                  | Empty-state latest page                                        |
+| `/model-audits`                 | Empty-state history page                                       |
+| `/model-audit/setup`            | Setup page                                                     |
 | `/redteam/setup#0` through `#5` | All wizard steps visited; initial setup modal remained visible |
-| `/reports` | Populated red-team reports index |
-| `/reports?evalId=...` | Live report detail page visited |
-| `/setup` | Eval creation flow |
-| `/login` | Redirected to `/eval` in the current authenticated local state |
-| `/does-not-exist` | 404 page |
+| `/reports`                      | Populated red-team reports index                               |
+| `/reports?evalId=...`           | Live report detail page visited                                |
+| `/setup`                        | Eval creation flow                                             |
+| `/login`                        | Redirected to `/eval` in the current authenticated local state |
+| `/does-not-exist`               | 404 page                                                       |
 
 ### Source-audited but not fully live-exercised
 

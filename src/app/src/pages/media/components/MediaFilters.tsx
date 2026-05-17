@@ -261,17 +261,11 @@ export function MediaFilters({
             <Button
               ref={evalFilterTriggerRef}
               variant="outline"
-              role="combobox"
               aria-label="Filter by evaluation"
               aria-describedby={evalFilterDescriptionId}
               aria-expanded={evalSearchOpen}
               aria-haspopup="listbox"
               aria-controls={evalFilterListboxId}
-              aria-activedescendant={
-                highlightedEvalIndex >= 0
-                  ? `${evalFilterListboxId}-option-${highlightedEvalIndex}`
-                  : undefined
-              }
               onKeyDown={handleEvalFilterKeyDown}
               className={cn(
                 'w-[160px] sm:w-[220px] h-9 justify-between font-normal bg-white dark:bg-zinc-900',
@@ -298,6 +292,15 @@ export function MediaFilters({
               <Input
                 id={evalSearchInputId}
                 ref={evalSearchInputRef}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls={evalFilterListboxId}
+                aria-expanded={evalSearchOpen}
+                aria-activedescendant={
+                  highlightedEvalIndex >= 0
+                    ? `${evalFilterListboxId}-option-${highlightedEvalIndex}`
+                    : undefined
+                }
                 placeholder="Search evaluations..."
                 value={evalSearchQuery}
                 onChange={(e) => {
