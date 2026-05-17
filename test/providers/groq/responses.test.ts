@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqResponsesProvider } from '../../../src/providers/groq/index';
 import * as fetchModule from '../../../src/util/fetch/index';
+import { mockProcessEnv } from '../../util/utils';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
@@ -11,11 +12,11 @@ describe('GroqResponsesProvider', () => {
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   beforeEach(() => {
-    process.env.GROQ_API_KEY = 'test-key';
+    mockProcessEnv({ GROQ_API_KEY: 'test-key' });
   });
 
   afterEach(async () => {
-    delete process.env.GROQ_API_KEY;
+    mockProcessEnv({ GROQ_API_KEY: undefined });
     await clearCache();
     vi.clearAllMocks();
   });
@@ -51,9 +52,9 @@ describe('GroqResponsesProvider', () => {
       expect(provider['isReasoningModel']()).toBe(true);
     });
 
-    it('should identify deepseek-r1 as reasoning model', () => {
+    it('should not identify retired deepseek-r1 as reasoning model', () => {
       const provider = new GroqResponsesProvider('deepseek-r1-distill-llama-70b', {});
-      expect(provider['isReasoningModel']()).toBe(true);
+      expect(provider['isReasoningModel']()).toBe(false);
     });
 
     it('should identify qwen as reasoning model', () => {
@@ -70,11 +71,6 @@ describe('GroqResponsesProvider', () => {
   describe('temperature support', () => {
     it('should support temperature for gpt-oss models', () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
-      expect(provider['supportsTemperature']()).toBe(true);
-    });
-
-    it('should support temperature for deepseek-r1 models', () => {
-      const provider = new GroqResponsesProvider('deepseek-r1-distill-llama-70b', {});
       expect(provider['supportsTemperature']()).toBe(true);
     });
 
@@ -236,9 +232,9 @@ describe('GroqResponsesProvider', () => {
     });
 
     it('should handle missing API key', async () => {
-      delete process.env.GROQ_API_KEY;
+      mockProcessEnv({ GROQ_API_KEY: undefined });
       const originalOpenAIKey = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
@@ -246,7 +242,7 @@ describe('GroqResponsesProvider', () => {
       } finally {
         // Restore OPENAI_API_KEY if it was set
         if (originalOpenAIKey) {
-          process.env.OPENAI_API_KEY = originalOpenAIKey;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAIKey });
         }
       }
     });

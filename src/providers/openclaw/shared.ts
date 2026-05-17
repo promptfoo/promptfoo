@@ -153,8 +153,11 @@ function resolveGatewayPortOverride(env?: Record<string, string | undefined>): n
 
 function toAuthSecret(
   kind: OpenClawAuthSecret['kind'],
-  value: string | undefined,
+  value: unknown,
 ): OpenClawAuthSecret | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
   const trimmed = value?.trim();
   return trimmed ? { kind, value: trimmed } : undefined;
 }
@@ -377,6 +380,15 @@ export function buildOpenClawContextHeaders(config?: OpenClawConfig): Record<str
   }
 
   return headers;
+}
+
+export function resolveOpenClawBillingModelName(config?: OpenClawConfig): string | undefined {
+  const backendModel = normalizeHeaderValue(config?.backend_model || config?.model_override);
+  if (!backendModel) {
+    return undefined;
+  }
+
+  return backendModel.startsWith('openai/') ? backendModel.slice('openai/'.length) : backendModel;
 }
 
 /**

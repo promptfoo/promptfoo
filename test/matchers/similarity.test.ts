@@ -6,6 +6,7 @@ import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
 import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import type { GradingConfig } from '../../src/types/index';
@@ -204,25 +205,27 @@ describe('matchesSimilarity', () => {
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-    const expected = 'Expected {{ var }}';
-    const output = 'Output {{ var }}';
-    const threshold = 0.8;
-    const grading: GradingConfig = {
-      provider: DefaultEmbeddingProvider,
-    };
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      const expected = 'Expected {{ var }}';
+      const output = 'Output {{ var }}';
+      const threshold = 0.8;
+      const grading: GradingConfig = {
+        provider: DefaultEmbeddingProvider,
+      };
 
-    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
-      embedding: [1, 2, 3],
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+        embedding: [1, 2, 3],
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
 
-    await matchesSimilarity(expected, output, threshold, false, grading);
+      await matchesSimilarity(expected, output, threshold, false, grading);
 
-    expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Expected {{ var }}');
-    expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Output {{ var }}');
-
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Expected {{ var }}');
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).toHaveBeenCalledWith('Output {{ var }}');
+    } finally {
+      restoreEnv();
+    }
   });
 
   describe('dot_product metric', () => {

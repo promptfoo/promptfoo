@@ -7,7 +7,7 @@ import { FILE_METADATA_KEY } from '../../src/constants';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
-import { type ApiProvider, type TestSuite } from '../../src/types/index';
+import { type ApiProvider, type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -410,5 +410,99 @@ describeEvaluator('evaluator metadata', () => {
       'iter-session-3',
     ]);
     expect(capturedContext.result.metadata.sessionId).toBeUndefined();
+  });
+
+  it('should persist afterEach hook namedScores, metadata, and response.metadata into result and metrics', async () => {
+    const mockExtension = 'file://test-extension.js:afterEach';
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'afterEach') {
+        const ctx = context as { test: any; result: any };
+        return {
+          ...ctx,
+          result: {
+            ...ctx.result,
+            namedScores: {
+              ...ctx.result.namedScores,
+              hook_metric: 42,
+            },
+            metadata: {
+              ...ctx.result.metadata,
+              hook_key: 'hook_value',
+            },
+            response: {
+              ...ctx.result.response,
+              metadata: {
+                ...ctx.result.response?.metadata,
+                session_url: 'https://example.com/session/123',
+              },
+            },
+          },
+        };
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: {},
+          assert: [{ type: 'equals', value: 'Test output' }],
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    // Verify hook's namedScores flowed into prompt metrics
+    expect(summary.prompts[0].metrics?.namedScores).toHaveProperty('hook_metric', 42);
+
+    // Verify hook's metadata and namedScores are in the persisted result
+    const result = summary.results[0];
+    expect(result.metadata).toHaveProperty('hook_key', 'hook_value');
+    expect(result.namedScores).toHaveProperty('hook_metric', 42);
+    expect(result.response?.metadata).toHaveProperty(
+      'session_url',
+      'https://example.com/session/123',
+    );
+  });
+
+  it('should persist row without hook modifications when afterEach hook throws', async () => {
+    const mockExtension = 'file://test-extension.js:afterEach';
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, _context) => {
+      if (hookName === 'afterEach') {
+        throw new Error('Hook exploded');
+      }
+      return _context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          vars: {},
+          assert: [{ type: 'equals', value: 'Test output' }],
+        },
+      ],
+      extensions: [mockExtension],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = (await evalRecord.toEvaluateSummary()) as EvaluateSummaryV3;
+
+    // Row should still be persisted despite hook failure
+    expect(summary.results).toHaveLength(1);
+    expect(summary.results[0].success).toBe(true);
+    expect(summary.stats.successes).toBe(1);
   });
 });

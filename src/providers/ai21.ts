@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -14,14 +14,42 @@ import type {
 
 const AI21_CHAT_MODELS = [
   {
-    id: 'jamba-1.5-mini',
+    id: 'jamba-mini',
     cost: {
       input: 0.2 / 1000000,
       output: 0.4 / 1000000,
     },
   },
   {
-    id: 'jamba-1.5-large',
+    id: 'jamba-mini-2',
+    cost: {
+      input: 0.2 / 1000000,
+      output: 0.4 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-mini-2-2026-01',
+    cost: {
+      input: 0.2 / 1000000,
+      output: 0.4 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-large',
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-large-1.7',
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-large-1.7-2025-07',
     cost: {
       input: 2 / 1000000,
       output: 8 / 1000000,
@@ -38,6 +66,8 @@ interface AI21ChatCompletionOptions {
   max_tokens?: number;
   response_format?: { type: 'json_object' | 'text' };
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
@@ -166,7 +196,7 @@ export class AI21ChatCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {

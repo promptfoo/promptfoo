@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TimestampSchema } from './common';
+import { ErrorResponseSchema, TimestampSchema } from './common';
 
 // ---------------------------------------------------------------------------
 // GET /api/model-audit/check-installed
@@ -12,6 +12,29 @@ export const CheckInstalledResponseSchema = z.object({
 });
 
 export type CheckInstalledResponse = z.infer<typeof CheckInstalledResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// GET /api/model-audit/scanners
+// ---------------------------------------------------------------------------
+
+export const ScannerInfoSchema = z
+  .object({
+    id: z.string(),
+    class: z.string().optional().default(''),
+    description: z.string().optional().default(''),
+    extensions: z.array(z.string()).optional().default([]),
+    dependencies: z.array(z.string()).optional().default([]),
+  })
+  .passthrough();
+
+export const ListScannersResponseSchema = z
+  .object({
+    scanners: z.array(ScannerInfoSchema),
+  })
+  .passthrough();
+
+export type ScannerInfo = z.infer<typeof ScannerInfoSchema>;
+export type ListScannersResponse = z.infer<typeof ListScannersResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // POST /api/model-audit/check-path
@@ -48,7 +71,7 @@ export const ScanRequestSchema = z.object({
   options: z
     .object({
       blacklist: z.array(z.string()).optional(),
-      timeout: z.number().positive().optional(),
+      timeout: z.number().nonnegative().optional(),
       maxFileSize: z.string().optional(),
       maxTotalSize: z.string().optional(),
       verbose: z.boolean().optional(),
@@ -61,9 +84,21 @@ export const ScanRequestSchema = z.object({
       sbom: z.string().optional(),
       output: z.string().optional(),
       maxSize: z.string().optional(),
+      scanners: z.array(z.string()).optional(),
+      excludeScanner: z.array(z.string()).optional(),
       persist: z.boolean().optional(),
       name: z.string().optional(),
       author: z.string().optional(),
+    })
+    .superRefine((options, ctx) => {
+      if (options.maxTotalSize !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maxTotalSize'],
+          message:
+            'options.maxTotalSize is no longer supported. Use options.maxSize for the scanner limit.',
+        });
+      }
     })
     .optional()
     .default({}),
@@ -71,17 +106,40 @@ export const ScanRequestSchema = z.object({
 
 export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 
-// Scan response is highly variable (success vs various error shapes),
-// so we do not apply a strict response schema.
+// Scan response is highly variable because it includes scanner-specific output.
+// Keep the API contract explicit while preserving the modelaudit JSON payload.
+export const ScanResponseSchema = z
+  .object({
+    rawOutput: z.string().optional(),
+    auditId: z.string().optional(),
+    persisted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const ScanErrorResponseSchema = ErrorResponseSchema;
+
+export type ScanResponse = z.infer<typeof ScanResponseSchema>;
+export type ScanErrorResponse = z.infer<typeof ScanErrorResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // GET /api/model-audit/scans
 // ---------------------------------------------------------------------------
 
+export const MODEL_AUDIT_SORT_FIELDS = [
+  'createdAt',
+  'failedChecks',
+  'hasErrors',
+  'id',
+  'modelPath',
+  'name',
+  'passedChecks',
+  'totalChecks',
+] as const;
+
 export const ListScansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(100),
   offset: z.coerce.number().int().min(0).optional().default(0),
-  sort: z.enum(['createdAt', 'name', 'modelPath']).optional().default('createdAt'),
+  sort: z.enum(MODEL_AUDIT_SORT_FIELDS).optional().default('createdAt'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   search: z.string().optional(),
 });
@@ -104,6 +162,12 @@ const ModelAuditRecordSchema = z
     passedChecks: z.number().nullable().optional(),
     failedChecks: z.number().nullable().optional(),
     metadata: z.unknown().nullable().optional(),
+    modelId: z.string().nullable().optional(),
+    revisionSha: z.string().nullable().optional(),
+    contentHash: z.string().nullable().optional(),
+    modelSource: z.string().nullable().optional(),
+    sourceLastModified: z.number().nullable().optional(),
+    scannerVersion: z.string().nullable().optional(),
   })
   .passthrough();
 
@@ -162,12 +226,17 @@ export const ModelAuditSchemas = {
   CheckInstalled: {
     Response: CheckInstalledResponseSchema,
   },
+  ListScanners: {
+    Response: ListScannersResponseSchema,
+  },
   CheckPath: {
     Request: CheckPathRequestSchema,
     Response: CheckPathResponseSchema,
   },
   Scan: {
     Request: ScanRequestSchema,
+    Response: ScanResponseSchema,
+    ErrorResponse: ScanErrorResponseSchema,
   },
   ListScans: {
     Query: ListScansQuerySchema,

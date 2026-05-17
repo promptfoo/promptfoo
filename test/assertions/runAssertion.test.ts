@@ -3018,6 +3018,36 @@ describe('runAssertion', () => {
       });
     });
 
+    it('should use resolved vars for context-based grading', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'file://docs/france.md',
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test,
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        metadata: {
+          context: 'Paris is the capital of France.',
+        },
+      });
+    });
+
     it('should throw an error when vars object is missing', async () => {
       const assertion: Assertion = {
         type: 'context-relevance',
@@ -3314,6 +3344,112 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('inline function transforms (Node.js package)', () => {
+    it('should support a function as assertion transform', async () => {
+      const output = 'hello world';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'HELLO WORLD',
+        transform: (output) => String(output).toUpperCase(),
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should pass context to inline function transform', async () => {
+      const output = 'raw output';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'search, calculate',
+        transform: (_output, context: any) => {
+          const tools = context.metadata?.toolCalls ?? [];
+          return tools.map((t: any) => t.name).join(', ');
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output,
+          metadata: { toolCalls: [{ name: 'search' }, { name: 'calculate' }] },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should support async function as assertion transform', async () => {
+      const output = 'hello';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'hello async',
+        transform: async (output) => output + ' async',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should surface synchronous errors thrown by an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: () => {
+          throw new Error('inline transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('inline transform boom');
+    });
+
+    it('should surface async rejections from an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: async () => {
+          throw new Error('async transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('async transform boom');
+    });
+  });
+
   describe('file references', () => {
     it('should handle file reference in string value', async () => {
       const assertion: Assertion = {
@@ -3599,6 +3735,51 @@ describe('runAssertion', () => {
       expect(result.assertion?.value).toBe('User: {{ name }}');
       // Metadata object should exist and be extensible
       expect(result.metadata).toBeTruthy();
+    });
+
+    // Regression for https://github.com/promptfoo/promptfoo/issues/7861: the
+    // reporter claimed defaultTest llm-rubric rubrics sent raw {{var}} text to
+    // the grader. In reality the assertion pipeline renders the value before
+    // grading — so the grading LLM DOES receive the substituted string. Prove
+    // this by letting the assertion run all the way through a real grader
+    // provider and inspecting the prompt it received.
+    it('renders llm-rubric value with vars before calling the grader', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const capturingGrader = createMockProvider({
+        id: 'capturing-grader',
+        callApi: capturedPrompt,
+      });
+
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'Does the output correctly reference the input: {{myVar}}?',
+        provider: capturingGrader,
+      };
+
+      const test: AtomicTestCase = {
+        vars: { myVar: 'hello world' },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'static model output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      expect(gradingPrompt).toContain('hello world');
+      expect(gradingPrompt).not.toContain('{{myVar}}');
+
+      expect(result.metadata?.renderedAssertionValue).toBe(
+        'Does the output correctly reference the input: hello world?',
+      );
+      expect(result.assertion?.value).toBe(
+        'Does the output correctly reference the input: {{myVar}}?',
+      );
     });
   });
 });

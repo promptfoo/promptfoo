@@ -78,6 +78,99 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Test 1')).toBeInTheDocument();
   });
 
+  it('opens an existing test case from the keyboard', async () => {
+    const user = userEvent.setup();
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Test 1',
+            vars: { input: 'hello' },
+            assert: [{ type: 'contains', value: 'hi' }],
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    const testCaseRow = screen.getByRole('button', { name: 'Open test case 1 for editing' });
+    testCaseRow.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByTestId('test-case-dialog')).toBeInTheDocument();
+  });
+
+  it('exposes missing variables to assistive technology', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Test 1',
+            vars: {},
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={['input']} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Missing variables: input.')).toHaveClass('sr-only');
+  });
+
+  it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {
+    const user = userEvent.setup();
+    const onOpenYamlEditor = vi.fn();
+    (useStore as any).mockReturnValue({
+      config: { tests: 'file://tests.csv' },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} onOpenYamlEditor={onOpenYamlEditor} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByText('file://tests.csv')).toBeInTheDocument();
+    expect(
+      screen.getByText('Test entries from YAML are not editable in the UI editor.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Test Case' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit YAML' }));
+
+    expect(onOpenYamlEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a YAML-managed state for generated test configs', () => {
+    (useStore as any).mockReturnValue({
+      config: { tests: { path: 'file://generate-tests.js' } },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByText('file://generate-tests.js')).toBeInTheDocument();
+    expect(screen.queryByText('Something went wrong:')).toBeNull();
+  });
+
   describe('File Upload', () => {
     // Helper to create FileReader mock
     const createFileReaderMock = (fileContent: string) => {
@@ -575,7 +668,7 @@ describe('TestCasesSection', () => {
       );
 
       // Find the duplicate button by aria-label
-      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case' });
+      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case 1' });
       await user.click(duplicateButton);
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -605,7 +698,7 @@ describe('TestCasesSection', () => {
       );
 
       // Find the delete button by aria-label
-      const deleteButton = screen.getByRole('button', { name: 'Delete test case' });
+      const deleteButton = screen.getByRole('button', { name: 'Delete test case 1' });
       await act(async () => {
         const user = userEvent.setup();
         await user.click(deleteButton);

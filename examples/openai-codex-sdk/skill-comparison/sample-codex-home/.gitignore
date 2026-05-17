@@ -1,0 +1,5 @@
+# Intentionally empty so the example ships without Codex login state. The
+# README explains how to point CODEX_HOME_OVERRIDE at $HOME/.codex if you
+# want to reuse a real login.
+*
+!.gitignore

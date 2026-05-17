@@ -3,7 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiProvider,
@@ -154,18 +154,15 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getConfig() {
-    return Object.keys(this.config).reduce(
-      (options, key) => {
-        const optionName = key as keyof HuggingfaceTextGenerationOptions;
-        if (HuggingFaceTextGenerationKeys.has(optionName)) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      },
-      {} as Partial<
-        Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>
-      >,
-    );
+    return Object.keys(this.config).reduce<
+      Partial<Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>>
+    >((options, key) => {
+      const optionName = key as keyof HuggingfaceTextGenerationOptions;
+      if (HuggingFaceTextGenerationKeys.has(optionName)) {
+        options[optionName] = this.config[optionName];
+      }
+      return options;
+    }, {});
   }
 
   private useChatCompletionFormat(): boolean {
@@ -257,7 +254,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       logger.debug('Huggingface Inference API response', { data: response.data });
@@ -338,7 +335,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (response.data.error) {
@@ -441,7 +438,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (typeof response.data === 'object' && 'error' in response.data) {
@@ -536,7 +533,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (typeof response.data === 'object' && 'error' in response.data) {
@@ -626,7 +623,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (typeof response.data === 'object' && 'error' in response.data) {

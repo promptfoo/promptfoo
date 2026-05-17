@@ -6,6 +6,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -14,10 +15,11 @@ import {
   renderVarsInObject,
 } from '../../util/index';
 import invariant from '../../util/invariant';
+import { isClaudeOpus47Model } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -102,6 +104,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     );
   }
 
+  /**
+   * Claude Opus 4.7 deprecates `temperature` at the model level — the
+   * deployment returns 400 for any request that includes it. Opus 4.7 keeps
+   * the standard `max_tokens` field (not `max_completion_tokens`) and does
+   * not accept `reasoning_effort`, so we only strip temperature here and
+   * leave the rest of the chat body intact.
+   */
+  protected isClaudeOpus47(): boolean {
+    return isClaudeOpus47Model(this.deploymentName);
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -150,6 +163,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
+    const isClaudeOpus47 = this.isClaudeOpus47();
 
     // Get max tokens based on model type
     const maxTokensDefault = config.omitDefaults
@@ -206,7 +220,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           }
         : {
             ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
-            ...(temperature === undefined ? {} : { temperature }),
+            ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
           }),
       ...(topP === undefined ? {} : { top_p: topP }),
       ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
@@ -340,7 +354,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         context?.bustCache ?? context?.debug,
       );
@@ -361,6 +375,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data = responseData;
       }
     } catch (err) {
+      // Preserve the structured rate-limit signal so the scheduler honors
+      // the transport-layer fail-fast contract (no retry on hard quotas).
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? {},
+            },
+          },
+        };
+      }
       return {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };

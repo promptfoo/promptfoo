@@ -10,12 +10,14 @@ import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiRealtimeProvider } from '../src/providers/openai/realtime';
 import { OpenAiResponsesProvider } from '../src/providers/openai/responses';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
+import { mockProcessEnv } from './util/utils';
 
 import type { ProviderOptions } from '../src/types/index';
 
@@ -25,6 +27,7 @@ vi.mock('../src/util/fetch/index.ts');
 vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
 vi.mock('../src/providers/openai/embedding');
+vi.mock('../src/providers/openai/realtime');
 vi.mock('../src/providers/openai/responses');
 vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
@@ -472,6 +475,21 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load OpenAI GPT-5.5 chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.5');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.5', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5.5 dated snapshot chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.5-2026-04-23');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-5.5-2026-04-23',
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
   it('should load OpenAI Codex provider with model from provider path', async () => {
     const provider = await loadApiProvider('openai:codex:gpt-5.4');
 
@@ -480,12 +498,28 @@ describe('loadApiProvider', () => {
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
   });
 
+  it('should load OpenAI Codex provider with GPT-5.5 model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex:gpt-5.5');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex:gpt-5.5');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.5');
+  });
+
   it('should load OpenAI Codex SDK provider with model from provider path', async () => {
     const provider = await loadApiProvider('openai:codex-sdk:gpt-5.4-pro');
 
     expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
     expect(provider.id()).toBe('openai:codex-sdk:gpt-5.4-pro');
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4-pro');
+  });
+
+  it('should load OpenAI Codex SDK provider with GPT-5.5 Pro model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex-sdk:gpt-5.5-pro');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex-sdk:gpt-5.5-pro');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.5-pro');
   });
 
   it('should load OpenAI Codex provider with model from config when ID has no model', async () => {
@@ -523,6 +557,40 @@ describe('loadApiProvider', () => {
       expect(provider).toBeDefined();
     } finally {
       (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI audio shorthand to chat', async () => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-audio'];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = [];
+    try {
+      const provider = await loadApiProvider('openai:gpt-audio');
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-audio', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
+    }
+  });
+
+  it('should default OpenAI realtime to a current model', async () => {
+    const provider = await loadApiProvider('openai:realtime');
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-1.5', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should auto-route OpenAI realtime 2 shorthand to realtime', async () => {
+    const originalModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
+    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = ['gpt-realtime-2'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-realtime-2');
+      expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-2', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalModelNames;
     }
   });
 
@@ -577,6 +645,22 @@ describe('loadApiProvider', () => {
     try {
       const provider = await loadApiProvider('openai:gpt-5.4-pro');
       expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.4-pro', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI GPT-5.5 Pro shorthand to responses', async () => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = ['gpt-5.5-pro'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.5-pro');
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.5-pro', expect.any(Object));
       expect(provider).toBeDefined();
     } finally {
       (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
@@ -788,14 +872,14 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle provider with custom label template', async () => {
-    process.env.CUSTOM_LABEL = 'my-label';
+    mockProcessEnv({ CUSTOM_LABEL: 'my-label' });
     const provider = await loadApiProvider('echo', {
       options: {
         label: '{{ env.CUSTOM_LABEL }}',
       },
     });
     expect(provider.label).toBe('my-label');
-    delete process.env.CUSTOM_LABEL;
+    mockProcessEnv({ CUSTOM_LABEL: undefined });
   });
 
   it('should throw error when file provider array is loaded with loadApiProvider', async () => {
@@ -818,7 +902,7 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle file provider with environment variables', async () => {
-    process.env.OPENAI_API_KEY = 'test-key-from-env';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key-from-env' });
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4',
       config: {
@@ -848,7 +932,7 @@ describe('loadApiProvider', () => {
         }),
       }),
     );
-    delete process.env.OPENAI_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
   });
 
   it('should load multiple providers from yaml file using loadApiProviders', async () => {
