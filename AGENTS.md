@@ -10,7 +10,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 
 | Directory           | Purpose                         | Local Docs                   |
 | ------------------- | ------------------------------- | ---------------------------- |
-| `.agents/`          | Codex marketplace metadata      | `.agents/AGENTS.md`          |
+| `.agents/`          | Codex metadata and repo skills  | `.agents/AGENTS.md`          |
 | `.github/`          | GitHub Actions and workflows    | `.github/AGENTS.md`          |
 | `code-scan-action/` | Code scan GitHub Action wrapper | `code-scan-action/AGENTS.md` |
 | `docs/agents/`      | Reusable coding-agent docs      | `docs/agents/AGENTS.md`      |
@@ -24,7 +24,6 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
 | `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
 | `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
-| `src/ui/`           | Terminal UI components          | `src/ui/AGENTS.md`           |
 | `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
 | `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
 | `examples/`         | Example configs                 | `examples/AGENTS.md`         |
@@ -294,6 +293,7 @@ EOF
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
+- Keep tracked root-owned TypeScript files under the root compiler project unless they belong to an explicitly separate project such as `src/app/` or `test/code-scan-action/`.
 - Follow consistent import order (Biome handles sorting)
 - Use consistent curly braces for all control statements
 - Prefer `const` over `let`; avoid `var`

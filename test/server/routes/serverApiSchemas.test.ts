@@ -256,7 +256,6 @@ describe('inline server API DTO validation', () => {
   });
 
   it('validates share request bodies and parses share responses', async () => {
-    mockedReadResult.mockResolvedValue({ result: { id: 'eval-1' } } as never);
     mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
     mockedCreateShareableUrl.mockResolvedValue('https://share.example/eval-1');
 
@@ -267,10 +266,12 @@ describe('inline server API DTO validation', () => {
     expect(invalid.body.error).toContain('id');
     expect(valid.status).toBe(200);
     expect(valid.body).toEqual({ url: 'https://share.example/eval-1' });
+    // The share route intentionally avoids `readResult` because it converts
+    // load failures into `undefined`, which would collapse real DB errors into 404s.
+    expect(mockedReadResult).not.toHaveBeenCalled();
   });
 
   it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {
-    mockedReadResult.mockResolvedValue({ result: { id: 'eval-1' } } as never);
     mockedEval.findById.mockResolvedValue(null as never);
 
     const response = await api.post('/api/results/share').send({ id: 'eval-1' });
@@ -278,10 +279,30 @@ describe('inline server API DTO validation', () => {
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: 'Eval not found' });
     expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
+    // Symmetric to the happy-path assertion above: the 404 branch must also
+    // never reach `readResult`. Otherwise a future refactor that reintroduces
+    // a `readResult` preflight only on the not-found path would silently
+    // resurrect the DB-error-as-404 regression.
+    expect(mockedReadResult).not.toHaveBeenCalled();
+  });
+
+  it('returns a 500 (not 404) when Eval.findById throws on a real DB error', async () => {
+    // This is the regression the PR fixes: pre-fix, `readResult` swallowed
+    // its own DB errors and returned undefined, which the route then
+    // classified as 404 "Eval not found". Routing the lookup through
+    // `Eval.findById` directly preserves the throw, and the route's
+    // try/catch funnels it through `sendError` for a structured 500.
+    mockedEval.findById.mockRejectedValueOnce(new Error('sqlite: database is locked'));
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load eval for share' });
+    expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
   });
 
   it('does not rate-limit share URL creation attempts', async () => {
-    mockedReadResult.mockResolvedValue(undefined);
+    mockedEval.findById.mockResolvedValue(null as never);
 
     const attempts = 35;
     for (let i = 0; i < attempts; i++) {
@@ -290,7 +311,7 @@ describe('inline server API DTO validation', () => {
       expect(response.body).toEqual({ error: 'Eval not found' });
     }
 
-    expect(mockedReadResult).toHaveBeenCalledTimes(attempts);
+    expect(mockedEval.findById).toHaveBeenCalledTimes(attempts);
   });
 
   it('validates dataset generation request bodies', async () => {

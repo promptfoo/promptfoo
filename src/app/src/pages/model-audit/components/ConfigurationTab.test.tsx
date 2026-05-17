@@ -37,6 +37,7 @@ describe('ConfigurationTab', () => {
     );
 
     expect(screen.getByText(initialError)).toBeInTheDocument();
+    expect(screen.getByText(initialError).parentElement).toHaveClass('flex-col', 'sm:flex-row');
 
     await act(() => {
       rerender(
@@ -49,7 +50,7 @@ describe('ConfigurationTab', () => {
     expect(screen.queryByText(initialError)).toBeNull();
   });
 
-  it('should show error state but remain clickable when installationStatus.installed is false', () => {
+  it('should show error state and stay disabled when installationStatus.installed is false', () => {
     render(
       <TooltipProvider delayDuration={0}>
         <ConfigurationTab
@@ -62,8 +63,7 @@ describe('ConfigurationTab', () => {
 
     // Button should show "ModelAudit Not Installed" text
     const scanButton = screen.getByRole('button', { name: 'ModelAudit Not Installed' });
-    // Button should NOT be disabled - users can click it to see installation instructions
-    expect(scanButton).not.toBeDisabled();
+    expect(scanButton).toBeDisabled();
     // Button should have error color styling (destructive variant)
     expect(scanButton).toHaveClass('bg-destructive');
   });
