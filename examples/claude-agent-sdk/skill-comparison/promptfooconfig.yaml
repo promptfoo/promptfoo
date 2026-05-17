@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Claude skill versions
+
+prompts:
+  - '{{request}}'
+
+# Shared schema for `output_format`. With it, the SDK returns a parsed object
+# instead of Markdown-fenced JSON, so the JS assertion can read fields directly.
+x-review-schema: &reviewSchema
+  type: json_schema
+  schema:
+    type: object
+    required: [summary, issues]
+    additionalProperties: false
+    properties:
+      summary:
+        type: string
+      issues:
+        type: array
+        items:
+          type: object
+          required: [id, severity]
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            severity:
+              type: string
+              enum: [high, medium, low]
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    label: review-standards-v1
+    config:
+      model: claude-sonnet-4-6
+      working_dir: ./fixtures/v1
+      setting_sources: ['project']
+      skills: ['review-standards']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
+      output_format: *reviewSchema
+
+  - id: anthropic:claude-agent-sdk
+    label: review-standards-v2
+    config:
+      model: claude-sonnet-4-6
+      working_dir: ./fixtures/v2
+      setting_sources: ['project']
+      skills: ['review-standards']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
+      output_format: *reviewSchema
+
+defaultTest:
+  # Without `disableVarExpansion`, Promptfoo would fan each YAML-list var into
+  # one test case per element (src/evaluator.ts:generateVarCombinations), which
+  # would split each comparison test in two.
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: skill-used
+      value: review-standards
+
+    - type: javascript
+      threshold: 0.7
+      value: |
+        // `output_format` makes the SDK hand us a parsed object directly. The
+        // Codex example's parallel assertion has to wrap with `JSON.parse(output)`
+        // because `output_schema` keeps `output` as a JSON string.
+        const expected = context.vars.expectedIssues;
+        const found = (output.issues || []).map((issue) => issue.id);
+        const hits = expected.filter((id) => found.includes(id));
+        const extras = found.filter((id) => !expected.includes(id));
+        const recall = hits.length / expected.length;
+        const precision = found.length ? hits.length / found.length : 0;
+        const score = 0.7 * recall + 0.3 * precision;
+
+        return {
+          pass: recall >= 0.75 && precision >= 0.5,
+          score,
+          reason: `matched ${hits.length}/${expected.length} expected issues; ${extras.length} unexpected issues`,
+        };
+
+tests:
+  - description: Finds both auth issues
+    vars:
+      request: Review src/auth.ts for password handling and token comparison issues.
+      expectedIssues:
+        - weak-password-hash
+        - timing-unsafe-compare
+
+  - description: Focuses on password handling only
+    vars:
+      request: Review src/auth.ts only for password handling issues.
+      expectedIssues:
+        - weak-password-hash

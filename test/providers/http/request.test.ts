@@ -15,7 +15,7 @@ import {
   estimateTokenCount,
   HttpProvider,
 } from '../../../src/providers/http';
-import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getRequestTimeoutMs } from '../../../src/providers/shared';
 
 describe('determineRequestBody', () => {
   it('should merge parsed prompt object with config body when content type is JSON', () => {
@@ -307,7 +307,7 @@ describe('request transformation', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'test' }),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       undefined,
       undefined,
@@ -343,7 +343,7 @@ describe('request transformation', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'value', transformed: 'TEST' }),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       undefined,
       undefined,

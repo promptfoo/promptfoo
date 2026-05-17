@@ -1,8 +1,8 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamPluginBase } from './base';
 
@@ -48,7 +48,7 @@ export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
     // Check if we're using a local file path or a URL
     if (DATASET_URL.startsWith('http')) {
       // Fetch from URL
-      const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
+      const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
       if (!response.ok) {
         throw new Error(`[XSTest] HTTP status: ${response.status} ${response.statusText}`);
       }
@@ -56,7 +56,7 @@ export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
     } else {
       // Read from local file
       try {
-        csvData = fs.readFileSync(DATASET_URL, 'utf8');
+        csvData = await fs.readFile(DATASET_URL, 'utf8');
       } catch (error) {
         throw new Error(`[XSTest] Error reading local file: ${error}`);
       }
