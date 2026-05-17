@@ -16,6 +16,8 @@ declare module '@tanstack/react-table' {
     filterOptions?: Array<{ label: string; value: string }>;
     /** Column alignment - affects both header and cell content. When 'right', sort icon appears on the left of the header label. */
     align?: 'left' | 'right';
+    /** Pin important columns to an edge while the table scrolls horizontally. */
+    sticky?: 'left' | 'right';
   }
 }
 
@@ -35,6 +37,7 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   showColumnToggle?: boolean;
   showFilter?: boolean;
   showExport?: boolean;
+  globalFilterLabel?: string;
   /**
    * @deprecated The shared DataTable is virtualized instead of paginated. This is accepted
    * temporarily so downstream consumers can upgrade before deleting old call-site props.
@@ -139,6 +142,7 @@ export interface DataTableToolbarProps<TData> {
   showFilter?: boolean;
   showGlobalFilter?: boolean;
   showExport?: boolean;
+  globalFilterLabel: string;
   onExportCSV?: () => void;
   onExportJSON?: () => void;
   toolbarActions?: React.ReactNode;

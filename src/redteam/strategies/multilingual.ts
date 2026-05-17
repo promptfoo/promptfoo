@@ -7,7 +7,7 @@ import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
@@ -140,7 +140,7 @@ async function processRemoteChunk(
       },
       body: JSON.stringify(payload),
     },
-    REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs(),
   );
   const { data, status, statusText } = resp as any;
   const result = (data as any)?.result;
