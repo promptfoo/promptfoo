@@ -1,4 +1,5 @@
 import os from 'os';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -114,10 +115,11 @@ describe('createTempOutputPath', () => {
   });
 
   it('should generate UUID-based unique paths', () => {
-    const uuidPattern =
-      /promptfoo-modelscan-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
     const tempPath = createTempOutputPath();
-    expect(tempPath).toMatch(uuidPattern);
+    expect(path.basename(tempPath)).toBe('results.json');
+    expect(path.basename(path.dirname(tempPath))).toMatch(
+      /^promptfoo-modelscan-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9]{6}$/,
+    );
   });
 
   it('should generate unique paths on each call', () => {
