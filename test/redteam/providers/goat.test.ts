@@ -583,6 +583,7 @@ describe('RedteamGoatProvider', () => {
     mockFetch
       .mockResolvedValueOnce({
         json: async () => ({
+          materializationHandled: true,
           'secret-remote-response-key-sentinel': true,
           message: {
             role: 'secret-remote-role-sentinel',
@@ -597,6 +598,7 @@ describe('RedteamGoatProvider', () => {
       })
       .mockResolvedValueOnce({
         json: async () => ({
+          materializationHandled: true,
           'secret-remote-response-key-sentinel': true,
           message: {
             role: 'secret-remote-role-sentinel',
