@@ -1097,6 +1097,20 @@ function renderOutputActions({
             <TooltipTrigger asChild>
               <button
                 type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleRowShareLink}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy link to output"
+              >
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy link to output</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
                 className={`action p-1 rounded hover:bg-muted transition-colors ${isHighlighted ? 'text-amber-500 dark:text-amber-400' : ''}`}
                 onClick={handleToggleHighlight}
                 onMouseDown={(e) => e.preventDefault()}
@@ -1109,20 +1123,6 @@ function renderOutputActions({
               </button>
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleRowShareLink}
-                onMouseDown={(e) => e.preventDefault()}
-                aria-label="Copy link to output"
-              >
-                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
         </>
       )}

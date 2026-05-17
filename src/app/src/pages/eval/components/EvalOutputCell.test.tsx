@@ -2250,6 +2250,30 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     // Copy button exists (no aria-label, so check by icon class)
     expect(container.querySelector('.lucide-clipboard-copy')).toBeInTheDocument();
   });
+
+  it('keeps utility and review actions in a stable, grouped order', () => {
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const actionsArea = container.querySelector('.cell-actions');
+    expect(actionsArea).toBeInTheDocument();
+
+    const actionNames = Array.from(actionsArea?.querySelectorAll('button') ?? []).map(
+      (button) =>
+        button.getAttribute('aria-label') ||
+        (button.querySelector('.lucide-clipboard-copy') ? 'Copy output to clipboard' : ''),
+    );
+
+    expect(actionNames).toEqual([
+      'Copy output to clipboard',
+      'Copy link to output',
+      'Toggle test highlight',
+      'Mark test passed',
+      'Mark test failed',
+      'Set test score',
+      'Edit comment',
+      'View output and test details',
+    ]);
+  });
 });
 
 describe('isImageProvider helper function', () => {
