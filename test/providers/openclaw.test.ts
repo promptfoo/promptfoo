@@ -1656,6 +1656,8 @@ describe('OpenClaw Provider', () => {
       // Verify connect request
       expect(connectReq.type).toBe('req');
       expect(connectReq.method).toBe('connect');
+      expect(connectReq.params.minProtocol).toBe(3);
+      expect(connectReq.params.maxProtocol).toBe(4);
       expect(connectReq.params.auth.token).toBe('test-token');
       expect(connectReq.params.device).toEqual({
         id: 'device-1',
