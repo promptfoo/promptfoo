@@ -92,5 +92,4 @@ Reference:
 - [Multi-turn Jailbreaks](multi-turn.md) - Related jailbreaking approach
 - [Prompt Injection](prompt-injection.md) - Another technique to bypass safety controls
 - [Authority Bias in LLMs](https://arxiv.org/pdf/2411.11407) - Research on academic framing
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

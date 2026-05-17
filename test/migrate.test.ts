@@ -1,10 +1,15 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
+
+const TEST_CURRENT_NODE_ABI = '137';
+const TEST_INSTALLED_BETTER_SQLITE3_ABI = '115';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
 const mockGetDb = vi.fn().mockReturnValue(mockDb);
+const mockCloseDbIfOpen = vi.fn();
 const mockGetDirectory = vi.fn();
 const mockLogger = {
   debug: vi.fn(),
@@ -14,6 +19,7 @@ const mockLogger = {
 };
 
 vi.mock('../src/database/index', () => ({
+  closeDbIfOpen: mockCloseDbIfOpen,
   getDb: mockGetDb,
 }));
 
@@ -116,6 +122,49 @@ describe('migrate', () => {
       expect(mockMigrate).not.toHaveBeenCalled();
     });
 
+    it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
+      const nativeAddonError = createNativeAddonVersionMismatchError();
+      mockGetDb.mockImplementation(() => {
+        throw nativeAddonError;
+      });
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await expect(runDbMigrations()).rejects.toBe(nativeAddonError);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        {
+          currentNodeVersion: process.version,
+          currentNodeAbi: TEST_CURRENT_NODE_ABI,
+          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
+        },
+      );
+      expect(mockMigrate).not.toHaveBeenCalled();
+    });
+
+    it('should demote ABI mismatch log to debug when suppressNativeAddonLogging is set', async () => {
+      const nativeAddonError = createNativeAddonVersionMismatchError();
+      mockGetDb.mockImplementation(() => {
+        throw nativeAddonError;
+      });
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await expect(runDbMigrations({ suppressNativeAddonLogging: true })).rejects.toBe(
+        nativeAddonError,
+      );
+
+      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        {
+          currentNodeVersion: process.version,
+          currentNodeAbi: TEST_CURRENT_NODE_ABI,
+          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
+        },
+      );
+      expect(mockMigrate).not.toHaveBeenCalled();
+    });
+
     it('should reject with error when migrate fails', async () => {
       const migrationError = new Error('Migration failed: syntax error');
       mockMigrate.mockImplementation(() => {
@@ -177,6 +226,53 @@ describe('migrate', () => {
       await runDbMigrations();
 
       expect(mockMigrate).toHaveBeenCalledWith(specificDb, expect.any(Object));
+    });
+  });
+
+  describe('runDbMigrationsFromCli', () => {
+    let originalExitCode: number | string | null | undefined;
+
+    beforeEach(() => {
+      originalExitCode = process.exitCode;
+      process.exitCode = undefined;
+      mockGetDirectory.mockReturnValue('/project/src');
+    });
+
+    afterEach(() => {
+      process.exitCode = originalExitCode;
+    });
+
+    it('should set exitCode to 0 after successful direct execution', async () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      const { runDbMigrationsFromCli } = await import('../src/migrate');
+
+      try {
+        await runDbMigrationsFromCli();
+
+        expect(process.exitCode).toBe(0);
+        expect(mockCloseDbIfOpen).toHaveBeenCalledTimes(1);
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    it('should set exitCode to 1 after failed direct execution', async () => {
+      mockGetDb.mockImplementation(() => {
+        throw new Error('Database connection failed');
+      });
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      const { runDbMigrationsFromCli } = await import('../src/migrate');
+
+      try {
+        await runDbMigrationsFromCli();
+
+        expect(process.exitCode).toBe(1);
+        expect(mockCloseDbIfOpen).toHaveBeenCalledTimes(1);
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
     });
   });
 });
