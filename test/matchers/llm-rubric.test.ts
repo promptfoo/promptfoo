@@ -163,6 +163,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: `llm-rubric response must contain 'pass' or 'score' field. Output: ${graderOutput}`,
+      metadata: { graderError: true },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -639,6 +640,28 @@ describe('matchesLlmRubric', () => {
           completionDetails: expect.any(Object),
           numRequests: 0,
         },
+      }),
+    );
+  });
+
+  it('should use a generic fallback reason when pass is false but the score meets the default threshold', async () => {
+    const expected = 'Expected output';
+    const output = 'Different output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    };
+
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+      output: JSON.stringify({ pass: false, score: '0.6' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0.6,
       }),
     );
   });

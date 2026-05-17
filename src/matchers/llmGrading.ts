@@ -173,6 +173,7 @@ export async function matchesLlmRubric(
     return await runJsonGradingPrompt({
       assertion,
       checkName: 'llm-rubric check',
+      defaultThreshold: 0.5,
       defaultPrompt: DEFAULT_GRADING_PROMPT,
       grading,
       label: 'llm-rubric',
