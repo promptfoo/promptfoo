@@ -4,7 +4,8 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
-import type { EvaluateOptions, TestCase, TestSuite } from '../types/index';
+import type { TestCase, TestSuite } from '../types/index';
+import type { InternalEvaluateOptions } from '../types/internal';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
@@ -75,27 +76,26 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
   );
 
-  // Apply shell-tool-name extensions on every entry, even when the receiver is
-  // already started. The set is process-global, so omitted config must reset it
-  // to defaults instead of inheriting a previous eval's override.
-  const { setCommandToolNames } = await import('../assertions/trajectoryUtils');
-  setCommandToolNames(testSuite.tracing?.commandToolNames);
+  const httpTracing = testSuite.tracing?.otlp?.http;
+  if (testSuite.tracing?.enabled && httpTracing?.enabled) {
+    const acceptFormats = normalizeOtlpAcceptFormats(httpTracing.acceptFormats);
+    const redactAttributes = httpTracing.redactAttributes;
 
-  if (
-    testSuite.tracing?.enabled &&
-    testSuite.tracing?.otlp?.http?.enabled &&
-    !otlpReceiverStarted
-  ) {
+    if (otlpReceiverStarted) {
+      const { updateOTLPReceiverOptions } = await import('./otlpReceiver');
+      updateOTLPReceiverOptions({ acceptFormats, redactAttributes });
+      logger.debug('[EvaluatorTracing] OTLP receiver already started, refreshed options');
+      return;
+    }
+
     telemetry.record('feature_used', {
       feature: 'tracing',
     });
     try {
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
-      const port = testSuite.tracing.otlp.http.port || 4318;
-      const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
-      const acceptFormats = normalizeOtlpAcceptFormats(testSuite.tracing.otlp.http.acceptFormats);
-      const redactAttributes = testSuite.tracing.otlp.http.redactAttributes;
+      const port = httpTracing.port || 4318;
+      const host = httpTracing.host || '127.0.0.1';
       logger.debug(
         `[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}` +
           (redactAttributes && redactAttributes.length > 0
@@ -195,7 +195,7 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
  */
 export async function generateTraceContextIfNeeded(
   test: TestCase,
-  evaluateOptions: EvaluateOptions | undefined,
+  evaluateOptions: InternalEvaluateOptions | undefined,
   testIdx: number,
   promptIdx: number,
   testSuite?: TestSuite,
@@ -247,6 +247,7 @@ export async function generateTraceContextIfNeeded(
         testIdx,
         promptIdx,
         vars: test.vars,
+        commandToolNames: testSuite?.tracing?.commandToolNames,
       },
     });
     logger.debug('[EvaluatorTracing] Trace record created successfully');

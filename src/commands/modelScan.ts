@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import crypto from 'crypto';
-import { unlinkSync } from 'fs';
+import { mkdtempSync, rmSync, unlinkSync } from 'fs';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -22,6 +22,7 @@ import {
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
 import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { getModelAuditVerdict, parseCompleteModelAuditResults } from '../util/modelAuditResults';
 import type { Command } from 'commander';
 
 import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
@@ -43,6 +44,12 @@ interface RevisionInfo {
   contentHash?: string;
   modelSource?: string;
   sourceLastModified?: number;
+}
+
+interface HuggingFaceRevisionSnapshot {
+  modelId: string;
+  sha: string;
+  lastModified: string;
 }
 
 interface ScanOptions {
@@ -79,9 +86,10 @@ interface ScanOptions {
  * @internal Exported for testing
  */
 export function createTempOutputPath(): string {
-  const tempDir = os.tmpdir();
-  const uuid = crypto.randomUUID();
-  return path.join(tempDir, `promptfoo-modelscan-${uuid}.json`);
+  const tempDir = mkdtempSync(
+    path.join(os.tmpdir(), `promptfoo-modelscan-${crypto.randomUUID()}-`),
+  );
+  return path.join(tempDir, 'results.json');
 }
 
 /**
@@ -112,13 +120,10 @@ export async function checkModelAuditInstalled(): Promise<{
 }
 
 /**
- * Determine if scan results contain errors.
+ * Determine if scan results contain any non-clean findings.
  */
-function hasErrorsInResults(results: ModelAuditScanResults): boolean {
-  return Boolean(
-    results.has_errors ||
-      results.issues?.some((issue) => issue.severity === 'critical' || issue.severity === 'error'),
-  );
+function hasFindingsInResults(results: ModelAuditScanResults): boolean {
+  return getModelAuditVerdict(results).hasFindings;
 }
 
 /**
@@ -374,7 +379,11 @@ async function checkExistingScan(
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
-): Promise<{ shouldSkip: boolean; existingAudit: ModelAudit | null }> {
+): Promise<{
+  shouldSkip: boolean;
+  existingAudit: ModelAudit | null;
+  huggingFaceRevision?: HuggingFaceRevisionSnapshot;
+}> {
   if (paths.length !== 1 || !isHuggingFaceModel(paths[0])) {
     return { shouldSkip: false, existingAudit: null };
   }
@@ -388,25 +397,30 @@ async function checkExistingScan(
     const parsed = parseHuggingFaceModel(paths[0]);
     const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : paths[0];
     const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
+    const huggingFaceRevision = {
+      modelId: metadata.modelId,
+      sha: metadata.sha,
+      lastModified: metadata.lastModified,
+    };
 
     if (!existing) {
-      return { shouldSkip: false, existingAudit: null };
+      return { shouldSkip: false, existingAudit: null, huggingFaceRevision };
     }
 
     if (hasScannerSelectionOptions(options)) {
       logger.debug('Re-scanning with scanner selection options');
-      return { shouldSkip: false, existingAudit: existing };
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
     if (hasPersistedScannerSelection(existing.metadata)) {
       logger.debug('Re-scanning because cached revision used scanner selection options');
-      return { shouldSkip: false, existingAudit: existing };
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
     // Force flag - re-scan but update existing record
     if (options.force) {
       logger.debug(`Re-scanning (--force): ${modelId}`);
-      return { shouldSkip: false, existingAudit: existing };
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
     // Version changed - re-scan
@@ -415,22 +429,13 @@ async function checkExistingScan(
         ? `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`
         : `previous scan missing version info (now using ${currentScannerVersion})`;
       logger.debug(`Re-scanning: ${reason}`);
-      return { shouldSkip: false, existingAudit: existing };
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
-    // Already scanned - skip
-    logger.info(chalk.yellow('✓ Model already scanned'));
-    logger.info(`  Model: ${modelId}`);
-    logger.info(`  Revision: ${metadata.sha}`);
-    if (existing.scannerVersion) {
-      logger.info(`  Scanner version: ${existing.scannerVersion}`);
-    }
-    logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
-    logger.info(`  Scan ID: ${existing.id}`);
-    logger.info(`\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`);
-    logger.info(chalk.green(`  promptfoo view ${existing.id}`));
-
-    return { shouldSkip: true, existingAudit: null };
+    // HuggingFace aliases are mutable. Without a pinned revision handed to the scanner,
+    // a cached alias match is not strong enough evidence to skip a fresh scan safely.
+    logger.debug(`Re-scanning mutable HuggingFace alias: ${modelId}`);
+    return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
   } catch (error) {
     logger.debug(`Failed to check for existing scan: ${error}`);
     return { shouldSkip: false, existingAudit: null };
@@ -443,6 +448,7 @@ async function checkExistingScan(
 async function fetchRevisionInfo(
   paths: string[],
   results: ModelAuditScanResults,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<RevisionInfo> {
   const revisionInfo: RevisionInfo = {};
 
@@ -453,12 +459,19 @@ async function fetchRevisionInfo(
   const modelPath = paths[0];
   if (isHuggingFaceModel(modelPath)) {
     try {
-      const metadata = await getHuggingFaceMetadata(modelPath);
+      const postScanMetadata = await getHuggingFaceMetadata(modelPath);
+      const metadata = preScanRevision ?? postScanMetadata;
       if (metadata) {
         revisionInfo.modelId = metadata.modelId;
-        revisionInfo.revisionSha = metadata.sha;
         revisionInfo.modelSource = 'huggingface';
         revisionInfo.sourceLastModified = new Date(metadata.lastModified).getTime();
+        if (preScanRevision && postScanMetadata && preScanRevision.sha !== postScanMetadata.sha) {
+          logger.warn(
+            `HuggingFace revision changed during scan for ${metadata.modelId}; omitting cached revision SHA`,
+          );
+        } else {
+          revisionInfo.revisionSha = metadata.sha;
+        }
       }
     } catch (error) {
       logger.debug(`Failed to fetch revision info: ${error}`);
@@ -486,8 +499,10 @@ function displayScanSummary(
   logger.info('\n' + chalk.bold('Model Audit Summary'));
   logger.info('=' + '='.repeat(50));
 
-  if (results.has_errors || (results.failed_checks ?? 0) > 0) {
-    logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
+  const verdict = getModelAuditVerdict(results);
+  if (verdict.hasFindings) {
+    const issueCount = Math.max(results.failed_checks ?? 0, results.issues?.length ?? 0);
+    logger.info(chalk.yellow(`⚠  Found ${issueCount} issues`));
     displayIssuesBySeverity(results.issues);
   } else {
     logger.info(chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`));
@@ -588,23 +603,54 @@ async function saveAuditRecord(
     },
   };
 
-  if (existingAudit) {
+  const matchedAudit =
+    existingAudit ??
+    (revisionInfo.modelId
+      ? await ModelAudit.findByRevision(
+          revisionInfo.modelId,
+          revisionInfo.revisionSha,
+          revisionInfo.contentHash,
+        )
+      : null);
+
+  const shouldCreateNewAudit =
+    matchedAudit?.contentHash &&
+    revisionInfo.contentHash &&
+    matchedAudit.contentHash !== revisionInfo.contentHash;
+
+  if (matchedAudit && !shouldCreateNewAudit) {
     // Update existing record with new scan results
-    existingAudit.results = results;
-    existingAudit.checks = results.checks ?? null;
-    existingAudit.issues = results.issues ?? null;
-    existingAudit.hasErrors = hasErrorsInResults(results);
-    existingAudit.totalChecks = results.total_checks ?? null;
-    existingAudit.passedChecks = results.passed_checks ?? null;
-    existingAudit.failedChecks = results.failed_checks ?? null;
-    existingAudit.scannerVersion = currentScannerVersion ?? null;
-    existingAudit.metadata = auditMetadata;
-    existingAudit.updatedAt = Date.now();
-    if (revisionInfo.contentHash) {
-      existingAudit.contentHash = revisionInfo.contentHash;
+    matchedAudit.results = results;
+    matchedAudit.checks = results.checks ?? null;
+    matchedAudit.issues = results.issues ?? null;
+    matchedAudit.hasErrors = hasFindingsInResults(results);
+    matchedAudit.totalChecks = results.total_checks ?? null;
+    matchedAudit.passedChecks = results.passed_checks ?? null;
+    matchedAudit.failedChecks = results.failed_checks ?? null;
+    matchedAudit.scannerVersion = currentScannerVersion ?? null;
+    matchedAudit.metadata = auditMetadata;
+    matchedAudit.updatedAt = Date.now();
+    if (revisionInfo.modelId) {
+      matchedAudit.modelId = revisionInfo.modelId;
     }
-    await existingAudit.save();
-    return existingAudit;
+    if (revisionInfo.revisionSha) {
+      matchedAudit.revisionSha = revisionInfo.revisionSha;
+    }
+    if (revisionInfo.contentHash) {
+      matchedAudit.contentHash = revisionInfo.contentHash;
+    }
+    if (revisionInfo.modelSource) {
+      matchedAudit.modelSource = revisionInfo.modelSource;
+    }
+    if (revisionInfo.sourceLastModified) {
+      matchedAudit.sourceLastModified = revisionInfo.sourceLastModified;
+    }
+    await matchedAudit.save();
+    return matchedAudit;
+  }
+
+  if (shouldCreateNewAudit) {
+    logger.debug('Creating new audit because model content changed since the previous scan');
   }
 
   return ModelAudit.create({
@@ -629,6 +675,7 @@ async function processJsonResults(
   options: ScanOptions,
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<number> {
   if (!jsonOutput) {
     logger.error('No output received from model scan');
@@ -637,7 +684,7 @@ async function processJsonResults(
 
   let results: ModelAuditScanResults;
   try {
-    results = JSON.parse(jsonOutput);
+    results = parseCompleteModelAuditResults(JSON.parse(jsonOutput));
   } catch (error) {
     logger.error(`Failed to parse scan results: ${error}`);
     if (options.verbose) {
@@ -647,7 +694,7 @@ async function processJsonResults(
   }
 
   // Fetch revision info and save to database
-  const revisionInfo = await fetchRevisionInfo(paths, results);
+  const revisionInfo = await fetchRevisionInfo(paths, results, preScanRevision);
   const audit = await saveAuditRecord(
     paths,
     results,
@@ -687,13 +734,15 @@ async function processJsonResults(
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
 
-  // Save to user-specified output file if requested
+  // Save to user-specified output file if requested. Persisted scans always emit
+  // Promptfoo's normalized JSON payload; use --no-write for raw ModelAudit output.
   if (options.output) {
     try {
       await fs.writeFile(options.output, JSON.stringify(results, null, 2));
       logger.info(`Results also saved to ${options.output}`);
     } catch (error) {
       logger.error(`Failed to save results to ${options.output}: ${error}`);
+      return 1;
     }
   }
 
@@ -730,7 +779,7 @@ async function processJsonResults(
     }
   }
 
-  return exitCode;
+  return exitCode === 0 && getModelAuditVerdict(results).hasFindings ? 1 : exitCode;
 }
 
 /**
@@ -744,11 +793,12 @@ async function processScanResultsFromFile(
   options: ScanOptions,
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<number> {
   // Helper to clean up temp file
   const cleanupTempFile = async () => {
     try {
-      await fs.unlink(jsonFilePath);
+      await fs.rm(path.dirname(jsonFilePath), { recursive: true, force: true });
     } catch (error) {
       logger.debug(`Failed to cleanup temp file ${jsonFilePath}: ${error}`);
     }
@@ -781,6 +831,7 @@ async function processScanResultsFromFile(
     options,
     currentScannerVersion,
     existingAudit,
+    preScanRevision,
   );
 }
 
@@ -794,6 +845,7 @@ async function processScanResultsFromStdout(
   options: ScanOptions,
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<number> {
   // Handle process errors
   const processErrorExitCode = logProcessError(spawnResult);
@@ -818,6 +870,7 @@ async function processScanResultsFromStdout(
     options,
     currentScannerVersion,
     existingAudit,
+    preScanRevision,
   );
 }
 
@@ -929,17 +982,19 @@ export function modelScanCommand(program: Command): void {
 
       // Check for existing scan (skip or get audit to update)
       let existingAuditToUpdate: ModelAudit | null = null;
+      let huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined;
       if (saveToDatabase) {
-        const { shouldSkip, existingAudit } = await checkExistingScan(
-          paths,
-          options,
-          currentScannerVersion,
-        );
+        const {
+          shouldSkip,
+          existingAudit,
+          huggingFaceRevision: scannedRevision,
+        } = await checkExistingScan(paths, options, currentScannerVersion);
         if (shouldSkip) {
           process.exitCode = 0;
           return;
         }
         existingAuditToUpdate = existingAudit;
+        huggingFaceRevision = scannedRevision;
       }
 
       // Parse CLI arguments
@@ -995,6 +1050,11 @@ export function modelScanCommand(program: Command): void {
             } catch {
               // Ignore - file may already be cleaned up or doesn't exist
             }
+            try {
+              rmSync(path.dirname(tempOutputPath), { recursive: true, force: true });
+            } catch {
+              // Ignore - directory may already be removed
+            }
           };
 
           // Register cleanup handlers for abnormal termination.
@@ -1024,6 +1084,7 @@ export function modelScanCommand(program: Command): void {
               options,
               currentScannerVersion,
               existingAuditToUpdate,
+              huggingFaceRevision,
             );
           } finally {
             // Cleanup first, then remove handlers. Order matters: if we removed
@@ -1047,6 +1108,7 @@ export function modelScanCommand(program: Command): void {
             options,
             currentScannerVersion,
             existingAuditToUpdate,
+            huggingFaceRevision,
           );
         }
       } catch (error) {

@@ -238,7 +238,7 @@ tests:
         provider: openai:gpt-5-mini
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, error detection, or token budgets, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans), or [`tokens-used`](/docs/configuration/expected-outputs/deterministic/#tokens-used).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, error detection, or token budgets, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans), or [`tokens-used`](/docs/configuration/expected-outputs/deterministic/#tokens-used).
 
 ## Configuration Reference
 
@@ -318,7 +318,7 @@ Key points:
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For a framework-specific example that exports OpenAI Agents SDK traces into Promptfoo, see the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For OpenAI Agents SDK workflows, use the built-in [JavaScript provider](/docs/providers/openai-agents) or the [Python SDK guide](/docs/guides/evaluate-openai-agents-python), depending on which SDK you are testing.
 
 :::note
 
@@ -409,6 +409,23 @@ Click the **Export Traces** button to download all traces for the current evalua
 - Trace data with spans and redacted attributes
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
+
+### Trace Linkage on Result Rows
+
+When tracing is enabled, every `EvaluateResult` row carries `traceId` and `evaluationId` at the top level so external tooling can correlate result rows to traces without re-deriving the linkage:
+
+```json
+{
+  "promptIdx": 0,
+  "testIdx": 0,
+  "success": true,
+  "traceId": "b01f108667a48e148ee80deb42c7f16d",
+  "evaluationId": "eval-Lie-2026-05-08T13:43:46",
+  "metadata": { "...": "..." }
+}
+```
+
+Use the `traceId` to look up an individual trace via `GET /api/traces/:traceId`, or pass the `evaluationId` to `GET /api/traces/evaluation/:evaluationId` to fetch every trace for the eval. Both fields are absent when tracing is not enabled for the row, so their presence is an unambiguous "this row was traced" signal.
 
 ## Best Practices
 

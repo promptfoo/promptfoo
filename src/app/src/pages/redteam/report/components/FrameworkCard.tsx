@@ -301,7 +301,7 @@ const FrameworkCard = ({
                     <div key={categoryId} className="overflow-hidden rounded border border-border">
                       <div
                         className={cn(
-                          'flex items-center justify-between bg-black/5 p-2 dark:bg-white/5',
+                          'flex flex-col items-start gap-2 bg-black/5 p-2 dark:bg-white/5 sm:flex-row sm:items-center sm:justify-between',
                           showHeaderBorder && 'border-b border-border',
                         )}
                       >

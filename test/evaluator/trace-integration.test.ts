@@ -277,4 +277,32 @@ describe('evaluator trace integration', () => {
       }),
     );
   });
+
+  it('should still run evaluator cleanup when receiver startup is fatal', async () => {
+    vi.mocked(evaluatorTracing.startOtlpReceiverIfNeeded).mockRejectedValueOnce(
+      new Error('receiver failed'),
+    );
+
+    const testSuite: TestSuite = {
+      providers: [],
+      prompts: [],
+      tests: [],
+      tracing: {
+        enabled: true,
+        failOnReceiverStartFailure: true,
+        otlp: {
+          http: {
+            enabled: true,
+            port: 4318,
+            host: '127.0.0.1',
+          },
+        },
+      },
+    };
+
+    await expect(evaluate(testSuite, mockEval, {})).rejects.toThrow('receiver failed');
+    expect(evaluatorTracing.stopOtlpReceiverIfNeeded).toHaveBeenCalled();
+    expect(mockFlushOtel).not.toHaveBeenCalled();
+    expect(mockShutdownOtel).not.toHaveBeenCalled();
+  });
 });

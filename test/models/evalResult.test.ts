@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -13,6 +14,7 @@ import {
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
+import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -179,6 +181,47 @@ describe('EvalResult', () => {
         evaluationId: 'single-evaluation-id',
         metadata: { source: 'single' },
       });
+    });
+
+    it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const result = await EvalResult.createFromEvaluateResult('test-eval-non-object-promptfoo', {
+        ...mockEvaluateResult,
+        traceId: 'wins-over-user',
+        evaluationId: 'wins-over-user',
+        metadata: { userKey: 'kept', __promptfoo: 'unexpected-string' as any },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('non-object metadata.__promptfoo'),
+      );
+      // Trace linkage takes precedence; non-object value is overwritten (not preserved).
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'wins-over-user',
+        evaluationId: 'wins-over-user',
+        metadata: { userKey: 'kept' },
+      });
+      // The read-side strip happens on findById, not just construction.
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+      expect(retrieved?.toEvaluateResult().metadata).toEqual({ userKey: 'kept' });
+    });
+
+    it('round-trips evaluationId without traceId (malformed traceparent path)', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-only-id', {
+        ...mockEvaluateResult,
+        evaluationId: 'eval-only',
+        metadata: { source: 'eval-only-test' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        evaluationId: 'eval-only',
+        metadata: { source: 'eval-only-test' },
+      });
+      expect(retrieved?.toEvaluateResult().traceId).toBeUndefined();
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
     });
 
     it('preserves user metadata alongside persisted trace linkage', async () => {
@@ -885,6 +928,81 @@ describe('EvalResult', () => {
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
     });
+
+    it('preserves trace linkage when save() updates an existing row', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-save-trace', {
+        ...mockEvaluateResult,
+        traceId: 'persisted-trace-id',
+        evaluationId: 'persisted-evaluation-id',
+        metadata: { source: 'pre-save' },
+      });
+
+      result.score = 0.42;
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        score: 0.42,
+        traceId: 'persisted-trace-id',
+        evaluationId: 'persisted-evaluation-id',
+        metadata: { source: 'pre-save' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
+    it('persists trace linkage mutated after construction', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-mutate-trace', {
+        ...mockEvaluateResult,
+        traceId: 'initial-trace',
+        evaluationId: 'initial-evaluation',
+      });
+
+      result.traceId = 'updated-trace';
+      result.evaluationId = 'updated-evaluation';
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.traceId).toBe('updated-trace');
+      expect(retrieved?.evaluationId).toBe('updated-evaluation');
+    });
+
+    it('clears trace linkage when both fields are unset before save()', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-clear-trace', {
+        ...mockEvaluateResult,
+        traceId: 'about-to-clear',
+        evaluationId: 'about-to-clear',
+        metadata: { source: 'clear-test' },
+      });
+
+      result.traceId = undefined;
+      result.evaluationId = undefined;
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.traceId).toBeUndefined();
+      expect(retrieved?.evaluationId).toBeUndefined();
+      expect(retrieved?.metadata).toEqual({ source: 'clear-test' });
+    });
+
+    it('save() is idempotent when called multiple times without changes', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-idempotent', {
+        ...mockEvaluateResult,
+        traceId: 'idempotent-trace',
+        evaluationId: 'idempotent-evaluation',
+        metadata: { source: 'idempotent' },
+      });
+
+      await result.save();
+      await result.save();
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'idempotent-trace',
+        evaluationId: 'idempotent-evaluation',
+        metadata: { source: 'idempotent' },
+      });
+    });
   });
 
   describe('toEvaluateResult', () => {
@@ -907,6 +1025,136 @@ describe('EvalResult', () => {
           },
         }),
       );
+    });
+
+    it('should preserve the original response object when response stripping is disabled', () => {
+      const response = {
+        output: 'provider output',
+        metadata: {
+          transformedRequest: {
+            headers: {
+              Authorization: 'Bearer nested-secret',
+            },
+          },
+        },
+      };
+
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().response).toBe(response);
+    });
+
+    it('should strip nested provider response metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: mockTestCase,
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+            latencyMs: 42,
+            metadata: {
+              transformedRequest: {
+                headers: {
+                  Authorization: 'Bearer nested-secret',
+                },
+              },
+            },
+          },
+          gradingResult: null,
+          provider: mockProvider,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
+
+        const evaluateResult = result.toEvaluateResult();
+
+        expect(evaluateResult.metadata).toEqual({});
+        expect(evaluateResult.response).toEqual({
+          output: 'provider output',
+          latencyMs: 42,
+        });
+        expect(JSON.stringify(evaluateResult)).not.toContain('nested-secret');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should strip nested test-case metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_METADATA: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            ...mockTestCase,
+            vars: {
+              customerEmail: 'secret@example.com',
+            },
+            metadata: {
+              goal: 'goal testcase-secret',
+              pluginConfig: {
+                policy: 'policy testcase-secret',
+              },
+              inputMaterialization: {
+                source: 'source testcase-secret',
+              },
+            },
+          },
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+          },
+          gradingResult: null,
+          provider: mockProvider,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
+
+        const evaluateResult = result.toEvaluateResult();
+
+        expect(evaluateResult.metadata).toEqual({});
+        expect(evaluateResult.testCase).not.toHaveProperty('metadata');
+        expect(evaluateResult.testCase.vars).toBeUndefined();
+        expect(JSON.stringify(evaluateResult)).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
     });
   });
 

@@ -8,7 +8,6 @@ import {
 } from '../../src/assertions/trajectory';
 import {
   extractTrajectorySteps,
-  setCommandToolNames,
   summarizeTrajectoryForJudge,
 } from '../../src/assertions/trajectoryUtils';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
@@ -134,16 +133,13 @@ describe('trajectory utilities', () => {
     // By default, a tool named 'bash' normalizes to type:tool, not type:command.
     expect(extractTrajectorySteps(customShellTrace)[0].type).toBe('tool');
 
-    try {
-      setCommandToolNames(['bash']);
-      const steps = extractTrajectorySteps(customShellTrace);
-      expect(steps[0].type).toBe('command');
-      // The command argument should also be reflected in the step name.
-      expect(steps[0].name).toBe('pytest tests/');
-    } finally {
-      // Reset to defaults so other tests aren't polluted.
-      setCommandToolNames([]);
-    }
+    const steps = extractTrajectorySteps({
+      ...customShellTrace,
+      metadata: { commandToolNames: ['bash'] },
+    });
+    expect(steps[0].type).toBe('command');
+    // The command argument should also be reflected in the step name.
+    expect(steps[0].name).toBe('pytest tests/');
   });
 
   it('extracts normalized trajectory steps from trace spans', () => {
@@ -274,6 +270,32 @@ describe('trajectory utilities', () => {
     expect(steps[0].type).toBe('command');
     expect(steps[0].name).toBe('echo hello');
     expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'echo']));
+  });
+
+  it('normalizes shell tool command arrays as one command step', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'shell-command-array',
+          name: 'tool shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'shell',
+            'tool.arguments':
+              '{"commands":["cat skills/discount-review/SKILL.md","python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo"]}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe(
+      'cat skills/discount-review/SKILL.md; python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo',
+    );
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'cat']));
   });
 
   it('normalizes array-format command arguments from exec_command', () => {
