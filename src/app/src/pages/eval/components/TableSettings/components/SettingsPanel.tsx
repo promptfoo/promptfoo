@@ -103,6 +103,7 @@ const SettingsPanel = () => {
           checked={showMetricPills}
           onChange={setShowMetricPills}
           tooltipText="Show custom metric pills in each results table cell"
+          disabled={!showPassFail}
         />
 
         <CompactToggle

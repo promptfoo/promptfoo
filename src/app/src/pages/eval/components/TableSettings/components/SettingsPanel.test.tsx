@@ -182,4 +182,23 @@ describe('SettingsPanel', () => {
     const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
     expect(passReasonsToggle).not.toBeDisabled();
   });
+
+  it('should disable Metrics pills when Pass/fail indicators is off', () => {
+    mockedUseResultsViewSettingsStore.mockReturnValue({
+      ...mockStore,
+      showPassFail: false,
+    });
+
+    renderWithProviders(<SettingsPanel />);
+
+    const metricPillsToggle = screen.getByRole('checkbox', { name: 'Metrics pills' });
+    expect(metricPillsToggle).toBeDisabled();
+  });
+
+  it('should enable Metrics pills when Pass/fail indicators is on', () => {
+    renderWithProviders(<SettingsPanel />);
+
+    const metricPillsToggle = screen.getByRole('checkbox', { name: 'Metrics pills' });
+    expect(metricPillsToggle).not.toBeDisabled();
+  });
 });
