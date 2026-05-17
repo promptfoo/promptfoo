@@ -70,5 +70,4 @@ By incorporating the Shell Injection plugin in your LLM red teaming strategy, yo
 - [SQL Injection](sql-injection.md)
 - [SSRF (Server-Side Request Forgery)](ssrf.md)
 - [Technical Vulnerabilities](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
