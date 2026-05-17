@@ -13,6 +13,8 @@ Promptfoo's LLM-based grading catches novel attacks through semantic understandi
 
 ## Getting Started
 
+Requires Node.js 18 or later (`agent-threat-rules` is published as pure ESM).
+
 ```bash
 npx promptfoo@latest init --example redteam-atr-mcp-defense
 cd redteam-atr-mcp-defense
@@ -48,20 +50,20 @@ Full rule list: [ATR rule categories](https://github.com/Agent-Threat-Rule/agent
 
 ## Customization
 
-Adjust severity threshold in `atr-assertion.mjs`:
+Adjust the severity threshold by editing the `FAIL_SEVERITIES` constant at the top of `atr-assertion.mjs`:
 
 ```javascript
-// Include medium severity for stricter scanning
-const threats = matches.filter(
-  (m) =>
-    m.rule.severity === 'critical' || m.rule.severity === 'high' || m.rule.severity === 'medium',
-);
+// Default: critical + high
+const FAIL_SEVERITIES = ['critical', 'high'];
+
+// Stricter: also fail on medium
+const FAIL_SEVERITIES = ['critical', 'high', 'medium'];
 ```
 
-Filter by category:
+To filter by category instead, replace the `threats` filter:
 
 ```javascript
-// Only check for credential exfiltration
+// Only fail on context-exfiltration matches (credentials, secrets, system prompts leaking out)
 const threats = matches.filter((m) => m.rule.tags.category === 'context-exfiltration');
 ```
 

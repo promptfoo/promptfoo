@@ -18,8 +18,6 @@ defaultTest:
   assert:
     - type: javascript
       value: file://atr-assertion.mjs
-  options:
-    transformVars: '{ ...vars, sessionId: context.uuid }'
 
 redteam:
   purpose: |
