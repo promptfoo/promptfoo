@@ -1767,10 +1767,10 @@ export const PLUGINS = [
   },
   {
     category: 'Custom',
-    description: 'Violates a custom configured policy',
+    description: 'Generates adversarial probes to test a custom configured policy',
     label: 'technical',
-    link: '/docs/red-team/plugins/custom/',
-    name: 'Custom Topic',
+    link: '/docs/red-team/plugins/policy/',
+    name: 'Custom Policy',
     pluginId: 'policy',
     applicationTypes: {
       rag: true,
