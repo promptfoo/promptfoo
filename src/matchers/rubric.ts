@@ -13,7 +13,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { fail, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
   Assertion,
@@ -138,21 +138,18 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
+  const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
+
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
       if (jsonObjects.length === 0) {
-        return {
-          failure: fail(`Could not extract JSON from ${label} response`, resp.tokenUsage),
-        };
+        return { failure: failWithTokens(`Could not extract JSON from ${label} response`) };
       }
     } catch (err) {
       return {
-        failure: fail(
-          `${label} produced malformed response: ${err}\n\n${resp.output}`,
-          resp.tokenUsage,
-        ),
+        failure: failWithTokens(`${label} produced malformed response: ${err}\n\n${resp.output}`),
       };
     }
   } else if (
@@ -163,9 +160,8 @@ function parseJsonGradingResponse(
     jsonObjects = [resp.output];
   } else {
     return {
-      failure: fail(
+      failure: failWithTokens(
         `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
       ),
     };
   }
@@ -173,9 +169,8 @@ function parseJsonGradingResponse(
   const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
-      failure: fail(
+      failure: failWithTokens(
         `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
       ),
     };
   }
@@ -225,7 +220,7 @@ export async function runJsonGradingPrompt({
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {

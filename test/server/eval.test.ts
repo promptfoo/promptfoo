@@ -152,6 +152,38 @@ describe('eval routes', () => {
       expect(findByIdSpy).toHaveBeenCalledWith('result-1');
     });
 
+    it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      // Pick the failing result so flipping `pass=true` produces a real
+      // state transition. With `results[0]` (already passing), every numeric
+      // field would be unchanged and the test couldn't distinguish a fresh
+      // post-rating row from a pre-rating snapshot.
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      expect(result.gradingResult?.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.success).toBe(false);
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      // The body must reflect the *post-rating* state, not just include the
+      // row's id — external SDK consumers depend on reading refreshed
+      // grading state without a follow-up GET. If the route ever regressed
+      // to returning a pre-save snapshot or a generic `{message}` envelope,
+      // the strict equality on flipped fields below would catch it.
+      expect(res.body.id).toBe(result.id);
+      expect(res.body.success).toBe(true);
+      expect(res.body.score).toBe(1);
+      expect(res.body.gradingResult?.pass).toBe(true);
+      expect(res.body.gradingResult?.score).toBe(1);
+      expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
