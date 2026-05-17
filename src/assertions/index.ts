@@ -312,6 +312,319 @@ const ASSERTION_HANDLERS: Record<
   'word-count': handleWordCount,
 };
 
+type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
+
+type AssertionValueResolution =
+  | {
+      renderedValue: AssertionValue | undefined;
+      valueFromScript: ValueFromScriptType;
+    }
+  | {
+      result: GradingResult;
+    };
+
+function createAssertionContext({
+  prompt,
+  resolvedVars,
+  test,
+  logProbs,
+  provider,
+  providerResponse,
+  assertion,
+}: {
+  prompt?: string;
+  resolvedVars: Record<string, VarValue>;
+  test: AtomicTestCase;
+  logProbs: ProviderResponse['logProbs'];
+  provider?: ApiProvider;
+  providerResponse: ProviderResponse;
+  assertion: Assertion;
+}): AssertionValueFunctionContext {
+  return {
+    prompt,
+    vars: resolvedVars,
+    test,
+    logProbs,
+    provider,
+    providerResponse,
+    ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
+  };
+}
+
+async function attachTraceContext({
+  context,
+  assertion,
+  traceId,
+  traceData,
+}: {
+  context: AssertionValueFunctionContext;
+  assertion: Assertion;
+  traceId?: string;
+  traceData?: TraceData | null;
+}): Promise<void> {
+  if (!traceId || !assertionMayNeedTraceContext(assertion)) {
+    return;
+  }
+
+  try {
+    const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+    if (!resolvedTraceData) {
+      return;
+    }
+
+    context.trace = {
+      traceId: resolvedTraceData.traceId,
+      evaluationId: resolvedTraceData.evaluationId,
+      testCaseId: resolvedTraceData.testCaseId,
+      metadata: resolvedTraceData.metadata,
+      spans: resolvedTraceData.spans || [],
+    };
+  } catch (error) {
+    logger.debug(`Failed to fetch trace data for assertion: ${error}`);
+  }
+}
+
+function parseFileAssertionReference(reference: string) {
+  const fileRef = reference.slice('file://'.length);
+  const separatorIndex = fileRef.indexOf(':');
+  if (separatorIndex === -1) {
+    return {
+      filePath: path.resolve(cliState.basePath || '', fileRef),
+      functionName: undefined,
+    };
+  }
+
+  return {
+    filePath: path.resolve(cliState.basePath || '', fileRef.slice(0, separatorIndex)),
+    functionName: fileRef.slice(separatorIndex + 1),
+  };
+}
+
+async function resolveFileAssertionValue({
+  renderedValue,
+  output,
+  context,
+  assertion,
+}: {
+  renderedValue: string;
+  output: unknown;
+  context: AssertionValueFunctionContext;
+  assertion: Assertion;
+}): Promise<AssertionValueResolution> {
+  const { filePath, functionName } = parseFileAssertionReference(renderedValue);
+
+  if (isJavascriptFile(filePath)) {
+    const valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
+    logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+    return { renderedValue, valueFromScript };
+  }
+
+  if (filePath.endsWith('.py')) {
+    try {
+      const valueFromScript = await runPython<ValueFromScriptType>(
+        filePath,
+        functionName || 'get_assert',
+        [output as string | number | object | undefined, context],
+      );
+      logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+      return { renderedValue, valueFromScript };
+    } catch (error) {
+      return {
+        result: {
+          pass: false,
+          score: 0,
+          reason: (error as Error).message,
+          assertion,
+        },
+      };
+    }
+  }
+
+  if (filePath.endsWith('.rb')) {
+    try {
+      const { runRuby } = await import('../ruby/rubyUtils.js');
+      const valueFromScript = await runRuby<ValueFromScriptType>(
+        filePath,
+        functionName || 'get_assert',
+        [output as string | number | object | undefined, context],
+      );
+      logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+      return { renderedValue, valueFromScript };
+    } catch (error) {
+      return {
+        result: {
+          pass: false,
+          score: 0,
+          reason: (error as Error).message,
+          assertion,
+        },
+      };
+    }
+  }
+
+  return {
+    renderedValue: processFileReference(renderedValue),
+    valueFromScript: undefined,
+  };
+}
+
+async function resolvePackageAssertionValue({
+  renderedValue,
+  output,
+  context,
+}: {
+  renderedValue: string;
+  output: unknown;
+  context: AssertionValueFunctionContext;
+}): Promise<AssertionValueResolution> {
+  const requiredModule = await loadFromPackage(renderedValue, cliState.basePath || '');
+  if (typeof requiredModule !== 'function') {
+    throw new Error(
+      `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
+    );
+  }
+
+  return {
+    renderedValue,
+    valueFromScript: await Promise.resolve(requiredModule(output, context)),
+  };
+}
+
+function renderArrayAssertionValue(
+  renderedValue: AssertionValue[],
+  resolvedVars: Record<string, VarValue>,
+): AssertionValue[] {
+  return renderedValue.map((value) => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    if (value.startsWith('file://')) {
+      return processFileReference(value);
+    }
+    return nunjucks.renderString(value, resolvedVars);
+  });
+}
+
+async function resolveAssertionValue({
+  assertion,
+  output,
+  context,
+  resolvedVars,
+}: {
+  assertion: Assertion;
+  output: unknown;
+  context: AssertionValueFunctionContext;
+  resolvedVars: Record<string, VarValue>;
+}): Promise<AssertionValueResolution> {
+  const renderedValue = assertion.value;
+
+  if (typeof renderedValue === 'string') {
+    if (renderedValue.startsWith('file://')) {
+      return resolveFileAssertionValue({ renderedValue, output, context, assertion });
+    }
+    if (isPackagePath(renderedValue)) {
+      return resolvePackageAssertionValue({ renderedValue, output, context });
+    }
+    return {
+      renderedValue: nunjucks.renderString(renderedValue, resolvedVars),
+      valueFromScript: undefined,
+    };
+  }
+
+  if (Array.isArray(renderedValue)) {
+    return {
+      renderedValue: renderArrayAssertionValue(renderedValue, resolvedVars),
+      valueFromScript: undefined,
+    };
+  }
+
+  return { renderedValue, valueFromScript: undefined };
+}
+
+function validateScriptResultForAssertion({
+  assertion,
+  baseType,
+  valueFromScript,
+}: {
+  assertion: Assertion;
+  baseType: AssertionType;
+  valueFromScript: ValueFromScriptType;
+}): void {
+  if (valueFromScript === undefined || ['javascript', 'python', 'ruby'].includes(baseType)) {
+    return;
+  }
+
+  if (typeof valueFromScript === 'function') {
+    throw new Error(
+      `Script for "${assertion.type}" assertion returned a function. ` +
+        `Only javascript/python/ruby assertion types can return functions. ` +
+        `For other assertion types, return the expected value (string, number, array, or object).`,
+    );
+  }
+
+  if (typeof valueFromScript === 'boolean') {
+    throw new Error(
+      `Script for "${assertion.type}" assertion returned a boolean. ` +
+        `Only javascript/python/ruby assertion types can return boolean values. ` +
+        `For other assertion types, return the expected value (string, number, array, or object).`,
+    );
+  }
+
+  if (
+    valueFromScript &&
+    typeof valueFromScript === 'object' &&
+    !Array.isArray(valueFromScript) &&
+    'pass' in valueFromScript
+  ) {
+    throw new Error(
+      `Script for "${assertion.type}" assertion returned a GradingResult. ` +
+        `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
+        `For other assertion types, return the expected value (string, number, array, or object).`,
+    );
+  }
+}
+
+function buildProviderCallContext({
+  provider,
+  prompt,
+  resolvedVars,
+  traceId,
+}: {
+  provider?: ApiProvider;
+  prompt?: string;
+  resolvedVars: Record<string, VarValue>;
+  traceId?: string;
+}): CallApiContextParams | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  return {
+    originalProvider: provider,
+    prompt: { raw: prompt || '', label: '' },
+    vars: resolvedVars,
+    ...(graderTraceparent && { traceparent: graderTraceparent }),
+  };
+}
+
+function attachRenderedAssertionMetadata(
+  result: GradingResult,
+  renderedValue: AssertionValue | undefined,
+  originalValue: AssertionValue | undefined,
+): void {
+  if (
+    renderedValue === undefined ||
+    renderedValue === originalValue ||
+    typeof renderedValue !== 'string'
+  ) {
+    return;
+  }
+
+  result.metadata = result.metadata || {};
+  result.metadata.renderedAssertionValue = renderedValue;
+}
+
 const nunjucks = getNunjucksEngine();
 
 /**
@@ -438,177 +751,38 @@ export async function runAssertion({
     });
   }
 
-  const context: AssertionValueFunctionContext = {
+  const context = createAssertionContext({
     prompt,
-    vars: resolvedVars,
+    resolvedVars,
     test,
     logProbs,
     provider,
     providerResponse,
-    ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
-  };
+    assertion,
+  });
+  await attachTraceContext({ context, assertion, traceId, traceData });
 
-  // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
-    try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
-      if (resolvedTraceData) {
-        context.trace = {
-          traceId: resolvedTraceData.traceId,
-          evaluationId: resolvedTraceData.evaluationId,
-          testCaseId: resolvedTraceData.testCaseId,
-          metadata: resolvedTraceData.metadata,
-          spans: resolvedTraceData.spans || [],
-        };
-      }
-    } catch (error) {
-      logger.debug(`Failed to fetch trace data for assertion: ${error}`);
-    }
+  const valueResolution = await resolveAssertionValue({
+    assertion,
+    output,
+    context,
+    resolvedVars,
+  });
+  if ('result' in valueResolution) {
+    return valueResolution.result;
   }
 
-  // Render assertion values
-  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
-  let valueFromScript: ValueFromScriptType;
-  if (typeof renderedValue === 'string') {
-    if (renderedValue.startsWith('file://')) {
-      const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
-
-      if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
-        try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
-        } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
-        }
-      } else if (filePath.endsWith('.rb')) {
-        try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = rubyScriptOutput;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
-        } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
-        }
-      } else {
-        renderedValue = processFileReference(renderedValue);
-      }
-    } else if (isPackagePath(renderedValue)) {
-      const basePath = cliState.basePath || '';
-      const requiredModule = await loadFromPackage(renderedValue, basePath);
-      if (typeof requiredModule !== 'function') {
-        throw new Error(
-          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
-        );
-      }
-
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
-    } else {
-      // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
-    }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
-      if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return processFileReference(v);
-        }
-        return nunjucks.renderString(v, resolvedVars);
-      }
-      return v;
-    });
-  }
-
-  // Centralized script output resolution
-  // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
-  // All other types should use the script output as the comparison value
-  const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
+  let { renderedValue } = valueResolution;
+  const { valueFromScript } = valueResolution;
   const baseType = getAssertionBaseType(assertion);
 
-  if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
-    // Validate the script result type - only javascript/python/ruby can return functions
-    if (typeof valueFromScript === 'function') {
-      throw new Error(
-        `Script for "${assertion.type}" assertion returned a function. ` +
-          `Only javascript/python/ruby assertion types can return functions. ` +
-          `For other assertion types, return the expected value (string, number, array, or object).`,
-      );
-    }
-
-    // Validate the script didn't return boolean or GradingResult
-    // These are only valid for javascript/python/ruby assertion types
-    if (typeof valueFromScript === 'boolean') {
-      throw new Error(
-        `Script for "${assertion.type}" assertion returned a boolean. ` +
-          `Only javascript/python/ruby assertion types can return boolean values. ` +
-          `For other assertion types, return the expected value (string, number, array, or object).`,
-      );
-    }
-
-    // Check if it's a GradingResult object (has 'pass' property)
-    if (
-      valueFromScript &&
-      typeof valueFromScript === 'object' &&
-      !Array.isArray(valueFromScript) &&
-      'pass' in valueFromScript
-    ) {
-      throw new Error(
-        `Script for "${assertion.type}" assertion returned a GradingResult. ` +
-          `Only javascript/python/ruby assertion types can return GradingResult objects. ` +
-          `For other assertion types, return the expected value (string, number, array, or object).`,
-      );
-    }
-
-    // Update renderedValue with the script output
-    // Type assertion is now safe because we've validated the type
+  validateScriptResultForAssertion({ assertion, baseType, valueFromScript });
+  if (valueFromScript !== undefined && !['javascript', 'python', 'ruby'].includes(baseType)) {
     renderedValue = valueFromScript as AssertionValue;
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
-  // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
-  const providerCallContext: CallApiContextParams | undefined = provider
-    ? {
-        originalProvider: provider,
-        prompt: { raw: prompt || '', label: '' },
-        vars: resolvedVars,
-        ...(graderTraceparent && { traceparent: graderTraceparent }),
-      }
-    : undefined;
+  const providerCallContext = buildProviderCallContext({ provider, prompt, resolvedVars, traceId });
 
   const finalTest = getFinalTest(
     vars === undefined ? test : { ...test, vars: resolvedVars },
@@ -645,14 +819,7 @@ export async function runAssertion({
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
-    if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
-    ) {
-      result.metadata = result.metadata || {};
-      result.metadata.renderedAssertionValue = renderedValue;
-    }
+    attachRenderedAssertionMetadata(result, renderedValue, assertion.value);
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
