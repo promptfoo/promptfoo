@@ -1,13 +1,17 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { isUuid } from '../util/uuid';
@@ -16,6 +20,9 @@ import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
 import type { ApiProvider } from '../types/providers';
+
+const VALIDATE_FAILURE_PREFIX = 'Failed to validate configuration: ';
+const LOAD_FAILURE_PREFIX = 'Failed to load configuration: ';
 
 interface ValidateOptions {
   config?: string[];
@@ -173,7 +180,7 @@ async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSumm
 
   // Test 1: Connectivity
   logger.info(`  ◌ Connectivity test ${chalk.dim('(running...)')}`);
-  const connectivityResult = await testProviderConnectivity(provider);
+  const connectivityResult = await testProviderConnectivity({ provider });
   displayTestResult(connectivityResult, 'Connectivity test');
   summary.hasSuggestions = !!connectivityResult.analysis?.changes_needed;
 
@@ -190,8 +197,9 @@ async function testHttpProvider(provider: ApiProvider): Promise<ProviderTestSumm
       summary.sessionSkipped = true;
     } else {
       logger.info(`  ◌ Session test ${chalk.dim('(running...)')}`);
-      const sessionResult = await testProviderSession(provider, undefined, {
-        skipConfigValidation: true,
+      const sessionResult = await testProviderSession({
+        provider,
+        options: { skipConfigValidation: true },
       });
       displayTestResult(sessionResult, 'Session test');
       summary.sessionPassed = sessionResult.success;
@@ -248,7 +256,9 @@ async function loadProvidersForTesting(
   } else {
     // Load all providers from config
     if (!config.providers || (Array.isArray(config.providers) && config.providers.length === 0)) {
-      logger.info('No providers found in configuration to test.');
+      logger.info(
+        'No providers found in configuration to test. Add providers to your config or run `promptfoo validate -t <provider-id>` to test a specific provider.',
+      );
       return [];
     }
 
@@ -419,20 +429,24 @@ export async function doValidate(
       logger.error(
         dedent`Configuration validation error:
 Config file path(s): ${Array.isArray(configPaths) ? configPaths.join(', ') : (configPaths ?? 'N/A')}
-${fromError(configParse.error).message}`,
+${z.prettifyError(configParse.error)}`,
       );
       process.exitCode = 1;
       return;
     }
     const suiteParse = TestSuiteSchema.safeParse(testSuite);
     if (!suiteParse.success) {
-      logger.error(dedent`Test suite validation error:\n${fromError(suiteParse.error).message}`);
+      logger.error(dedent`Test suite validation error:\n${z.prettifyError(suiteParse.error)}`);
       process.exitCode = 1;
       return;
     }
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {
-    logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
+    if (err instanceof ConfigResolutionError) {
+      logConfigResolutionError(err, VALIDATE_FAILURE_PREFIX);
+    } else {
+      logger.error(`${VALIDATE_FAILURE_PREFIX}${err instanceof Error ? err.message : err}`);
+    }
     process.exitCode = 1;
   }
 }
@@ -467,11 +481,13 @@ export async function doValidateTarget(
       );
       await runProviderTests(undefined, config as UnifiedConfig);
     } catch (err) {
-      logger.error(
-        chalk.red(
-          `Failed to load configuration: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+      if (err instanceof ConfigResolutionError) {
+        logConfigResolutionError(err, LOAD_FAILURE_PREFIX);
+      } else {
+        logger.error(
+          chalk.red(`${LOAD_FAILURE_PREFIX}${err instanceof Error ? err.message : String(err)}`),
+        );
+      }
       process.exitCode = 1;
     }
   } else if (opts.target) {

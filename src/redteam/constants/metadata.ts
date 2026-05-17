@@ -1,5 +1,13 @@
 import { z } from 'zod';
+import {
+  CODING_AGENT_COLLECTIONS,
+  CODING_AGENT_PLUGIN_ALIASES,
+  CODING_AGENT_PLUGIN_DESCRIPTIONS,
+  CODING_AGENT_PLUGIN_DISPLAY_NAMES,
+  CODING_AGENT_PLUGINS,
+} from './codingAgents';
 
+import type { CodingAgentCollection, CodingAgentPlugin } from './codingAgents';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
@@ -22,6 +30,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
+  'data-exfil': 'Tests for data exfiltration via URL parameters, images, or markdown links',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
   contracts: 'Tests for unauthorized contractual commitments and legal exposure',
   coppa: "Tests for COPPA (Children's Online Privacy Protection Act) compliance violations",
@@ -39,6 +48,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   foundation: 'Tests a collection of plugins designed to run against foundation models',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Dynamic multi-turn attack generation using adversarial techniques',
+  'indirect-web-pwn': 'Embeds attack prompts in web pages for indirect prompt injection via fetch',
   'guardrails-eval':
     'Comprehensive testing suite for evaluating guardrails effectiveness against prompt injection, jailbreaking, harmful content, and PII leakage',
   hallucination: 'Tests for fabrication of false or misleading information',
@@ -80,6 +90,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.)',
+  'insurance:data-disclosure':
+    'Tests for unauthorized disclosure of protected policyholder data including claims history, property details, driving records, and financial information',
   'insurance:network-misinformation': 'Tests for inaccurate provider network information',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations',
@@ -92,7 +104,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
   intent: 'Tests for manipulation of system behavior via specific prompts',
-  jailbreak: 'Single-shot optimization of safety bypass techniques',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -109,6 +122,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information',
+  'medical:fda:ai-disclosure':
+    'Tests whether medical AI systems conceal intended-use limits, low-confidence outputs, subgroup caveats, data drift, or silent model updates',
+  'medical:fda:cyber-access-control':
+    'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default access before privileged commands or therapy changes',
+  'medical:fda:cyber-audit-tampering':
+    'Tests whether medical-device AI systems suppress anomaly alerts, rewrite audit trails, hide SBOM/version evidence, or disable forensic logging',
   'medical:hallucination': 'Tests for fabricated medical facts, studies, or drug interactions',
   'medical:incorrect-knowledge':
     'Tests for factually wrong medical information that could cause harm',
@@ -130,7 +149,11 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'financial:hallucination':
     'Tests for fabricated market data, non-existent financial instruments, or fictional company information',
   'financial:impartiality': 'Tests for unauthorized financial advice or transaction facilitation',
+  'financial:japan-fiea-suitability':
+    "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
   'financial:sycophancy':
     'Tests for agreeing with risky investment strategies or validating get-rich-quick schemes',
   'goal-misalignment':
@@ -156,9 +179,12 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   policy: 'Tests compliance with custom security policies',
   politics: 'Tests handling of political content and bias',
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
+  'jailbreak-templates':
+    'Tests LLM resistance to known jailbreak techniques using static templates (DAN, Skeleton Key, etc.)',
   'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
   'rag-document-exfiltration': 'Tests for RAG document exfiltration',
   'rag-poisoning': 'Tests for vulnerabilities to RAG retrieval poisoning attacks',
+  'rag-source-attribution': 'Tests for fabricated document citations in RAG systems',
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
@@ -172,10 +198,13 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'sql-injection': 'Tests for SQL injection vulnerabilities',
   ssrf: 'Tests for server-side request forgery vulnerabilities',
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
+  'model-identification':
+    'Tests whether an AI system can be tricked into revealing its underlying model identity',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
+  vlsu: 'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
@@ -184,10 +213,54 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   bias: 'Bias detection across protected characteristics',
   medical: 'Medical AI safety testing across healthcare vulnerabilities',
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
-  insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
+  insurance: 'Insurance AI safety testing across all insurance types',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
+  telecom:
+    'Telecommunications AI safety testing across CPNI protection, account security, and regulatory compliance vulnerabilities',
+  'telecom:cpni-disclosure':
+    'Tests for unauthorized disclosure of Customer Proprietary Network Information',
+  'telecom:location-disclosure': 'Tests for unauthorized disclosure of customer location data',
+  'telecom:account-takeover': 'Tests for SIM swap and account hijacking vulnerabilities',
+  'telecom:e911-misinformation': 'Tests for incorrect emergency calling information',
+  'telecom:tcpa-violation': 'Tests for TCPA consent and Do Not Call compliance',
+  'telecom:unauthorized-changes': 'Tests for slamming and cramming vulnerabilities',
+  'telecom:fraud-enablement': 'Tests for telecom-specific fraud facilitation',
+  'telecom:porting-misinformation': 'Tests for incorrect number portability information',
+  'telecom:billing-misinformation': 'Tests for incorrect billing and pricing information',
+  'telecom:coverage-misinformation': 'Tests for false coverage or service claims',
+  'telecom:law-enforcement-request-handling': 'Tests for improper law enforcement request handling',
+  'telecom:accessibility-violation': 'Tests for accessibility compliance violations',
+  'teen-safety':
+    'Teen safety testing for harmful body ideals, dangerous challenges, unsafe roleplay, and underage access to restricted goods or services',
+  'teen-safety:harmful-body-ideals':
+    'Tests for harmful body ideals, body shaming, and enabling disordered eating or exercise behaviors that are unsafe for teens',
+  'teen-safety:dangerous-content':
+    'Tests for dangerous activities, viral challenges, unsafe stunts, and dangerous at-home procedures inappropriate for teens',
+  'teen-safety:dangerous-roleplay':
+    'Tests for unsafe roleplay involving minors, including romantic, sexual, or violent interactive scenarios',
+  'teen-safety:age-restricted-goods-and-services':
+    'Tests for enabling or normalizing underage access to alcohol, vaping, gambling, weapons, and other age-restricted goods or services',
+  realestate:
+    'Real Estate AI safety testing for Fair Housing Act compliance, steering prevention, and housing discrimination vulnerabilities',
+  'realestate:fair-housing-discrimination':
+    'Tests for Fair Housing Act violations across all 7 protected classes (race, color, religion, national origin, sex, familial status, disability)',
+  'realestate:steering':
+    'Tests for illegal steering practices directing buyers to/from neighborhoods based on demographics',
+  'realestate:discriminatory-listings':
+    'Tests for discriminatory language in property listings and advertisements',
+  'realestate:lending-discrimination':
+    'Tests for ECOA and FHA violations in mortgage lending including redlining and disparate treatment',
+  'realestate:valuation-bias':
+    'Tests for algorithmic bias in property appraisals and automated valuations',
+  'realestate:accessibility-discrimination':
+    'Tests for ADA and FHA disability accommodation violations in housing',
+  'realestate:advertising-discrimination':
+    'Tests for discriminatory targeting and language in housing advertisements',
+  'realestate:source-of-income':
+    'Tests for Section 8 and housing voucher discrimination (state-specific protections)',
+  ...CODING_AGENT_PLUGIN_DESCRIPTIONS,
 };
 
 // These names are displayed in risk cards and in the table
@@ -215,6 +288,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   custom: 'Custom',
   'cross-session-leak': 'Cross-Session Data Leakage',
   cyberseceval: 'CyberSecEval Dataset',
+  'data-exfil': 'Data Exfiltration',
   'debug-access': 'Debug Interface Exposure',
   default: 'Standard Security Suite',
   'divergent-repetition': 'Divergent Repetition',
@@ -223,9 +297,13 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ferpa: 'FERPA Compliance',
   foundation: 'Foundation Model Plugin Collection',
   gcg: 'Greedy Coordinate Gradient',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   layer: 'Strategy Layer',
   mcp: 'Model Context Protocol',
   'medical:anchoring-bias': 'Medical Anchoring Bias',
+  'medical:fda:ai-disclosure': 'FDA AI Disclosure',
+  'medical:fda:cyber-access-control': 'FDA Cyber Access Control',
+  'medical:fda:cyber-audit-tampering': 'FDA Cyber Audit Tampering',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'Medical Incorrect Knowledge',
   'medical:off-label-use': 'Medical Off-Label Use',
@@ -239,7 +317,9 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:defamation': 'Financial Defamation',
   'financial:hallucination': 'Financial Hallucination',
   'financial:impartiality': 'Financial Services Impartiality',
+  'financial:japan-fiea-suitability': 'Japan FIEA Suitability',
   'financial:misconduct': 'Financial Services Misconduct',
+  'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
   'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
   'off-topic': 'Off-Topic Manipulation',
@@ -291,14 +371,42 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'Coverage Discrimination',
+  'insurance:data-disclosure': 'Data Disclosure',
   'insurance:network-misinformation': 'Network Misinformation',
   'insurance:phi-disclosure': 'PHI Disclosure',
   'ecommerce:pci-dss': 'PCI DSS Compliance',
   'ecommerce:compliance-bypass': 'Compliance Bypass',
   'ecommerce:order-fraud': 'Order Fraud',
   'ecommerce:price-manipulation': 'Price Manipulation',
+  telecom: 'Telecommunications Safety Suite',
+  'telecom:cpni-disclosure': 'CPNI Disclosure',
+  'telecom:location-disclosure': 'Location Data Disclosure',
+  'telecom:account-takeover': 'Account Takeover',
+  'telecom:e911-misinformation': 'E911 Misinformation',
+  'telecom:tcpa-violation': 'TCPA Violation',
+  'telecom:unauthorized-changes': 'Unauthorized Changes (Slamming/Cramming)',
+  'telecom:fraud-enablement': 'Fraud Enablement',
+  'telecom:porting-misinformation': 'Porting Misinformation',
+  'telecom:billing-misinformation': 'Billing Misinformation',
+  'telecom:coverage-misinformation': 'Coverage Misinformation',
+  'telecom:law-enforcement-request-handling': 'Law Enforcement Request Handling',
+  'telecom:accessibility-violation': 'Accessibility Violation',
+  'teen-safety': 'Teen Safety Suite',
+  'teen-safety:harmful-body-ideals': 'Harmful Body Ideals',
+  'teen-safety:dangerous-content': 'Dangerous Activities & Challenges',
+  'teen-safety:dangerous-roleplay': 'Dangerous Roleplay',
+  'teen-safety:age-restricted-goods-and-services': 'Age-Restricted Goods & Services',
+  realestate: 'Real Estate Safety Suite',
+  'realestate:fair-housing-discrimination': 'Fair Housing Discrimination',
+  'realestate:steering': 'Real Estate Steering',
+  'realestate:discriminatory-listings': 'Discriminatory Listings',
+  'realestate:lending-discrimination': 'Lending Discrimination',
+  'realestate:valuation-bias': 'Valuation Bias',
+  'realestate:accessibility-discrimination': 'Accessibility Discrimination',
+  'realestate:advertising-discrimination': 'Advertising Discrimination',
+  'realestate:source-of-income': 'Source of Income Discrimination',
   intent: 'Intent',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
   'jailbreak:hydra': 'Hydra Multi-turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
@@ -323,9 +431,11 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   policy: 'Policy Compliance',
   politics: 'Political Bias',
   'prompt-extraction': 'System Prompt Disclosure',
+  'jailbreak-templates': 'Jailbreak Templates',
   'prompt-injection': 'Direct Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
+  'rag-source-attribution': 'RAG Source Attribution',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
   'mischievous-user': 'Mischievous User',
@@ -337,13 +447,16 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'sql-injection': 'SQL Injection',
   ssrf: 'SSRF Vulnerability',
   'system-prompt-override': 'System Prompt Override',
+  'model-identification': 'Model Identification',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard Dataset',
+  vlsu: 'VLSU Compositional Safety',
   wordplay: 'Wordplay',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
+  ...CODING_AGENT_PLUGIN_DISPLAY_NAMES,
 };
 
 export const Severity = {
@@ -351,17 +464,19 @@ export const Severity = {
   High: 'high',
   Medium: 'medium',
   Low: 'low',
+  Informational: 'informational',
 } as const;
 export type Severity = (typeof Severity)[keyof typeof Severity];
 
 // Zod schema for Severity validation
-export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low']);
+export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'informational']);
 
 export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Critical]: 'Critical',
   [Severity.High]: 'High',
   [Severity.Medium]: 'Medium',
   [Severity.Low]: 'Low',
+  [Severity.Informational]: 'Informational',
 };
 
 export const severityRiskScores: Record<Severity, number> = {
@@ -369,7 +484,18 @@ export const severityRiskScores: Record<Severity, number> = {
   [Severity.High]: 7.0,
   [Severity.Medium]: 4.0,
   [Severity.Low]: 0.0,
+  [Severity.Informational]: 0.0,
 };
+
+const codingAgentRiskCategorySeverityMap: Record<
+  CodingAgentCollection | CodingAgentPlugin,
+  Severity
+> = {
+  ...Object.fromEntries(CODING_AGENT_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
+  ...Object.fromEntries(
+    CODING_AGENT_COLLECTIONS.map((collectionId) => [collectionId, Severity.High]),
+  ),
+} as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
 
 /*
  * Default severity values for each plugin.
@@ -392,7 +518,9 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:defamation': Severity.Medium,
   'financial:hallucination': Severity.Low,
   'financial:impartiality': Severity.Medium,
+  'financial:japan-fiea-suitability': Severity.High,
   'financial:misconduct': Severity.High,
+  'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
   'goal-misalignment': Severity.Low,
   competitors: Severity.Low,
@@ -400,11 +528,15 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   coppa: Severity.High,
   'cross-session-leak': Severity.Medium,
   cyberseceval: Severity.Medium,
+  'data-exfil': Severity.High,
   donotanswer: Severity.Medium,
   'debug-access': Severity.High,
   default: Severity.Low,
   mcp: Severity.High,
   'medical:anchoring-bias': Severity.High,
+  'medical:fda:ai-disclosure': Severity.High,
+  'medical:fda:cyber-access-control': Severity.Critical,
+  'medical:fda:cyber-audit-tampering': Severity.Critical,
   'medical:hallucination': Severity.Critical,
   'medical:incorrect-knowledge': Severity.Critical,
   'medical:off-label-use': Severity.High,
@@ -413,6 +545,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'off-topic': Severity.Medium,
   'divergent-repetition': Severity.Medium,
   'excessive-agency': Severity.Medium,
+  'model-identification': Severity.Medium,
   'tool-discovery': Severity.Low,
   foundation: Severity.Medium,
   'guardrails-eval': Severity.Medium,
@@ -460,12 +593,40 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
   'insurance:coverage-discrimination': Severity.Critical,
+  'insurance:data-disclosure': Severity.Critical,
   'insurance:network-misinformation': Severity.High,
   'insurance:phi-disclosure': Severity.Critical,
   'ecommerce:pci-dss': Severity.Critical,
   'ecommerce:compliance-bypass': Severity.High,
   'ecommerce:order-fraud': Severity.High,
   'ecommerce:price-manipulation': Severity.High,
+  telecom: Severity.Critical,
+  'telecom:cpni-disclosure': Severity.Critical,
+  'telecom:location-disclosure': Severity.Critical,
+  'telecom:account-takeover': Severity.Critical,
+  'telecom:e911-misinformation': Severity.Critical,
+  'telecom:tcpa-violation': Severity.High,
+  'telecom:unauthorized-changes': Severity.High,
+  'telecom:fraud-enablement': Severity.High,
+  'telecom:porting-misinformation': Severity.High,
+  'telecom:billing-misinformation': Severity.Medium,
+  'telecom:coverage-misinformation': Severity.Medium,
+  'telecom:law-enforcement-request-handling': Severity.Medium,
+  'telecom:accessibility-violation': Severity.Medium,
+  'teen-safety': Severity.Low,
+  'teen-safety:harmful-body-ideals': Severity.Low,
+  'teen-safety:dangerous-content': Severity.Low,
+  'teen-safety:dangerous-roleplay': Severity.Low,
+  'teen-safety:age-restricted-goods-and-services': Severity.Low,
+  realestate: Severity.Critical,
+  'realestate:fair-housing-discrimination': Severity.Critical,
+  'realestate:steering': Severity.Critical,
+  'realestate:discriminatory-listings': Severity.High,
+  'realestate:lending-discrimination': Severity.Critical,
+  'realestate:valuation-bias': Severity.High,
+  'realestate:accessibility-discrimination': Severity.High,
+  'realestate:advertising-discrimination': Severity.High,
+  'realestate:source-of-income': Severity.High,
   intent: Severity.High,
   overreliance: Severity.Low,
   'pharmacy:controlled-substance-compliance': Severity.High,
@@ -482,6 +643,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'prompt-extraction': Severity.Medium,
   'rag-document-exfiltration': Severity.Medium,
   'rag-poisoning': Severity.Medium,
+  'rag-source-attribution': Severity.High,
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
@@ -493,8 +655,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   unsafebench: Severity.Medium,
   'unverifiable-claims': Severity.Medium,
   vlguard: Severity.Medium,
+  vlsu: Severity.Medium,
   wordplay: Severity.Low,
   xstest: Severity.Low,
+  ...codingAgentRiskCategorySeverityMap,
 };
 
 export const riskCategories: Record<string, Plugin[]> = {
@@ -505,6 +669,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'bola',
     'cca',
     'debug-access',
+    'model-identification',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
@@ -519,8 +684,10 @@ export const riskCategories: Record<string, Plugin[]> = {
 
     // Data protection
     'cross-session-leak',
+    'data-exfil',
     'divergent-repetition',
     'harmful:privacy',
+    'insurance:data-disclosure',
     'insurance:phi-disclosure',
     'pii:api-db',
     'pii:direct',
@@ -530,6 +697,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'prompt-extraction',
     'rag-document-exfiltration',
     'rag-poisoning',
+    'rag-source-attribution',
 
     'agentic:memory-poisoning',
   ],
@@ -571,6 +739,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'harmful:radicalization',
     'harmful:self-harm',
     'harmful:sexual-content',
+    'teen-safety:harmful-body-ideals',
+    'teen-safety:dangerous-content',
+    'teen-safety:dangerous-roleplay',
+    'teen-safety:age-restricted-goods-and-services',
     'wordplay',
   ],
 
@@ -591,6 +763,8 @@ export const riskCategories: Record<string, Plugin[]> = {
     'unverifiable-claims',
   ],
 
+  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
+
   'Domain-Specific Risks': [
     'ecommerce:pci-dss',
     'ecommerce:compliance-bypass',
@@ -604,10 +778,15 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:defamation',
     'financial:hallucination',
     'financial:impartiality',
+    'financial:japan-fiea-suitability',
     'financial:misconduct',
+    'financial:sox-compliance',
     'financial:sycophancy',
     'medical:hallucination',
     'medical:anchoring-bias',
+    'medical:fda:ai-disclosure',
+    'medical:fda:cyber-access-control',
+    'medical:fda:cyber-audit-tampering',
     'medical:incorrect-knowledge',
     'medical:off-label-use',
     'medical:prioritization-error',
@@ -615,6 +794,26 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pharmacy:controlled-substance-compliance',
     'pharmacy:dosage-calculation',
     'pharmacy:drug-interaction',
+    'telecom:cpni-disclosure',
+    'telecom:location-disclosure',
+    'telecom:account-takeover',
+    'telecom:e911-misinformation',
+    'telecom:tcpa-violation',
+    'telecom:unauthorized-changes',
+    'telecom:fraud-enablement',
+    'telecom:porting-misinformation',
+    'telecom:billing-misinformation',
+    'telecom:coverage-misinformation',
+    'telecom:law-enforcement-request-handling',
+    'telecom:accessibility-violation',
+    'realestate:fair-housing-discrimination',
+    'realestate:steering',
+    'realestate:discriminatory-listings',
+    'realestate:lending-discrimination',
+    'realestate:valuation-bias',
+    'realestate:accessibility-discrimination',
+    'realestate:advertising-discrimination',
+    'realestate:source-of-income',
   ],
 
   Datasets: [
@@ -627,6 +826,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pliny',
     'unsafebench',
     'vlguard',
+    'vlsu',
     'xstest',
   ],
 };
@@ -636,20 +836,22 @@ export const categoryDescriptions = {
   'Compliance & Legal': 'Regulatory compliance, legal, and policy violation risks.',
   'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
-  Datasets: 'Pre-defined test cases from research datasets.',
+  'Coding Agent Security':
+    'Repository prompt injection, terminal output injection, launcher environment disclosure, sandbox read escape, and verifier sabotage risks for coding agents.',
   'Domain-Specific Risks': 'Specialized risks and failure modes.',
+  Datasets: 'Pre-defined test cases from research datasets.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;
 
-export const categoryMapReverse = Object.entries(riskCategories).reduce(
+export const categoryMapReverse = Object.entries(riskCategories).reduce<Record<string, string>>(
   (acc, [category, harms]) => {
     harms.forEach((harm) => {
       acc[harm] = category;
     });
     return acc;
   },
-  {} as Record<string, string>,
+  {},
 );
 
 export const categoryLabels = Object.keys(categoryMapReverse);
@@ -668,12 +870,16 @@ export const categoryAliases: Record<Plugin, string> = {
   coppa: 'COPPACompliance',
   'cross-session-leak': 'CrossSessionLeak',
   cyberseceval: 'CyberSecEval',
+  'data-exfil': 'DataExfil',
   donotanswer: 'DoNotAnswer',
   'debug-access': 'DebugAccess',
   default: 'Default',
   ferpa: 'FERPACompliance',
   mcp: 'MCP',
   'medical:anchoring-bias': 'MedicalAnchoringBias',
+  'medical:fda:ai-disclosure': 'MedicalFdaAiDisclosure',
+  'medical:fda:cyber-access-control': 'MedicalFdaCyberAccessControl',
+  'medical:fda:cyber-audit-tampering': 'MedicalFdaCyberAuditTampering',
   'medical:hallucination': 'Medical Hallucination',
   'medical:incorrect-knowledge': 'MedicalIncorrectKnowledge',
   'medical:off-label-use': 'MedicalOffLabelUse',
@@ -691,7 +897,9 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:defamation': 'FinancialDefamation',
   'financial:hallucination': 'FinancialHallucination',
   'financial:impartiality': 'FinancialImpartiality',
+  'financial:japan-fiea-suitability': 'FinancialJapanFieaSuitability',
   'financial:misconduct': 'FinancialMisconduct',
+  'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
   'goal-misalignment': 'GoalMisalignment',
   'off-topic': 'OffTopic',
@@ -700,6 +908,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'pharmacy:drug-interaction': 'PharmacyDrugInteraction',
   'divergent-repetition': 'DivergentRepetition',
   'excessive-agency': 'ExcessiveAgency',
+  'model-identification': 'ModelIdentification',
   'tool-discovery': 'ToolDiscovery',
   foundation: 'Foundation',
   'guardrails-eval': 'GuardrailsEvaluation',
@@ -717,6 +926,33 @@ export const categoryAliases: Record<Plugin, string> = {
   insurance: 'Insurance Safety',
   financial: 'Financial Safety',
   ecommerce: 'E-commerce Safety',
+  telecom: 'Telecommunications Safety',
+  'telecom:cpni-disclosure': 'TelecomCpniDisclosure',
+  'telecom:location-disclosure': 'TelecomLocationDisclosure',
+  'telecom:account-takeover': 'TelecomAccountTakeover',
+  'telecom:e911-misinformation': 'TelecomE911Misinformation',
+  'telecom:tcpa-violation': 'TelecomTcpaViolation',
+  'telecom:unauthorized-changes': 'TelecomUnauthorizedChanges',
+  'telecom:fraud-enablement': 'TelecomFraudEnablement',
+  'telecom:porting-misinformation': 'TelecomPortingMisinformation',
+  'telecom:billing-misinformation': 'TelecomBillingMisinformation',
+  'telecom:coverage-misinformation': 'TelecomCoverageMisinformation',
+  'telecom:law-enforcement-request-handling': 'TelecomLawEnforcementRequestHandling',
+  'telecom:accessibility-violation': 'TelecomAccessibilityViolation',
+  'teen-safety': 'TeenSafety',
+  'teen-safety:harmful-body-ideals': 'TeenSafetyHarmfulBodyIdeals',
+  'teen-safety:dangerous-content': 'TeenSafetyDangerousContent',
+  'teen-safety:dangerous-roleplay': 'TeenSafetyDangerousRoleplay',
+  'teen-safety:age-restricted-goods-and-services': 'TeenSafetyAgeRestrictedGoodsAndServices',
+  realestate: 'Real Estate Safety',
+  'realestate:fair-housing-discrimination': 'RealEstateFairHousingDiscrimination',
+  'realestate:steering': 'RealEstateSteering',
+  'realestate:discriminatory-listings': 'RealEstateDiscriminatoryListings',
+  'realestate:lending-discrimination': 'RealEstateLendingDiscrimination',
+  'realestate:valuation-bias': 'RealEstateValuationBias',
+  'realestate:accessibility-discrimination': 'RealEstateAccessibilityDiscrimination',
+  'realestate:advertising-discrimination': 'RealEstateAdvertisingDiscrimination',
+  'realestate:source-of-income': 'RealEstateSourceOfIncome',
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -748,6 +984,7 @@ export const categoryAliases: Record<Plugin, string> = {
   imitation: 'Imitation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
   'insurance:coverage-discrimination': 'InsuranceCoverageDiscrimination',
+  'insurance:data-disclosure': 'InsuranceDataDisclosure',
   'insurance:network-misinformation': 'InsuranceNetworkMisinformation',
   'insurance:phi-disclosure': 'InsurancePhiDisclosure',
   intent: 'Intent',
@@ -763,6 +1000,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'prompt-extraction': 'PromptExtraction',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
+  'rag-source-attribution': 'RAGSourceAttribution',
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
@@ -774,17 +1012,18 @@ export const categoryAliases: Record<Plugin, string> = {
   unsafebench: 'UnsafeBench',
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard',
+  vlsu: 'VLSU',
   wordplay: 'Wordplay',
   xstest: 'XSTest',
+  ...CODING_AGENT_PLUGIN_ALIASES,
 };
 
-export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
-  (acc, [key, value]) => {
-    acc[value] = key;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
+export const categoryAliasesReverse = Object.entries(categoryAliases).reduce<
+  Record<string, string>
+>((acc, [key, value]) => {
+  acc[value] = key;
+  return acc;
+}, {});
 
 export const pluginDescriptions: Record<Plugin, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',
@@ -802,6 +1041,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'cross-session-leak':
     'Tests for information leakage vulnerabilities between different user sessions',
   cyberseceval: "Tests prompt injection attacks from Meta's CyberSecEval dataset",
+  'data-exfil':
+    'Tests whether the AI can be tricked into exfiltrating sensitive data via URL parameters, images, or markdown links',
   donotanswer: 'Tests for vulnerabilities to Do Not Answer attacks',
   'debug-access':
     'Identifies exposed debugging interfaces and unauthorized command execution vectors',
@@ -809,6 +1050,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'divergent-repetition':
     'Tests repetitive patterns that can cause the model to diverge from normal behavior and leak training data',
   'excessive-agency': 'Evaluates system boundary enforcement and unauthorized action prevention',
+  'model-identification':
+    'Tests whether an AI system reveals its underlying model identity, version, or creator when probed',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   ferpa: 'Tests for Family Educational Rights and Privacy Act compliance',
   foundation: 'Tests a collection of plugins designed to run against foundation models',
@@ -828,11 +1071,65 @@ export const pluginDescriptions: Record<Plugin, string> = {
   pharmacy:
     'Comprehensive pharmacy AI safety testing for pharmaceutical vulnerabilities including drug interactions, dosage calculations, and controlled substance compliance',
   insurance:
-    'Comprehensive insurance AI safety testing for healthcare coverage vulnerabilities including coverage discrimination, network misinformation, and PHI disclosure',
+    'Comprehensive insurance AI safety testing across all insurance types including coverage discrimination, network misinformation, PHI disclosure, and policyholder data disclosure',
   financial:
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
   ecommerce:
     'Comprehensive e-commerce AI safety testing for payment security and transaction integrity vulnerabilities including PCI DSS compliance, fraud detection, and price manipulation',
+  telecom:
+    'Comprehensive telecommunications AI safety testing across CPNI protection, account security, regulatory compliance (FCC, TCPA, CALEA), and telecom-specific fraud prevention',
+  'telecom:cpni-disclosure':
+    'Tests for unauthorized disclosure of Customer Proprietary Network Information (CPNI) including call records, service details, and billing information in violation of FCC 47 U.S.C. Section 222',
+  'telecom:location-disclosure':
+    'Tests for unauthorized disclosure of customer location data from cell tower connections, GPS, or network information',
+  'telecom:account-takeover':
+    'Tests for SIM swap vulnerabilities, authentication bypass, and account hijacking that could enable fraud or identity theft',
+  'telecom:e911-misinformation':
+    "Tests for incorrect or unsafe information about emergency calling, location accuracy, VoIP limitations, and E911 regulations (Kari's Law, RAY BAUM's Act)",
+  'telecom:tcpa-violation':
+    'Tests for TCPA violations including improper consent handling, Do Not Call list compliance, and illegal robocall/text facilitation',
+  'telecom:unauthorized-changes':
+    'Tests for slamming (unauthorized carrier switches) and cramming (unauthorized charges) vulnerabilities that violate FCC Section 258',
+  'telecom:fraud-enablement':
+    'Tests for telecom-specific fraud facilitation including caller ID spoofing, SIM box fraud, and service arbitrage schemes',
+  'telecom:porting-misinformation':
+    'Tests for incorrect number portability information, unauthorized port facilitation, or port-blocking that violates FCC LNP rules',
+  'telecom:billing-misinformation':
+    'Tests for incorrect billing information, hidden fees, or misleading price quotes that violate FCC Truth-in-Billing requirements',
+  'telecom:coverage-misinformation':
+    'Tests for false or misleading claims about network coverage, 5G availability, or roaming capabilities',
+  'telecom:law-enforcement-request-handling':
+    'Tests for improper handling of law enforcement data requests in violation of CALEA requirements and privacy laws',
+  'telecom:accessibility-violation':
+    'Tests for accessibility compliance violations under Section 255, Section 508, ADA, and 21st Century CVAA',
+  'teen-safety':
+    'Comprehensive teen safety testing for age-appropriate AI behavior across body image harms, dangerous activities, unsafe roleplay, and underage access risks',
+  'teen-safety:harmful-body-ideals':
+    'Tests for harmful body-ideal promotion, body shaming, and facilitation of unsafe restriction, purging, over-exercise, or concealment behaviors that can harm teens',
+  'teen-safety:dangerous-content':
+    'Tests for promotion, glorification, or facilitation of dangerous challenges, unsafe stunts, risky experimentation, and dangerous at-home procedures inappropriate for teens',
+  'teen-safety:dangerous-roleplay':
+    'Tests for interactive roleplay involving minors that simulates romantic, sexual, or violent scenarios that could normalize exploitation or harm',
+  'teen-safety:age-restricted-goods-and-services':
+    'Tests for encouragement, sourcing, or circumvention tactics that help minors access age-restricted goods or services such as alcohol, vaping, gambling, weapons, or adult-only venues',
+  realestate:
+    'Comprehensive real estate AI safety testing for Fair Housing Act compliance, steering prevention, lending discrimination (ECOA), valuation bias, and housing discrimination vulnerabilities',
+  'realestate:fair-housing-discrimination':
+    'Tests for Fair Housing Act violations across all 7 protected classes: race, color, religion, national origin, sex (including gender identity and sexual orientation), familial status, and disability',
+  'realestate:steering':
+    'Tests for illegal steering practices where systems direct buyers toward or away from neighborhoods based on protected class characteristics rather than objective housing criteria',
+  'realestate:discriminatory-listings':
+    'Tests for discriminatory language in property listings that indicates preferences, limitations, or discrimination based on protected classes including code words and exclusionary language',
+  'realestate:lending-discrimination':
+    'Tests for Equal Credit Opportunity Act (ECOA) and Fair Housing Act violations in mortgage lending including redlining, disparate treatment, and discriminatory underwriting',
+  'realestate:valuation-bias':
+    'Tests for algorithmic bias in property appraisals and automated valuation models that could result in discriminatory property valuations based on neighborhood demographics',
+  'realestate:accessibility-discrimination':
+    'Tests for Americans with Disabilities Act (ADA) and Fair Housing Act violations in disability accommodations, service animal policies, and reasonable modification requests',
+  'realestate:advertising-discrimination':
+    'Tests for Fair Housing Act violations in housing advertising including discriminatory targeting, imagery, and language in digital and traditional marketing',
+  'realestate:source-of-income':
+    'Tests for Section 8 voucher and housing assistance discrimination in jurisdictions with source of income protections',
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -862,9 +1159,11 @@ export const pluginDescriptions: Record<Plugin, string> = {
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
   'insurance:coverage-discrimination':
-    'Tests for discriminatory coverage or benefit determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, and age discrimination statutes',
+    'Tests for discriminatory coverage, underwriting, or claims determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, Fair Housing Act, ECOA, and state unfair trade practices acts',
+  'insurance:data-disclosure':
+    'Tests for unauthorized disclosure of protected policyholder data including claims history, property details, driving records, beneficiary information, and business data in violation of GLBA, FCRA, DPPA, and state insurance privacy laws',
   'insurance:network-misinformation':
-    'Tests for inaccurate provider network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose members to surprise medical bills and balance billing',
+    'Tests for inaccurate provider or vendor network information including wrong network status, terminated contracts, ghost networks, and outdated provider data that could expose policyholders to unexpected costs, voided warranties, or inadequate service',
   'insurance:phi-disclosure':
     'Tests for unauthorized disclosure of Protected Health Information in violation of HIPAA privacy regulations including cross-member PHI leakage, inadequate authentication, and disclosure to unauthorized third parties',
   'ecommerce:pci-dss':
@@ -878,6 +1177,12 @@ export const pluginDescriptions: Record<Plugin, string> = {
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
+  'medical:fda:ai-disclosure':
+    'Tests whether AI-enabled medical-device or clinical LLM systems disclose intended-use boundaries, confidence and uncertainty, subgroup limitations, data drift, and model or device version changes instead of concealing them',
+  'medical:fda:cyber-access-control':
+    'Tests whether medical-device AI systems enforce authenticated, role-scoped, deny-by-default workflows and refuse privileged device, telemetry, update, or therapy actions from unauthorized users or stale sessions',
+  'medical:fda:cyber-audit-tampering':
+    'Tests whether medical-device AI systems preserve anomaly alerts, SBOM/version records, and forensic audit trails instead of helping users suppress, rewrite, or delete cybersecurity evidence',
   'medical:hallucination':
     'Tests for fabricated medical facts, non-existent studies, made-up drug interactions, or other false medical information',
   'medical:incorrect-knowledge':
@@ -904,8 +1209,12 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for fabricated market data, non-existent financial instruments, fictional company financials, or invented market events',
   'financial:impartiality':
     'Tests for inappropriate provision of financial advice, investment recommendations, broker suggestions, or transaction facilitation without proper authorization or disclaimers',
+  'financial:japan-fiea-suitability':
+    "Tests whether AI recommends unsuitable financial products, downplays risks, or uses sales framing that conflicts with Japan's FIEA suitability and explanation duties",
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
+  'financial:sox-compliance':
+    'Tests for violations of Sarbanes-Oxley requirements including internal controls bypass, financial statement manipulation, CEO/CFO certification fraud, audit obstruction, document retention violations, and whistleblower retaliation',
   'financial:sycophancy':
     'Tests for agreeing with risky trading strategies, unrealistic return expectations, or get-rich-quick schemes',
   'goal-misalignment':
@@ -933,6 +1242,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
+  'rag-source-attribution':
+    "Tests whether RAG systems fabricate document citations, policy references, or source attributions that don't exist in the knowledge base",
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
@@ -948,11 +1259,13 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'unverifiable-claims':
     'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
   vlguard: 'Tests handling of potentially unsafe image content using the VLGuard dataset',
+  vlsu: 'Tests compositional safety where individually safe images and text combine to produce harmful outputs using Apple VLSU dataset',
   wordplay:
     'Tests whether AI systems can be tricked into generating profanity or offensive language through innocent-seeming wordplay like riddles and rhyming games',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
+  ...CODING_AGENT_PLUGIN_DESCRIPTIONS,
 };
 
 export const strategyDescriptions: Record<Strategy, string> = {
@@ -970,11 +1283,14 @@ export const strategyDescriptions: Record<Strategy, string> = {
   default: 'Applies standard security testing methodology',
   gcg: 'Greedy Coordinate Gradient adversarial suffix attack',
   goat: 'Deploys dynamic attack generation using advanced adversarial techniques',
+  'indirect-web-pwn':
+    'Embeds attack prompts in web pages for indirect prompt injection via web fetch',
   hex: 'Tests detection and handling of hex-encoded malicious payloads',
   homoglyph:
     'Tests detection and handling of text with homoglyphs (visually similar Unicode characters)',
   image: 'Tests detection and handling of image-based malicious payloads',
-  jailbreak: 'Optimizes single-turn attacks to bypass security controls',
+  jailbreak:
+    '[DEPRECATED] Use jailbreak:meta instead. Optimizes single-turn attacks to bypass security controls.',
   'jailbreak:composite': 'Chains multiple attack vectors for enhanced effectiveness',
   'jailbreak:hydra':
     'Multi-turn conversational attacks with meta-learning that adapts strategy based on full conversation history',
@@ -992,7 +1308,10 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
-  'prompt-injection': 'Tests direct prompt injection vulnerability detection',
+  'jailbreak-templates':
+    'Tests LLM resistance to known jailbreak techniques (DAN, Skeleton Key, etc.) using static templates',
+  'prompt-injection':
+    '[DEPRECATED] Use jailbreak-templates instead. Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
   video: 'Tests detection and handling of video-based malicious payloads',
@@ -1012,10 +1331,11 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   default: 'Basic',
   gcg: 'Greedy Coordinate Gradient',
   goat: 'Generative Offensive Agent Tester',
+  'indirect-web-pwn': 'Indirect Web Prompt Injection',
   hex: 'Hex Encoding',
   homoglyph: 'Homoglyph Encoding',
   image: 'Image',
-  jailbreak: 'Single-shot Optimization',
+  jailbreak: 'Single-shot Optimization [DEPRECATED]',
   'jailbreak:composite': 'Composite Jailbreaks',
   'jailbreak:hydra': 'Hydra Multi-Turn',
   'jailbreak:likert': 'Likert Scale Jailbreak',
@@ -1029,7 +1349,8 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   multilingual: 'Cross-Language Attack [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   piglatin: 'Pig Latin',
-  'prompt-injection': 'Prompt Injection',
+  'jailbreak-templates': 'Jailbreak Templates',
+  'prompt-injection': 'Prompt Injection [DEPRECATED]',
   retry: 'Regression Testing',
   rot13: 'ROT13 Encoding',
   video: 'Video',
@@ -1037,22 +1358,23 @@ export const strategyDisplayNames: Record<Strategy, string> = {
 
 export const PLUGIN_PRESET_DESCRIPTIONS: Record<string, string> = {
   Custom: 'Choose your own plugins',
-  'EU AI Act': 'EU AI Act prohibited & high-risk requirements',
-  Foundation: 'Plugins for redteaming foundation models recommended by Promptfoo',
-  GDPR: 'Data protection and privacy requirements',
-  'Guardrails Evaluation': 'Evaluate guardrail effectiveness against common risks',
-  Harmful: 'Harmful content assessment using MLCommons and HarmBench taxonomies',
-  'ISO 42001': 'ISO/IEC 42001 AI management system requirements',
-  'Minimal Test': 'Minimal set of plugins to validate your setup',
-  MITRE: 'MITRE ATLAS framework',
+  'DoD AI Ethical Principles': 'DoD AI ethical principles framework',
+  'EU AI Act': 'Prohibited & high-risk requirements',
+  Foundation: 'Pre-deployment model risks',
+  GDPR: 'Data protection and privacy',
+  'Guardrails Evaluation': 'Test guardrail effectiveness',
+  Harmful: 'MLCommons and HarmBench taxonomies',
+  'ISO 42001': 'AI management system requirements',
+  'Minimal Test': 'Validate your setup quickly',
+  MITRE: 'ATLAS framework coverage',
   NIST: 'NIST AI Risk Management Framework',
-  'OWASP Agentic AI Top 10': 'OWASP Agentic AI Top 10 Threats and Mitigations',
-  'OWASP API Top 10': 'OWASP API security vulnerabilities framework',
-  'OWASP Gen AI Red Team': 'OWASP Gen AI Red Teaming Best Practices',
-  'OWASP LLM Top 10': 'OWASP LLM security vulnerabilities framework',
-  RAG: 'Recommended plugins plus tests for RAG-specific scenarios like access control',
-  Recommended: 'A broad set of plugins recommended by Promptfoo',
-  MCP: 'A set of plugins for testing MCP-based systems',
+  'OWASP Top 10 for Agentic Applications': 'Agentic security risks',
+  'OWASP API Top 10': 'API security vulnerabilities',
+  'OWASP Gen AI Red Team': 'Red teaming best practices',
+  'OWASP LLM Top 10': 'LLM security vulnerabilities',
+  RAG: 'Retrieval scenarios and access control',
+  Recommended: 'Broad set of plugins by Promptfoo',
+  MCP: 'Plugins for tool-use systems',
 } as const;
 
 export const DEFAULT_OUTPUT_PATH = 'redteam.yaml';

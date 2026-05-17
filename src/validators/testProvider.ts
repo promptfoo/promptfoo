@@ -3,6 +3,8 @@ import { evaluate } from '../evaluator';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { HttpProviderConfig } from '../providers/http';
+import { createPlaceholderInputValue } from '../redteam/inputVariables';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch/index';
@@ -15,14 +17,20 @@ import {
 } from './util';
 
 import type { EvaluateOptions, TestSuite } from '../types/index';
-import type { ApiProvider } from '../types/providers';
+import type { ApiProvider, ProviderResponse } from '../types/providers';
+import type { Inputs } from '../types/shared';
+
+interface Result {
+  response?: ProviderResponse;
+  metadata?: Record<string, unknown>;
+}
 
 export interface ProviderTestResult {
   success: boolean;
   message: string;
   error?: string;
-  providerResponse?: any;
-  transformedRequest?: any;
+  providerResponse?: unknown;
+  transformedRequest?: unknown;
   sessionId?: string;
   analysis?: {
     changes_needed?: boolean;
@@ -40,9 +48,9 @@ export interface SessionTestResult {
     sessionId?: string;
     sessionSource?: string;
     request1?: { prompt: string; sessionId?: string };
-    response1?: any;
+    response1?: unknown;
     request2?: { prompt: string; sessionId?: string };
-    response2?: any;
+    response2?: unknown;
   };
 }
 
@@ -51,13 +59,19 @@ type ValidationResult = { success: true } | { success: false; result: SessionTes
 /**
  * Tests basic provider connectivity with a prompt.
  * Extracted from POST /providers/test endpoint
- * @param provider The provider to test
- * @param prompt An optional prompt to test w/
  */
-export async function testProviderConnectivity(
-  provider: ApiProvider,
-  prompt: string = 'Hello World!',
-): Promise<ProviderTestResult> {
+export async function testProviderConnectivity({
+  provider,
+  prompt = 'Hello World!',
+  inputs,
+}: {
+  /** The provider to test */
+  provider: ApiProvider;
+  /** An optional prompt to test with */
+  prompt?: string;
+  /** Input variable definitions for multi-input configurations */
+  inputs?: Inputs;
+}): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
   // Generate a session ID for testing (works for both client sessions)
@@ -65,6 +79,14 @@ export async function testProviderConnectivity(
   // requests will use the server-returned session ID
   if (!provider?.config?.sessionParser) {
     vars['sessionId'] = crypto.randomUUID();
+  }
+
+  // Generate dummy values for each input variable defined in multi-input configuration
+  // The inputs object has variable names as keys and descriptions as values
+  if (inputs && typeof inputs === 'object') {
+    for (const [varName, definition] of Object.entries(inputs)) {
+      vars[varName] = createPlaceholderInputValue(varName, definition);
+    }
   }
 
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
@@ -282,7 +304,7 @@ function validateServerSessionExtraction({
   sessionSource: string;
   sessionId: string;
   firstPrompt: string;
-  firstResult: any;
+  firstResult: Result;
 }): ValidationResult {
   if (sessionSource !== 'server') {
     return { success: true };
@@ -320,9 +342,9 @@ function buildServerSessionTroubleshootingAdvice({
   secondResult,
 }: {
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: any;
-  firstResult: any;
-  secondResult: any;
+  providerConfig: HttpProviderConfig;
+  firstResult: Result;
+  secondResult: Result;
 }): string {
   const firstSessionId = firstResult.response?.sessionId ?? firstResult.metadata?.sessionId;
   const secondSessionId = secondResult.response?.sessionId ?? secondResult.metadata?.sessionId;
@@ -357,10 +379,10 @@ function buildTroubleshootingAdvice({
   sessionWorking: boolean;
   sessionSource: string;
   sessionConfig: { sessionSource?: string; sessionParser?: string } | undefined;
-  providerConfig: any;
+  providerConfig: HttpProviderConfig;
   initialSessionId: string | undefined;
-  firstResult: any;
-  secondResult: any;
+  firstResult: Result;
+  secondResult: Result;
 }): string {
   if (sessionWorking) {
     return '';
@@ -403,11 +425,27 @@ function buildTroubleshootingAdvice({
  * For server-sourced sessions, extracts sessionId from first response and uses it in second request
  * For client-sourced sessions, generates a sessionId and uses it in both requests
  */
-export async function testProviderSession(
-  provider: ApiProvider,
-  sessionConfig?: { sessionSource?: string; sessionParser?: string },
-  options?: { skipConfigValidation?: boolean },
-): Promise<SessionTestResult> {
+export async function testProviderSession({
+  provider,
+  sessionConfig,
+  options,
+  inputs,
+  mainInputVariable,
+}: {
+  /** The provider to test */
+  provider: ApiProvider;
+  /** Session configuration overrides */
+  sessionConfig?: { sessionSource?: string; sessionParser?: string };
+  /** Test options */
+  options?: { skipConfigValidation?: boolean };
+  /** Input variable definitions for multi-input configurations */
+  inputs?: Inputs;
+  /**
+   * For multi-input configurations, specifies which variable to use for
+   * the conversation prompts (e.g., 'user_message'). Other input variables get dummy test values.
+   */
+  mainInputVariable?: string;
+}): Promise<SessionTestResult> {
   try {
     // Validate sessions config
     const sessionValidation = validateAndConfigureSessions({
@@ -426,6 +464,29 @@ export async function testProviderSession(
 
     const initialSessionId = effectiveSessionSource === 'server' ? undefined : crypto.randomUUID();
 
+    const materializeSessionPrompt = (prompt: string) => {
+      if (!mainInputVariable) {
+        return prompt;
+      }
+      const definition = inputs?.[mainInputVariable];
+      return definition
+        ? createPlaceholderInputValue(mainInputVariable, definition, prompt)
+        : prompt;
+    };
+
+    // Generate dummy values for each input variable defined in multi-input configuration.
+    // If mainInputVariable is specified, it is materialized from the actual conversation prompts.
+    const inputVars: Record<string, string> = {};
+    if (inputs && typeof inputs === 'object') {
+      for (const [varName, definition] of Object.entries(inputs)) {
+        // Skip the main input variable - it will be set to the actual prompts
+        if (varName === mainInputVariable) {
+          continue;
+        }
+        inputVars[varName] = createPlaceholderInputValue(varName, definition);
+      }
+    }
+
     const firstPrompt = 'What can you help me with?';
     const secondPrompt = 'What was the last thing I asked you?';
 
@@ -439,6 +500,11 @@ export async function testProviderSession(
     const firstContext = {
       vars: {
         ...(initialSessionId ? { sessionId: initialSessionId } : {}),
+        ...inputVars,
+        // This allows multi-input configurations to use a custom variable for the conversation.
+        ...(mainInputVariable
+          ? { [mainInputVariable]: materializeSessionPrompt(firstPrompt) }
+          : {}),
       },
       prompt: {
         raw: firstPrompt,
@@ -499,6 +565,10 @@ export async function testProviderSession(
     const secondContext = {
       vars: {
         ...(extractedSessionId ? { sessionId: extractedSessionId } : {}),
+        ...inputVars,
+        ...(mainInputVariable
+          ? { [mainInputVariable]: materializeSessionPrompt(secondPrompt) }
+          : {}),
       },
       prompt: {
         raw: secondPrompt,

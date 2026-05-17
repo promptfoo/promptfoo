@@ -53,6 +53,14 @@ For OpenAI:
 export OPENAI_API_KEY=your_api_key_here
 ```
 
+If promptfoo starts the OpenCode server for you, you can also set `config.apiKey` together with `config.provider_id` in your provider config.
+
+:::note
+
+If you connect to an existing OpenCode server with `baseUrl`, that server is responsible for authentication, MCP setup, and custom agents. Promptfoo can still send per-request options like `model`, `tools`, `format`, and `workspace`, but it cannot reconfigure the remote server.
+
+:::
+
 OpenCode supports 75+ providers - see [Supported Providers](#supported-providers) for the full list.
 
 ## Quick Start
@@ -105,6 +113,50 @@ prompts:
 ```
 
 By default, when you specify a working directory, OpenCode SDK has access to these read-only tools: `read`, `grep`, `glob`, `list`.
+Relative `working_dir` values are resolved from the directory containing the config file.
+
+### Structured Output
+
+Use the OpenCode `format` request option for JSON Schema-constrained responses:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      format:
+        type: json_schema
+        schema:
+          type: object
+          additionalProperties: false
+          properties:
+            summary:
+              type: string
+            severity:
+              type: string
+          required:
+            - summary
+            - severity
+
+prompts:
+  - 'Summarize the issue as JSON'
+```
+
+### With Workspace
+
+OpenCode `workspace` support lets you target a specific workspace-aware server context. This requires either `working_dir` or `baseUrl`:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      working_dir: ./repo
+      workspace: feature-branch
+
+prompts:
+  - 'Review the files in this workspace'
+```
 
 ### With Full Tool Access
 
@@ -136,33 +188,29 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 
 ## Supported Parameters
 
-| Parameter          | Type    | Description                                    | Default                    |
-| ------------------ | ------- | ---------------------------------------------- | -------------------------- |
-| `apiKey`           | string  | API key for the LLM provider                   | Environment variable       |
-| `baseUrl`          | string  | URL for existing OpenCode server               | Auto-start server          |
-| `hostname`         | string  | Server hostname when starting new server       | `127.0.0.1`                |
-| `port`             | number  | Server port when starting new server           | Auto-select                |
-| `timeout`          | number  | Server startup timeout (ms)                    | `30000`                    |
-| `working_dir`      | string  | Directory for file operations                  | Temporary directory        |
-| `provider_id`      | string  | LLM provider (anthropic, openai, google, etc.) | Auto-detect                |
-| `model`            | string  | Model to use                                   | Provider default           |
-| `tools`            | object  | Tool configuration                             | Read-only with working_dir |
-| `permission`       | object  | Permission configuration for tools             | Ask for dangerous tools    |
-| `agent`            | string  | Built-in agent to use (build, plan)            | Default agent              |
-| `custom_agent`     | object  | Custom agent configuration                     | None                       |
-| `session_id`       | string  | Resume existing session                        | Create new session         |
-| `persist_sessions` | boolean | Keep sessions between calls                    | `false`                    |
-| `mcp`              | object  | MCP server configuration                       | None                       |
-
-:::note Planned Features
-
-The following parameters are defined but not yet supported by the OpenCode SDK:
-
-- `max_retries` - Maximum retries for API calls
-- `log_level` - SDK log level
-- `enable_streaming` - Enable streaming responses
-
-:::
+| Parameter           | Type    | Description                                                                | Default                    |
+| ------------------- | ------- | -------------------------------------------------------------------------- | -------------------------- |
+| `apiKey`            | string  | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable       |
+| `baseUrl`           | string  | URL for an existing OpenCode server                                        | Auto-start server          |
+| `hostname`          | string  | Server hostname when starting a new server                                 | `127.0.0.1`                |
+| `port`              | number  | Server port when starting a new server                                     | Auto-select                |
+| `timeout`           | number  | Server startup timeout in milliseconds                                     | `30000`                    |
+| `log_level`         | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default           |
+| `working_dir`       | string  | Directory for file operations and read-only default tools                  | Temporary directory        |
+| `workspace`         | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                       |
+| `provider_id`       | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default           |
+| `model`             | string  | Model to use for this request                                              | OpenCode default           |
+| `format`            | object  | Output format, including JSON Schema structured output                     | Text                       |
+| `variant`           | string  | Provider/model variant defined in OpenCode config                          | Default variant            |
+| `tools`             | object  | Tool configuration                                                         | Read-only with working_dir |
+| `permission`        | object  | Permission configuration for tools                                         | Ask for dangerous tools    |
+| `agent`             | string  | Built-in or preconfigured agent to use                                     | Default agent              |
+| `custom_agent`      | object  | Custom agent configuration when promptfoo starts the OpenCode server       | None                       |
+| `session_id`        | string  | Resume an existing session                                                 | Create new session         |
+| `parent_session_id` | string  | Fork from an existing session (v2 server only); inherits compacted history | None                       |
+| `persist_sessions`  | boolean | Reuse the same session for repeated calls with the same provider config    | `false`                    |
+| `mcp`               | object  | MCP server configuration when promptfoo starts the OpenCode server         | None                       |
+| `cache_mcp`         | boolean | Enable caching when MCP is configured                                      | `false`                    |
 
 ## Supported Providers
 
@@ -218,6 +266,27 @@ With `working_dir` specified, these read-only tools are enabled by default:
 | `glob` | Find files by pattern           |
 | `list` | List directory contents         |
 
+### All Available Tools
+
+| Tool        | Purpose                                  | Default |
+| ----------- | ---------------------------------------- | ------- |
+| `bash`      | Execute shell commands                   | false   |
+| `edit`      | Modify existing files                    | false   |
+| `write`     | Create/overwrite files                   | false   |
+| `read`      | Read file contents                       | true\*  |
+| `grep`      | Search file contents with regex          | true\*  |
+| `glob`      | Find files by pattern                    | true\*  |
+| `list`      | List directory contents                  | true\*  |
+| `patch`     | Apply diff patches                       | false   |
+| `todowrite` | Create task lists                        | false   |
+| `todoread`  | Read task lists                          | false   |
+| `webfetch`  | Fetch web content                        | false   |
+| `question`  | Prompt user for input during execution   | false   |
+| `skill`     | Load SKILL.md files into conversation    | false   |
+| `lsp`       | Code intelligence queries (experimental) | false   |
+
+\* Only enabled when `working_dir` is specified.
+
 ### Tool Configuration
 
 Customize available tools:
@@ -238,6 +307,8 @@ providers:
         bash: true # Enable shell commands
         patch: true # Enable patch application
         webfetch: true # Enable web fetching
+        question: true # Enable user prompts
+        skill: true # Enable SKILL.md loading
 
 # Disable specific tools
 providers:
@@ -250,9 +321,10 @@ providers:
 
 ### Permissions
 
-Configure tool permissions:
+Configure tool permissions using simple values or pattern-based rules:
 
 ```yaml
+# Simple permissions
 providers:
   - id: opencode:sdk
     config:
@@ -260,13 +332,61 @@ providers:
         bash: allow # or 'ask' or 'deny'
         edit: allow
         webfetch: deny
+        doom_loop: deny # Prevent infinite agent loops
+        external_directory: deny # Block access outside working dir
+
+# Pattern-based permissions
+providers:
+  - id: opencode:sdk
+    config:
+      permission:
+        bash:
+          'git *': allow # Allow git commands
+          'rm *': deny # Deny rm commands
+          '*': ask # Ask for everything else
+        edit:
+          '*.md': allow # Allow editing markdown
+          'src/**': ask # Ask for src directory
 ```
+
+| Permission           | Purpose                          |
+| -------------------- | -------------------------------- |
+| `bash`               | Shell command execution          |
+| `edit`               | File editing                     |
+| `read`               | Reading files                    |
+| `glob`               | Finding files by pattern         |
+| `grep`               | Searching file contents          |
+| `list`               | Listing directories              |
+| `task`               | Subtask execution                |
+| `lsp`                | Code intelligence queries        |
+| `skill`              | Loading SKILL.md files           |
+| `webfetch`           | Web fetching                     |
+| `websearch`          | Web search                       |
+| `codesearch`         | Codebase search                  |
+| `todowrite`          | Writing to todo list             |
+| `question`           | Interactive user prompts         |
+| `doom_loop`          | Prevents infinite agent loops    |
+| `external_directory` | Access outside working directory |
+
+Additional tools added by future OpenCode releases can be configured using the same shape — unknown keys are forwarded unchanged.
+
+:::note
+
+Promptfoo converts the object form above into the `PermissionRuleset` array the OpenCode v2 API expects (`[{ permission: "bash", pattern: "*", action: "allow" }, ...]`). You configure permissions in the friendly object form and the provider handles the conversion per request.
+
+:::
+
+:::tip Security Recommendation
+
+For security-conscious deployments, set `doom_loop: deny` and `external_directory: deny` to prevent infinite agent loops and restrict file access to the working directory.
+
+:::
 
 ## Session Management
 
 ### Ephemeral Sessions (Default)
 
-Creates a new session for each eval:
+Creates a new session for each call and deletes it when the call completes:
 
 ```yaml
 providers:
@@ -275,7 +395,7 @@ providers:
 
 ### Persistent Sessions
 
-Reuse sessions between calls:
+Reuse the same session between calls that use the same provider config:
 
 ```yaml
 providers:
@@ -283,6 +403,8 @@ providers:
     config:
       persist_sessions: true
 ```
+
+This reuse is independent of the promptfoo response cache. It is scoped to the lifetime of the provider instance. If you need to continue a session later, capture its `sessionId` and pass it back with `session_id`.
 
 ### Session Resumption
 
@@ -295,6 +417,19 @@ providers:
       session_id: previous-session-id
 ```
 
+### Forked Sessions
+
+Fork a new session off an existing one. The child inherits the parent's compacted history and starts as a fresh conversation. Requires the v2 OpenCode server (silently ignored on v1):
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      parent_session_id: parent-session-id
+```
+
+`parent_session_id` is independent of `session_id`: use `session_id` to continue the same conversation, or `parent_session_id` to branch a new one. Setting both is supported, but `session_id` wins because resumed sessions are not re-forked on create.
+
 ## Custom Agents
 
 Define custom agents with specific configurations:
@@ -305,17 +440,41 @@ providers:
     config:
       custom_agent:
         description: Security-focused code reviewer
+        mode: primary # 'primary', 'subagent', or 'all'
         model: claude-sonnet-4-20250514
         temperature: 0.3
+        top_p: 0.9 # Nucleus sampling parameter
+        steps: 10 # Max iterations before text-only response
+        color: '#ff5500' # Visual identification
         tools:
           read: true
           grep: true
           write: false
           bash: false
+        permission:
+          edit: deny
+          external_directory: deny
         prompt: |
           You are a security-focused code reviewer.
           Analyze code for vulnerabilities and report findings.
 ```
+
+`custom_agent` is applied when promptfoo starts the OpenCode server itself. If you use `baseUrl`, define that agent on the target server and use `agent` to select it.
+
+| Parameter     | Type    | Description                               |
+| ------------- | ------- | ----------------------------------------- |
+| `description` | string  | Required. Explains the agent's purpose    |
+| `mode`        | string  | 'primary', 'subagent', or 'all'           |
+| `model`       | string  | Model ID (overrides global)               |
+| `temperature` | number  | Response randomness (0.0-1.0)             |
+| `top_p`       | number  | Nucleus sampling (0.0-1.0)                |
+| `steps`       | number  | Max iterations before text-only response  |
+| `color`       | string  | Hex color for visual identification       |
+| `tools`       | object  | Tool configuration                        |
+| `permission`  | object  | Permission configuration                  |
+| `prompt`      | string  | Custom system prompt                      |
+| `disable`     | boolean | Disable this agent                        |
+| `hidden`      | boolean | Hide from @ autocomplete (subagents only) |
 
 ## MCP Integration
 
@@ -326,17 +485,33 @@ providers:
   - id: opencode:sdk
     config:
       mcp:
+        # Local MCP server
         weather-server:
           type: local
           command: ['node', 'mcp-weather-server.js']
           environment:
             API_KEY: '{{env.WEATHER_API_KEY}}'
+          timeout: 30000
+          enabled: true
+
+        # Remote MCP server with headers
         api-server:
           type: remote
           url: https://api.example.com/mcp
           headers:
             Authorization: 'Bearer {{env.API_TOKEN}}'
+
+        # Remote MCP server with OAuth
+        oauth-server:
+          type: remote
+          url: https://secure.example.com/mcp
+          oauth:
+            clientId: '{{env.OAUTH_CLIENT_ID}}'
+            clientSecret: '{{env.OAUTH_CLIENT_SECRET}}'
+            scope: 'read write'
 ```
+
+Like `custom_agent`, `mcp` is server configuration. It applies when promptfoo starts the OpenCode server, not when you connect to an already-running server with `baseUrl`.
 
 ## Caching Behavior
 
@@ -344,8 +519,22 @@ This provider automatically caches responses based on:
 
 - Prompt content
 - Working directory fingerprint (if specified)
+- Workspace and output format configuration
 - Provider and model configuration
 - Tool configuration
+
+When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state. To opt back into caching for deterministic MCP tools, set `cache_mcp: true`:
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      cache_mcp: true
+      mcp:
+        my-server:
+          type: local
+          command: ['node', 'my-deterministic-mcp-server.js']
+```
 
 To disable caching:
 
@@ -404,9 +593,11 @@ Choose based on your use case:
 
 ## Examples
 
-See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/opencode-sdk) for complete implementations:
+See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk) for complete implementations:
 
-- [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/opencode-sdk/basic) - Simple chat-only mode
+- [Basic usage](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk/basic) - Simple chat-only mode
+- [Working directory](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk/working-dir) - Read-only local file access
+- [Structured output](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-opencode-sdk/structured-output) - JSON Schema-constrained responses
 
 ## See Also
 

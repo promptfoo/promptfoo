@@ -24,6 +24,15 @@ export const FileChangeStatus = {
 } as const;
 export type FileChangeStatus = (typeof FileChangeStatus)[keyof typeof FileChangeStatus];
 
+export const CodeScanOutputFormat = {
+  TEXT: 'text',
+  JSON: 'json',
+  SARIF: 'sarif',
+} as const;
+export type CodeScanOutputFormat = (typeof CodeScanOutputFormat)[keyof typeof CodeScanOutputFormat];
+
+export const CodeScanOutputFormatSchema = z.enum(['text', 'json', 'sarif']);
+
 // ============================================================================
 // Severity Utility Types
 // ============================================================================
@@ -299,6 +308,12 @@ export interface JsonRpcMessage {
 export interface SocketAuthCredentials {
   apiKey?: string;
   oidcToken?: string;
+  // Fork PR authentication (when OIDC unavailable due to GitHub blocking OIDC for forks)
+  forkPR?: {
+    owner: string;
+    repo: string;
+    number: number;
+  };
 }
 
 // GitHub types

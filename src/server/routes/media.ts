@@ -7,16 +7,11 @@
 import express from 'express';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
+import { MediaSchemas } from '../../types/api/media';
+import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
-
-const ALLOWED_MEDIA_TYPES = new Set(['audio', 'image', 'video']);
-const MEDIA_FILENAME_REGEX = /^[a-f0-9]{12}\.[a-z0-9]+$/i;
-
-function isValidMediaKey(type: string, filename: string): boolean {
-  return ALLOWED_MEDIA_TYPES.has(type) && MEDIA_FILENAME_REGEX.test(filename);
-}
 
 /**
  * Get storage stats
@@ -26,24 +21,18 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
   try {
     const storage = getMediaStorage();
 
-    // LocalFileSystemProvider has a getStats method
-    if ('getStats' in storage && typeof storage.getStats === 'function') {
-      const stats = (storage as any).getStats();
-      res.json({
+    // Only LocalFileSystemProvider exposes getStats; other providers report providerId only.
+    const extraStats =
+      'getStats' in storage && typeof storage.getStats === 'function'
+        ? await storage.getStats()
+        : {};
+
+    res.json(
+      MediaSchemas.Stats.Response.parse({
         success: true,
-        data: {
-          providerId: storage.providerId,
-          ...stats,
-        },
-      });
-    } else {
-      res.json({
-        success: true,
-        data: {
-          providerId: storage.providerId,
-        },
-      });
-    }
+        data: { providerId: storage.providerId, ...extraStats },
+      }),
+    );
   } catch (error) {
     logger.error('[Media API] Error getting storage stats', { error });
     res.status(500).json({ error: 'Failed to get storage stats' });
@@ -55,12 +44,14 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  * Path format: /info/audio/abc123.mp3
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
   try {
-    const { type, filename } = req.params;
-    if (!isValidMediaKey(type, filename)) {
-      res.status(400).json({ error: 'Invalid media key' });
-      return;
-    }
+    const { type, filename } = paramsResult.data;
     const key = `${type}/${filename}`;
 
     const exists = await mediaExists(key);
@@ -72,14 +63,16 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     const storage = getMediaStorage();
     const url = await storage.getUrl(key);
 
-    res.json({
-      success: true,
-      data: {
-        key,
-        exists: true,
-        url,
-      },
-    });
+    res.json(
+      MediaSchemas.Info.Response.parse({
+        success: true,
+        data: {
+          key,
+          exists: true,
+          url,
+        },
+      }),
+    );
   } catch (error) {
     logger.error('[Media API] Error getting media info', { error });
     res.status(500).json({ error: 'Failed to get media info' });
@@ -94,12 +87,14 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  * The key is constructed from type + filename, e.g., "audio/abc123.mp3"
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
   try {
-    const { type, filename } = req.params;
-    if (!isValidMediaKey(type, filename)) {
-      res.status(400).json({ error: 'Invalid media key' });
-      return;
-    }
+    const { type, filename } = paramsResult.data;
     const key = `${type}/${filename}`;
 
     logger.debug(`[Media API] Serving media: ${key}`);

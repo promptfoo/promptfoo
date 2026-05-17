@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: QuiverAI Arrow models — text-to-SVG generation comparison
+
+prompts:
+  - 'Create a simple SVG icon of: {{subject}}'
+
+providers:
+  # Arrow 1.1 — recommended general-purpose generation model
+  - id: quiverai:arrow-1.1
+    label: Arrow 1.1
+    config:
+      max_output_tokens: 8192
+
+  # Arrow 1.1 Max — higher fidelity for detail-sensitive generation
+  - id: quiverai:arrow-1.1-max
+    label: Arrow 1.1 Max
+    config:
+      max_output_tokens: 8192
+
+  # Style-guided variant — separate `instructions` from the prompt
+  - id: quiverai:arrow-1.1
+    label: Arrow 1.1 (flat style)
+    config:
+      max_output_tokens: 8192
+      instructions: 'Flat design with clean geometry and a minimal color palette'
+
+defaultTest:
+  options:
+    rubricPrompt: |
+      Evaluate if this SVG meets the criteria. Be fair — stylized interpretations are fine.
+      Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
+
+      SVG: {{ output }}
+      Criteria: {{ rubric }}
+
+tests:
+  - vars:
+      subject: a red heart
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a heart shape in red color
+        threshold: 0.5
+
+  - vars:
+      subject: a yellow star
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a star shape in yellow/gold color
+        threshold: 0.5
+
+  - vars:
+      subject: a rocket ship
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a rocket or spaceship shape
+        threshold: 0.5
+
+  - vars:
+      subject: a red panda face
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a face with red/orange coloring suggestive of a red panda
+        threshold: 0.4

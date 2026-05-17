@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './hooks/useSettingsState';
 import TableSettingsModal from './TableSettingsModal';
@@ -11,10 +12,6 @@ vi.mock('./hooks/useSettingsState', () => ({
 
 vi.mock('./components/SettingsPanel', () => ({
   default: () => <div data-testid="mock-settings-panel"></div>,
-}));
-
-vi.mock('@mui/material/useMediaQuery', () => ({
-  default: vi.fn(() => true),
 }));
 
 describe('TableSettingsModal', () => {
@@ -53,18 +50,20 @@ describe('TableSettingsModal', () => {
     expect(screen.getByText('Table Settings')).toBeInTheDocument();
   });
 
-  it('should call the onClose callback when the close button is clicked', () => {
+  it('should call the onClose callback when the close button is clicked', async () => {
+    const user = userEvent.setup();
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
-    const closeButton = screen.getByRole('button', { name: 'close' });
-    fireEvent.click(closeButton);
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    await user.click(closeButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should call resetToDefaults when the "Reset to Defaults" button is clicked', () => {
+  it('should call resetToDefaults when the "Reset to Defaults" button is clicked', async () => {
+    const user = userEvent.setup();
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset settings to defaults' });
-    fireEvent.click(resetButton);
+    await user.click(resetButton);
 
     expect(mockResetToDefaults).toHaveBeenCalled();
   });
@@ -79,28 +78,39 @@ describe('TableSettingsModal', () => {
     expect(useSettingsState).toHaveBeenCalledWith(true);
   });
 
-  it('should call onClose when the Done button is clicked', () => {
+  it('should call onClose when the Done button is clicked', async () => {
+    const user = userEvent.setup();
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
     const mainActionButton = screen.getByRole('button', { name: 'Done' });
-    fireEvent.click(mainActionButton);
+    await user.click(mainActionButton);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should render the dialog in full screen mode when isMobile is true', () => {
+  it('should render the dialog with proper sizing', () => {
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
     const dialog = screen.getByRole('dialog');
 
-    expect(dialog).toHaveClass('MuiDialog-paperFullScreen');
+    // The dialog uses Radix UI with Tailwind classes for sizing
+    expect(dialog).toHaveClass('max-h-[90vh]', 'max-w-[680px]', 'flex-col');
   });
 
-  it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', () => {
+  it('keeps the settings body scrollable while the footer stays visible', () => {
+    render(<TableSettingsModal open={true} onClose={mockOnClose} />);
+
+    const settingsPanel = screen.getByTestId('mock-settings-panel');
+    expect(settingsPanel.parentElement).toHaveClass('min-h-0', 'overflow-y-auto');
+    expect(screen.getByRole('button', { name: 'Done' }).closest('div')).toHaveClass('shrink-0');
+  });
+
+  it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', async () => {
+    const user = userEvent.setup();
     mockSettingsState(true);
 
     render(<TableSettingsModal open={true} onClose={mockOnClose} />);
 
-    const closeButton = screen.getByRole('button', { name: 'close' });
-    fireEvent.click(closeButton);
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    await user.click(closeButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });

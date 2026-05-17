@@ -1,62 +1,91 @@
 import React from 'react';
 
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import {
+  AlertTriangleIcon,
+  ContentCopyIcon,
+  DeleteIcon,
+  EditIcon,
+  UploadIcon,
+} from '@app/components/ui/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import Copy from '@mui/icons-material/ContentCopy';
-import Delete from '@mui/icons-material/Delete';
-import Edit from '@mui/icons-material/Edit';
-import Publish from '@mui/icons-material/Publish';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import TestCaseDialog from './TestCaseDialog';
-import type { CsvRow, TestCase } from '@promptfoo/types';
+import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 
 interface TestCasesSectionProps {
   varsList: string[];
+  onOpenYamlEditor?: () => void;
 }
 
 // Validation function for TestCase structure
-function isValidTestCase(obj: any): obj is TestCase {
+function isValidTestCase(obj: unknown): obj is TestCase {
   if (!obj || typeof obj !== 'object') {
     return false;
   }
 
+  const testCase = obj as Record<string, unknown>;
+
   // Check required structure - vars should be an object if present
-  if (obj.vars && typeof obj.vars !== 'object') {
+  if (testCase.vars && typeof testCase.vars !== 'object') {
     return false;
   }
 
   // Check assert array if present
-  if (obj.assert && !Array.isArray(obj.assert)) {
+  if (testCase.assert && !Array.isArray(testCase.assert)) {
     return false;
   }
 
   // Check options if present
-  if (obj.options && typeof obj.options !== 'object') {
+  if (testCase.options && typeof testCase.options !== 'object') {
     return false;
   }
 
   return true;
 }
 
-const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
+function isTestGeneratorConfig(obj: unknown): obj is TestGeneratorConfig {
+  return obj !== null && typeof obj === 'object' && 'path' in obj;
+}
+
+function isInlineTestCase(obj: unknown): obj is TestCase {
+  return isValidTestCase(obj) && !isTestGeneratorConfig(obj);
+}
+
+const getManagedTestsLabel = (tests: unknown): string => {
+  if (typeof tests === 'string') {
+    return tests;
+  }
+
+  if (Array.isArray(tests)) {
+    return `${tests.length} YAML test entr${tests.length === 1 ? 'y' : 'ies'}`;
+  }
+
+  if (isTestGeneratorConfig(tests) && typeof tests.path === 'string') {
+    return tests.path;
+  }
+
+  return 'YAML test configuration';
+};
+
+const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
-  const testCases = (config.tests || []) as TestCase[];
+  const rawTests = config.tests;
+  const canEditInlineTests =
+    rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isInlineTestCase));
+  const testCases = canEditInlineTests ? ((rawTests || []) as TestCase[]) : [];
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
@@ -108,7 +137,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
 
           if (fileName.endsWith('.csv')) {
             // Handle CSV files
-            const { parse: parseCsv } = await import('csv-parse/sync');
+            const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
             const rows: CsvRow[] = parseCsv(text, { columns: true });
             newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
           } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
@@ -219,165 +248,281 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   };
 
   return (
-    <>
-      <Stack direction="row" spacing={2} mb={2} justifyContent="space-between">
-        <Typography variant="h5">Test Cases</Typography>
-        <div>
-          <label htmlFor={`file-input-add-test-case`}>
-            <Tooltip title="Upload test cases from CSV or YAML">
-              <span>
-                <IconButton component="span">
-                  <Publish />
-                </IconButton>
-                <input
-                  id={`file-input-add-test-case`}
-                  type="file"
-                  accept=".csv,.yaml,.yml"
-                  onChange={handleAddTestCaseFromFile}
-                  style={{ display: 'none' }}
-                />
-              </span>
-            </Tooltip>
-          </label>
-          {testCases.length === 0 && (
-            <Button
-              color="secondary"
-              onClick={() => {
-                const exampleTestCase: TestCase = {
-                  description: 'Fun animal adventure story',
-                  vars: {
-                    animal: 'penguin',
-                    location: 'tropical island',
-                  },
-                  assert: [
-                    {
-                      type: 'contains-any',
-                      value: ['penguin', 'adventure', 'tropical', 'island'],
-                    },
-                    {
-                      type: 'llm-rubric',
-                      value:
-                        'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
-                    },
-                  ],
-                };
-                setTestCases([...testCases, exampleTestCase]);
-              }}
-              sx={{ mr: 1 }}
-            >
-              Add Example
+    <div className="space-y-4">
+      {!canEditInlineTests && (
+        <Alert variant="info" className="flex-col items-start sm:flex-row sm:items-center">
+          <AlertContent>
+            <AlertTitle>Managed in YAML</AlertTitle>
+            <AlertDescription>
+              This test configuration is loaded from{' '}
+              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
+                {getManagedTestsLabel(rawTests)}
+              </code>
+              . Use the YAML editor to update it.
+            </AlertDescription>
+          </AlertContent>
+          {onOpenYamlEditor && (
+            <Button variant="outline" size="sm" onClick={onOpenYamlEditor}>
+              Edit YAML
             </Button>
           )}
-          <Button color="primary" onClick={() => setTestCaseDialogOpen(true)} variant="contained">
-            Add Test Case
-          </Button>
-        </div>
-      </Stack>
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Description</TableCell>
-              <TableCell>Assertions</TableCell>
-              <TableCell>Variables</TableCell>
-              <TableCell align="right"></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {testCases.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center">
-                  No test cases added yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              testCases.map((testCase, index) => (
-                <TableRow
-                  key={index}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                      cursor: 'pointer',
-                    },
-                  }}
+        </Alert>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-xl font-semibold">Test Cases</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          {canEditInlineTests && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
+                    <Button variant="ghost" size="icon" asChild>
+                      <span>
+                        <UploadIcon className="size-4" />
+                      </span>
+                    </Button>
+                    <input
+                      type="file"
+                      accept=".csv,.yaml,.yml"
+                      onChange={handleAddTestCaseFromFile}
+                      className="hidden"
+                    />
+                  </label>
+                </TooltipTrigger>
+                <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
+              </Tooltip>
+
+              <Button
+                onClick={() => setTestCaseDialogOpen(true)}
+                className="dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                Add Test Case
+              </Button>
+
+              {testCases.length === 0 && (
+                <Button
+                  variant="secondary"
                   onClick={() => {
-                    setEditingTestCaseIndex(index);
-                    setTestCaseDialogOpen(true);
+                    const exampleTestCase: TestCase = {
+                      description: 'Fun animal adventure story',
+                      vars: {
+                        animal: 'penguin',
+                        location: 'tropical island',
+                      },
+                      assert: [
+                        {
+                          type: 'contains-any',
+                          value: ['penguin', 'adventure', 'tropical', 'island'],
+                        },
+                        {
+                          type: 'llm-rubric',
+                          value:
+                            'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
+                        },
+                      ],
+                    };
+                    setTestCases([...testCases, exampleTestCase]);
                   }}
                 >
-                  <TableCell>
-                    <Typography variant="body2">
-                      {testCase.description || `Test Case #${index + 1}`}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{testCase.assert?.length || 0} assertions</TableCell>
-                  <TableCell>
-                    {Object.entries(testCase.vars || {})
-                      .map(([k, v]) => k + '=' + v)
-                      .join(', ')}
-                  </TableCell>
-                  <TableCell align="right" sx={{ minWidth: 150 }}>
-                    <IconButton
+                  Add Example
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Test Cases Table */}
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[640px]">
+          <thead className="bg-muted/50">
+            <tr className="border-b border-border">
+              <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Assertions</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Variables</th>
+              <th className="w-[120px] px-4 py-3 text-right text-sm font-semibold">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {canEditInlineTests ? (
+              testCases.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                    No test cases added yet.
+                  </td>
+                </tr>
+              ) : (
+                testCases.map((testCase, index) => {
+                  const testCaseVars = Object.keys(testCase.vars || {});
+                  const missingVars = varsList.filter((v) => !testCaseVars.includes(v));
+                  const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
+
+                  return (
+                    <tr
+                      key={index}
                       onClick={() => {
                         setEditingTestCaseIndex(index);
                         setTestCaseDialogOpen(true);
                       }}
-                      size="small"
+                      className={cn(
+                        'border-b border-border cursor-pointer',
+                        'hover:bg-muted/50 transition-colors',
+                        hasMissingVars && 'bg-amber-50/50 dark:bg-amber-950/20',
+                      )}
                     >
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      onClick={(event) => handleDuplicateTestCase(event, index)}
-                      size="small"
-                    >
-                      <Copy />
-                    </IconButton>
-                    <IconButton
-                      onClick={(event) => handleRemoveTestCase(event, index)}
-                      size="small"
-                    >
-                      <Delete />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))
+                      <td className="px-4 py-3 text-sm">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingTestCaseIndex(index);
+                            setTestCaseDialogOpen(true);
+                          }}
+                          aria-label={`Open test case ${index + 1} for editing`}
+                          className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {hasMissingVars && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Missing variables: {missingVars.join(', ')}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                          {hasMissingVars && (
+                            <span className="sr-only">
+                              Missing variables: {missingVars.join(', ')}.
+                            </span>
+                          )}
+                          {testCase.description || (
+                            <span className="text-muted-foreground italic">
+                              Test Case #{index + 1}
+                            </span>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {testCase.assert?.length ? (
+                          `${testCase.assert.length} assertion${testCase.assert.length === 1 ? '' : 's'}`
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
+                        {Object.keys(testCase.vars || {}).length > 0 ? (
+                          Object.entries(testCase.vars || {})
+                            .map(([k, v]) => `${k}=${v}`)
+                            .join(', ')
+                        ) : (
+                          <span className="font-sans text-muted-foreground/60">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTestCaseIndex(index);
+                                  setTestCaseDialogOpen(true);
+                                }}
+                                aria-label={`Edit test case ${index + 1}`}
+                              >
+                                <EditIcon className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(event) => handleDuplicateTestCase(event, index)}
+                                aria-label={`Duplicate test case ${index + 1}`}
+                              >
+                                <ContentCopyIcon className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Duplicate</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(event) => handleRemoveTestCase(event, index)}
+                                aria-label={`Delete test case ${index + 1}`}
+                              >
+                                <DeleteIcon className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )
+            ) : (
+              <tr>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  Test entries from YAML are not editable in the UI editor.
+                </td>
+              </tr>
             )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <TestCaseDialog
-        open={testCaseDialogOpen}
-        onAdd={handleAddTestCase}
-        varsList={varsList}
-        initialValues={editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]}
-        onCancel={() => {
-          setEditingTestCaseIndex(null);
-          setTestCaseDialogOpen(false);
-        }}
-      />
+          </tbody>
+        </table>
+      </div>
+
+      {/* Test Case Dialog */}
+      {canEditInlineTests && (
+        <TestCaseDialog
+          open={testCaseDialogOpen}
+          onAdd={handleAddTestCase}
+          varsList={varsList}
+          initialValues={
+            editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]
+          }
+          onCancel={() => {
+            setEditingTestCaseIndex(null);
+            setTestCaseDialogOpen(false);
+          }}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={cancelDeleteTestCase}
-        aria-labelledby="delete-test-case-dialog-title"
-      >
-        <DialogTitle id="delete-test-case-dialog-title">Delete Test Case</DialogTitle>
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this test case? This action cannot be undone.
-          </DialogContentText>
+          <DialogHeader>
+            <DialogTitle>Delete test case?</DialogTitle>
+            <DialogDescription>
+              This removes the test case from this evaluation. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDeleteTestCase}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteTestCase}>
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelDeleteTestCase} color="primary">
-            Cancel
-          </Button>
-          <Button onClick={confirmDeleteTestCase} color="error" autoFocus>
-            Delete
-          </Button>
-        </DialogActions>
       </Dialog>
-    </>
+    </div>
   );
 };
 

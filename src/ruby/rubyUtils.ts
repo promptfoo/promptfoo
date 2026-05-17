@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
@@ -274,12 +274,12 @@ export async function validateRubyPath(rubyPath: string, isExplicit: boolean): P
  * @returns A promise that resolves to the output of the Ruby script.
  * @throws An error if there's an issue running the Ruby script or parsing its output.
  */
-export async function runRuby(
+export async function runRuby<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
   options: { rubyExecutable?: string } = {},
-): Promise<any> {
+): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -297,7 +297,7 @@ export async function runRuby(
   const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
   try {
-    fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
+    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Ruby wrapper with args: ${safeJsonStringify(args)}`);
 
     const { stdout, stderr } = await execFileAsync(rubyPath, [
@@ -316,10 +316,10 @@ export async function runRuby(
       logger.error(stderr.trim());
     }
 
-    const output = fs.readFileSync(outputPath, 'utf-8');
+    const output = await fs.readFile(outputPath, 'utf-8');
     logger.debug(`Ruby script ${absPath} returned: ${output}`);
 
-    let result: { type: 'final_result'; data: any } | undefined;
+    let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
       logger.debug(
@@ -349,12 +349,14 @@ export async function runRuby(
       }`,
     );
   } finally {
-    [tempJsonPath, outputPath].forEach((file) => {
-      try {
-        fs.unlinkSync(file);
-      } catch (error) {
-        logger.error(`Error removing ${file}: ${error}`);
-      }
-    });
+    await Promise.all(
+      [tempJsonPath, outputPath].map(async (file) => {
+        try {
+          await fs.unlink(file);
+        } catch (error) {
+          logger.error(`Error removing ${file}: ${error}`);
+        }
+      }),
+    );
   }
 }

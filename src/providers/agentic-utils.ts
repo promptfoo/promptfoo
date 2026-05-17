@@ -7,12 +7,13 @@
  */
 
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
+import { safeResolve } from '../util/pathUtils';
 
 import type { ProviderResponse } from '../types/index';
 
@@ -21,6 +22,26 @@ import type { ProviderResponse } from '../types/index';
  * Prevents hanging on extremely large directories
  */
 const FINGERPRINT_TIMEOUT_MS = 2000;
+const STAT_BATCH_SIZE = 32;
+
+/**
+ * Resolve a coding-agent working directory relative to the config file directory.
+ *
+ * `cliState.basePath` tracks the loaded config file's directory. Coding-agent providers
+ * use `process.cwd()` only when no config base path is available, which keeps relative
+ * paths stable when the same config is run from different shells.
+ */
+export function resolveAgenticWorkingDir(
+  workingDir: string | undefined,
+  configBasePath?: string,
+): string | undefined {
+  if (!workingDir) {
+    return undefined;
+  }
+
+  const basePath = configBasePath ? path.resolve(configBasePath) : process.cwd();
+  return safeResolve(basePath, workingDir);
+}
 
 /**
  * Get a fingerprint for a working directory to use as a cache key.
@@ -34,23 +55,23 @@ const FINGERPRINT_TIMEOUT_MS = 2000;
  * @throws Error if fingerprinting times out or directory is inaccessible
  */
 export async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirStat = fs.statSync(workingDir);
+  const dirStat = await fs.stat(workingDir);
   const dirMtime = dirStat.mtimeMs;
 
   const startTime = Date.now();
 
   // Recursively get all files
-  const getAllFiles = (dir: string, files: string[] = []): string[] => {
+  const getAllFiles = async (dir: string, files: string[] = []): Promise<string[]> => {
     if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
       throw new Error('Working directory fingerprint timed out');
     }
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = await fs.readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        getAllFiles(fullPath, files);
+        await getAllFiles(fullPath, files);
       } else if (entry.isFile()) {
         files.push(fullPath);
       }
@@ -58,16 +79,26 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
     return files;
   };
 
-  const allFiles = getAllFiles(workingDir);
+  const allFiles = await getAllFiles(workingDir);
 
   // Create fingerprint from directory mtime + all file mtimes
-  const fileMtimes = allFiles
-    .map((file: string) => {
-      const stat = fs.statSync(file);
-      const relativePath = path.relative(workingDir, file);
-      return `${relativePath}:${stat.mtimeMs}`;
-    })
-    .sort(); // Sort for consistent ordering
+  const fileMtimes: string[] = [];
+  for (let i = 0; i < allFiles.length; i += STAT_BATCH_SIZE) {
+    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
+      throw new Error('Working directory fingerprint timed out');
+    }
+
+    const batch = allFiles.slice(i, i + STAT_BATCH_SIZE);
+    const batchMtimes = await Promise.all(
+      batch.map(async (file: string) => {
+        const stat = await fs.stat(file);
+        const relativePath = path.relative(workingDir, file);
+        return `${relativePath}:${stat.mtimeMs}`;
+      }),
+    );
+    fileMtimes.push(...batchMtimes);
+  }
+  fileMtimes.sort(); // Sort for consistent ordering
 
   const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
   const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
@@ -85,6 +116,10 @@ export interface AgenticCacheOptions {
   workingDir?: string;
   /** Whether to bust the cache (read bypass, but still write) */
   bustCache?: boolean;
+  /** MCP configuration — when present and cacheMcp is not true, caching is disabled */
+  mcp?: unknown;
+  /** When true, enables caching even when MCP is configured */
+  cacheMcp?: boolean;
 }
 
 /**
@@ -145,6 +180,16 @@ export async function initializeAgenticCache(
     };
   }
 
+  // MCP tools typically interact with external state, so disable caching by default.
+  // Users can opt in with cacheMcp: true for deterministic MCP tools.
+  if (options.mcp && !options.cacheMcp) {
+    return {
+      shouldCache: false,
+      shouldReadCache: false,
+      shouldWriteCache: false,
+    };
+  }
+
   let workingDirFingerprint: string | null = null;
 
   if (options.workingDir) {
@@ -168,6 +213,7 @@ export async function initializeAgenticCache(
   const cacheKey = generateCacheKey(options.cacheKeyPrefix, {
     ...cacheKeyData,
     workingDirFingerprint,
+    ...(options.mcp ? { mcp: options.mcp } : {}),
   });
 
   return {
@@ -201,7 +247,7 @@ export async function getCachedResponse(
       logger.debug(
         `Returning cached response${debugContext ? ` for ${debugContext}` : ''} (cache key: ${cacheResult.cacheKey})`,
       );
-      return JSON.parse(cachedResponse);
+      return { ...JSON.parse(cachedResponse), cached: true };
     }
   } catch (error) {
     logger.error(`Error getting cached response: ${String(error)}`);

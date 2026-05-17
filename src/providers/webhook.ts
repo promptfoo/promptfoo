@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
@@ -30,11 +30,15 @@ export class WebhookProvider implements ApiProvider {
       params.config = this.config;
     }
 
+    interface WebhookResponse {
+      output?: string;
+    }
+
     let data,
       cached = false,
       latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs } = await fetchWithCache(
+      ({ data, cached, latencyMs } = await fetchWithCache<WebhookResponse>(
         this.webhookUrl,
         {
           method: 'POST',
@@ -43,7 +47,7 @@ export class WebhookProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       ));
     } catch (err) {

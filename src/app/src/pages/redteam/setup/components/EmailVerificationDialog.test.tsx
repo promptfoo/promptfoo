@@ -1,7 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
@@ -26,8 +25,6 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 describe('EmailVerificationDialog', () => {
-  const theme = createTheme();
-
   const mockProps: ComponentProps<typeof EmailVerificationDialog> = {
     open: true,
     onClose: vi.fn(),
@@ -35,11 +32,7 @@ describe('EmailVerificationDialog', () => {
   };
 
   const renderComponent = (props: ComponentProps<typeof EmailVerificationDialog> = mockProps) => {
-    return render(
-      <ThemeProvider theme={theme}>
-        <EmailVerificationDialog {...props} />
-      </ThemeProvider>,
-    );
+    return render(<EmailVerificationDialog {...props} />);
   };
 
   beforeEach(() => {
@@ -168,12 +161,14 @@ describe('EmailVerificationDialog', () => {
   });
 
   it('handles Enter key submission', async () => {
+    const user = userEvent.setup();
     renderComponent();
 
     const emailInput = screen.getByLabelText('Work Email Address');
     await userEvent.type(emailInput, 'test@example.com');
 
-    fireEvent.keyDown(emailInput, { key: 'Enter' });
+    emailInput.focus();
+    await user.keyboard('{Enter}');
 
     await waitFor(() => {
       expect(mockSaveEmail).toHaveBeenCalledWith('test@example.com');

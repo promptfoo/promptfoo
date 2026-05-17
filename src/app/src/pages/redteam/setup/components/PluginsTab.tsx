@@ -1,30 +1,19 @@
 import { useCallback, useMemo, useState } from 'react';
 
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
+import { Input } from '@app/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import ErrorIcon from '@mui/icons-material/Error';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import RemoveIcon from '@mui/icons-material/Remove';
-import SearchIcon from '@mui/icons-material/Search';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
   DEFAULT_PLUGINS,
+  DOD_AI_ETHICS_MAPPING,
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
@@ -33,19 +22,32 @@ import {
   HARM_PLUGINS,
   ISO_42001_MAPPING,
   MCP_PLUGINS,
+  MINIMAL_TEST_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
-  OWASP_AGENTIC_REDTEAM_MAPPING,
+  OWASP_AGENTIC_TOP_10_MAPPING,
   OWASP_API_TOP_10_MAPPING,
   OWASP_LLM_RED_TEAM_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
   PLUGIN_PRESET_DESCRIPTIONS,
   type Plugin,
+  RAG_PLUGINS,
   riskCategories,
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  HelpCircle,
+  Minus,
+  Search,
+  Settings,
+} from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useSearchParams } from 'react-router-dom';
+import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -60,36 +62,129 @@ import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
-const ErrorFallback = ({ error }: { error: Error }) => (
+const ErrorFallback = ({ error }: { error: unknown }) => (
   <div role="alert">
     <p>Something went wrong:</p>
-    <pre>{error.message}</pre>
+    <pre>{error instanceof Error ? error.message : String(error)}</pre>
   </div>
 );
 
-// Constants
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+type PluginPreset = {
+  name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+  plugins: ReadonlySet<Plugin>;
+};
+
+const STANDARD_PRESETS: PluginPreset[] = [
+  {
+    name: 'Recommended',
+    plugins: DEFAULT_PLUGINS,
+  },
+  {
+    name: 'Minimal Test',
+    plugins: MINIMAL_TEST_PLUGINS,
+  },
+  {
+    name: 'RAG',
+    plugins: RAG_PLUGINS,
+  },
+  {
+    name: 'Foundation',
+    plugins: new Set(FOUNDATION_PLUGINS),
+  },
+  {
+    name: 'Guardrails Evaluation',
+    plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+  },
+  {
+    name: 'MCP',
+    plugins: new Set(MCP_PLUGINS),
+  },
+  {
+    name: 'Harmful',
+    plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+  },
+  {
+    name: 'NIST',
+    plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP LLM Top 10',
+    plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP Gen AI Red Team',
+    plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP API Top 10',
+    plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP Top 10 for Agentic Applications',
+    plugins: new Set(Object.values(OWASP_AGENTIC_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'MITRE',
+    plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'EU AI Act',
+    plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'ISO 42001',
+    plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'GDPR',
+    plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
+  },
+];
+
+const ENTERPRISE_PRESETS: PluginPreset[] = [
+  ...STANDARD_PRESETS,
+  {
+    name: 'DoD AI Ethical Principles',
+    plugins: new Set(Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins)),
+  },
+];
+
+const CATEGORY_FILTERS = Object.entries(riskCategories).map(([category, plugins]) => ({
+  key: category,
+  label: category,
+  count: plugins.filter((p) => p !== 'intent' && p !== 'policy').length,
+}));
+
+const DOMAIN_SPECIFIC_PLUGIN_SET = new Set<Plugin>(DOMAIN_SPECIFIC_PLUGINS);
+
+const PLUGIN_CATEGORY_BY_ID = new Map<Plugin, string>();
+for (const [category, plugins] of Object.entries(riskCategories)) {
+  for (const plugin of plugins) {
+    if (!PLUGIN_CATEGORY_BY_ID.has(plugin)) {
+      PLUGIN_CATEGORY_BY_ID.set(plugin, category);
+    }
+  }
+}
 
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   pluginConfig: LocalPluginConfig;
   updatePluginConfig: (plugin: string, newConfig: Partial<LocalPluginConfig[string]>) => void;
   recentlyUsedPlugins: Plugin[];
-  onUserInteraction: () => void;
   isRemoteGenerationDisabled: boolean;
 }
 
 export default function PluginsTab({
   selectedPlugins,
   handlePluginToggle,
+  setSelectedPlugins,
   pluginConfig,
   updatePluginConfig,
   recentlyUsedPlugins,
-  onUserInteraction,
   isRemoteGenerationDisabled,
 }: PluginsTabProps): React.ReactElement {
-  const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const toast = useToast();
 
@@ -111,6 +206,7 @@ export default function PluginsTab({
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
+  const [presetsExpanded, setPresetsExpanded] = useState(true);
 
   const {
     data: { status: apiHealthStatus },
@@ -119,6 +215,8 @@ export default function PluginsTab({
   // Check if user has enterprise access (cloud enabled)
   const { data: cloudConfig } = useCloudConfig();
   const hasEnterpriseAccess = cloudConfig?.isEnabled ?? false;
+  const [searchParams] = useSearchParams();
+  const showEnterpriseMappings = searchParams.get('showEnterpriseMappings') === '1';
 
   // Test case generation state - now from context
   const {
@@ -127,84 +225,12 @@ export default function PluginsTab({
     plugin: generatingPlugin,
   } = useTestCaseGeneration();
 
-  // Presets
-  const presets: {
-    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }[] = useMemo(
-    () => [
-      {
-        name: 'Recommended',
-        plugins: DEFAULT_PLUGINS,
-      },
-      {
-        name: 'Minimal Test',
-        plugins: new Set(['harmful:hate', 'harmful:self-harm']),
-      },
-      {
-        name: 'RAG',
-        plugins: new Set([...DEFAULT_PLUGINS, 'bola', 'bfla', 'rbac']),
-      },
-      {
-        name: 'Foundation',
-        plugins: new Set(FOUNDATION_PLUGINS),
-      },
-      {
-        name: 'Guardrails Evaluation',
-        plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
-      },
-      {
-        name: 'MCP',
-        plugins: new Set(MCP_PLUGINS),
-      },
-      {
-        name: 'Harmful',
-        plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
-      },
-      {
-        name: 'NIST',
-        plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP LLM Top 10',
-        plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP Gen AI Red Team',
-        plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP API Top 10',
-        plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP Agentic AI Top 10',
-        plugins: new Set(Object.values(OWASP_AGENTIC_REDTEAM_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'MITRE',
-        plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'EU AI Act',
-        plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'ISO 42001',
-        plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'GDPR',
-        plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
-      },
-    ],
-    [],
-  );
+  const presets = showEnterpriseMappings ? ENTERPRISE_PRESETS : STANDARD_PRESETS;
 
   // Helper functions
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {
-      if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
+      if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
         return true;
       }
       const config = pluginConfig[plugin];
@@ -226,51 +252,45 @@ export default function PluginsTab({
     [pluginConfig],
   );
 
-  // Category filters
-  const categoryFilters = useMemo(
-    () =>
-      Object.keys(riskCategories).map((category) => ({
-        key: category,
-        label: category,
-      })),
-    [],
-  );
+  // Category filters with plugin counts
+  const allCategoryFilters = useMemo(() => {
+    const recentlyUsedCount = new Set(recentlyUsedPlugins).size;
 
-  const allCategoryFilters = useMemo(
-    () => [
-      ...(recentlyUsedPlugins.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
-      ...(selectedPlugins.size > 0
-        ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
+    return [
+      ...(recentlyUsedCount > 0
+        ? [{ key: 'Recently Used', label: 'Recently Used', count: recentlyUsedCount }]
         : []),
-      ...categoryFilters,
-    ],
-    [recentlyUsedPlugins.length, selectedPlugins.size, categoryFilters],
-  );
+      ...(selectedPlugins.size > 0
+        ? [{ key: 'Selected', label: 'Selected', count: selectedPlugins.size }]
+        : []),
+      ...CATEGORY_FILTERS,
+    ];
+  }, [recentlyUsedPlugins, selectedPlugins.size]);
 
   // Check if we're showing domain-specific category
-  const showingDomainSpecific = useMemo(
-    () => selectedCategory === 'Domain-Specific Risks',
-    [selectedCategory],
-  );
+  const showingDomainSpecific = selectedCategory === 'Domain-Specific Risks';
 
   // Get all plugins with categories
   const allPluginsWithCategories = useMemo(() => {
     const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
+    const seenPlugins = new Set<Plugin>();
+
+    const appendPlugin = (plugin: Plugin, category: string) => {
+      if (seenPlugins.has(plugin)) {
+        return;
+      }
+      seenPlugins.add(plugin);
+      pluginsWithCategories.push({ plugin, category });
+    };
 
     if (selectedCategory === 'Selected') {
       Array.from(selectedPlugins).forEach((plugin) => {
-        let originalCategory = 'Other';
-        if (recentlyUsedPlugins.includes(plugin)) {
-          originalCategory = 'Recently Used';
-        } else {
-          for (const [category, plugins] of Object.entries(riskCategories)) {
-            if (plugins.includes(plugin)) {
-              originalCategory = category;
-              break;
-            }
-          }
-        }
-        pluginsWithCategories.push({ plugin, category: originalCategory });
+        appendPlugin(
+          plugin,
+          recentlyUsedPlugins.includes(plugin)
+            ? 'Recently Used'
+            : PLUGIN_CATEGORY_BY_ID.get(plugin) || 'Other',
+        );
       });
       return pluginsWithCategories;
     }
@@ -280,7 +300,7 @@ export default function PluginsTab({
       (!selectedCategory || selectedCategory === 'Recently Used')
     ) {
       recentlyUsedPlugins.forEach((plugin) => {
-        pluginsWithCategories.push({ plugin, category: 'Recently Used' });
+        appendPlugin(plugin, 'Recently Used');
       });
     }
 
@@ -294,10 +314,8 @@ export default function PluginsTab({
             .filter((plugin) => plugin !== 'intent' && plugin !== 'policy')
             .forEach((plugin) => {
               // Skip domain-specific plugins when rendering flat list
-              if (!DOMAIN_SPECIFIC_PLUGINS.includes(plugin)) {
-                if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
-                  pluginsWithCategories.push({ plugin, category });
-                }
+              if (!DOMAIN_SPECIFIC_PLUGIN_SET.has(plugin)) {
+                appendPlugin(plugin, category);
               }
             });
         }
@@ -335,7 +353,7 @@ export default function PluginsTab({
       return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
     };
 
-    return plugins.sort((a, b) => {
+    return [...plugins].sort((a, b) => {
       const displayNameA = getDisplayName(a.plugin);
       const displayNameB = getDisplayName(b.plugin);
 
@@ -353,42 +371,48 @@ export default function PluginsTab({
     [presets, selectedPlugins],
   );
 
+  // Split selected plugins into configured vs needing configuration
+  const { pluginsNeedingConfig, configuredPlugins } = useMemo(() => {
+    const needsConfig: Plugin[] = [];
+    const configured: Plugin[] = [];
+
+    for (const plugin of selectedPlugins) {
+      if (requiresPluginConfig(plugin) && !isPluginConfigured(plugin)) {
+        needsConfig.push(plugin);
+      } else {
+        configured.push(plugin);
+      }
+    }
+
+    return { pluginsNeedingConfig: needsConfig, configuredPlugins: configured };
+  }, [selectedPlugins, isPluginConfigured]);
+
   // Event handlers
   const handleCategoryToggle = useCallback((category: string) => {
     setSelectedCategory((prev) => (prev === category ? undefined : category));
   }, []);
 
   const handlePresetSelect = useCallback(
-    (preset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }) => {
+    (preset: PluginPreset) => {
       recordEvent('feature_used', {
         feature: 'redteam_config_plugins_preset_selected',
         preset: preset.name,
       });
-      onUserInteraction();
       if (preset.name === 'Custom') {
         setIsCustomMode(true);
       } else {
-        preset.plugins.forEach((plugin) => {
-          if (!selectedPlugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
-        // Remove plugins not in preset
-        selectedPlugins.forEach((plugin) => {
-          if (!preset.plugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
+        // Use setSelectedPlugins for efficient bulk update
+        setSelectedPlugins(new Set(preset.plugins));
         setIsCustomMode(false);
       }
     },
-    [recordEvent, onUserInteraction, selectedPlugins, handlePluginToggle],
+    [recordEvent, setSelectedPlugins],
   );
 
   const handleGenerateTestCase = useCallback(
     async (plugin: Plugin) => {
       // For plugins that require config, we need to show config dialog first
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
+      if (requiresPluginConfig(plugin)) {
         setSelectedConfigPlugin(plugin);
         setConfigDialogOpen(true);
       }
@@ -410,149 +434,149 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+      <div
+        className="flex w-full flex-col gap-6 lg:flex-row lg:items-start"
+        data-testid="plugins-tab-container"
+      >
         {/* Main content */}
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          {/* Presets section */}
-          <Box sx={{ mb: 3 }}>
-            <Typography
-              variant="h6"
-              sx={{
-                mb: 2,
-                fontWeight: 600,
-                color: 'text.primary',
-              }}
+        <div className="min-w-0 flex-1">
+          {/* Presets section - collapsible */}
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setPresetsExpanded((prev) => !prev)}
+              aria-expanded={presetsExpanded}
+              className="mb-3 flex w-full cursor-pointer items-center gap-2 text-left"
             >
-              Presets
-            </Typography>
+              {presetsExpanded ? (
+                <ChevronDown className="size-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="size-4 text-muted-foreground" />
+              )}
+              <h3 className="text-lg font-semibold">Presets</h3>
+              {!presetsExpanded && currentlySelectedPreset && (
+                <Badge variant="secondary">
+                  {currentlySelectedPreset.name} ({currentlySelectedPreset.plugins.size} plugins)
+                </Badge>
+              )}
+            </button>
 
-            <Grid spacing={2} container sx={{ mb: 3 }}>
-              {presets.map((preset) => {
-                const isSelected =
-                  preset.name === 'Custom'
-                    ? isCustomMode
-                    : preset.name === currentlySelectedPreset?.name;
-                return (
-                  <Box key={preset.name}>
+            {presetsExpanded && (
+              <div className="grid auto-rows-fr grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                {presets.map((preset) => {
+                  const isSelected =
+                    preset.name === 'Custom'
+                      ? isCustomMode
+                      : preset.name === currentlySelectedPreset?.name;
+                  return (
                     <PresetCard
+                      key={preset.name}
                       name={preset.name}
                       description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
                       isSelected={isSelected}
                       onClick={() => handlePresetSelect(preset)}
                     />
-                  </Box>
-                );
-              })}
-            </Grid>
-          </Box>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-          {/* Search and Filter section */}
-          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-            <TextField
-              variant="outlined"
-              placeholder="Search plugins..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ minWidth: 300, flexShrink: 0 }}
-            />
+          {/* Filter by category */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(undefined)}
+                className={cn(
+                  'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                  selectedCategory === undefined
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                )}
+              >
+                All
+              </button>
+              {allCategoryFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => handleCategoryToggle(filter.key)}
+                  className={cn(
+                    'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                    selectedCategory === filter.key
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                  )}
+                >
+                  {filter.label}
+                  <span
+                    className={cn(
+                      'inline-flex size-5 items-center justify-center rounded-full text-xs',
+                      selectedCategory === filter.key
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-            <Box sx={{ flex: 1 }}>
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                <Chip
-                  label="All Categories"
-                  variant={selectedCategory === undefined ? 'filled' : 'outlined'}
-                  color={selectedCategory === undefined ? 'primary' : 'default'}
-                  onClick={() => setSelectedCategory(undefined)}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
-                    },
+          {/* Search and bulk selection */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                data-testid="plugin-search-input"
+                placeholder="Search plugins..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            {!showingDomainSpecific && (
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  className="cursor-pointer text-sm text-primary hover:underline"
+                  onClick={() => {
+                    setSelectedPlugins(
+                      new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
+                    );
                   }}
-                />
-                {allCategoryFilters.map((filter) => (
-                  <Chip
-                    key={filter.key}
-                    label={filter.label}
-                    variant={selectedCategory === filter.key ? 'filled' : 'outlined'}
-                    color={selectedCategory === filter.key ? 'primary' : 'default'}
-                    onClick={() => handleCategoryToggle(filter.key)}
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
-                      },
-                    }}
-                  />
-                ))}
-              </Stack>
-            </Box>
-          </Stack>
-
-          {/* Bulk selection actions - hide for domain-specific view */}
-          {!showingDomainSpecific && (
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 2,
-                mb: 2,
-                '& > *': {
-                  color: 'primary.main',
-                  cursor: 'pointer',
-                  fontSize: '0.875rem',
-                  textDecoration: 'none',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
-                },
-              }}
-            >
-              <Box
-                component="span"
-                onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (!selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
-                }}
-              >
-                Select all
-              </Box>
-              <Box
-                component="span"
-                onClick={() => {
-                  onUserInteraction();
-                  filteredPlugins.forEach(({ plugin }) => {
-                    if (selectedPlugins.has(plugin)) {
-                      handlePluginToggle(plugin);
-                    }
-                  });
-                }}
-              >
-                Select none
-              </Box>
-            </Box>
-          )}
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="cursor-pointer text-sm text-primary hover:underline"
+                  onClick={() => {
+                    const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
+                    const newSelected = new Set(
+                      [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
+                    );
+                    setSelectedPlugins(newSelected);
+                  }}
+                >
+                  Select none
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Domain-Specific Vertical Suites */}
           {showingDomainSpecific && (
-            <Stack spacing={3} sx={{ mb: 3 }}>
+            <div className="mb-6 space-y-6">
               {VERTICAL_SUITES.map((suite) => (
                 <VerticalSuiteCard
                   key={suite.id}
                   suite={suite}
                   selectedPlugins={selectedPlugins}
                   onPluginToggle={handlePluginToggle}
+                  setSelectedPlugins={setSelectedPlugins}
                   onConfigClick={handleConfigClick}
                   onGenerateTestCase={handleGenerateTestCase}
                   isPluginConfigured={isPluginConfigured}
@@ -567,18 +591,22 @@ export default function PluginsTab({
                   }}
                 />
               ))}
-            </Stack>
+            </div>
           )}
 
           {/* Plugin list */}
           {!showingDomainSpecific && (
-            <Stack spacing={1} sx={{ mb: 3 }}>
+            <div className="mb-6 space-y-2">
               {filteredPlugins.map(({ plugin, category }) => {
                 const pluginDisabled = isPluginDisabled(plugin);
+                const isSelected = selectedPlugins.has(plugin);
+                const requiresConfig = requiresPluginConfig(plugin);
+                const hasConfigError = requiresConfig && isSelected && !isPluginConfigured(plugin);
+
                 return (
-                  <Paper
+                  <div
                     key={plugin}
-                    variant="outlined"
+                    data-testid={`plugin-list-item-${plugin}`}
                     onClick={() => {
                       if (pluginDisabled) {
                         toast.showToast(
@@ -589,108 +617,55 @@ export default function PluginsTab({
                       }
                       handlePluginToggle(plugin);
                     }}
-                    sx={{
-                      border: '1px solid',
-                      borderColor: (() => {
-                        if (pluginDisabled) {
-                          return 'action.disabled';
-                        }
-                        if (selectedPlugins.has(plugin)) {
-                          // Show red border if missing required config
-                          if (
-                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                            !isPluginConfigured(plugin)
-                          ) {
-                            return 'error.main';
-                          }
-                          return 'primary.main';
-                        }
-                        return theme.palette.divider;
-                      })(),
-                      borderRadius: 1,
-                      cursor: pluginDisabled ? 'not-allowed' : 'pointer',
-                      opacity: pluginDisabled ? 0.5 : 1,
-                      bgcolor: (theme) => {
-                        if (pluginDisabled) {
-                          return 'action.disabledBackground';
-                        }
-                        if (selectedPlugins.has(plugin)) {
-                          // Show red background if plugin is selected but missing required config
-                          if (
-                            PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                            !isPluginConfigured(plugin)
-                          ) {
-                            return alpha(theme.palette.error.main, 0.08);
-                          }
-                          return alpha(theme.palette.primary.main, 0.08);
-                        }
-                        return 'transparent';
-                      },
-                      '&:hover': {
-                        bgcolor: (theme) => {
-                          if (pluginDisabled) {
-                            return 'action.disabledBackground';
-                          }
-                          if (selectedPlugins.has(plugin)) {
-                            // Show red hover if plugin is selected but missing required config
-                            if (
-                              PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                              !isPluginConfigured(plugin)
-                            ) {
-                              return alpha(theme.palette.error.main, 0.12);
-                            }
-                            return alpha(theme.palette.primary.main, 0.12);
-                          }
-                          return alpha(theme.palette.common.black, 0.04);
-                        },
-                        cursor: pluginDisabled ? 'not-allowed' : 'pointer',
-                        borderColor: (() => {
-                          if (pluginDisabled) {
-                            return 'action.disabled';
-                          }
-                          if (selectedPlugins.has(plugin)) {
-                            // Keep red border on hover if missing config
-                            if (
-                              PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                              !isPluginConfigured(plugin)
-                            ) {
-                              return 'error.main';
-                            }
-                            return 'primary.main';
-                          }
-                          return theme.palette.action.hover;
-                        })(),
-                      },
-                      p: 2,
-                      transition: 'all 0.2s ease-in-out',
-                      display: 'flex',
-                      alignItems: 'center',
-                      width: '100%',
-                      ...(selectedPlugins.has(plugin) && {
-                        boxShadow: (theme) =>
-                          PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)
-                            ? `0 2px 8px ${alpha(theme.palette.error.main, 0.15)}`
-                            : `0 2px 8px ${alpha(theme.palette.primary.main, 0.15)}`,
-                      }),
-                    }}
+                    className={cn(
+                      'flex w-full items-center rounded-lg border border-border p-4 transition-all',
+                      pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      isSelected &&
+                        !hasConfigError &&
+                        cn(
+                          'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+                          !pluginDisabled && 'hover:bg-primary/[0.08]',
+                        ),
+                      hasConfigError &&
+                        cn(
+                          'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+                          !pluginDisabled && 'hover:bg-destructive/[0.08]',
+                        ),
+                      !isSelected &&
+                        !pluginDisabled &&
+                        'border-border hover:border-primary/50 hover:bg-muted/50',
+                    )}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', mr: 2, flexShrink: 0 }}>
-                      <Checkbox
-                        checked={selectedPlugins.has(plugin)}
-                        disabled={pluginDisabled}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handlePluginToggle(plugin);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        color="primary"
-                        size="small"
-                        aria-label={
-                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
-                        }
-                      />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-center gap-2">
+                        <span className="font-medium">
+                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                        </span>
+                        {category === 'Recently Used' && (
+                          <Badge variant="secondary">Recently Used</Badge>
+                        )}
+                        {pluginDisabled && isRemoteGenerationDisabled && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
+                                Remote generation required
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              This plugin requires remote generation. Unset
+                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      {subCategoryDescriptions[plugin] && (
+                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                          {subCategoryDescriptions[plugin]}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
                         disabled={
@@ -701,106 +676,78 @@ export default function PluginsTab({
                         isGenerating={generatingTestCase && generatingPlugin === plugin}
                         tooltipTitle={
                           pluginDisabled
-                            ? 'This plugin reqiures remote generation'
+                            ? 'This plugin requires remote generation'
                             : apiHealthStatus === 'connected'
                               ? `Generate a test case for ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`
                               : 'Promptfoo Cloud connection is required for test generation'
                         }
                       />
-                      {/* Config button - available for all plugins (gradingGuidance is universal) */}
-                      {selectedPlugins.has(plugin) && (
-                        <Tooltip
-                          title={`Configure ${displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}`}
-                        >
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfigClick(plugin);
-                            }}
-                            sx={{
-                              color:
-                                PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
-                                !isPluginConfigured(plugin)
-                                  ? 'error.main'
-                                  : 'text.secondary',
-                              ml: 0.5,
-                            }}
-                          >
-                            <SettingsOutlinedIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                    </Box>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Typography
-                          variant="body1"
-                          sx={{
-                            fontWeight: 500,
-                          }}
-                        >
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </Typography>
-
-                        {/* Badge for plugins requiring remote generation */}
-                        {pluginDisabled && isRemoteGenerationDisabled && (
-                          <Tooltip title="This plugin requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.">
-                            <Typography
-                              variant="caption"
-                              sx={(theme) => ({
-                                fontSize: '0.7rem',
-                                color: 'error.main',
-                                fontWeight: 500,
-                                backgroundColor: alpha(theme.palette.error.main, 0.08),
-                                px: 0.5,
-                                py: 0.25,
-                                borderRadius: 0.5,
-                                border: `1px solid ${alpha(theme.palette.error.main, 0.3)}`,
-                              })}
+                      {isSelected && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Configure ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
+                              className={cn(
+                                'size-8',
+                                hasConfigError ? 'text-destructive' : 'text-muted-foreground',
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConfigClick(plugin);
+                              }}
                             >
-                              Remote generation required
-                            </Typography>
-                          </Tooltip>
-                        )}
-                      </Box>
-                      {subCategoryDescriptions[plugin] && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {subCategoryDescriptions[plugin]}
-                        </Typography>
-                      )}
-                    </Box>
-                    <Box sx={{ flexShrink: 0 }}>
-                      {category === 'Recently Used' && (
-                        <Chip label="Recently Used" size="small" color="info" variant="outlined" />
+                              <Settings className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Configure{' '}
+                            {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                       {hasSpecificPluginDocumentation(plugin) && (
-                        <Tooltip title="View documentation">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              window.open(getPluginDocumentationUrl(plugin), '_blank');
-                            }}
-                            sx={{ ml: 1 }}
-                          >
-                            <HelpOutlineIcon fontSize="small" />
-                          </IconButton>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`View documentation for ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
+                              className="size-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(getPluginDocumentationUrl(plugin), '_blank');
+                              }}
+                            >
+                              <HelpCircle className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>View documentation</TooltipContent>
                         </Tooltip>
                       )}
-                    </Box>
-                  </Paper>
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={pluginDisabled}
+                        onCheckedChange={() => {
+                          handlePluginToggle(plugin);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        aria-label={
+                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                        }
+                      />
+                    </div>
+                  </div>
                 );
               })}
-            </Stack>
+            </div>
           )}
 
           {/* Plugin config dialog */}
@@ -818,119 +765,143 @@ export default function PluginsTab({
               setSelectedConfigPlugin(null);
             }}
           />
-        </Box>
+        </div>
 
         {/* Selected Plugins Sidebar */}
-        <Box
-          sx={{
-            width: 320,
-            position: 'sticky',
-            top: 72,
-            maxHeight: '60vh',
-            overflowY: 'auto',
-          }}
+        <div
+          className="w-full max-h-[60vh] overflow-y-auto lg:sticky lg:top-[72px] lg:w-80"
+          data-testid="selected-plugins-sidebar"
         >
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              backgroundColor: 'background.paper',
-            }}
-          >
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+          <div className="rounded-lg border border-border bg-background p-4">
+            <h3 className="mb-4 text-lg font-semibold" data-testid="selected-plugins-header">
               Selected Plugins ({selectedPlugins.size})
-            </Typography>
+            </h3>
 
             {selectedPlugins.size === 0 ? (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ textAlign: 'center', py: 4 }}
+              <p
+                className="py-8 text-center text-sm text-muted-foreground"
+                data-testid="selected-plugins-empty-state"
               >
                 No plugins selected yet.
                 <br />
                 Click on plugins to add them here.
-              </Typography>
+              </p>
             ) : (
-              <Stack sx={{ maxHeight: '400px', overflowY: 'auto' }} spacing={1}>
-                {Array.from(selectedPlugins).map((plugin) => {
-                  const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
-                  const hasError = requiresConfig && !isPluginConfigured(plugin);
-
-                  return (
-                    <Paper
-                      key={plugin}
-                      variant="outlined"
-                      sx={{
-                        p: 1.5,
-                        display: 'flex',
-                        alignItems: 'center',
-                        backgroundColor: hasError ? 'error.50' : 'primary.50',
-                        borderColor: hasError ? 'error.main' : 'primary.200',
-                        borderWidth: hasError ? 2 : 1,
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          flex: 1,
-                          minWidth: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                        }}
-                      >
-                        {hasError && (
-                          <ErrorIcon
-                            fontSize="small"
-                            sx={{
-                              color: 'error.main',
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontWeight: 500,
-                            fontSize: '0.875rem',
-                            color: hasError ? 'error.main' : 'text.primary',
-                          }}
+              <div className="max-h-[400px] space-y-2 overflow-y-auto">
+                {/* Plugins requiring configuration - shown first */}
+                {pluginsNeedingConfig.length > 0 && (
+                  <div className="mb-3" data-testid="plugins-needing-config-section">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-destructive">
+                      Needs Configuration
+                    </p>
+                    <div className="space-y-2">
+                      {pluginsNeedingConfig.map((plugin) => (
+                        <div
+                          key={plugin}
+                          data-testid={`selected-plugin-needs-config-${plugin}`}
+                          onClick={() => handleConfigClick(plugin)}
+                          className={cn(
+                            'flex cursor-pointer items-center rounded-lg border-2 border-destructive bg-destructive/10 p-3 transition-colors',
+                            'hover:bg-destructive/20',
+                          )}
                         >
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </Typography>
-                      </Box>
-                      <IconButton
-                        size="small"
-                        onClick={() => handlePluginToggle(plugin)}
-                        sx={{ color: 'text.secondary', ml: 1 }}
-                      >
-                        <RemoveIcon fontSize="small" />
-                      </IconButton>
-                    </Paper>
-                  );
-                })}
-              </Stack>
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <AlertCircle className="size-4 shrink-0 text-destructive" />
+                            <span className="text-sm font-medium text-destructive">
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Configure ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
+                              className="size-6 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConfigClick(plugin);
+                              }}
+                            >
+                              <Settings className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Remove ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
+                              className="size-6"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePluginToggle(plugin);
+                              }}
+                            >
+                              <Minus className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Configured plugins */}
+                {configuredPlugins.length > 0 && (
+                  <div data-testid="configured-plugins-section">
+                    {pluginsNeedingConfig.length > 0 && (
+                      <div className="my-3 border-t border-border" />
+                    )}
+                    <div className="space-y-2">
+                      {configuredPlugins.map((plugin) => (
+                        <div
+                          key={plugin}
+                          data-testid={`selected-plugin-${plugin}`}
+                          className="flex items-center rounded-lg border border-primary/20 bg-primary/5 p-3"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove ${
+                              displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                            }`}
+                            className="ml-2 size-6"
+                            onClick={() => handlePluginToggle(plugin)}
+                          >
+                            <Minus className="size-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {selectedPlugins.size > 0 && (
-              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+              <div className="mt-4 border-t border-border pt-4">
                 <Button
-                  variant="outlined"
-                  size="small"
-                  fullWidth
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  data-testid="clear-all-plugins-button"
                   onClick={() => {
-                    onUserInteraction();
-                    selectedPlugins.forEach((plugin) => handlePluginToggle(plugin));
+                    setSelectedPlugins(new Set());
                   }}
-                  sx={{ fontSize: '0.875rem' }}
                 >
                   Clear All
                 </Button>
-              </Box>
+              </div>
             )}
-          </Paper>
-        </Box>
-      </Box>
+          </div>
+        </div>
+      </div>
     </ErrorBoundary>
   );
 }

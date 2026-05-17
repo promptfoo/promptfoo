@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - Python provider'
+
+providers:
+  - file://../providers/echo_provider.py
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: Python
+    assert:
+      - type: contains
+        value: 'Python Echo:'
+      - type: contains
+        value: Python

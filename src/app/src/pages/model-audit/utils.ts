@@ -33,7 +33,7 @@ const stripPositionInfo = (filePath: string): string => {
  */
 export const getIssueFilePath = (issue: {
   location?: string | null;
-  details?: Record<string, any> & { path?: string; files?: string[] };
+  details?: Record<string, unknown> & { path?: string; files?: string[] };
 }): string => {
   // Check location first (most common)
   if (issue.location && typeof issue.location === 'string' && issue.location.trim()) {
@@ -86,4 +86,24 @@ export const mapSeverityForFiltering = (
   }
 
   return issueSeverity === selectedSeverity;
+};
+
+export const hasModelAuditFindings = (results: {
+  has_errors?: boolean;
+  failed_checks?: number;
+  failedChecks?: number;
+  checks?: Array<{ status?: string }>;
+  issues?: Array<{ severity?: string }>;
+}): boolean => {
+  return Boolean(
+    results.has_errors ||
+      (results.failed_checks ?? results.failedChecks ?? 0) > 0 ||
+      results.checks?.some((check) => check.status === 'failed') ||
+      results.issues?.some(
+        (issue) =>
+          issue.severity === 'critical' ||
+          issue.severity === 'error' ||
+          issue.severity === 'warning',
+      ),
+  );
 };

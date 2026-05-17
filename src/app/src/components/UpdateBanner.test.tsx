@@ -1,7 +1,9 @@
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
-import { createTheme, Theme, ThemeProvider } from '@mui/material/styles';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { renderWithProviders } from '@app/utils/testutils';
+import { cleanup, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateBanner from './UpdateBanner';
 
 vi.mock('@app/hooks/useVersionCheck');
@@ -11,6 +13,12 @@ describe('UpdateBanner', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    document.documentElement.style.removeProperty('--update-banner-height');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.documentElement.style.removeProperty('--update-banner-height');
   });
 
   it('should render the banner with correct info when an update with a primary command is available', () => {
@@ -33,7 +41,7 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeInTheDocument();
     expect(screen.getByText(/\(current: v1.9.0\)/i)).toBeInTheDocument();
@@ -50,7 +58,8 @@ describe('UpdateBanner', () => {
     expect(copyCommandButton).toHaveAttribute('title', 'npm i -g promptfoo@latest');
   });
 
-  it('should copy the update command to the clipboard and display a snackbar when the copy command button is clicked and the clipboard API succeeds', async () => {
+  it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {
+    const user = userEvent.setup();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -71,21 +80,56 @@ describe('UpdateBanner', () => {
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: mockWriteText,
-      },
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
 
-    await fireEvent.click(copyCommandButton);
+    await user.click(copyCommandButton);
 
     expect(mockWriteText).toHaveBeenCalledWith('npm i -g promptfoo@latest');
 
-    expect(await screen.findByText(/Update command copied to clipboard/i)).toBeVisible();
+    // After copying, the Check icon should be shown (Lucide icons have lucide-check class)
+    await waitFor(() => {
+      const checkIcon = copyCommandButton.querySelector('.lucide-check');
+      expect(checkIcon).toBeInTheDocument();
+    });
+  });
+
+  it("should make the don't remind me action clickable", async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.fn();
+    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss,
+    };
+    mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
+
+    renderWithProviders(<UpdateBanner />);
+
+    const dismissButton = screen.getByRole('button', {
+      name: "Don't remind me of this version",
+    });
+
+    expect(dismissButton).toHaveClass('cursor-pointer');
+
+    await user.click(dismissButton);
+
+    expect(dismiss).toHaveBeenCalledTimes(1);
   });
 
   it('should render correctly in both dark and light modes', () => {
@@ -108,23 +152,18 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    const lightTheme = createTheme({ palette: { mode: 'light' } });
-    const darkTheme = createTheme({ palette: { mode: 'dark' } });
-
-    const renderWithTheme = (theme: Theme) =>
-      render(
-        <ThemeProvider theme={theme}>
-          <UpdateBanner />
-        </ThemeProvider>,
-      );
-
-    renderWithTheme(lightTheme);
+    // Light mode
+    document.documentElement.removeAttribute('data-theme');
+    renderWithProviders(<UpdateBanner />);
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeVisible();
 
     cleanup();
 
-    renderWithTheme(darkTheme);
+    // Dark mode
+    document.documentElement.setAttribute('data-theme', 'dark');
+    renderWithProviders(<UpdateBanner />);
     expect(screen.getByText(/Update available: v2.0.0/i)).toBeVisible();
+    document.documentElement.removeAttribute('data-theme');
   });
 
   it('should render the copy command button with default text when commandType is undefined', () => {
@@ -147,7 +186,7 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
     expect(copyCommandButton).toBeInTheDocument();
@@ -173,9 +212,51 @@ describe('UpdateBanner', () => {
     };
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
-    render(<UpdateBanner />);
+    renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
     expect(copyCommandButton).toBeInTheDocument();
+  });
+
+  it('should measure the banner when it becomes visible after loading', async () => {
+    const hiddenState: ReturnType<typeof useVersionCheck> = {
+      versionInfo: null,
+      loading: true,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    };
+    const visibleState: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    };
+    mockUseVersionCheck.mockReturnValue(hiddenState);
+
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
+
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
+    mockUseVersionCheck.mockReturnValue(visibleState);
+    rerender(<UpdateBanner />);
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe(
+        '48px',
+      );
+    });
   });
 });

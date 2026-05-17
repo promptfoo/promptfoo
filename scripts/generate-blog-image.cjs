@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const fs = require('fs');
+const fs = require('fs/promises');
 const path = require('path');
 const https = require('https');
 // Load environment variables from .env file
@@ -36,12 +36,12 @@ Usage: node generate-blog-image.js [options]
 Options:
   -f, --filename <name>    Output filename (default: blog-image.png)
   -p, --prompt <text>      Image generation prompt
-  -s, --size <size>        Image size: 1024x1024, 1792x1024, 1024x1792 (default: 1024x1024)
+  -s, --size <size>        Image size: 1024x1024, 1536x1024, 1024x1536, auto (default: 1024x1024)
   -o, --output-dir <dir>   Output subdirectory under site/static/img/ (default: blog)
   -h, --help              Show this help message
 Examples:
   node generate-blog-image.js -f system-cards-hero.png -p "A red panda reading documentation"
-  node generate-blog-image.js --filename hero.jpg --prompt "Conference banner" --size 1792x1024 --output-dir events
+  node generate-blog-image.js --filename hero.jpg --prompt "Conference banner" --size 1536x1024 --output-dir events
 `);
     process.exit(0);
   }
@@ -111,20 +111,31 @@ async function generateImage() {
   });
 }
 async function downloadImage(url, filepath) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(filepath);
+  const buffer = await new Promise((resolve, reject) => {
     https
       .get(url, (response) => {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close(resolve);
+        if (response.statusCode && response.statusCode >= 400) {
+          response.resume();
+          reject(new Error(`Failed to download image: ${response.statusCode}`));
+          return;
+        }
+        const chunks = [];
+        response.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
+        response.on('end', () => {
+          resolve(Buffer.concat(chunks));
+        });
+        response.on('error', reject);
       })
-      .on('error', (error) => {
-        fs.unlink(filepath, () => {}); // Delete the file on error
-        reject(error);
-      });
+      .on('error', reject);
   });
+  try {
+    await fs.writeFile(filepath, buffer);
+  } catch (error) {
+    await fs.unlink(filepath).catch(() => {}); // Delete the file on error
+    throw error;
+  }
 }
 async function main() {
   try {
@@ -134,7 +145,7 @@ async function main() {
       // If we get base64 data, save it directly
       const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       const buffer = Buffer.from(imageData.b64_json, 'base64');
-      fs.writeFileSync(outputPath, buffer);
+      await fs.writeFile(outputPath, buffer);
       console.log(`Image saved to: ${outputPath}`);
     } else if (imageData.url) {
       // If we get a URL, download the image
@@ -149,4 +160,5 @@ async function main() {
     process.exit(1);
   }
 }
+// biome-ignore lint/nursery/noFloatingPromises: convert this to ESM
 main();

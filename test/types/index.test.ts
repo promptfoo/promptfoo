@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import Ajv from 'ajv';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -9,15 +10,21 @@ import {
   AssertionSchema,
   BaseAssertionTypesSchema,
   CommandLineOptionsSchema,
+  GradingConfigSchema,
   isGradingResult,
+  MAX_SUGGESTIONS_COUNT,
+  OutputConfigSchema,
   TestCaseSchema,
   TestSuiteConfigSchema,
   TestSuiteSchema,
   UnifiedConfigSchema,
   VarsSchema,
 } from '../../src/types/index';
+import { dereferenceConfig } from '../../src/util/config/load';
+import { PromptConfigSchema } from '../../src/validators/prompts';
+import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite } from '../../src/types/index';
+import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -93,7 +100,6 @@ describe('AssertionSchema', () => {
 
 describe('VarsSchema', () => {
   it('should validate and transform various types of values', () => {
-    expect.assertions(9);
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
       { input: { key: 42 }, expected: { key: 42 } },
@@ -109,20 +115,22 @@ describe('VarsSchema', () => {
       },
     ];
 
+    expect.assertions(testCases.length);
+
     testCases.forEach(({ input, expected }) => {
       expect(VarsSchema.safeParse(input)).toEqual({ success: true, data: expected });
     });
   });
 
   it('should throw an error for invalid types', () => {
-    expect.assertions(4);
-
     const invalidCases = [
       { key: null },
       { key: undefined },
       { key: Symbol('test') },
       { key: () => {} },
     ];
+
+    expect.assertions(invalidCases.length);
 
     invalidCases.forEach((invalidInput) => {
       expect(() => VarsSchema.parse(invalidInput)).toThrow(z.ZodError);
@@ -308,6 +316,282 @@ describe('TestCaseSchema assertScoringFunction', () => {
   });
 });
 
+// Tests for #7096: Ensure TestCaseSchema.options accepts properties from all merged schemas
+// This was broken when z.intersection() generated allOf with additionalProperties:false
+describe('TestCaseSchema options (merged schema properties)', () => {
+  it('should validate options with properties from PromptConfigSchema', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: {
+        prefix: 'You are a helpful assistant.',
+        suffix: 'Please be concise.',
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate options with properties from OutputConfigSchema', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: {
+        transform: 'output.toUpperCase()',
+        storeOutputAs: 'myOutput',
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate options with properties from GradingConfigSchema', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: {
+        provider: 'openai:gpt-4o-mini',
+        rubricPrompt: 'Grade the response',
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate options with additional properties (disableVarExpansion, etc)', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: {
+        disableVarExpansion: true,
+        disableConversationVar: true,
+        runSerially: true,
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate options combining properties from ALL merged schemas', () => {
+    // This is the critical test - properties from different sub-schemas must work together
+    const testCase = {
+      vars: { question: 'What is 2+2?' },
+      options: {
+        // From PromptConfigSchema
+        prefix: 'You are a helpful assistant.',
+        suffix: 'Be concise.',
+        // From OutputConfigSchema
+        transform: 'output.trim()',
+        storeOutputAs: 'answer',
+        // From GradingConfigSchema
+        provider: 'openai:gpt-4o-mini',
+        rubricPrompt: 'Check if the answer is correct',
+        // Additional properties
+        disableVarExpansion: false,
+        disableConversationVar: true,
+        runSerially: false,
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate options with provider as object config', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: {
+        provider: {
+          id: 'openai:gpt-4o-mini',
+          config: {
+            temperature: 0,
+          },
+        },
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should allow provider-specific properties in options via catchall', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      options: {
+        provider: 'openai:gpt-4o-mini',
+        // Provider-specific options like response_format, temperature, etc. should pass through
+        response_format: { type: 'json_object' },
+        custom_option: 'custom_value',
+      },
+    };
+    const result = TestCaseSchema.parse(testCase);
+    // catchall(z.any()) allows provider-specific options to pass through for per-test structured output
+    expect(result.options).toHaveProperty('provider', 'openai:gpt-4o-mini');
+    expect(result.options).toHaveProperty('response_format', { type: 'json_object' });
+    expect(result.options).toHaveProperty('custom_option', 'custom_value');
+  });
+});
+
+// Tests for metadata schema - ensure custom keys are allowed alongside internal properties
+// This was broken when z.intersection() generated allOf with additionalProperties:false
+describe('TestCaseSchema metadata (custom keys support)', () => {
+  it('should validate metadata with custom user-defined keys', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      metadata: {
+        customKey: 'custom value',
+        anotherKey: 123,
+        nestedData: { foo: 'bar' },
+      },
+    };
+    const result = TestCaseSchema.parse(testCase);
+    expect(result.metadata).toHaveProperty('customKey', 'custom value');
+    expect(result.metadata).toHaveProperty('anotherKey', 123);
+    expect(result.metadata).toHaveProperty('nestedData');
+  });
+
+  it('should validate metadata with internal pluginConfig property', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      metadata: {
+        pluginConfig: { someConfig: 'value' },
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate metadata with internal strategyConfig property', () => {
+    const testCase = {
+      vars: { input: 'test' },
+      metadata: {
+        strategyConfig: { anotherConfig: 'value' },
+      },
+    };
+    expect(() => TestCaseSchema.parse(testCase)).not.toThrow();
+  });
+
+  it('should validate metadata combining internal properties with custom keys', () => {
+    // This is the critical test - internal properties and custom keys must coexist
+    const testCase = {
+      vars: { input: 'test' },
+      metadata: {
+        // Internal properties
+        pluginConfig: { pluginOption: true },
+        strategyConfig: { strategyOption: 'abc' },
+        // Custom user-defined keys
+        customTag: 'my-tag',
+        experimentId: 12345,
+        additionalInfo: { nested: { deeply: 'value' } },
+      },
+    };
+    const result = TestCaseSchema.parse(testCase);
+    expect(result.metadata).toHaveProperty('pluginConfig');
+    expect(result.metadata).toHaveProperty('strategyConfig');
+    expect(result.metadata).toHaveProperty('customTag', 'my-tag');
+    expect(result.metadata).toHaveProperty('experimentId', 12345);
+    expect(result.metadata).toHaveProperty('additionalInfo');
+  });
+});
+
+// Guard tests to ensure merged schemas don't have overlapping keys
+// This prevents silent overwrites when spreading .shape properties
+describe('TestCaseSchema options merged schema guard', () => {
+  it('should have no overlapping keys between PromptConfigSchema and OutputConfigSchema', () => {
+    const promptKeys = Object.keys(PromptConfigSchema.shape);
+    const outputKeys = Object.keys(OutputConfigSchema.shape);
+    const overlap = promptKeys.filter((key) => outputKeys.includes(key));
+    expect(overlap).toEqual([]);
+  });
+
+  it('should have no overlapping keys between PromptConfigSchema and GradingConfigSchema', () => {
+    const promptKeys = Object.keys(PromptConfigSchema.shape);
+    const gradingKeys = Object.keys(GradingConfigSchema.shape);
+    const overlap = promptKeys.filter((key) => gradingKeys.includes(key));
+    expect(overlap).toEqual([]);
+  });
+
+  it('should have no overlapping keys between OutputConfigSchema and GradingConfigSchema', () => {
+    const outputKeys = Object.keys(OutputConfigSchema.shape);
+    const gradingKeys = Object.keys(GradingConfigSchema.shape);
+    const overlap = outputKeys.filter((key) => gradingKeys.includes(key));
+    expect(overlap).toEqual([]);
+  });
+
+  it('should have no overlapping keys with additional options properties', () => {
+    const additionalKeys = ['disableVarExpansion', 'disableConversationVar', 'runSerially'];
+    const allSchemaKeys = [
+      ...Object.keys(PromptConfigSchema.shape),
+      ...Object.keys(OutputConfigSchema.shape),
+      ...Object.keys(GradingConfigSchema.shape),
+    ];
+    const overlap = additionalKeys.filter((key) => allSchemaKeys.includes(key));
+    expect(overlap).toEqual([]);
+  });
+});
+
+// AJV-based regression test for #7096
+// Validates that the generated JSON schema accepts combined options properties
+describe('JSON Schema validation (AJV)', () => {
+  it('should validate defaultTest.options with combined properties against config-schema.json', () => {
+    const schemaPath = path.join(__dirname, '../../site/static/config-schema.json');
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+
+    const ajv = new Ajv({ strict: false, allErrors: true });
+    const validate = ajv.compile(schema);
+
+    // Config with combined options from all merged schemas
+    const config = {
+      prompts: ['test prompt'],
+      providers: ['echo'],
+      defaultTest: {
+        options: {
+          // From PromptConfigSchema
+          prefix: 'You are helpful.',
+          suffix: 'Be concise.',
+          // From OutputConfigSchema
+          transform: 'output.trim()',
+          // From GradingConfigSchema
+          provider: 'openai:gpt-4o-mini',
+          // Additional properties
+          disableVarExpansion: false,
+        },
+      },
+      tests: [{ vars: { input: 'test' } }],
+    };
+
+    const valid = validate(config);
+    if (!valid) {
+      // Filter to show only the relevant errors (not the anyOf noise)
+      const relevantErrors = validate.errors?.filter(
+        (e) => e.instancePath.includes('options') && e.keyword === 'additionalProperties',
+      );
+      expect(relevantErrors).toEqual([]);
+    }
+    expect(valid).toBe(true);
+  });
+
+  it('should validate test metadata with custom keys against config-schema.json', () => {
+    const schemaPath = path.join(__dirname, '../../site/static/config-schema.json');
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+
+    const ajv = new Ajv({ strict: false, allErrors: true });
+    const validate = ajv.compile(schema);
+
+    // Config with custom metadata keys
+    const config = {
+      prompts: ['test prompt'],
+      providers: ['echo'],
+      tests: [
+        {
+          vars: { input: 'test' },
+          metadata: {
+            customTag: 'my-tag',
+            experimentId: 12345,
+            pluginConfig: { option: true },
+          },
+        },
+      ],
+    };
+
+    const valid = validate(config);
+    if (!valid) {
+      const relevantErrors = validate.errors?.filter(
+        (e) => e.instancePath.includes('metadata') && e.keyword === 'additionalProperties',
+      );
+      expect(relevantErrors).toEqual([]);
+    }
+    expect(valid).toBe(true);
+  });
+});
+
 describe('CommandLineOptionsSchema', () => {
   it('should validate options with filterErrorsOnly string', () => {
     const options = {
@@ -359,7 +643,7 @@ describe('CommandLineOptionsSchema', () => {
       filterErrorsOnly: true,
     };
     expect(() => CommandLineOptionsSchema.parse(options)).toThrow(
-      'Expected string, received boolean',
+      'Invalid input: expected string, received boolean',
     );
   });
 
@@ -371,6 +655,7 @@ describe('CommandLineOptionsSchema', () => {
       filterFailing: 'true',
       filterFirstN: 5,
       filterMetadata: 'meta',
+      filterRange: '1:3',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
@@ -398,12 +683,57 @@ describe('CommandLineOptionsSchema', () => {
       filterMetadata: 'metadata',
       filterPattern: 'pattern',
       filterProviders: 'provider1',
+      filterRange: '1:3',
       filterSample: 5,
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
     );
+  });
+
+  it('should reject invalid filterRange values', () => {
+    const baseOptions = {
+      output: ['output1'],
+      providers: ['provider1'],
+    };
+    expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: '3:1' })).toThrow(
+      '--filter-range start must be less than or equal to end, got: 3:1',
+    );
+    expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: ':' })).toThrow(
+      '--filter-range must be specified in start:end format using zero-based indices, got: :',
+    );
+  });
+});
+
+describe('CommandLineOptionsSchema suggestionsCount', () => {
+  const baseOptions = { providers: ['p'], output: ['o'] };
+
+  it('coerces string CLI input', () => {
+    expect(CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: '5' })).toMatchObject(
+      { suggestionsCount: 5 },
+    );
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['above max', MAX_SUGGESTIONS_COUNT + 1],
+    ['non-integer', 1.5],
+    ['NaN string', 'abc'],
+  ])('rejects %s (%s)', (_label, value) => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: value }),
+    ).toThrow();
+  });
+
+  it('accepts the boundary values', () => {
+    expect(CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: 1 })).toMatchObject({
+      suggestionsCount: 1,
+    });
+    expect(
+      CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: MAX_SUGGESTIONS_COUNT }),
+    ).toMatchObject({ suggestionsCount: MAX_SUGGESTIONS_COUNT });
   });
 });
 
@@ -661,10 +991,11 @@ describe('TestSuiteConfigSchema', () => {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
       const config = yaml.load(configContent) as Record<string, unknown>;
+      const dereferencedConfig = await dereferenceConfig(config as TestSuiteConfig);
       const extendedSchema = TestSuiteConfigSchema.extend({
-        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        ...(typeof config.redteam !== 'undefined' && {
+        targets: TestSuiteConfigSchema.shape.providers.optional(),
+        providers: TestSuiteConfigSchema.shape.providers.optional(),
+        ...(typeof dereferencedConfig.redteam !== 'undefined' && {
           prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
         }),
       }).refine(
@@ -674,15 +1005,15 @@ describe('TestSuiteConfigSchema', () => {
           return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
         },
         {
-          message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+          error: "Exactly one of 'targets' or 'providers' must be provided, but not both",
         },
       );
 
-      const result = extendedSchema.safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
-      expect(result.success).toBe(true);
+      const result = extendedSchema.safeParse(dereferencedConfig);
+      expect(
+        result.success,
+        `Validation failed for ${file}: ${result.success ? '' : result.error.message}`,
+      ).toBe(true);
     });
   }
 });
@@ -752,19 +1083,14 @@ describe('UnifiedConfigSchema extensions handling', () => {
 
 describe('TestSuiteSchema', () => {
   const baseTestSuite: TestSuite = {
-    providers: [
-      {
-        id: () => 'mock-provider',
-        callApi: () => Promise.resolve({}),
-      },
-    ],
+    providers: [createMockProvider({ id: 'mock-provider', response: {} })],
     prompts: [{ raw: 'Hello, world!', label: 'mock-prompt' }],
   };
 
   describe('extensions field', () => {
     it('should allow null extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1' }],
+        providers: [createMockProvider({ id: 'provider1', response: {} })],
         prompts: [{ raw: 'prompt1', label: 'test' }],
         extensions: null,
       };
@@ -773,7 +1099,7 @@ describe('TestSuiteSchema', () => {
 
     it('should allow undefined extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1' }],
+        providers: [createMockProvider({ id: 'provider1', response: {} })],
         prompts: [{ raw: 'prompt1', label: 'test' }],
       };
       expect(() => TestSuiteSchema.parse(suite)).not.toThrow();
@@ -828,12 +1154,7 @@ describe('TestSuiteSchema', () => {
   describe('defaultTest validation', () => {
     it('should accept string defaultTest starting with file://', () => {
       const validConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: 'file://path/to/defaultTest.yaml',
@@ -846,12 +1167,7 @@ describe('TestSuiteSchema', () => {
 
     it('should reject string defaultTest not starting with file://', () => {
       const invalidConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: 'invalid/path.yaml',
@@ -859,19 +1175,14 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(invalidConfig);
       expect(result.success).toBe(false);
-      expect(result.error!.errors[0].message).toContain(
+      expect(result.error!.issues[0].message).toContain(
         'defaultTest string must start with file://',
       );
     });
 
     it('should accept object defaultTest', () => {
       const validConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: {
@@ -893,12 +1204,7 @@ describe('TestSuiteSchema', () => {
 
     it('should accept undefined defaultTest', () => {
       const validConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
       };

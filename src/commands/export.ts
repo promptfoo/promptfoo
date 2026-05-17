@@ -1,14 +1,13 @@
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import zlib from 'zlib';
 
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { getConfigDirectoryPath } from '../util/config/manage';
 import { createOutputMetadata, writeOutput } from '../util/index';
-import { getLogFiles } from '../util/logFiles';
+import { getLogDirectory, getLogFiles } from '../util/logs';
 import type { Command } from 'commander';
 
 /**
@@ -20,9 +19,13 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
     const gzip = zlib.createGzip({ level: 9 });
 
     output.on('close', () => {
-      const stats = fs.statSync(outputPath);
-      logger.info(`Created log archive: ${outputPath} (${stats.size} bytes)`);
-      resolve();
+      fsPromises
+        .stat(outputPath)
+        .then((stats) => {
+          logger.info(`Created log archive: ${outputPath} (${stats.size} bytes)`);
+          resolve();
+        })
+        .catch(reject);
     });
 
     output.on('error', reject);
@@ -30,67 +33,86 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
 
     gzip.pipe(output);
 
-    for (const logFile of logFiles) {
-      if (fs.existsSync(logFile)) {
-        const fileName = path.basename(logFile);
-        const fileContent = fs.readFileSync(logFile);
-        const fileStats = fs.statSync(logFile);
+    void (async () => {
+      try {
+        for (const logFile of logFiles) {
+          let fileContent: Buffer;
+          let fileStats: Awaited<ReturnType<typeof fsPromises.stat>>;
 
-        // Create tar header (simplified version)
-        const header = Buffer.alloc(512);
+          try {
+            [fileContent, fileStats] = await Promise.all([
+              fsPromises.readFile(logFile),
+              fsPromises.stat(logFile),
+            ]);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+              continue;
+            }
+            throw error;
+          }
 
-        // File name (100 bytes)
-        Buffer.from(fileName).copy(header, 0, 0, Math.min(fileName.length, 100));
+          const fileName = path.basename(logFile);
 
-        // File mode (8 bytes) - default 644
-        Buffer.from('0000644 ').copy(header, 100);
+          // Create tar header (simplified version)
+          const header = Buffer.alloc(512);
 
-        // User ID (8 bytes)
-        Buffer.from('0000000 ').copy(header, 108);
+          // File name (100 bytes)
+          Buffer.from(fileName).copy(header, 0, 0, Math.min(fileName.length, 100));
 
-        // Group ID (8 bytes)
-        Buffer.from('0000000 ').copy(header, 116);
+          // File mode (8 bytes) - default 644
+          Buffer.from('0000644 ').copy(header, 100);
 
-        // File size (12 bytes) - octal
-        const sizeOctal = fileStats.size.toString(8).padStart(11, '0') + ' ';
-        Buffer.from(sizeOctal).copy(header, 124);
+          // User ID (8 bytes)
+          Buffer.from('0000000 ').copy(header, 108);
 
-        // Modification time (12 bytes) - octal
-        const mtime = Math.floor(fileStats.mtime.getTime() / 1000);
-        const mtimeOctal = mtime.toString(8).padStart(11, '0') + ' ';
-        Buffer.from(mtimeOctal).copy(header, 136);
+          // Group ID (8 bytes)
+          Buffer.from('0000000 ').copy(header, 116);
 
-        // Checksum placeholder (8 bytes)
-        Buffer.from('        ').copy(header, 148);
+          // File size (12 bytes) - octal
+          const sizeOctal = fileStats.size.toString(8).padStart(11, '0') + ' ';
+          Buffer.from(sizeOctal).copy(header, 124);
 
-        // Type flag (1 byte) - regular file
-        header[156] = 0x30; // '0'
+          // Modification time (12 bytes) - octal
+          const mtime = Math.floor(fileStats.mtime.getTime() / 1000);
+          const mtimeOctal = mtime.toString(8).padStart(11, '0') + ' ';
+          Buffer.from(mtimeOctal).copy(header, 136);
 
-        // Calculate checksum
-        let checksum = 0;
-        for (let i = 0; i < 512; i++) {
-          checksum += header[i];
+          // Checksum placeholder (8 bytes)
+          Buffer.from('        ').copy(header, 148);
+
+          // Type flag (1 byte) - regular file
+          header[156] = 0x30; // '0'
+
+          // Calculate checksum
+          let checksum = 0;
+          for (let i = 0; i < 512; i++) {
+            checksum += header[i];
+          }
+          const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
+          Buffer.from(checksumOctal).copy(header, 148);
+
+          // Write header
+          gzip.write(header);
+
+          // Write file content
+          gzip.write(fileContent);
+
+          // Pad to 512-byte boundary
+          const padding = 512 - (fileContent.length % 512);
+          if (padding < 512) {
+            gzip.write(Buffer.alloc(padding));
+          }
         }
-        const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
-        Buffer.from(checksumOctal).copy(header, 148);
 
-        // Write header
-        gzip.write(header);
-
-        // Write file content
-        gzip.write(fileContent);
-
-        // Pad to 512-byte boundary
-        const padding = 512 - (fileContent.length % 512);
-        if (padding < 512) {
-          gzip.write(Buffer.alloc(padding));
-        }
+        // Write two empty 512-byte blocks to end the tar
+        gzip.write(Buffer.alloc(1024));
+        gzip.end();
+      } catch (error) {
+        gzip.destroy(error as Error);
+        output.destroy(error as Error);
+        reject(error);
       }
-    }
-
-    // Write two empty 512-byte blocks to end the tar
-    gzip.write(Buffer.alloc(1024));
-    gzip.end();
+    })();
   });
 }
 
@@ -112,7 +134,8 @@ export function exportCommand(program: Command) {
 
         if (!result) {
           logger.error(`No eval found with ID ${evalId}`);
-          process.exit(1);
+          process.exitCode = 1;
+          return;
         }
 
         if (cmdObj.output) {
@@ -142,7 +165,7 @@ export function exportCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`Failed to export eval: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 
@@ -153,21 +176,26 @@ export function exportCommand(program: Command) {
     .option('-o, --output [outputPath]', 'Output path for the compressed log file')
     .action(async (cmdObj) => {
       try {
-        const configDir = getConfigDirectoryPath(true);
-        const logDir = getEnvString('PROMPTFOO_LOG_DIR')
-          ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
-          : path.join(configDir, 'logs');
+        const logDir = getLogDirectory();
 
-        if (!fs.existsSync(logDir)) {
-          logger.error('No log directory found. Logs have not been created yet.');
-          process.exit(1);
+        try {
+          await fsPromises.access(logDir);
+        } catch {
+          logger.error(
+            `No log directory found. Logs are created when running commands like "promptfoo eval".\nLog directory: ${logDir}`,
+          );
+          process.exitCode = 1;
+          return;
         }
 
-        const allLogFiles = getLogFiles(logDir);
+        const allLogFiles = await getLogFiles();
 
         if (allLogFiles.length === 0) {
-          logger.error('No log files found in the logs directory.');
-          process.exit(1);
+          logger.error(
+            `No log files found in the logs directory. Logs are created when running commands like "promptfoo eval".\nLog directory: ${logDir}`,
+          );
+          process.exitCode = 1;
+          return;
         }
 
         // Determine how many files to include
@@ -176,7 +204,8 @@ export function exportCommand(program: Command) {
           const count = parseInt(cmdObj.count, 10);
           if (isNaN(count) || count <= 0) {
             logger.error('Count must be a positive number');
-            process.exit(1);
+            process.exitCode = 1;
+            return;
           }
           logFiles = allLogFiles.slice(0, count);
         }
@@ -214,7 +243,7 @@ export function exportCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`Failed to collect logs: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

@@ -3,7 +3,7 @@ const users = [];
 
 function login(email, password, callback) {
   setTimeout(() => {
-    const user = users.find(u => u.email === email);
+    const user = users.find((u) => u.email === email);
     if (!user) {
       return callback(new Error('User not found'));
     }
@@ -16,14 +16,14 @@ function login(email, password, callback) {
 
 function register(email, password, callback) {
   setTimeout(() => {
-    const existingUser = users.find(u => u.email === email);
+    const existingUser = users.find((u) => u.email === email);
     if (existingUser) {
       return callback(new Error('User already exists'));
     }
     const user = {
       id: Math.random().toString(36).substr(2, 9),
       email: email,
-      password: password
+      password: password,
     };
     users.push(user);
     callback(null, { id: user.id, email: user.email });
@@ -32,7 +32,7 @@ function register(email, password, callback) {
 
 function getUserById(id, callback) {
   setTimeout(() => {
-    const user = users.find(u => u.id === id);
+    const user = users.find((u) => u.id === id);
     if (!user) {
       return callback(new Error('User not found'));
     }
@@ -43,5 +43,5 @@ function getUserById(id, callback) {
 module.exports = {
   login,
   register,
-  getUserById
+  getUserById,
 };

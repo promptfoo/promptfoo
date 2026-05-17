@@ -22,18 +22,30 @@ import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
+const fsMock = vi.hoisted(() => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+}));
+
 // Mock setup
 vi.mock('fs', () => {
-  const fsMock = {
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn(),
-    unlinkSync: vi.fn(),
-  };
   return {
     ...fsMock,
     default: fsMock,
   };
 });
+
+vi.mock('fs/promises', () => ({
+  default: {
+    writeFile: fsMock.writeFileSync,
+    readFile: fsMock.readFileSync,
+    unlink: fsMock.unlinkSync,
+  },
+  writeFile: fsMock.writeFileSync,
+  readFile: fsMock.readFileSync,
+  unlink: fsMock.unlinkSync,
+}));
 
 vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),
@@ -68,6 +80,54 @@ describe('Python Utils', () => {
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
+  });
+
+  describe('getConfiguredPythonPath', () => {
+    it('should return explicit config path when provided', () => {
+      const result = pythonUtils.getConfiguredPythonPath('/custom/python/path');
+      expect(result).toBe('/custom/python/path');
+    });
+
+    it('should return PROMPTFOO_PYTHON when config path is not provided', () => {
+      vi.mocked(getEnvString).mockReturnValue('/env/python/path');
+
+      const result = pythonUtils.getConfiguredPythonPath(undefined);
+
+      expect(result).toBe('/env/python/path');
+      expect(getEnvString).toHaveBeenCalledWith('PROMPTFOO_PYTHON');
+    });
+
+    it('should prioritize config path over PROMPTFOO_PYTHON', () => {
+      vi.mocked(getEnvString).mockReturnValue('/env/python/path');
+
+      const result = pythonUtils.getConfiguredPythonPath('/config/python/path');
+
+      expect(result).toBe('/config/python/path');
+    });
+
+    it('should return undefined when neither config nor env var is set', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+
+      const result = pythonUtils.getConfiguredPythonPath(undefined);
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return undefined when config is empty string and env var is not set', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+
+      const result = pythonUtils.getConfiguredPythonPath('');
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should return PROMPTFOO_PYTHON when config is empty string', () => {
+      vi.mocked(getEnvString).mockReturnValue('/env/python');
+
+      const result = pythonUtils.getConfiguredPythonPath('');
+
+      expect(result).toBe('/env/python');
+    });
   });
 
   describe('getSysExecutable', () => {
@@ -359,8 +419,9 @@ describe('Python Utils', () => {
     describe('concurrent validation', () => {
       it('should share validation promise between concurrent calls', async () => {
         mockExecFileAsync.mockImplementation(async () => {
-          // Add delay to simulate slow execution
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Yield control so concurrent callers can register on the shared
+          // validation promise before resolution.
+          await Promise.resolve();
           return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
 
@@ -385,8 +446,9 @@ describe('Python Utils', () => {
         pythonUtils.state.cachedPythonPath = null;
 
         mockExecFileAsync.mockImplementation(async () => {
-          // Delay to simulate slow execution
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          // Yield control so concurrent callers can race onto the shared
+          // validation promise before resolution.
+          await Promise.resolve();
           return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
 

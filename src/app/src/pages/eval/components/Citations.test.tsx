@@ -1,4 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Citations from './Citations';
@@ -7,18 +9,14 @@ describe('Citations component', () => {
   // Mock clipboard API
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-      },
-    });
+    mockClipboard();
   });
 
   it('renders nothing when citations is null or empty array', () => {
-    const { container: container1 } = render(<Citations citations={null} />);
+    const { container: container1 } = renderWithProviders(<Citations citations={null} />);
     expect(container1.firstChild).toBeNull();
 
-    const { container: container2 } = render(<Citations citations={[]} />);
+    const { container: container2 } = renderWithProviders(<Citations citations={[]} />);
     expect(container2.firstChild).toBeNull();
   });
 
@@ -35,7 +33,7 @@ describe('Citations component', () => {
       ],
     };
 
-    render(<Citations citations={bedrockCitation} />);
+    renderWithProviders(<Citations citations={bedrockCitation} />);
 
     // Check heading
     expect(screen.getByText('Citations')).toBeInTheDocument();
@@ -68,7 +66,7 @@ describe('Citations component', () => {
       },
     ];
 
-    render(<Citations citations={multipleCitations} />);
+    renderWithProviders(<Citations citations={multipleCitations} />);
 
     // Check count
     expect(screen.getByText('(2)')).toBeInTheDocument();
@@ -87,7 +85,7 @@ describe('Citations component', () => {
       quote: 'This is a quote from Anthropic documentation',
     };
 
-    render(<Citations citations={anthropicCitation} />);
+    renderWithProviders(<Citations citations={anthropicCitation} />);
 
     // Check source
     expect(screen.getByText('anthropic.com')).toBeInTheDocument();
@@ -102,7 +100,7 @@ describe('Citations component', () => {
       content: 'Minimal citation content',
     };
 
-    render(<Citations citations={minimalCitation} />);
+    renderWithProviders(<Citations citations={minimalCitation} />);
 
     // Check source
     expect(screen.getByText('Some unknown source')).toBeInTheDocument();
@@ -120,7 +118,7 @@ describe('Citations component', () => {
       { source: 'Unknown format source', content: 'Default content' },
     ];
 
-    render(<Citations citations={mixedCitations} />);
+    renderWithProviders(<Citations citations={mixedCitations} />);
 
     // Use getAllByText for sources that appear in the chip labels
     expect(screen.getByText('example.com')).toBeInTheDocument();
@@ -135,7 +133,7 @@ describe('Citations component', () => {
   it('copies citation content to clipboard when copy button is clicked', async () => {
     const citation = { source: 'Test Source', content: 'Test content to copy' };
 
-    render(<Citations citations={citation} />);
+    renderWithProviders(<Citations citations={citation} />);
 
     const copyButton = screen.getByLabelText('Copy citation content 1');
     await userEvent.click(copyButton);
@@ -152,7 +150,7 @@ describe('Citations component', () => {
       content: 'Content with URL source',
     };
 
-    render(<Citations citations={citation} />);
+    renderWithProviders(<Citations citations={citation} />);
 
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', 'https://example.com/document');
@@ -162,7 +160,7 @@ describe('Citations component', () => {
   it('handles raw citation strings by converting to objects', () => {
     const rawTextCitation = 'This is just a raw text citation';
 
-    render(<Citations citations={rawTextCitation} />);
+    renderWithProviders(<Citations citations={rawTextCitation} />);
 
     // Use getAllByText since "Unknown source" might appear multiple times
     expect(screen.getAllByText('Unknown source')[0]).toBeInTheDocument();
@@ -183,7 +181,7 @@ describe('Citations component', () => {
       ],
     };
 
-    render(<Citations citations={nestedCitation} />);
+    renderWithProviders(<Citations citations={nestedCitation} />);
 
     // Should process both nested references
     expect(screen.getByText('First reference')).toBeInTheDocument();
@@ -197,7 +195,7 @@ describe('Citations component', () => {
       {}, // Empty object
     ];
 
-    render(<Citations citations={incompleteCitations} />);
+    renderWithProviders(<Citations citations={incompleteCitations} />);
 
     // Use getAllByText since the fallback text appears multiple times
     expect(screen.getByText('Content without source')).toBeInTheDocument();
@@ -212,7 +210,7 @@ describe('Citations component', () => {
 
     const citation = { source: 'Test', content: 'Content to copy' };
 
-    render(<Citations citations={citation} />);
+    renderWithProviders(<Citations citations={citation} />);
 
     // Click copy button
     const copyButton = screen.getByLabelText('Copy citation content 1');

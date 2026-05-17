@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import cliState from './cliState';
+import { getEnvOverrides } from './envOverrides';
 
 import type { EnvOverrides } from './types/env';
 
@@ -140,6 +140,16 @@ type EnvVars = {
   PROMPTFOO_JKS_ALIAS?: string;
 
   //=========================================================================
+  // Server security
+  //=========================================================================
+  /**
+   * Comma-separated list of trusted origins allowed to make cross-site
+   * mutating requests to the promptfoo server.
+   * Example: "https://app.example.com,https://admin.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
+
+  //=========================================================================
   // HTTP proxy settings
   //=========================================================================
   ALL_PROXY?: string;
@@ -192,18 +202,8 @@ type EnvVars = {
   //=========================================================================
   // UI configuration
   //=========================================================================
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_APP_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_API_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   VITE_PUBLIC_BASENAME?: string;
-  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
   VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
-  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
 
   //=========================================================================
   // Continuous Integration
@@ -225,6 +225,10 @@ type EnvVars = {
   //=========================================================================
   // Provider-specific settings
   //=========================================================================
+  // Abliteration
+  ABLIT_API_BASE_URL?: string;
+  ABLIT_KEY?: string;
+
   // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
@@ -237,6 +241,9 @@ type EnvVars = {
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
+
+  // Atlas Cloud
+  ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
   AWS_BEARER_TOKEN_BEDROCK?: string;
@@ -356,6 +363,18 @@ type EnvVars = {
   // OpenAI Codex SDK
   CODEX_API_KEY?: string;
 
+  // ClawdBot legacy OpenClaw compatibility
+  CLAWDBOT_GATEWAY_PASSWORD?: string;
+  CLAWDBOT_GATEWAY_TOKEN?: string;
+  CLAWDBOT_GATEWAY_URL?: string;
+
+  // OpenClaw
+  OPENCLAW_CONFIG_PATH?: string;
+  OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_PORT?: number | string;
+  OPENCLAW_GATEWAY_TOKEN?: string;
+  OPENCLAW_GATEWAY_URL?: string;
+
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 
@@ -411,6 +430,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // QuiverAI
+  QUIVERAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
@@ -425,10 +447,9 @@ export type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  // First check if the key exists in CLI state env config
-  if (cliState.config?.env && typeof cliState.config.env === 'object') {
-    // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
-    const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
+  const envOverrides = getEnvOverrides();
+  if (envOverrides) {
+    const envValue = envOverrides[key as string];
     if (envValue !== undefined) {
       return String(envValue);
     }
@@ -468,15 +489,13 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
 export function getEnvInt(key: EnvVarKey): number | undefined;
 export function getEnvInt(key: EnvVarKey, defaultValue: number): number;
 export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return Math.floor(value);
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseInt(value, 10);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseInt(str, 10);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }
@@ -490,15 +509,13 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undef
 export function getEnvFloat(key: EnvVarKey): number | undefined;
 export function getEnvFloat(key: EnvVarKey, defaultValue: number): number;
 export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return value;
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseFloat(value);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseFloat(str);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }

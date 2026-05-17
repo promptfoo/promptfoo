@@ -41,6 +41,262 @@ export interface EvalSummaryParams {
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
   tracker: TokenUsageTracker;
+  /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
+  targetErrorStatus?: number;
+}
+
+type TokenUsageBreakdown = Pick<
+  TokenUsage,
+  'prompt' | 'completion' | 'total' | 'cached' | 'numRequests' | 'completionDetails'
+>;
+
+function getCompletionMessage({
+  completionType,
+  evalId,
+  shareableUrl,
+  wasAborted,
+  writeToDatabase,
+  activelySharing,
+}: {
+  completionType: string;
+  evalId: string;
+  shareableUrl: string | null;
+  wasAborted: boolean;
+  writeToDatabase: boolean;
+  activelySharing: boolean;
+}): string {
+  if (wasAborted) {
+    const idSuffix = writeToDatabase ? ` (ID: ${chalk.cyan(evalId)})` : '';
+    return `${chalk.red('✗')} ${completionType} aborted${idSuffix}`;
+  }
+
+  if (writeToDatabase && shareableUrl) {
+    return `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`;
+  }
+
+  if (writeToDatabase && activelySharing) {
+    return `${chalk.green('✓')} ${completionType} complete`;
+  }
+
+  if (writeToDatabase) {
+    return `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`;
+  }
+
+  return `${chalk.green('✓')} ${completionType} complete`;
+}
+
+function getAbortSummaryLines(targetErrorStatus: number | undefined): string[] {
+  if (targetErrorStatus == null) {
+    return [];
+  }
+
+  return [
+    '',
+    chalk.red.bold('Scan stopped: Target is unavailable and will not recover on retry.'),
+    chalk.red(`  Target returned HTTP ${targetErrorStatus}`),
+    '',
+    chalk.yellow('Possible causes:'),
+    chalk.yellow('  • Invalid API key or authentication (401/403)'),
+    chalk.yellow('  • Target endpoint does not exist (404)'),
+    chalk.yellow('  • Server does not support the request (501)'),
+    '',
+    chalk.cyan('To fix: Check your target configuration and credentials.'),
+  ];
+}
+
+function getGuidanceLines({
+  writeToDatabase,
+  shareableUrl,
+  wantsToShare,
+  activelySharing,
+  hasExplicitDisable,
+  cloudEnabled,
+}: {
+  writeToDatabase: boolean;
+  shareableUrl: string | null;
+  wantsToShare: boolean;
+  activelySharing: boolean;
+  hasExplicitDisable: boolean;
+  cloudEnabled: boolean;
+}): string[] {
+  if (!writeToDatabase || shareableUrl || wantsToShare || activelySharing) {
+    return [];
+  }
+
+  const lines = ['', `» View results: ${chalk.green.bold('promptfoo view')}`];
+
+  if (!hasExplicitDisable) {
+    lines.push(
+      cloudEnabled
+        ? `» Create shareable URL: ${chalk.green.bold('promptfoo share')}`
+        : `» Share with your team: ${chalk.green.bold('https://promptfoo.app')}`,
+    );
+  }
+
+  lines.push(`» Feedback: ${chalk.green.bold('https://promptfoo.dev/feedback')}`);
+  return lines;
+}
+
+function buildUsageDetails(usage: TokenUsageBreakdown, total: number): string[] {
+  const parts: string[] = [];
+
+  if (usage.prompt && usage.prompt > 0) {
+    parts.push(`${usage.prompt.toLocaleString()} prompt`);
+  }
+
+  if (usage.completion && usage.completion > 0) {
+    parts.push(`${usage.completion.toLocaleString()} completion`);
+  }
+
+  if (usage.cached && usage.cached > 0) {
+    parts.push(
+      usage.cached === total && parts.length === 0
+        ? 'cached'
+        : `${usage.cached.toLocaleString()} cached`,
+    );
+  }
+
+  if (usage.completionDetails?.reasoning && usage.completionDetails.reasoning > 0) {
+    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
+  }
+
+  return parts;
+}
+
+function getTokenUsageLines(
+  tokenUsage: TokenUsage,
+  isRedteam: boolean,
+  tracker: TokenUsageTracker,
+): string[] {
+  const hasEvalTokens =
+    (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
+  const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
+
+  if (!hasEvalTokens && !hasGradingTokens) {
+    return [];
+  }
+
+  const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
+  const evalTokens = {
+    prompt: tokenUsage.prompt || 0,
+    completion: tokenUsage.completion || 0,
+    total: tokenUsage.total || combinedTotal,
+    cached: tokenUsage.cached || 0,
+    numRequests: tokenUsage.numRequests || 0,
+    completionDetails: tokenUsage.completionDetails || {
+      reasoning: 0,
+      acceptedPrediction: 0,
+      rejectedPrediction: 0,
+    },
+  };
+
+  const lines = [
+    `${chalk.bold('Total Tokens:')} ${chalk.white.bold(
+      (evalTokens.total + (tokenUsage.assertions?.total || 0)).toLocaleString(),
+    )}`,
+  ];
+
+  if (isRedteam && tokenUsage.numRequests) {
+    lines.push(
+      `  ${chalk.gray('Probes:')} ${chalk.white(tokenUsage.numRequests.toLocaleString())}`,
+    );
+  }
+
+  if (evalTokens.total > 0) {
+    const evalParts = buildUsageDetails(evalTokens, evalTokens.total);
+    lines.push(
+      `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(
+        ', ',
+      )})`,
+    );
+  }
+
+  if (tokenUsage.assertions?.total && tokenUsage.assertions.total > 0) {
+    const gradingParts = buildUsageDetails(tokenUsage.assertions, tokenUsage.assertions.total);
+    lines.push(
+      `  ${chalk.gray('Grading:')} ${chalk.white(
+        tokenUsage.assertions.total.toLocaleString(),
+      )} (${gradingParts.join(', ')})`,
+    );
+  }
+
+  lines.push(...getProviderUsageLines(tracker));
+  return lines;
+}
+
+function getProviderUsageLines(tracker: TokenUsageTracker): string[] {
+  const providerIds = tracker.getProviderIds();
+  if (providerIds.length <= 1) {
+    return [];
+  }
+
+  const sortedProviders = providerIds
+    .map((id) => ({ id, usage: tracker.getProviderUsage(id) }))
+    .filter((p): p is { id: string; usage: NonNullable<typeof p.usage> } => p.usage != null)
+    .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
+
+  const lines = ['', chalk.bold('Providers:')];
+
+  for (const { id, usage } of sortedProviders) {
+    if ((usage.total || 0) === 0 && (usage.prompt || 0) + (usage.completion || 0) === 0) {
+      continue;
+    }
+
+    const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
+    const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
+    const details = buildUsageDetails(usage, displayTotal);
+    const requestInfo = `${usage.numRequests || 0} requests`;
+    const separator = details.length > 0 ? '; ' : '';
+
+    lines.push(
+      `  ${chalk.gray(`${displayId}:`)} ${chalk.white(
+        displayTotal.toLocaleString(),
+      )} (${requestInfo}${separator}${details.join(', ')})`,
+    );
+  }
+
+  return lines;
+}
+
+function formatResultPercentage(count: number, totalTests: number): string {
+  const percentage = totalTests === 0 ? 0 : (count / totalTests) * 100;
+  return percentage === 0 || percentage === 100
+    ? `${percentage.toFixed(0)}%`
+    : `${percentage.toFixed(2)}%`;
+}
+
+function formatResultLine(
+  count: number,
+  label: string,
+  icon: string | undefined,
+  iconColor: (text: string) => string,
+  totalTests: number,
+): string {
+  const iconPart = icon ? `${iconColor(icon)} ` : '';
+  return `  ${iconPart}${chalk.white.bold(count.toLocaleString())} ${chalk.white(
+    label,
+  )} ${chalk.gray(`(${formatResultPercentage(count, totalTests)})`)}`;
+}
+
+function getResultsLines({
+  successes,
+  failures,
+  errors,
+  duration,
+  maxConcurrency,
+}: Pick<EvalSummaryParams, 'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency'>) {
+  const totalTests = successes + failures + errors;
+  const errorLabel = errors === 1 ? 'error' : 'errors';
+
+  return [
+    '',
+    chalk.bold('Results:'),
+    formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
+    formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
+    formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
+    chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
+    '',
+  ];
 }
 
 /**
@@ -81,245 +337,27 @@ export interface EvalSummaryParams {
  * ```
  */
 export function generateEvalSummary(params: EvalSummaryParams): string[] {
-  const {
-    evalId,
-    isRedteam,
-    writeToDatabase,
-    shareableUrl,
-    wantsToShare,
-    hasExplicitDisable,
-    cloudEnabled,
-    activelySharing = false,
-    tokenUsage,
-    successes,
-    failures,
-    errors,
-    duration,
-    maxConcurrency,
-    tracker,
-  } = params;
-
-  const lines: string[] = [];
-  const completionType = isRedteam ? 'Red team' : 'Eval';
-
-  // Completion message
-  // When activelySharing, don't show eval ID since URL (which contains the ID) will appear right after
-  const completionMessage =
-    writeToDatabase && shareableUrl
-      ? `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`
-      : writeToDatabase && activelySharing
-        ? `${chalk.green('✓')} ${completionType} complete`
-        : writeToDatabase
-          ? `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`
-          : `${chalk.green('✓')} ${completionType} complete`;
-
-  lines.push(completionMessage);
-
-  // Guidance section (only when writing to DB, no shareable URL, not wanting to share, and not actively sharing)
-  // When wantsToShare is true, guidance is handled by notCloudEnabledShareInstructions() in eval.ts
-  // When activelySharing is true, share URL will be shown after summary via ora spinner
-  if (writeToDatabase && !shareableUrl && !wantsToShare && !activelySharing) {
-    lines.push('');
-    lines.push(`» View results: ${chalk.green.bold('promptfoo view')}`);
-
-    if (!hasExplicitDisable) {
-      if (cloudEnabled) {
-        lines.push(`» Create shareable URL: ${chalk.green.bold('promptfoo share')}`);
-      } else {
-        lines.push(`» Share with your team: ${chalk.green.bold('https://promptfoo.app')}`);
-      }
-    }
-
-    lines.push(`» Feedback: ${chalk.green.bold('https://promptfoo.dev/feedback')}`);
-  }
-
-  lines.push('');
-
-  // Token usage section
-  const hasEvalTokens =
-    (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
-  const hasGradingTokens = tokenUsage.assertions && (tokenUsage.assertions.total || 0) > 0;
-
-  if (hasEvalTokens || hasGradingTokens) {
-    const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
-    const evalTokens = {
-      prompt: tokenUsage.prompt || 0,
-      completion: tokenUsage.completion || 0,
-      total: tokenUsage.total || combinedTotal,
-      cached: tokenUsage.cached || 0,
-      completionDetails: tokenUsage.completionDetails || {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    };
-
-    const grandTotal = evalTokens.total + (tokenUsage.assertions?.total || 0);
-    lines.push(`${chalk.bold('Total Tokens:')} ${chalk.white.bold(grandTotal.toLocaleString())}`);
-
-    // Show probe count for redteam
-    if (isRedteam && tokenUsage.numRequests) {
-      lines.push(
-        `  ${chalk.gray('Probes:')} ${chalk.white(tokenUsage.numRequests.toLocaleString())}`,
-      );
-    }
-
-    // Build eval breakdown - only show if there are eval tokens
-    if (evalTokens.total > 0) {
-      const evalParts = [];
-      if (evalTokens.prompt > 0) {
-        evalParts.push(`${evalTokens.prompt.toLocaleString()} prompt`);
-      }
-      if (evalTokens.completion > 0) {
-        evalParts.push(`${evalTokens.completion.toLocaleString()} completion`);
-      }
-      if (evalTokens.cached > 0) {
-        // If 100% cached, just say "cached" instead of repeating the number
-        if (evalTokens.cached === evalTokens.total && evalParts.length === 0) {
-          evalParts.push('cached');
-        } else {
-          evalParts.push(`${evalTokens.cached.toLocaleString()} cached`);
-        }
-      }
-      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
-        evalParts.push(`${evalTokens.completionDetails.reasoning.toLocaleString()} reasoning`);
-      }
-      lines.push(
-        `  ${chalk.gray('Eval:')} ${chalk.white(evalTokens.total.toLocaleString())} (${evalParts.join(', ')})`,
-      );
-    }
-
-    // Grading breakdown (if present)
-    if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
-      const gradingParts = [];
-      if (tokenUsage.assertions.prompt && tokenUsage.assertions.prompt > 0) {
-        gradingParts.push(`${tokenUsage.assertions.prompt.toLocaleString()} prompt`);
-      }
-      if (tokenUsage.assertions.completion && tokenUsage.assertions.completion > 0) {
-        gradingParts.push(`${tokenUsage.assertions.completion.toLocaleString()} completion`);
-      }
-      if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
-        // Simplify 100% cached
-        if (
-          tokenUsage.assertions.cached === tokenUsage.assertions.total &&
-          gradingParts.length === 0
-        ) {
-          gradingParts.push('cached');
-        } else {
-          gradingParts.push(`${tokenUsage.assertions.cached.toLocaleString()} cached`);
-        }
-      }
-      if (
-        tokenUsage.assertions.completionDetails?.reasoning &&
-        tokenUsage.assertions.completionDetails.reasoning > 0
-      ) {
-        gradingParts.push(
-          `${tokenUsage.assertions.completionDetails.reasoning.toLocaleString()} reasoning`,
-        );
-      }
-      lines.push(
-        `  ${chalk.gray('Grading:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())} (${gradingParts.join(', ')})`,
-      );
-    }
-
-    // Provider breakdown (if multiple providers)
-    const providerIds = tracker.getProviderIds();
-    if (providerIds.length > 1) {
-      lines.push('');
-      lines.push(chalk.bold('Providers:'));
-
-      // Sort providers by total token usage (descending), filtering out any with undefined usage
-      const sortedProviders = providerIds
-        .map((id) => ({ id, usage: tracker.getProviderUsage(id) }))
-        .filter((p): p is { id: string; usage: NonNullable<typeof p.usage> } => p.usage != null)
-        .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
-
-      for (const { id, usage } of sortedProviders) {
-        if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
-          const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
-          // Extract just the provider ID part (remove class name in parentheses)
-          const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
-
-          // Build breakdown details - only show non-zero values, simplify 100% cached
-          const details = [];
-          if (usage.prompt && usage.prompt > 0) {
-            details.push(`${usage.prompt.toLocaleString()} prompt`);
-          }
-          if (usage.completion && usage.completion > 0) {
-            details.push(`${usage.completion.toLocaleString()} completion`);
-          }
-          if (usage.cached && usage.cached > 0) {
-            // Simplify 100% cached
-            if (usage.cached === displayTotal && details.length === 0) {
-              details.push('cached');
-            } else {
-              details.push(`${usage.cached.toLocaleString()} cached`);
-            }
-          }
-          if (usage.completionDetails?.reasoning && usage.completionDetails.reasoning > 0) {
-            details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-          }
-
-          // Always show request count - 0 requests means 100% cached, which is valuable info
-          const requestInfo = `${usage.numRequests || 0} requests`;
-          const separator = details.length > 0 ? '; ' : '';
-          const breakdown = ` (${requestInfo}${separator}${details.join(', ')})`;
-          lines.push(
-            `  ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())}${breakdown}`,
-          );
-        }
-      }
-    }
-  }
-
-  // Add spacing between provider breakdown and results
-  lines.push('');
-
-  // Results section
-  const totalTests = successes + failures + errors;
-  const passRate = (successes / totalTests) * 100;
-
-  // Determine pass rate color and precision
-  let passRateDisplay;
-  if (!Number.isNaN(passRate)) {
-    // Use smart precision: whole numbers for 0% and 100%, otherwise 2 decimals
-    const passRateFormatted =
-      passRate === 0 || passRate === 100 ? `${passRate.toFixed(0)}%` : `${passRate.toFixed(2)}%`;
-
-    if (passRate >= 100) {
-      passRateDisplay = chalk.green.bold(passRateFormatted);
-    } else if (passRate >= 80) {
-      passRateDisplay = chalk.yellow.bold(passRateFormatted);
-    } else {
-      passRateDisplay = chalk.red.bold(passRateFormatted);
-    }
-  }
-
-  // Results line - always show detailed breakdown with bold numbers
-  const passedPart =
-    successes > 0
-      ? `${chalk.green('✓')} ${chalk.green.bold(successes.toLocaleString())} passed`
-      : `${chalk.gray.bold(successes.toLocaleString())} passed`;
-  const failedPart =
-    failures > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(failures.toLocaleString())} failed`
-      : `${chalk.gray.bold(failures.toLocaleString())} failed`;
-  const errorLabel = errors === 1 ? 'error' : 'errors';
-  const errorsPart =
-    errors > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
-      : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
-
-  const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
-  if (Number.isNaN(passRate)) {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine}`);
-  } else {
-    lines.push(`${chalk.bold('Results:')} ${resultsLine} (${passRateDisplay})`);
-  }
-
-  const durationDisplay = formatDuration(duration);
-  lines.push(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-  lines.push('');
-
-  return lines;
+  const completionType = params.isRedteam ? 'Red team' : 'Eval';
+  return [
+    getCompletionMessage({
+      completionType,
+      evalId: params.evalId,
+      shareableUrl: params.shareableUrl,
+      wasAborted: params.targetErrorStatus != null,
+      writeToDatabase: params.writeToDatabase,
+      activelySharing: params.activelySharing ?? false,
+    }),
+    ...getAbortSummaryLines(params.targetErrorStatus),
+    ...getGuidanceLines({
+      writeToDatabase: params.writeToDatabase,
+      shareableUrl: params.shareableUrl,
+      wantsToShare: params.wantsToShare,
+      activelySharing: params.activelySharing ?? false,
+      hasExplicitDisable: params.hasExplicitDisable,
+      cloudEnabled: params.cloudEnabled,
+    }),
+    '',
+    ...getTokenUsageLines(params.tokenUsage, params.isRedteam, params.tracker),
+    ...getResultsLines(params),
+  ];
 }

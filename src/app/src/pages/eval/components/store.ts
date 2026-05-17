@@ -11,6 +11,8 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import logger from '../../../../../logger';
+import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -37,6 +39,19 @@ function computeHighlightCount(table: EvaluateTable | null): number {
   }, 0);
 }
 
+/**
+ * Counts the number of outputs that have been manually rated by users.
+ * A result is considered user-rated if it has a componentResult with assertion.type === 'human'.
+ */
+function computeUserRatedCount(table: EvaluateTable | null): number {
+  if (!table) {
+    return 0;
+  }
+  return table.body.reduce((count, row) => {
+    return count + row.outputs.filter(hasHumanRating).length;
+  }, 0);
+}
+
 function computeAvailableMetrics(table: EvaluateTable | null): string[] {
   if (!table || !table.head?.prompts) {
     return [];
@@ -60,20 +75,23 @@ function computeAvailableMetrics(table: EvaluateTable | null): string[] {
 /**
  * Extracts unique policy IDs from plugins.
  */
-function buildPolicyOptions(plugins?: RedteamPluginObject[]): string[] {
+async function buildPolicyOptions(plugins?: RedteamPluginObject[]): Promise<string[]> {
   const policyIds = new Set<string>();
-  plugins?.forEach((plugin) => {
-    if (typeof plugin !== 'string' && plugin.id === 'policy') {
-      const policy = plugin?.config?.policy;
-      if (policy) {
-        if (isValidPolicyObject(policy)) {
-          policyIds.add(policy.id);
-        } else {
-          policyIds.add(makeInlinePolicyId(policy));
+
+  if (plugins) {
+    for (const plugin of plugins) {
+      if (typeof plugin !== 'string' && plugin.id === 'policy') {
+        const policy = plugin?.config?.policy;
+        if (policy) {
+          if (isValidPolicyObject(policy)) {
+            policyIds.add(policy.id);
+          } else {
+            policyIds.add(await makeInlinePolicyId(policy));
+          }
         }
       }
     }
-  });
+  }
 
   return Array.from(policyIds).sort();
 }
@@ -84,21 +102,28 @@ type PolicyIdToNameMap = Record<PolicyObject['id'], PolicyObject['name']>;
  * Creates a mapping of policy IDs to their names for display purposes.
  * Used by the filter form to show policy names in the dropdown.
  */
-function extractPolicyIdToNameMap(plugins: RedteamPluginObject[]): PolicyIdToNameMap {
-  return plugins
-    .filter((plugin) => typeof plugin !== 'string' && plugin.id === 'policy')
-    .reduce((map: PolicyIdToNameMap, plugin, index) => {
-      const policy = plugin?.config?.policy as Policy;
-      if (isValidPolicyObject(policy)) {
-        map[policy.id] = policy.name;
-      }
-      // Backwards compatibility w/ text-only inline policies.
-      else {
-        const id = makeInlinePolicyId(policy);
-        map[id] = makeDefaultPolicyName(index);
-      }
-      return map;
-    }, {});
+async function extractPolicyIdToNameMap(
+  plugins: RedteamPluginObject[],
+): Promise<PolicyIdToNameMap> {
+  const map: PolicyIdToNameMap = {};
+  const policyPlugins = plugins.filter(
+    (plugin) => typeof plugin !== 'string' && plugin.id === 'policy',
+  );
+
+  for (let index = 0; index < policyPlugins.length; index++) {
+    const plugin = policyPlugins[index];
+    const policy = plugin?.config?.policy as Policy;
+    if (isValidPolicyObject(policy)) {
+      map[policy.id] = policy.name;
+    }
+    // Backwards compatibility w/ text-only inline policies.
+    else if (policy) {
+      const id = await makeInlinePolicyId(policy);
+      map[id] = makeDefaultPolicyName(index);
+    }
+  }
+
+  return map;
 }
 
 function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | null): string[] {
@@ -117,10 +142,10 @@ function extractUniqueStrategyIds(strategies?: Array<string | { id: string }> | 
  * @param config - The eval config
  * @param table - The eval table (needed to extract policy options from metrics)
  */
-function buildRedteamFilterOptions(
+async function buildRedteamFilterOptions(
   config?: Partial<UnifiedConfig> | null,
   _table?: EvaluateTable | null,
-): { plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {} {
+): Promise<{ plugin: string[]; strategy: string[]; severity: string[]; policy: string[] } | {}> {
   const isRedteam = Boolean(config?.redteam);
 
   // For non-redteam evaluations, don't provide redteam-specific filter options.
@@ -142,7 +167,7 @@ function buildRedteamFilterOptions(
     ),
     strategy: extractUniqueStrategyIds(config?.redteam?.strategies),
     severity: computeAvailableSeverities(config?.redteam?.plugins),
-    policy: buildPolicyOptions(config?.redteam?.plugins),
+    policy: await buildPolicyOptions(config?.redteam?.plugins),
   };
 }
 
@@ -155,7 +180,9 @@ function computeAvailableSeverities(
 
   // Get the risk category severity map with any overrides from plugins
   const severityMap = getRiskCategorySeverityMap(
-    plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)) as any,
+    plugins.map((plugin) =>
+      typeof plugin === 'string' ? { id: plugin } : plugin,
+    ) as RedteamPluginObject[],
   );
 
   // Extract unique severities from the map
@@ -167,18 +194,24 @@ function computeAvailableSeverities(
   });
 
   // Return sorted array of severity values (in order of criticality)
-  const severityOrder = [Severity.Critical, Severity.High, Severity.Medium, Severity.Low];
+  const severityOrder = [
+    Severity.Critical,
+    Severity.High,
+    Severity.Medium,
+    Severity.Low,
+    Severity.Informational,
+  ];
   return severityOrder.filter((sev) => severities.has(sev));
 }
 
 interface FetchEvalOptions {
   pageIndex?: number;
   pageSize?: number;
+  filterMode?: EvalResultsFilterMode;
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
   filters?: ResultsFilter[];
-  filterMode?: EvalResultsFilterMode;
 }
 
 interface ColumnState {
@@ -242,7 +275,7 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
-  setTableFromResultsFile: (resultsFile: ResultsFile) => void;
+  setTableFromResultsFile: (resultsFile: ResultsFile) => Promise<void>;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -254,6 +287,7 @@ interface TableState {
   setFilteredResultsCount: (count: number) => void;
 
   highlightedResultsCount: number;
+  userRatedResultsCount: number;
 
   totalResultsCount: number;
   setTotalResultsCount: (count: number) => void;
@@ -362,7 +396,9 @@ interface TableState {
   fetchMetadataValues: (id: string, key: string) => Promise<string[]>;
   currentMetadataValuesRequests: Record<string, AbortController | null>;
 
-  reset: () => void;
+  filterMode: EvalResultsFilterMode;
+  setFilterMode: (filterMode: EvalResultsFilterMode) => void;
+  resetFilterMode: () => void;
 }
 
 interface SettingsState {
@@ -392,6 +428,14 @@ interface SettingsState {
 
   columnStates: Record<string, ColumnState>;
   setColumnState: (evalId: string, state: ColumnState) => void;
+
+  /**
+   * Maps a schema hash (sorted var names joined) to the list of hidden var names for that schema.
+   * This allows different "shapes" of evals to have different column visibility preferences.
+   * Evals with the same set of variables share visibility state.
+   */
+  hiddenVarNamesBySchema: Record<string, string[]>;
+  setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) => void;
 
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
@@ -436,13 +480,33 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           },
         })),
 
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) =>
+        set((prevState) => ({
+          hiddenVarNamesBySchema: {
+            ...prevState.hiddenVarNamesBySchema,
+            [schemaHash]: hiddenVarNames,
+          },
+        })),
+
       maxImageWidth: 256,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
       maxImageHeight: 256,
       setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
     }),
-    // Default storage is localStorage
-    { name: 'eval-settings' },
+    {
+      name: 'eval-settings',
+      version: 2,
+      migrate: (persistedState, version) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 2) {
+          // Remove old global hiddenVarNames, initialize new schema-based storage
+          delete state.hiddenVarNames;
+          state.hiddenVarNamesBySchema = {};
+        }
+        return state as typeof persistedState;
+      },
+    },
   ),
 );
 
@@ -469,7 +533,7 @@ const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolea
 };
 
 export const useTableStore = create<TableState>()(
-  subscribeWithSelector((set, get, store) => ({
+  subscribeWithSelector((set, get) => ({
     evalId: null,
     setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
 
@@ -489,42 +553,58 @@ export const useTableStore = create<TableState>()(
       set((prevState) => ({
         table,
         highlightedResultsCount: computeHighlightCount(table),
+        userRatedResultsCount: computeUserRatedCount(table),
         filters: prevState.filters,
       }));
     },
 
-    setTableFromResultsFile: (resultsFile: ResultsFile) => {
+    setTableFromResultsFile: async (resultsFile: ResultsFile) => {
       if (resultsFile.version && resultsFile.version >= 4) {
         const table = convertResultsToTable(resultsFile);
+
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(resultsFile.config, table),
+          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+        ]);
 
         set((prevState) => ({
           table,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(table),
+          userRatedResultsCount: computeUserRatedCount(table),
           filters: {
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(table),
               metadata: [],
-              ...buildRedteamFilterOptions(resultsFile.config, table),
+              ...redteamOptions,
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+            policyIdToNameMap,
           },
         }));
       } else {
         const results = resultsFile.results as EvaluateSummaryV2;
+
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(resultsFile.config, results.table),
+          extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+        ]);
+
         set((prevState) => ({
           table: results.table,
           version: resultsFile.version,
           highlightedResultsCount: computeHighlightCount(results.table),
+          userRatedResultsCount: computeUserRatedCount(results.table),
           filters: {
             ...prevState.filters,
             options: {
               metric: computeAvailableMetrics(results.table),
               metadata: [],
-              ...buildRedteamFilterOptions(resultsFile.config, results.table),
+              ...redteamOptions,
             },
-            policyIdToNameMap: extractPolicyIdToNameMap(resultsFile.config.redteam?.plugins ?? []),
+            policyIdToNameMap,
           },
         }));
       }
@@ -544,6 +624,7 @@ export const useTableStore = create<TableState>()(
     stats: null,
 
     highlightedResultsCount: 0,
+    userRatedResultsCount: 0,
 
     isFetching: false,
     isStreaming: false,
@@ -555,7 +636,8 @@ export const useTableStore = create<TableState>()(
       const {
         pageIndex = 0,
         pageSize = 50,
-        filterMode = 'all',
+        // Default to current store value to keep initial load consistent with UI state
+        filterMode = get().filterMode,
         searchText = '',
         skipSettingEvalId = false,
         skipLoadingState = false,
@@ -585,7 +667,7 @@ export const useTableStore = create<TableState>()(
       });
 
       try {
-        console.log(`Fetching data for eval ${id} with options:`, options);
+        logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
 
         const url = new URL(
           `/eval/${id}/table`,
@@ -618,21 +700,24 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        const resp = await callApi(
-          // Remove the origin as it was only added to satisfy the URL constructor.
-          url
-            .toString()
-            .replace(window.location.origin, ''),
-        );
+        // Remove the origin as it was only added to satisfy the URL constructor.
+        const resp = await callApi(url.toString().replace(window.location.origin, ''));
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
+
+          // Build async options
+          const [redteamOptions, policyIdToNameMap] = await Promise.all([
+            buildRedteamFilterOptions(data.config, data.table),
+            extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+          ]);
 
           set((prevState) => ({
             table: data.table,
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
+            userRatedResultsCount: computeUserRatedCount(data.table),
             config: data.config,
             version: data.version,
             author: data.author,
@@ -648,9 +733,9 @@ export const useTableStore = create<TableState>()(
               options: {
                 metric: computeAvailableMetrics(data.table),
                 metadata: [],
-                ...buildRedteamFilterOptions(data.config, data.table),
+                ...redteamOptions,
               },
-              policyIdToNameMap: extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+              policyIdToNameMap,
             },
           }));
 
@@ -1005,11 +1090,9 @@ export const useTableStore = create<TableState>()(
       }
     },
 
-    /**
-     * Resets the store's state to its initial values.
-     */
-    reset: () => {
-      set(store.getInitialState());
-    },
+    filterMode: 'all',
+    setFilterMode: (filterMode: EvalResultsFilterMode) =>
+      set((prevState) => ({ ...prevState, filterMode })),
+    resetFilterMode: () => set((prevState) => ({ ...prevState, filterMode: 'all' })),
   })),
 );

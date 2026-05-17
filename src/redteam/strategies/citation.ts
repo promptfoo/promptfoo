@@ -4,9 +4,13 @@ import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
@@ -47,7 +51,17 @@ async function generateCitations(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface CitationGenerationResponse {
+        error?: string;
+        result?: {
+          citation: {
+            type: string;
+            content: string;
+          };
+        };
+      }
+
+      const { data } = await fetchWithCache<CitationGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -56,7 +70,7 @@ async function generateCitations(
           },
           body: JSON.stringify(payload),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       logger.debug(
@@ -137,7 +151,7 @@ export async function addCitationTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Citation strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Citation strategy'));
   }
 
   const citationTestCases = await generateCitations(testCases, injectVar, config);

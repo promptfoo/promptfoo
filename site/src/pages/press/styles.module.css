@@ -36,3 +36,30 @@
   display: block;
   margin-bottom: 0.25rem;
 }
+
+.section {
+  scroll-margin-top: 80px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sectionHeading:hover .anchorLink,
+.sectionHeading:focus-within .anchorLink {
+  opacity: 1;
+}
+
+.anchorLink {
+  opacity: 0;
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity 0.2s ease;
+}
+
+.anchorLink:hover {
+  text-decoration: underline;
+}

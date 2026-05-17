@@ -8,6 +8,16 @@ import { GolangProvider } from '../../src/providers/golangCompletion';
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockGetCache = vi.hoisted(() => vi.fn());
 const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  mkdtempSync: vi.fn(),
+  existsSync: vi.fn(),
+  rmSync: vi.fn(),
+  readdirSync: vi.fn(),
+  copyFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}));
 
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
@@ -26,7 +36,46 @@ vi.mock('../../src/cache', () => ({
   isCacheEnabled: mockIsCacheEnabled,
 }));
 
-vi.mock('fs');
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  // Wrap each sync mock so the corresponding fs/promises export returns a real
+  // Promise (or rejects), matching the actual API contract.
+  const access = vi.fn(async (filePath: any) => {
+    if (fsMocks.existsSync(filePath)) {
+      return undefined;
+    }
+    throw Object.assign(new Error(`ENOENT: no such file or directory, access '${filePath}'`), {
+      code: 'ENOENT',
+    });
+  });
+  const readFile = vi.fn(async (...args: any[]) => fsMocks.readFileSync(...args));
+  const readdir = vi.fn(async (...args: any[]) => fsMocks.readdirSync(...args));
+  const mkdtemp = vi.fn(async (...args: any[]) => fsMocks.mkdtempSync(...args));
+  const mkdir = vi.fn(async (...args: any[]) => fsMocks.mkdirSync(...args));
+  const copyFile = vi.fn(async (...args: any[]) => fsMocks.copyFileSync(...args));
+  const rm = vi.fn(async (...args: any[]) => fsMocks.rmSync(...args));
+  const promiseApi = { readFile, readdir, mkdtemp, mkdir, copyFile, rm, access };
+  return { default: promiseApi, ...promiseApi };
+});
 vi.mock('path');
 
 vi.mock('../../src/util', async () => {
@@ -57,6 +106,9 @@ describe('GolangProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockExecFile.mockReset();
+    mockGetCache.mockReset();
+    mockIsCacheEnabled.mockReset();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({
@@ -288,7 +340,8 @@ describe('GolangProvider', () => {
 
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
       expect(mockExecFile).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result' });
+      expect(result.cached).toBe(true);
+      expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
     it('should handle cache errors', async () => {

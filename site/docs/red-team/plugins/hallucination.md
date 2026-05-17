@@ -67,8 +67,8 @@ By incorporating the Hallucination plugin in your LLM red teaming strategy, you 
 
 ## Related Concepts
 
+- [RAG Source Attribution](rag-source-attribution.md) - Tests for fabricated document citations in RAG systems
 - [Misinformation and Disinformation](../llm-vulnerability-types.md#misinformation-and-misuse)
 - [Overreliance](overreliance.md)
 - [Excessive Agency](excessive-agency.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

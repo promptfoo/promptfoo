@@ -3,10 +3,14 @@ import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
@@ -31,9 +35,7 @@ export async function textToAudio(
 ): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
-    throw new Error(
-      'Remote generation is disabled but required for audio strategy. Please enable remote generation to use this strategy.',
-    );
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Audio strategy'));
   }
 
   try {
@@ -47,18 +49,25 @@ export async function textToAudio(
       email: getUserEmail(),
     };
 
-    const { data } = await fetchWithCache(
+    interface AudioGenerationResponse {
+      error?: string;
+      audioBase64?: string;
+    }
+
+    const { data } = await fetchWithCache<AudioGenerationResponse>(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
-    if (data.error) {
-      throw new Error(`Error in remote audio generation: ${data.error}`);
+    if (data.error || !data.audioBase64) {
+      throw new Error(
+        `Error in remote audio generation: ${data.error || 'No audio data returned'}`,
+      );
     }
 
     logger.debug(`Received audio base64 from remote API (${data.audioBase64.length} chars)`);
@@ -104,7 +113,6 @@ export async function addAudioToBase64(
   config: Record<string, any> = {},
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
-  const language = config.language || 'en';
   const evalId = config.evalId;
 
   let progressBar: SingleBar | undefined;
@@ -127,6 +135,13 @@ export async function addAudioToBase64(
     );
 
     const originalText = String(testCase.vars[injectVar]);
+
+    // Get language from test case metadata (set during plugin generation), fall back to config, then 'en'
+    const language =
+      testCase.metadata?.language ||
+      testCase.metadata?.modifiers?.language ||
+      config.language ||
+      'en';
 
     // Convert text to audio using the remote API
     const audioResult = await textToAudio(originalText, language, { evalId });
