@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import {
@@ -5,6 +7,7 @@ import {
   cacheResponse,
   getCachedResponse,
   initializeAgenticCache,
+  resolveAgenticWorkingDir,
 } from '../../src/providers/agentic-utils';
 
 vi.mock('../../src/cache');
@@ -290,6 +293,33 @@ describe('agentic-utils', () => {
       expect(resultA.cacheKey).toBeDefined();
       expect(resultB.cacheKey).toBeDefined();
       expect(resultA.cacheKey).not.toBe(resultB.cacheKey);
+    });
+  });
+
+  describe('resolveAgenticWorkingDir', () => {
+    it('should return undefined when no working directory is configured', () => {
+      expect(resolveAgenticWorkingDir(undefined, '/test/basePath')).toBeUndefined();
+    });
+
+    it('should resolve relative working directories from the config base path', () => {
+      expect(resolveAgenticWorkingDir('./workspace', '/test/basePath')).toBe(
+        path.resolve('/test/basePath', 'workspace'),
+      );
+    });
+
+    it('should fall back to process.cwd() when no config base path is available', () => {
+      expect(resolveAgenticWorkingDir('./workspace')).toBe(
+        path.resolve(process.cwd(), 'workspace'),
+      );
+    });
+
+    it('should preserve absolute paths and URLs', () => {
+      expect(resolveAgenticWorkingDir('/var/tmp/workspace', '/test/basePath')).toBe(
+        '/var/tmp/workspace',
+      );
+      expect(resolveAgenticWorkingDir('file:///var/tmp/workspace', '/test/basePath')).toBe(
+        'file:///var/tmp/workspace',
+      );
     });
   });
 });

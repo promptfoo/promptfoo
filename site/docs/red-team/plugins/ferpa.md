@@ -72,5 +72,4 @@ By incorporating the FERPA plugin in your LLM red teaming strategy, you can iden
 - [COPPA (Children's Online Privacy Protection)](coppa.md)
 - [Privacy Vulnerabilities](../llm-vulnerability-types.md#privacy-vulnerabilities)
 - [RBAC (Role-Based Access Control)](rbac.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

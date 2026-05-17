@@ -132,6 +132,7 @@ jobs:
         run: |
           promptfoo scan-model ./models/ \
             --strict \
+            --no-write \
             --format sarif \
             --output model-scan-results.sarif
 

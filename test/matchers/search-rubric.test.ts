@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
     callApi: vi.fn(async (): Promise<ProviderResponse> => ({ output: 'should not be used' })),
   };
   const webSearchProvider = {
-    id: () => 'openai:gpt-5.4-2026-03-05',
+    id: () => 'openai:gpt-5.5-2026-04-23',
     constructor: { name: 'OpenAiResponsesProvider' },
     config: {
       tools: [{ type: 'web_search_preview' }],
@@ -62,11 +62,11 @@ describe('matchesSearchRubric', () => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
 
     const result = await matchesSearchRubric('Confirm current facts', 'output', {
-      provider: 'openai:responses:gpt-5.4-2026-03-05',
+      provider: 'openai:responses:gpt-5.5-2026-04-23',
     });
 
     expect(mocks.loadApiProvider).toHaveBeenCalled();
-    expect(mocks.loadApiProvider.mock.calls[0][0]).toBe('openai:responses:gpt-5.4-2026-03-05');
+    expect(mocks.loadApiProvider.mock.calls[0][0]).toBe('openai:responses:gpt-5.5-2026-04-23');
     expect(mocks.configuredProvider.callApi).not.toHaveBeenCalled();
     expect(mocks.webSearchProvider.callApi).toHaveBeenCalledTimes(1);
     expect(result).toEqual(
@@ -91,12 +91,12 @@ describe('matchesSearchRubric', () => {
     mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
 
     const result = await matchesSearchRubric('Confirm current facts', 'output', {
-      provider: 'openai:responses:gpt-5.4-2026-03-05',
+      provider: 'openai:responses:gpt-5.5-2026-04-23',
     });
 
     expect(mocks.webSearchProvider.callApi).toHaveBeenCalledTimes(1);
     expect(result.metadata).toEqual({
-      searchProvider: 'openai:gpt-5.4-2026-03-05',
+      searchProvider: 'openai:gpt-5.5-2026-04-23',
       searchResults: [],
     });
   });

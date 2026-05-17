@@ -86,6 +86,18 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
+  it('stacks filters above search before the layout has room for a shared row', () => {
+    const mockSetProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={mockSetProvider} />,
+    );
+
+    const searchWrapper = screen.getByPlaceholderText('Search providers...').parentElement;
+    expect(searchWrapper?.parentElement).toHaveClass('flex-col', 'sm:flex-row');
+    expect(searchWrapper).toHaveClass('w-full', 'sm:w-64');
+  });
+
   it('should filter provider options by selected category when a category chip is toggled on', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
@@ -204,7 +216,7 @@ describe('ProviderTypeSelector', () => {
       'JavaScript / TypeScript',
       'Python',
       'Go',
-      'Custom Provider',
+      'Custom Target',
       'Browser Automation',
       'Shell Command',
       'HTTP/HTTPS Endpoint',
@@ -321,7 +333,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano and older models')).toBeVisible();
+    expect(screen.getByText('GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {
