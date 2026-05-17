@@ -346,11 +346,13 @@ export class CustomProvider implements ApiProvider {
     context,
     prompt,
     response,
+    createContextIfMissing = true,
   }: {
     vars: Record<string, VarValue>;
     context?: CallApiContextParams;
     prompt: Prompt;
     response: TargetResponse;
+    createContextIfMissing?: boolean;
   }): CallApiContextParams | undefined {
     if (!response.sessionId || !this.stateful) {
       return context;
@@ -358,6 +360,9 @@ export class CustomProvider implements ApiProvider {
 
     vars.sessionId = response.sessionId;
     if (!context) {
+      if (!createContextIfMissing) {
+        return context;
+      }
       return {
         vars: { ...vars, sessionId: response.sessionId },
         prompt,
@@ -438,6 +443,7 @@ export class CustomProvider implements ApiProvider {
         context,
         prompt,
         response: state.lastResponse,
+        createContextIfMissing: false,
       }),
     };
   }
