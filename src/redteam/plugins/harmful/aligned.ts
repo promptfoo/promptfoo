@@ -1,6 +1,7 @@
+import logger from '../../../logger';
 import invariant from '../../../util/invariant';
 import { HARM_PLUGINS } from '../../constants';
-import { extractVariablesFromJson, getShortPluginId } from '../../util';
+import { extractMaterializedVariablesFromJsonWithMetadata, getShortPluginId } from '../../util';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
@@ -38,35 +39,66 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return getHarmfulAssertions(this.harmCategory);
   }
 
-  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
+  protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
     const harmCategoryLabel = HARM_PLUGINS[this.harmCategory] || this.harmCategory;
+    const pluginId = getShortPluginId(this.harmCategory);
 
-    return prompts.map(({ __prompt }) => {
-      // Base vars with the primary injectVar
-      const vars: Record<string, string> = {
-        [this.injectVar]: __prompt,
-      };
+    return Promise.all(
+      [...prompts]
+        .sort((a, b) => a.__prompt.localeCompare(b.__prompt))
+        .map(async ({ __prompt }, materializationIndex) => {
+          // Base vars with the primary injectVar
+          const vars: Record<string, string> = {
+            [this.injectVar]: __prompt,
+          };
+          let inputMaterialization: Awaited<
+            ReturnType<typeof extractMaterializedVariablesFromJsonWithMetadata>
+          >['metadata'];
 
-      // If inputs is defined, extract individual keys from the JSON into vars
-      if (hasMultipleInputs) {
-        try {
-          const parsed = JSON.parse(__prompt);
-          Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));
-        } catch {
-          // If parsing fails, just use the raw prompt
-        }
-      }
+          // If inputs is defined, extract individual keys from the JSON into vars
+          if (hasMultipleInputs) {
+            let parsed: Record<string, unknown> | undefined;
+            try {
+              parsed = JSON.parse(__prompt);
+            } catch (error) {
+              logger.debug('[AlignedHarmful] Could not parse prompt as JSON for multi-input mode', {
+                error,
+              });
+            }
 
-      return {
-        vars,
-        metadata: {
-          harmCategory: harmCategoryLabel,
-          pluginId: getShortPluginId(this.harmCategory),
-          pluginConfig: this.config,
-        },
-        assert: getHarmfulAssertions(this.harmCategory),
-      };
-    });
+            if (parsed) {
+              try {
+                const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
+                  parsed,
+                  this.config.inputs!,
+                  {
+                    materializationIndex,
+                    pluginId,
+                    provider: this.provider,
+                    purpose: this.purpose,
+                  },
+                );
+                Object.assign(vars, materializedVars.vars);
+                inputMaterialization = materializedVars.metadata;
+              } catch (error) {
+                logger.debug('[AlignedHarmful] Failed to materialize prompt inputs', { error });
+                throw error;
+              }
+            }
+          }
+
+          return {
+            vars,
+            metadata: {
+              harmCategory: harmCategoryLabel,
+              pluginId,
+              pluginConfig: this.config,
+              ...(inputMaterialization ? { inputMaterialization } : {}),
+            },
+            assert: getHarmfulAssertions(this.harmCategory),
+          };
+        }),
+    );
   }
 }

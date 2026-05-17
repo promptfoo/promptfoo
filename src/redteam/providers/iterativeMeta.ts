@@ -11,12 +11,18 @@ import {
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializationContextVars,
+  buildRemoteMaterializedInputVariables,
+} from '../remoteMaterialization';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -46,6 +52,7 @@ import type {
   CallApiOptionsParams,
   GradingResult,
   GuardrailResponse,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   RedteamFileConfig,
@@ -123,7 +130,7 @@ export async function runMetaAgentRedteam({
   test?: AtomicTestCase;
   vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
@@ -163,6 +170,7 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+  let failClosedError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
@@ -200,6 +208,7 @@ export async function runMetaAgentRedteam({
       goal,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
+      inputs,
       excludeTargetOutputFromAgenticAttackGeneration,
       lastAttempt:
         i > 0 && lastResponse && redteamHistory[i - 1]
@@ -228,7 +237,15 @@ export async function runMetaAgentRedteam({
           raw: JSON.stringify(cloudRequest),
           label: 'meta-agent',
         },
-        vars: {},
+        vars: shouldGenerateRemote()
+          ? buildRemoteMaterializationContextVars({
+              injectVar,
+              inputs,
+              materializationIndex: i,
+              pluginId: String(test?.metadata?.pluginId || 'iterative-meta'),
+              purpose: test?.metadata?.purpose as string | undefined,
+            })
+          : {},
       },
       options,
     );
@@ -338,13 +355,52 @@ export async function runMetaAgentRedteam({
       .replace(/%\}/g, '% }');
 
     // Extract input vars from the attack prompt for multi-input mode
+    if (inputs && shouldGenerateRemote()) {
+      assertRemoteMaterializationHandled(agentResp, 'Iterative Meta multi-input generation');
+    }
     const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+    let materializedInputVars:
+      | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+      | undefined;
+    if (inputs && shouldGenerateRemote() && !currentInputVars && !agentResp.materializedVars) {
+      failClosedError =
+        'Iterative Meta remote multi-input generation returned an invalid prompt format';
+      logger.warn(
+        '[IterativeMeta] Remote multi-input generation returned an invalid prompt format',
+        {
+          iteration: i + 1,
+          attackPromptPreview: attackPrompt.slice(0, 200),
+        },
+      );
+      break;
+    }
+    if ((currentInputVars || agentResp.materializedVars) && inputs) {
+      if (shouldGenerateRemote()) {
+        materializedInputVars = buildRemoteMaterializedInputVariables(
+          agentResp,
+          currentInputVars ?? {},
+          inputs,
+        );
+      } else {
+        materializedInputVars = await materializeInputVariablesWithMetadata(
+          currentInputVars!,
+          inputs,
+          {
+            materializationIndex: i,
+            pluginId: String(test?.metadata?.pluginId || 'iterative-meta'),
+            provider: agentProvider,
+            purpose: test?.metadata?.purpose as string | undefined,
+          },
+        );
+      }
+    }
+    const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, VarValue> = {
       ...iterationVars,
       [injectVar]: escapedAttackPrompt,
-      ...(currentInputVars || {}),
+      ...(currentRenderInputVars || {}),
     };
 
     const targetPrompt = await renderPrompt(
@@ -362,10 +418,16 @@ export async function runMetaAgentRedteam({
 
     // Execute attack against target
     const iterationStart = Date.now();
+    const targetContext = iterationContext
+      ? {
+          ...iterationContext,
+          vars: updatedVars,
+        }
+      : iterationContext;
     const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
-      iterationContext,
+      targetContext,
       options,
     );
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
@@ -566,7 +628,7 @@ export async function runMetaAgentRedteam({
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
-      inputVars: currentInputVars,
+      inputVars: currentRenderInputVars,
     });
 
     // Check if vulnerability was achieved
@@ -588,7 +650,11 @@ export async function runMetaAgentRedteam({
   return {
     output: bestResponse || lastResponse?.output || '',
     prompt: bestPrompt,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(failClosedError
+      ? { error: failClosedError }
+      : lastResponse?.error
+        ? { error: lastResponse.error }
+        : {}),
     metadata: {
       finalIteration,
       vulnerabilityAchieved,
@@ -617,7 +683,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  readonly inputs?: Record<string, string>;
+  readonly inputs?: Inputs;
 
   constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -625,7 +691,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
-    this.inputs = config.inputs as Record<string, string> | undefined;
+    this.inputs = config.inputs as Inputs | undefined;
 
     const configuredIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);

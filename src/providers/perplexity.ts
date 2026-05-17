@@ -156,7 +156,7 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
 
     // Replace the cost calculation with our own
     if (response.tokenUsage) {
-      if (response.tokenUsage.cached) {
+      if (response.cached) {
         // For cached responses, don't recalculate cost
         return response;
       }

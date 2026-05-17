@@ -1,10 +1,10 @@
-import * as fs from 'fs';
 import * as os from 'os';
 
 import chalk from 'chalk';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { resolveConfigs } from '../util/config/load';
+import { pathExists } from '../util/file';
 import { printBorder } from '../util/index';
 import { VERSION } from '../version';
 import type { Command } from 'commander';
@@ -47,7 +47,7 @@ async function doDebug(options: DebugOptions): Promise<void> {
 
   // Try to load config if available
   const configPath = options.config || options.defaultConfigPath;
-  if (configPath && fs.existsSync(configPath)) {
+  if (configPath && (await pathExists(configPath))) {
     debugInfo.configInfo.configExists = true;
     try {
       const resolved = await resolveConfigs(
