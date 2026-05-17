@@ -9,6 +9,7 @@ import ora from 'ora';
 import { TERMINAL_MAX_WIDTH } from '../../constants';
 import logger from '../../logger';
 import {
+  CodeScanOutputFormat,
   CodeScanSeverity,
   countBySeverity,
   formatSeverity,
@@ -17,12 +18,13 @@ import {
 } from '../../types/codeScan';
 import { formatDuration } from '../../util/formatDuration';
 import { printBorder } from '../../util/index';
+import { scanResponseToSarif } from '../util/sarif';
 
 /**
  * Options for output display
  */
 export interface OutputOptions {
-  json: boolean;
+  format: CodeScanOutputFormat;
   githubPr?: string;
 }
 
@@ -30,7 +32,7 @@ export interface OutputOptions {
  * Options for spinner creation
  */
 export interface SpinnerOptions {
-  json: boolean;
+  format: CodeScanOutputFormat;
   isWebUI: boolean;
   logLevel: string;
 }
@@ -42,7 +44,10 @@ export interface SpinnerOptions {
  * @returns Spinner instance or undefined if spinner should not be shown
  */
 export function createSpinner(options: SpinnerOptions): ReturnType<typeof ora> | undefined {
-  const showSpinner = !options.isWebUI && !options.json && options.logLevel !== 'debug';
+  const showSpinner =
+    !options.isWebUI &&
+    options.format === CodeScanOutputFormat.TEXT &&
+    options.logLevel !== 'debug';
 
   if (showSpinner) {
     return ora({ text: '', color: 'green' }).start();
@@ -63,9 +68,11 @@ export function displayScanResults(
   duration: number,
   options: OutputOptions,
 ): void {
-  if (options.json) {
+  if (options.format === CodeScanOutputFormat.JSON) {
     // Output full scan response to stdout for programmatic consumption
     console.log(JSON.stringify(response, null, 2));
+  } else if (options.format === CodeScanOutputFormat.SARIF) {
+    console.log(JSON.stringify(scanResponseToSarif(response), null, 2));
   } else {
     // Pretty-print results for human consumption
     const { comments, review } = response;

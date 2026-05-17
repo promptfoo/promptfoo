@@ -36,6 +36,13 @@ inputs:
     description: 'Enable scanning PRs from forked repositories'
     required: false
     default: 'false'
+  sarif-output-path:
+    description: 'Optional path to write SARIF output for upload to GitHub Code Scanning'
+    required: false
+
+outputs:
+  sarif-path:
+    description: 'Path to the SARIF file when a scan completes and sarif-output-path is configured'
 
 runs:
   using: 'node20'

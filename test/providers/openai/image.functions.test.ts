@@ -450,7 +450,7 @@ describe('OpenAI Image Provider Functions', () => {
           usage: data.usage,
         },
       });
-      expect(result).not.toHaveProperty('cost');
+      expect(result.cost).toBeCloseTo((10 * 5 + 20 * 30) / 1e6, 12);
     });
 
     it('should handle errors during output formatting', async () => {
