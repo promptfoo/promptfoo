@@ -55,7 +55,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node.js 20+](https://nodejs.org/en/download/package-manager/).
+First, install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`.
 
 Then create a new project for your red teaming needs:
 
