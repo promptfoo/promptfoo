@@ -273,6 +273,51 @@ providers:
         user_role: 'customer'
 ```
 
+### Response Transforms
+
+Use `transformResponse` when the MCP tool result needs to be reshaped before Promptfoo evaluates it.
+This is useful when a tool returns structured content, multiple content blocks, or metadata that you
+want to promote into a `ProviderResponse`.
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        command: node
+        args: ['server.js']
+      transformResponse: |
+        {
+          output: result.structuredContent?.answer ?? content,
+          metadata: { source: result.structuredContent?.source }
+        }
+```
+
+The transform receives three arguments:
+
+- `result`: The raw MCP SDK tool result
+- `content`: Promptfoo's normalized string representation of the tool result
+- `context`: Tool-call metadata with `toolName`, `toolArgs`, and `originalPayload`
+
+You can provide the transform as a JavaScript expression, a function, or a file reference:
+
+```yaml
+transformResponse: 'file://path/to/parser.js'
+```
+
+```javascript
+module.exports = (result, content, context) => ({
+  output: result.structuredContent?.answer ?? content,
+  metadata: { toolName: context.toolName },
+});
+```
+
+Return a primitive value to set `output`, or return a full `ProviderResponse` object when you need
+fields such as `metadata`, `guardrails`, or `sessionId`.
+Function and file-based transforms may be async; Promptfoo awaits them before evaluating the tool
+result.
+
 ### Timeout Configuration
 
 MCP tool calls have a default timeout of 60 seconds (from the MCP SDK). For long-running tools, you can increase the timeout:

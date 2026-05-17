@@ -243,6 +243,7 @@ describe('OpenAI Provider', () => {
       expect(result2.output).toBe('Test output 2');
       // Cached responses don't count as new requests, so numRequests is not included
       expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.cost).toBe(0);
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -1894,6 +1895,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const body = JSON.parse(call[1].body);
       expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should forward prompt cache options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          prompt_cache_key: 'shared-prefix',
+          prompt_cache_retention: 'in_memory',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_retention).toBe('in_memory');
     });
 
     it('should not share config between provider instances', () => {
