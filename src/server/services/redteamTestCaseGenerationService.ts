@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { VERSION } from '../../constants';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   type MultiTurnStrategy,
@@ -269,7 +269,7 @@ async function handleGoatStrategy(
       },
       body: JSON.stringify(goatBody),
     },
-    REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs(),
   );
 
   if (!response.ok) {
@@ -380,7 +380,7 @@ async function handleMischievousUserStrategy(
       },
       body: JSON.stringify(mischievousBody),
     },
-    REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs(),
   );
 
   if (!response.ok) {
@@ -494,7 +494,7 @@ async function handleHydraStrategy(
       },
       body: JSON.stringify(hydraBody),
     },
-    REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs(),
   );
 
   if (!response.ok) {
@@ -581,7 +581,7 @@ async function handleCrescendoLikeStrategy(
       },
       body: JSON.stringify(providerRequest),
     },
-    REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs(),
   );
 
   if (!response.ok) {

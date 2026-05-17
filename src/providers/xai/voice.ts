@@ -29,6 +29,7 @@ import type {
 export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
 export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
 export const XAI_VOICE_COST_PER_MINUTE = 0.05;
+export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-1.0';
 
 export const XAI_VOICE_DEFAULTS = {
   voice: 'Ara' as const,
@@ -99,6 +100,7 @@ export interface XAIVoiceOptions {
   // Custom endpoint configuration
   apiBaseUrl?: string; // Full base URL e.g., "https://my-proxy.com/v1"
   apiHost?: string; // Host only e.g., "my-proxy.com" → "https://my-proxy.com/v1"
+  region?: string; // Regional endpoint, e.g., "us-east-1" -> "https://us-east-1.api.x.ai/v1"
   websocketUrl?: string; // Complete WebSocket URL override (used exactly as-is, no transformation)
 
   // Voice configuration
@@ -110,6 +112,9 @@ export interface XAIVoiceOptions {
   // Turn detection
   turn_detection?: {
     type: 'server_vad';
+    threshold?: number;
+    silence_duration_ms?: number;
+    prefix_padding_ms?: number;
   } | null;
 
   // Audio format configuration
@@ -233,9 +238,7 @@ function generateEventId(): string {
  * Provides real-time voice conversations with Grok models.
  *
  * Usage:
- *   xai:voice:grok-3
- *   xai:voice:grok-3-fast
- *   xai:voice:grok-4
+ *   xai:voice:grok-voice-think-fast-1.0
  */
 export class XAIVoiceProvider implements ApiProvider {
   modelName: string;
@@ -265,18 +268,23 @@ export class XAIVoiceProvider implements ApiProvider {
 
   /**
    * Get the HTTP(S) API base URL
-   * Priority: apiHost > apiBaseUrl > XAI_API_BASE_URL env > default
+   * Priority: apiHost > apiBaseUrl > XAI_API_BASE_URL env > region > default
    */
   protected getApiUrl(): string {
     if (this.config.apiHost) {
       return `https://${this.config.apiHost}/v1`;
     }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.XAI_API_BASE_URL ||
-      getEnvString('XAI_API_BASE_URL') ||
-      XAI_VOICE_DEFAULT_API_URL
-    );
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+    const envApiBaseUrl = this.env?.XAI_API_BASE_URL || getEnvString('XAI_API_BASE_URL');
+    if (envApiBaseUrl) {
+      return envApiBaseUrl;
+    }
+    if (this.config.region) {
+      return `https://${this.config.region}.api.x.ai/v1`;
+    }
+    return XAI_VOICE_DEFAULT_API_URL;
   }
 
   /**
@@ -296,7 +304,11 @@ export class XAIVoiceProvider implements ApiProvider {
     if (this.config.websocketUrl) {
       return this.config.websocketUrl;
     }
-    return `${this.getWebSocketBase()}/realtime`;
+    // xAI's realtime WS expects the model in the URL query string
+    // (see https://docs.x.ai/docs/guides/voice).
+    const url = new URL(`${this.getWebSocketBase()}/realtime`);
+    url.searchParams.set('model', this.modelName || XAI_VOICE_DEFAULT_MODEL);
+    return url.toString();
   }
 
   /**
@@ -708,7 +720,7 @@ export function createXAIVoiceProvider(
 ): ApiProvider {
   // Parse model name from path: xai:voice:<model>
   const splits = providerPath.split(':');
-  const modelName = splits.slice(2).join(':') || 'grok-3';
+  const modelName = splits.slice(2).join(':') || XAI_VOICE_DEFAULT_MODEL;
 
   return new XAIVoiceProvider(modelName, options);
 }

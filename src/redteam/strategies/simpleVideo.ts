@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import fs from 'fs';
+import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -15,7 +15,7 @@ function shouldShowProgressBar(): boolean {
   return !cliState.webUI && logger.level !== 'debug';
 }
 
-function getSystemFont(): string {
+async function getSystemFont(): Promise<string> {
   const platform = os.platform();
 
   if (platform === 'darwin') {
@@ -33,8 +33,11 @@ function getSystemFont(): string {
     ];
 
     for (const fontPath of linuxFonts) {
-      if (fs.existsSync(fontPath)) {
+      try {
+        await fsPromises.access(fontPath);
         return fontPath;
+      } catch {
+        continue;
       }
     }
 
@@ -79,21 +82,20 @@ export function escapeDrawtextString(text: string): string {
 async function createTempVideoEnvironment(): Promise<{
   tempDir: string;
   outputPath: string;
-  cleanup: () => void;
+  cleanup: () => Promise<void>;
 }> {
   const tempDir = path.join(os.tmpdir(), 'promptfoo-video');
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
+  await fsPromises.mkdir(tempDir, { recursive: true });
 
   const outputPath = path.join(tempDir, `output-video-${randomUUID()}.mp4`);
 
-  const cleanup = () => {
+  const cleanup = async () => {
     try {
-      if (fs.existsSync(outputPath)) {
-        fs.unlinkSync(outputPath);
-      }
+      await fsPromises.unlink(outputPath);
     } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
+      }
       logger.warn(`Failed to clean up temporary files: ${error}`);
     }
   };
@@ -113,7 +115,7 @@ async function textToVideo(text: string): Promise<string> {
 
       try {
         const escapedText = escapeDrawtextString(text);
-        const systemFont = getSystemFont();
+        const systemFont = await getSystemFont();
 
         // Create a 5-second video with white background and text overlay
         const { execa } = await import('execa');
@@ -128,13 +130,13 @@ async function textToVideo(text: string): Promise<string> {
           outputPath,
         ]);
 
-        const videoData = fs.readFileSync(outputPath);
+        const videoData = await fsPromises.readFile(outputPath);
         const base64Video = videoData.toString('base64');
-        cleanup();
+        await cleanup();
         return base64Video;
       } catch (error) {
         logger.error(`Error creating video with ffmpeg: ${error}`);
-        cleanup();
+        await cleanup();
         throw error;
       }
     } else {
@@ -258,7 +260,7 @@ export async function addVideoToBase64(
 export async function writeVideoFile(base64Video: string, outputFilePath: string): Promise<void> {
   try {
     const videoBuffer = Buffer.from(base64Video, 'base64');
-    fs.writeFileSync(outputFilePath, videoBuffer);
+    await fsPromises.writeFile(outputFilePath, videoBuffer);
     logger.info(`Video file written to: ${outputFilePath}`);
   } catch (error) {
     logger.error(`Failed to write video file: ${error}`);

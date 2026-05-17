@@ -29,6 +29,10 @@ function isOpenAiResponsesProvider(provider: ApiProvider, id: string): boolean {
   );
 }
 
+function isXAIResponsesProvider(provider: ApiProvider, id: string): boolean {
+  return id.includes('xai:responses') || provider.constructor?.name === 'XAIResponsesProvider';
+}
+
 /**
  * Check if a provider has web search capabilities
  * @param provider The provider to check
@@ -57,8 +61,12 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for xAI with search parameters
-  if (id.includes('xai') && provider.config?.search_parameters?.mode === 'on') {
+  // Check for xAI with either the current Responses API tools or legacy Live Search params.
+  if (
+    id.includes('xai') &&
+    (provider.config?.search_parameters?.mode === 'on' ||
+      (isXAIResponsesProvider(provider, id) && hasTool(provider, (t) => t.type === 'web_search')))
+  ) {
     return true;
   }
 
@@ -121,10 +129,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.4 snapshot with web search tool (via responses API)
+  // OpenAI GPT-5.5 snapshot with web search tool (via responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.4-2026-03-05', {
+      return await loadApiProvider('openai:responses:gpt-5.5-2026-04-23', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },
@@ -145,10 +153,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // Google Gemini 3 Pro Preview with googleSearch tool
+  // Google Gemini 3.1 Pro Preview with googleSearch tool
   const loadGoogleWebSearch = async () => {
     try {
-      return await loadApiProvider('google:gemini-3-pro-preview', {
+      return await loadApiProvider('google:gemini-3.1-pro-preview', {
         options: {
           config: { tools: [{ googleSearch: {} }] },
         },
@@ -159,10 +167,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // Vertex AI Gemini 3 Pro Preview with googleSearch tool
+  // Vertex AI Gemini 3.1 Pro Preview with googleSearch tool
   const loadVertexWebSearch = async () => {
     try {
-      return await loadApiProvider('vertex:gemini-3-pro-preview', {
+      return await loadApiProvider('vertex:gemini-3.1-pro-preview', {
         options: {
           config: { tools: [{ googleSearch: {} }] },
         },
@@ -173,12 +181,12 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.1 Fast Reasoning with live web search
+  // xAI Grok 4.3 with Responses API web search
   const loadXaiWebSearch = async () => {
     try {
-      return await loadApiProvider('xai:grok-4-1-fast-reasoning', {
+      return await loadApiProvider('xai:responses:grok-4.3', {
         options: {
-          config: { search_parameters: { mode: 'on' } },
+          config: { tools: [{ type: 'web_search' }] },
         },
       });
     } catch (err) {
