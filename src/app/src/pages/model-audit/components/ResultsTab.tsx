@@ -22,7 +22,12 @@ import {
 import { Separator } from '@app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import { getIssueFilePath, getSeverityLabel, isCriticalSeverity } from '../utils';
+import {
+  getIssueFilePath,
+  getSeverityLabel,
+  hasModelAuditFindings,
+  isCriticalSeverity,
+} from '../utils';
 import ChecksSection from './ChecksSection';
 
 import type { ScanIssue, ScanResult } from '../ModelAudit.types';
@@ -100,6 +105,7 @@ export default function ResultsTab({
   const checksTotal = totalChecks ?? scanResults.total_checks ?? scanResults.totalChecks ?? 0;
   const checksPassed = passedChecks ?? scanResults.passed_checks ?? scanResults.passedChecks ?? 0;
   const checksFailed = failedChecks ?? scanResults.failed_checks ?? scanResults.failedChecks ?? 0;
+  const hasFindings = hasModelAuditFindings(scanResults);
 
   // Filter issues
   const filteredIssues = useMemo(() => {
@@ -205,16 +211,31 @@ export default function ResultsTab({
       {/* Findings List */}
       {filteredIssues.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <CheckCircleIcon className="size-12 text-emerald-500 mb-3" />
-          <h3 className="text-lg font-medium text-emerald-700 dark:text-emerald-300">
+          {hasFindings ? (
+            <WarningIcon className="size-12 text-amber-500 mb-3" />
+          ) : (
+            <CheckCircleIcon className="size-12 text-emerald-500 mb-3" />
+          )}
+          <h3
+            className={cn(
+              'text-lg font-medium',
+              hasFindings
+                ? 'text-amber-700 dark:text-amber-300'
+                : 'text-emerald-700 dark:text-emerald-300',
+            )}
+          >
             {selectedSeverity
               ? `No ${getSeverityLabel(selectedSeverity)} issues`
-              : 'No issues found'}
+              : hasFindings
+                ? 'No issue rows returned'
+                : 'No issues found'}
           </h3>
           <p className="text-sm text-muted-foreground mt-1">
             {selectedSeverity
               ? 'Try selecting a different severity filter.'
-              : 'Your model passed all security checks.'}
+              : hasFindings
+                ? 'The scan reported findings or failed checks without issue details.'
+                : 'Your model passed all security checks.'}
           </p>
         </div>
       ) : (

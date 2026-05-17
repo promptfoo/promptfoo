@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { LlamaProvider } from '../../src/providers/llama';
-import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
+import { getRequestTimeoutMs } from '../../src/providers/shared';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -89,7 +89,7 @@ describe('LlamaProvider', () => {
             logit_bias: undefined,
           }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
     });
     it('should return the correct response on success', async () => {
