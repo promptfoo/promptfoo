@@ -804,6 +804,30 @@ describe('OpenClaw Provider', () => {
 
       expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
     });
+
+    it('should price usage from an explicit OpenAI backend model override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'priced' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawChatProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('price me');
+
+      expect(result.cost).toBeGreaterThan(0);
+    });
   });
 
   describe('OpenClawResponsesProvider', () => {
@@ -904,6 +928,230 @@ describe('OpenClaw Provider', () => {
       expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/responses');
       expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
     });
+
+    it('should leave cost unset when the backend model is not known', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it('should price usage from an explicit OpenAI backend model override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should infer hidden cached input from OpenClaw Responses totals', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 8,
+        completion: 2,
+        total: 10,
+        completionDetails: { cacheReadInputTokens: 4 },
+      });
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should not double count explicit cached input from OpenClaw Responses usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            input_tokens_details: { cached_tokens: 4 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        completionDetails: { cacheReadInputTokens: 4 },
+      });
+    });
+
+    it('should preserve hosted tool cost when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+            {
+              type: 'file_search_call',
+              status: 'completed',
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0.0025);
+    });
+
+    it('should use effective passthrough tools when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-4o',
+          gateway_url: 'http://test:18789',
+          tools: [{ type: 'web_search_preview' }],
+          passthrough: { tools: [{ type: 'web_search' }] },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0.01);
+      expect(result.cost).toBeLessThan(0.011);
+    });
+
+    it('should preserve zero cost for cached responses when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBe(0);
+    });
   });
 
   describe('OpenClawEmbeddingProvider', () => {
@@ -980,6 +1228,30 @@ describe('OpenClaw Provider', () => {
       expect(mockFetchWithCache.mock.calls[0][1].headers['x-openclaw-model']).toBe(
         'openai/text-embedding-3-small',
       );
+    });
+
+    it('should price usage from an explicit OpenAI backend embedding override', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          data: [{ embedding: [1] }],
+          usage: { prompt_tokens: 10, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawEmbeddingProvider('main', {
+        config: {
+          backend_model: 'openai/text-embedding-3-small',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callEmbeddingApi('embed this');
+
+      expect(result.cost).toBeGreaterThan(0);
     });
   });
 

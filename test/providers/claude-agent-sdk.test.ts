@@ -487,6 +487,554 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata?.structuredOutput).toBeUndefined();
       });
 
+      it('should return main agent result when background sub-agents emit interleaved result messages', async () => {
+        // Reproduces #9054: when the main agent spawns a background sub-agent
+        // (Task tool with run_in_background: true), the SDK interleaves the
+        // sub-agent's `result` message into the parent stream before the main
+        // agent's terminal `result` arrives. SDKResultMessage has no
+        // parent_tool_use_id, so position is the only signal — the main agent's
+        // result is always last.
+        const subAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent summary that should NOT be surfaced',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        };
+        const mainAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Main agent final answer',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentResult]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Main agent final answer');
+        expect(result.sessionId).toBe('main-session');
+        expect(result.cost).toBe(0.003);
+        expect(result.tokenUsage).toEqual({ prompt: 20, completion: 30, total: 50 });
+        expect(result.metadata?.numTurns).toBe(4);
+        expect(result.metadata?.terminalReason).toBe('completed');
+        // Raw should reflect the main agent's result, not the sub-agent's
+        expect(JSON.parse(result.raw as string).session_id).toBe('main-session');
+      });
+
+      it('should surface main agent error when sub-agent succeeds first', async () => {
+        // Inverse of the previous test: sub-agent finishes successfully but the
+        // main agent ultimately errors. The main agent's outcome must win —
+        // otherwise we'd mask main-agent failures behind a green sub-agent
+        // summary. See https://github.com/promptfoo/promptfoo/issues/9054.
+        const subAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'cccccccc-cccc-cccc-cccc-cccccccccccc' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent summary',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        };
+        const mainAgentError: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'error_max_turns',
+          session_id: 'main-session',
+          uuid: 'dddddddd-dddd-dddd-dddd-dddddddddddd' as `${string}-${string}-${string}-${string}-${string}`,
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: true,
+          num_turns: 4,
+          permission_denials: [],
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentError]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
+        expect(result.sessionId).toBe('main-session');
+      });
+
+      it('should cache only the main agent response, not interleaved sub-agent results', async () => {
+        // Locks the load-bearing behavioral guarantee of the #9054 fix:
+        // cacheResponse must fire exactly once with the main agent's payload,
+        // never with an intermediate sub-agent result. If a future refactor
+        // re-introduced caching inside the for-await loop, the second call
+        // below would return the sub-agent's summary from cache.
+        const subAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent summary that must NOT end up in the cache',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        };
+        const mainAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: 'ffffffff-ffff-ffff-ffff-ffffffffffff' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Main agent final answer (cached)',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+        };
+
+        mockQuery.mockImplementation(() => createMockQuery([subAgentResult, mainAgentResult]));
+
+        const wasEnabled = isCacheEnabled();
+        enableCache();
+        try {
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          const first = await provider.callApi('Cache-once prompt');
+          expect(first.output).toBe('Main agent final answer (cached)');
+          expect(mockQuery).toHaveBeenCalledTimes(1);
+
+          // Cache hit on second call — returns whatever cacheResponse stored.
+          // If the loop had cached the sub-agent's result, we'd see
+          // 'Sub-agent summary…' here. We must see the main agent's payload.
+          const second = await provider.callApi('Cache-once prompt');
+          expect(mockQuery).toHaveBeenCalledTimes(1);
+          expect(second.cached).toBe(true);
+          expect(second.output).toBe('Main agent final answer (cached)');
+          expect(second.sessionId).toBe('main-session');
+        } finally {
+          await clearCache();
+          if (wasEnabled) {
+            enableCache();
+          } else {
+            disableCache();
+          }
+        }
+      });
+
+      it('should return only the last of three or more interleaved result messages', async () => {
+        // Real workloads with multiple run_in_background Task calls produce N+1
+        // result messages in the parent stream. The accumulator must keep the
+        // last one regardless of how many sub-agents finished before it.
+        const buildSubAgent = (i: number): Partial<SDKMessage> => ({
+          type: 'result',
+          subtype: 'success',
+          session_id: `sub-session-${i}`,
+          uuid: `1111111${i}-1111-1111-1111-111111111111` as `${string}-${string}-${string}-${string}-${string}`,
+          result: `Sub-agent ${i} summary`,
+          usage: createMockUsage(2, 2),
+          total_cost_usd: 0.0001,
+          duration_ms: 100,
+          duration_api_ms: 50,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        });
+        const mainAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: '99999999-9999-9999-9999-999999999999' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Main agent final answer (after three sub-agents)',
+          usage: createMockUsage(30, 40),
+          total_cost_usd: 0.005,
+          duration_ms: 2500,
+          duration_api_ms: 2000,
+          is_error: false,
+          num_turns: 6,
+          permission_denials: [],
+          terminal_reason: 'completed',
+        };
+
+        mockQuery.mockReturnValue(
+          createMockQuery([buildSubAgent(1), buildSubAgent(2), buildSubAgent(3), mainAgentResult]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Main agent final answer (after three sub-agents)');
+        expect(result.sessionId).toBe('main-session');
+        expect(result.metadata?.numTurns).toBe(6);
+      });
+
+      it('should warn and mark span ERROR when stream has multiple results but no terminal_reason on the last', async () => {
+        // Truncated-stream guard: if we observed multiple result messages but
+        // the last one has no terminal_reason, the stream may have been cut
+        // off after a sub-agent finished. We still return a response (so
+        // downstream evals don't crash), but we surface a warning and mark
+        // the OTEL span ERROR so this isn't graded silently.
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+        const setStatusSpy = vi.fn();
+        vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
+          setStatus: setStatusSpy,
+          setAttribute: vi.fn(),
+          setAttributes: vi.fn(),
+          addEvent: vi.fn(),
+          recordException: vi.fn(),
+          updateName: vi.fn(),
+          end: vi.fn(),
+          isRecording: () => true,
+          spanContext: () => ({ traceId: 't', spanId: 's', traceFlags: 1 }),
+        } as any);
+
+        try {
+          const subAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'sub-session',
+            uuid: 'aaaa1111-aaaa-aaaa-aaaa-aaaaaaaaaaaa' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Sub-agent finished',
+            usage: createMockUsage(5, 5),
+            total_cost_usd: 0.0005,
+            duration_ms: 200,
+            duration_api_ms: 150,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+          };
+          // No terminal_reason — simulates a truncated/cut-off stream.
+          const stragglerResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'unclear-session',
+            uuid: 'bbbb2222-bbbb-bbbb-bbbb-bbbbbbbbbbbb' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Possibly another sub-agent',
+            usage: createMockUsage(3, 3),
+            total_cost_usd: 0.0003,
+            duration_ms: 100,
+            duration_api_ms: 80,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+          };
+
+          mockQuery.mockReturnValue(createMockQuery([subAgentResult, stragglerResult]));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          // Still returns a response (we'd rather grade against a possibly-wrong
+          // answer than crash), but flagged via logs and span status.
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('Possibly another sub-agent');
+          expect(warnSpy).toHaveBeenCalledTimes(1);
+          expect(warnSpy.mock.calls[0]?.[0]).toMatch(/2 result messages/);
+          expect(warnSpy.mock.calls[0]?.[0]).toMatch(/may have been truncated/);
+          expect(setStatusSpy).toHaveBeenCalledWith({
+            code: SpanStatusCode.ERROR,
+            message: expect.stringContaining('terminal_reason'),
+          });
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should not warn when the final result is a non-success error subtype after a sub-agent', async () => {
+        // Negative case for the truncation heuristic: a non-success subtype
+        // like 'error_max_turns' is itself a definitive terminal signal — the
+        // SDK is reporting the run ended in error. Warning on this would be
+        // a false positive on every legitimate main-agent failure that
+        // follows a background sub-agent.
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+        try {
+          const subAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'sub-session',
+            uuid: 'cccc1111-cccc-cccc-cccc-cccccccccccc' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Sub-agent finished',
+            usage: createMockUsage(5, 5),
+            total_cost_usd: 0.0005,
+            duration_ms: 200,
+            duration_api_ms: 150,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+          };
+          const mainAgentError: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'error_max_turns',
+            session_id: 'main-session',
+            uuid: 'dddd2222-dddd-dddd-dddd-dddddddddddd' as `${string}-${string}-${string}-${string}-${string}`,
+            usage: createMockUsage(20, 30),
+            total_cost_usd: 0.003,
+            duration_ms: 1500,
+            duration_api_ms: 1200,
+            is_error: true,
+            num_turns: 4,
+            permission_denials: [],
+            // Intentionally no terminal_reason: error subtype is the signal.
+          };
+
+          mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentError]));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
+          expect(warnSpy).not.toHaveBeenCalled();
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should not warn when a single result message has no terminal_reason', async () => {
+        // Negative case: a single non-terminal result is the normal pre-fix
+        // path, not a truncation signal. We must not spam warnings.
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+        try {
+          mockQuery.mockReturnValue(
+            createMockResponse('Plain response', { input_tokens: 1, output_tokens: 1 }),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.output).toBe('Plain response');
+          expect(warnSpy).not.toHaveBeenCalled();
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should select the human-origin result regardless of position when SDK reports origin', async () => {
+        // SDK >= 0.2.126 tags result messages with `origin.kind`. When the
+        // human-origin (user-prompted) result arrives BEFORE a trailing
+        // task-notification followup from a background sub-agent, the
+        // origin-aware selection must still pick the human result rather than
+        // falling back to "last result wins".
+        const mainAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: 'aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Main agent final answer (origin: human)',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'human' },
+        };
+        const lateSubAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'bbbb3333-bbbb-bbbb-bbbb-bbbbbbbbbbbb' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Late background sub-agent summary',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          origin: { kind: 'task-notification' },
+        };
+
+        // Human-origin main result arrives first; task-notification trailer
+        // arrives after — the inverse of the position heuristic's assumption.
+        mockQuery.mockReturnValue(createMockQuery([mainAgentResult, lateSubAgentResult]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Main agent final answer (origin: human)');
+        expect(result.sessionId).toBe('main-session');
+        expect(result.metadata?.numTurns).toBe(4);
+        expect(JSON.parse(result.raw as string).session_id).toBe('main-session');
+      });
+
+      it('should not warn about truncation when origin identifies the main result without terminal_reason', async () => {
+        // With SDK >= 0.2.126 the `origin` field is authoritative. If the
+        // human-origin result has no terminal_reason, that's the legitimate
+        // main-agent result — not a truncation signal. The pre-0.2.126
+        // position-heuristic warning would fire here (multiple results, last
+        // has no terminal_reason); origin-aware selection must suppress it.
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+        const setStatusSpy = vi.fn();
+        vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
+          setStatus: setStatusSpy,
+          setAttribute: vi.fn(),
+          setAttributes: vi.fn(),
+          addEvent: vi.fn(),
+          recordException: vi.fn(),
+          updateName: vi.fn(),
+          end: vi.fn(),
+          isRecording: () => true,
+          spanContext: () => ({ traceId: 't', spanId: 's', traceFlags: 1 }),
+        } as any);
+
+        try {
+          const subAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'sub-session',
+            uuid: 'cccc3333-cccc-cccc-cccc-cccccccccccc' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Sub-agent finished',
+            usage: createMockUsage(5, 5),
+            total_cost_usd: 0.0005,
+            duration_ms: 200,
+            duration_api_ms: 150,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+            origin: { kind: 'task-notification' },
+          };
+          const mainAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'main-session',
+            uuid: 'dddd3333-dddd-dddd-dddd-dddddddddddd' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Main agent reply',
+            usage: createMockUsage(20, 30),
+            total_cost_usd: 0.003,
+            duration_ms: 1500,
+            duration_api_ms: 1200,
+            is_error: false,
+            num_turns: 4,
+            permission_denials: [],
+            origin: { kind: 'human' },
+            // Intentionally no terminal_reason: origin is the signal here.
+          };
+
+          mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentResult]));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('Main agent reply');
+          expect(warnSpy).not.toHaveBeenCalled();
+          expect(setStatusSpy).not.toHaveBeenCalledWith(
+            expect.objectContaining({ code: SpanStatusCode.ERROR }),
+          );
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should fall back to the last result when every result is a task-notification', async () => {
+        // Defensive fallback: if origin tags every result as a
+        // task-notification (i.e. the main-agent result genuinely never
+        // arrived, perhaps due to a truncated stream), don't return undefined
+        // — surface the last result we did see so downstream evals don't
+        // crash, matching the pre-origin behavior.
+        const subAgent1: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-1',
+          uuid: 'eeee3333-eeee-eeee-eeee-eeeeeeeeeeee' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent 1',
+          usage: createMockUsage(2, 2),
+          total_cost_usd: 0.0001,
+          duration_ms: 100,
+          duration_api_ms: 50,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          origin: { kind: 'task-notification' },
+        };
+        const subAgent2: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-2',
+          uuid: 'ffff3333-ffff-ffff-ffff-ffffffffffff' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent 2 (last)',
+          usage: createMockUsage(3, 3),
+          total_cost_usd: 0.0002,
+          duration_ms: 100,
+          duration_api_ms: 50,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          origin: { kind: 'task-notification' },
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([subAgent1, subAgent2]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Sub-agent 2 (last)');
+        expect(result.sessionId).toBe('sub-2');
+      });
+
+      it('should return error when no result message arrives at all', async () => {
+        // Locks the no-result early-return path when the stream closes
+        // without emitting any `result` message (origin or otherwise).
+        mockQuery.mockReturnValue(createMockQuery([]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe("Claude Agent SDK call didn't return a result");
+      });
+
       it('should return error when API key is missing', async () => {
         // ensure process env won't provide the key or any other Claude Agent SDK env vars
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
@@ -1491,6 +2039,59 @@ describe('ClaudeCodeSDKProvider', () => {
               answers: { 'Which option?': 'Option A' },
             },
           });
+        });
+
+        it('passes through programmatic can_use_tool callbacks', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async (_toolName, input) => ({
+            behavior: 'allow' as const,
+            updatedInput: input,
+          }));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              canUseTool,
+            }),
+          });
+        });
+
+        it('wraps programmatic can_use_tool callbacks for AskUserQuestion automation', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async (_toolName, input) => ({
+            behavior: 'allow' as const,
+            updatedInput: input,
+          }));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          await callArgs.options.canUseTool(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: new AbortController().signal, toolUseID: 'test-id' },
+          );
+
+          expect(canUseTool).toHaveBeenCalledWith(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id' },
+          );
         });
 
         it('with includePartialMessages configuration', async () => {
@@ -2860,6 +3461,29 @@ describe('ClaudeCodeSDKProvider', () => {
         enableCache();
       });
 
+      it('should bypass cache when can_use_tool callback is provided', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        await clearCache();
+
+        const canUseTool = vi.fn(async (_toolName: string, input: Record<string, unknown>) => ({
+          behavior: 'allow' as const,
+          updatedInput: input,
+        }));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { can_use_tool: canUseTool },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+
+        // Two real SDK calls — cache must be skipped because the user-supplied
+        // callback can change tool decisions in ways the cache key can't model.
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
       it('should handle cache errors gracefully', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -3838,6 +4462,136 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan).toBeDefined();
         expect(toolSpan!.attrs['tool.incomplete']).toBe(true);
         expect(toolSpan!.status?.code).toBe(2); // SpanStatusCode.ERROR
+      });
+
+      it('emits each orphan tool span exactly once across interleaved sub-agent results', async () => {
+        // Pre-fix, drainOrphans() fired inside the result branch and would
+        // execute on each interleaved sub-agent result. Post-fix it runs once
+        // after the for-await loop. This test locks that in so a future
+        // refactor can't silently double-emit orphan spans.
+        const { emittedSpans } = installTracerSpy();
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            {
+              type: 'assistant',
+              parent_tool_use_id: null,
+              message: createMockBetaMessage([
+                {
+                  type: 'tool_use',
+                  id: 'orphan-interleaved',
+                  name: 'Read',
+                  input: { file_path: '/y' },
+                },
+              ]),
+              session_id: 'test-session',
+            },
+            // Interleaved sub-agent result: pre-fix this would have triggered
+            // both an early return AND a drainOrphans call.
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'sub-session',
+              uuid: '11111111-1111-1111-1111-111111111111',
+              result: 'sub done',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+            },
+            // Main agent's terminal result.
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'main-session',
+              uuid: '22222222-2222-2222-2222-222222222222',
+              result: 'main done',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+              terminal_reason: 'completed',
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('prompt');
+
+        // Main agent's result wins.
+        expect(result.output).toBe('main done');
+        expect(result.sessionId).toBe('main-session');
+
+        // The orphan tool_use must produce exactly one span — not two.
+        const readSpans = emittedSpans.filter((s) => s.name === 'tool Read');
+        expect(readSpans).toHaveLength(1);
+        expect(readSpans[0].attrs['tool.incomplete']).toBe(true);
+      });
+
+      it('does not flip span status to ERROR when only an interleaved sub-agent has an aborted terminal_reason', async () => {
+        // Pre-fix, the aborted-terminal_reason check ran inside the result
+        // branch and would fire on the FIRST result message. So a sub-agent
+        // that aborted would mark the parent span ERROR even when the main
+        // agent completed normally. Post-fix, only the main agent's
+        // terminal_reason can flip the parent span.
+        const { emittedSpans } = installTracerSpy();
+
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            // Sub-agent reports an aborted terminal_reason.
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'sub-aborted-session',
+              uuid: '33333333-3333-3333-3333-333333333333',
+              result: 'sub aborted',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 1,
+              permission_denials: [],
+              terminal_reason: 'aborted_streaming',
+            },
+            // Main agent completes cleanly.
+            {
+              type: 'result',
+              subtype: 'success',
+              session_id: 'main-clean-session',
+              uuid: '44444444-4444-4444-4444-444444444444',
+              result: 'main clean',
+              usage: createMockUsage(1, 1),
+              total_cost_usd: 0,
+              duration_ms: 1,
+              duration_api_ms: 1,
+              is_error: false,
+              num_turns: 2,
+              permission_denials: [],
+              terminal_reason: 'completed',
+            },
+          ]),
+        );
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('prompt');
+
+        expect(result.output).toBe('main clean');
+        expect(result.metadata?.terminalReason).toBe('completed');
+
+        // No emitted span should be ERROR-statused due to the sub-agent's abort.
+        const erroredSpans = emittedSpans.filter((s) => s.status?.code === SpanStatusCode.ERROR);
+        expect(erroredSpans).toHaveLength(0);
       });
 
       it('propagates response.model from modelUsage and finish_reasons from terminal_reason', async () => {

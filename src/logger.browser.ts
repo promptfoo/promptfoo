@@ -94,6 +94,12 @@ export let sourceMapSupportInitialized = false;
 export function setLogCallback(cb: ((msg: string) => void) | null): void {
   globalLogCallback = cb;
 }
+
+export function clearLogCallbackIfOwned(cb: ((msg: string) => void) | null): void {
+  if (cb && globalLogCallback === cb) {
+    globalLogCallback = null;
+  }
+}
 export function setStructuredLogging(_enabled: boolean): void {}
 export function setLoggerShuttingDown(value: boolean): void {
   isShuttingDown = value;

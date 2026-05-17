@@ -19,6 +19,12 @@ export function setLogCallback(callback: LogCallback | null) {
   globalLogCallback = callback;
 }
 
+export function clearLogCallbackIfOwned(callback: LogCallback | null) {
+  if (callback && globalLogCallback === callback) {
+    globalLogCallback = null;
+  }
+}
+
 // Global configuration for structured logging
 let useStructuredLogging = false;
 
