@@ -3,11 +3,16 @@ import { Presets, SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -39,12 +44,29 @@ async function generateCompositePrompts(
         `Composite: testCase.vars is required, but got ${JSON.stringify(testCase)}`,
       );
 
+      // Get inputs schema from plugin config for multi-input mode
+      const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
+
       const payload = {
         task: 'jailbreak:composite',
         prompt: testCase.vars[injectVar],
         email: getUserEmail(),
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
+        ...(inputs && { inputs }),
+        // Composite pipeline configuration
+        ...(config.techniques && { techniques: config.techniques }),
+        ...(config.evasions && { evasions: config.evasions }),
+        ...(config.alwaysIncludeTechniques && {
+          alwaysIncludeTechniques: config.alwaysIncludeTechniques,
+        }),
+        ...(config.compositionOrder && { compositionOrder: config.compositionOrder }),
+        ...(config.combinationMode && { combinationMode: config.combinationMode }),
+        ...(config.includeEvasionGuidance != null && {
+          includeEvasionGuidance: config.includeEvasionGuidance,
+        }),
+        ...(config.evasionGuidance && { evasionGuidance: config.evasionGuidance }),
+        ...(config.targetContext && { targetContext: config.targetContext }),
       };
 
       interface CompositeGenerationResponse {
@@ -61,7 +83,7 @@ async function generateCompositePrompts(
           },
           body: JSON.stringify(payload),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       logger.debug(
@@ -124,7 +146,7 @@ export async function addCompositeTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Composite jailbreak strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Composite jailbreak strategy'));
   }
 
   const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);

@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
@@ -17,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
@@ -433,7 +435,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage = 'Failed to generate policies';
+      let errorMessage: string;
 
       if (error instanceof Error) {
         // Handle network errors
@@ -527,7 +529,7 @@ export const CustomPoliciesSection = () => {
 
         // Parse CSV and take the first column regardless of header name
         const { parse } = await import('csv-parse/browser/esm/sync');
-        const records = parse(text, {
+        const records = parse<Record<string, string>>(text, {
           skip_empty_lines: true,
           columns: true,
           trim: true,
@@ -535,7 +537,7 @@ export const CustomPoliciesSection = () => {
 
         // Extract policies from the first column
         const newPolicies = records
-          .map((record: any) => Object.values(record)[0] as string)
+          .map((record) => Object.values(record)[0] as string)
           .filter((policy: string) => policy && policy.trim() !== '');
 
         if (newPolicies.length > 0) {
@@ -639,6 +641,7 @@ export const CustomPoliciesSection = () => {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label={`Edit policy ${row.index + 1}`}
                   className="size-8"
                   onClick={() => handleEditPolicy(row.original)}
                 >
@@ -722,15 +725,13 @@ export const CustomPoliciesSection = () => {
   return (
     <div className="flex flex-col gap-4" ref={containerRef}>
       <div
-        className="grid gap-4"
-        style={{
-          gridTemplateColumns: showSuggestionsSidebar ? '1fr 380px' : '1fr',
-          height: 600,
-          minHeight: 400,
-        }}
+        className={cn(
+          'grid min-h-[400px] gap-4 lg:h-[600px]',
+          showSuggestionsSidebar && 'grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]',
+        )}
       >
         {/* Main table area */}
-        <div className="min-w-0" style={{ height: '100%' }}>
+        <div className="min-w-0 min-h-[400px] lg:h-full">
           <DataTable
             data={rows}
             columns={columns}
@@ -740,7 +741,6 @@ export const CustomPoliciesSection = () => {
             getRowId={(row) => row.id}
             toolbarActions={toolbarActions}
             showToolbar
-            showPagination={false}
             emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </div>
@@ -805,7 +805,7 @@ export const CustomPoliciesSection = () => {
                 placeholder="e.g., Data Privacy Policy"
               />
               {policyDialog.errors.name && (
-                <p className="text-sm text-destructive">{policyDialog.errors.name}</p>
+                <HelperText error>{policyDialog.errors.name}</HelperText>
               )}
             </div>
             <div className="space-y-2">
@@ -824,7 +824,7 @@ export const CustomPoliciesSection = () => {
                 placeholder="Enter the policy text that describes what should be checked..."
               />
               {policyDialog.errors.policyText && (
-                <p className="text-sm text-destructive">{policyDialog.errors.policyText}</p>
+                <HelperText error>{policyDialog.errors.policyText}</HelperText>
               )}
             </div>
           </div>

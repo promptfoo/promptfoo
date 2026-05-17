@@ -98,6 +98,79 @@ An **IF** node can then route execution:
 - **failures = 0** → take _green_ path (maybe just archive the results).
 - **failures > 0** → post to Slack or comment on the pull request.
 
+## Evaluating n8n AI Agent prompts and outputs
+
+If your goal is to test the **prompt inside an n8n AI Agent / OpenAI node** (not just run Promptfoo from a workflow), treat the n8n node like any other app contract:
+
+1. Put the agent prompt in a file,
+2. Map incoming n8n fields to `tests.vars`, and
+3. Assert on the exact JSON or tool-call shape that downstream n8n nodes expect.
+
+This works well when you want to regression-test an agent before wiring it into a larger workflow.
+
+### Validate JSON that downstream n8n nodes consume
+
+If your agent is supposed to emit structured data for a **Set**, **Code**, **Switch**, or **HTTP Request** node, validate the payload directly.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://./prompts/n8n-support-router.txt
+
+providers:
+  - openai:gpt-5-mini
+
+tests:
+  - vars:
+      customer_message: 'Customer wants to cancel order #4815 and asks for a refund'
+    assert:
+      - type: contains-json
+        value:
+          type: object
+          required: [route, priority, reply]
+          properties:
+            route:
+              type: string
+              enum: [billing, support, sales]
+            priority:
+              type: string
+              enum: [low, medium, high]
+            reply:
+              type: string
+```
+
+Use `contains-json` when the model may wrap JSON in prose or a markdown code block. If your node must return **only** JSON, use [`is-json`](/docs/guides/evaluate-json) instead.
+
+### Validate tool calls for agent workflows
+
+If your n8n setup uses an OpenAI-compatible agent that should call tools before continuing, validate that Promptfoo sees a real tool call and that it matches your schema.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - file://./prompts/n8n-calendar-agent.txt
+
+providers:
+  - id: openai:gpt-5-mini
+    config:
+      tools: file://./tools/calendar-tools.yaml
+
+tests:
+  - vars:
+      user_request: "Move tomorrow's standup to 3pm and notify the team"
+    assert:
+      - type: finish-reason
+        value: tool_calls
+      - type: is-valid-openai-tools-call
+```
+
+That pattern is especially useful when your n8n workflow branches on whether the LLM produced a tool invocation versus a final answer.
+
+### Useful building blocks
+
+- [`/docs/configuration/tools`](/docs/configuration/tools) for defining tool schemas
+- [`/docs/guides/evaluate-json`](/docs/guides/evaluate-json) for JSON and schema assertions
+- [`examples/openai-tools-call`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) for a concrete OpenAI tool-calling config
+- [`examples/eval-tool-use`](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use) for finish-reason and tool-use checks across providers
+
 ## Advanced patterns
 
 ### Run different configs in parallel

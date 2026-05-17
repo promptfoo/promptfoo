@@ -1,18 +1,11 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
-import type { ProviderOptions } from '@promptfoo/types';
-
-const mockUpdateConfig = vi.fn();
-vi.mock('../../hooks/useRedTeamConfig', () => ({
-  useRedTeamConfig: () => ({
-    config: { testGenerationInstructions: '' },
-    updateConfig: mockUpdateConfig,
-  }),
-}));
+import type { Inputs, ProviderOptions } from '@promptfoo/types';
 
 vi.mock('./ExtensionEditor', () => ({
   default: ({
@@ -45,8 +38,8 @@ vi.mock('./InputsEditor', () => ({
     onChange,
     compact,
   }: {
-    inputs?: Record<string, string>;
-    onChange: (inputs: Record<string, string> | undefined) => void;
+    inputs?: Inputs;
+    onChange: (inputs: Inputs | undefined) => void;
     compact?: boolean;
   }) => {
     return (
@@ -82,11 +75,15 @@ describe('CommonConfigurationOptions', () => {
   });
 
   it('should render the InputsEditor component inside Test Generation section', async () => {
-    renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
+    const user = userEvent.setup();
+    const onPromptsChange = vi.fn();
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onPromptsChange={onPromptsChange} />,
+    );
 
     // Expand the Test Generation collapsible
     const testGenTrigger = screen.getByText('Test Generation');
-    fireEvent.click(testGenTrigger);
+    await user.click(testGenTrigger);
 
     expect(screen.getByTestId('mock-inputs-editor')).toBeInTheDocument();
   });
@@ -111,7 +108,8 @@ describe('CommonConfigurationOptions', () => {
     expect(onValidationChange).toHaveBeenCalledWith(true);
   });
 
-  it('should call onExtensionsChange when ExtensionEditor updates extensions', () => {
+  it('should call onExtensionsChange when ExtensionEditor updates extensions', async () => {
+    const user = userEvent.setup();
     const onExtensionsChange = vi.fn();
 
     renderWithProviders(
@@ -119,24 +117,30 @@ describe('CommonConfigurationOptions', () => {
     );
 
     const editor = screen.getByTestId('mock-extension-editor');
-    editor.click();
+    await user.click(editor);
 
     expect(onExtensionsChange).toHaveBeenCalledWith(['file://new-extension.js:hook']);
   });
 
-  it('should call updateCustomTarget when InputsEditor updates inputs', () => {
+  it('should call updateCustomTarget when InputsEditor updates inputs', async () => {
+    const user = userEvent.setup();
     const updateCustomTarget = vi.fn();
+    const onPromptsChange = vi.fn();
 
     renderWithProviders(
-      <CommonConfigurationOptions {...defaultProps} updateCustomTarget={updateCustomTarget} />,
+      <CommonConfigurationOptions
+        {...defaultProps}
+        updateCustomTarget={updateCustomTarget}
+        onPromptsChange={onPromptsChange}
+      />,
     );
 
     // Expand the Test Generation collapsible
     const testGenTrigger = screen.getByText('Test Generation');
-    fireEvent.click(testGenTrigger);
+    await user.click(testGenTrigger);
 
     const inputsEditor = screen.getByTestId('mock-inputs-editor');
-    inputsEditor.click();
+    await user.click(inputsEditor);
 
     expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
   });
@@ -163,7 +167,8 @@ describe('CommonConfigurationOptions', () => {
     expect(screen.getByDisplayValue('100')).toBeInTheDocument();
   });
 
-  it('should call updateCustomTarget when delay is changed', () => {
+  it('should call updateCustomTarget when delay is changed', async () => {
+    const user = userEvent.setup();
     const updateCustomTarget = vi.fn();
     const targetWithDelay: ProviderOptions = {
       id: 'test-provider',
@@ -180,13 +185,18 @@ describe('CommonConfigurationOptions', () => {
     );
 
     const delayInput = screen.getByDisplayValue('100');
-    fireEvent.change(delayInput, { target: { value: '200' } });
+    await user.click(delayInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('200');
 
     expect(updateCustomTarget).toHaveBeenCalledWith('delay', 200);
   });
 
   it('should render Test Generation collapsible section', () => {
-    renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
+    const onPromptsChange = vi.fn();
+    renderWithProviders(
+      <CommonConfigurationOptions {...defaultProps} onPromptsChange={onPromptsChange} />,
+    );
 
     expect(screen.getByText('Test Generation')).toBeInTheDocument();
     expect(
@@ -195,26 +205,32 @@ describe('CommonConfigurationOptions', () => {
   });
 
   describe('handleInputsChange', () => {
-    it('should generate JSON template with template variables when inputs are provided', () => {
+    it('should generate JSON template with template variables when inputs are provided', async () => {
+      const user = userEvent.setup();
       const updateCustomTarget = vi.fn();
+      const onPromptsChange = vi.fn();
 
       renderWithProviders(
-        <CommonConfigurationOptions {...defaultProps} updateCustomTarget={updateCustomTarget} />,
+        <CommonConfigurationOptions
+          {...defaultProps}
+          updateCustomTarget={updateCustomTarget}
+          onPromptsChange={onPromptsChange}
+        />,
       );
 
       // Expand Test Generation section
       const testGenTrigger = screen.getByText('Test Generation');
-      fireEvent.click(testGenTrigger);
+      await user.click(testGenTrigger);
 
       // Simulate InputsEditor calling onChange with inputs
       const inputsEditor = screen.getByTestId('mock-inputs-editor');
-      fireEvent.click(inputsEditor);
+      await user.click(inputsEditor);
 
       // Should call updateCustomTarget with inputs
       expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
 
-      // Should call updateConfig with JSON template
-      expect(mockUpdateConfig).toHaveBeenCalledWith('prompts', ['{"testVar":"{{testVar}}"}']);
+      // Should call onPromptsChange with JSON template
+      expect(onPromptsChange).toHaveBeenCalledWith(['{"testVar":"{{testVar}}"}']);
     });
 
     it('should generate template preserving object key order for multiple variables', () => {

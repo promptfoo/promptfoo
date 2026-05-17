@@ -8,6 +8,7 @@ describe('getSeverityColor', () => {
     { severity: Severity.High, expected: 'hsl(var(--severity-high))' },
     { severity: Severity.Medium, expected: 'hsl(var(--severity-medium))' },
     { severity: Severity.Low, expected: 'hsl(var(--severity-low))' },
+    { severity: Severity.Informational, expected: 'hsl(var(--severity-informational))' },
   ])('should return CSS variable for $severity', ({ severity, expected }) => {
     const result = getSeverityColor(severity);
     expect(result).toBe(expected);

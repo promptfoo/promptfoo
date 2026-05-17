@@ -125,9 +125,9 @@ export const TOOL_DEFINITIONS: ToolMetadata[] = [
   {
     name: 'run_evaluation',
     description:
-      'Run an eval from a promptfoo config with optional test case filtering and pagination',
+      'Run an eval from a promptfoo config with optional test case index filtering and pagination',
     parameters:
-      'configPath?: string, testCaseIndices?: number | number[] | {start, end}, promptFilter?: string | string[], providerFilter?: string | string[], maxConcurrency?: number (1-20), timeoutMs?: number (1s-5min), resultLimit?: number (1-100, default: 20), resultOffset?: number',
+      'configPath?: string, testCaseIndices?: number | number[] | {start, end} (zero-based, end exclusive), promptFilter?: string | string[], providerFilter?: string | string[], maxConcurrency?: number (1-20), timeoutMs?: number (1s-5min), resultLimit?: number (1-100, default: 20), resultOffset?: number',
     annotations: { readOnlyHint: false, idempotentHint: false, longRunningHint: true },
     category: 'evaluation',
   },

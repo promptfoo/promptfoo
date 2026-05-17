@@ -33,16 +33,18 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface SessionEndpointConfigProps {
   session?: {
     url?: string;
     method?: 'GET' | 'POST';
     headers?: Record<string, string>;
-    body?: Record<string, any> | string;
+    body?: Record<string, unknown> | string;
     responseParser?: string;
   };
   onUpdate: (session: SessionEndpointConfigProps['session']) => void;
@@ -55,7 +57,7 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
       : [{ key: '', value: '' }],
   );
 
-  const updateSession = (field: string, value: any) => {
+  const updateSession = (field: string, value: unknown) => {
     onUpdate({
       ...session,
       [field]: value,
@@ -64,15 +66,12 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
 
   const updateHeaders = (newHeaders: Array<{ key: string; value: string }>) => {
     setHeaders(newHeaders);
-    const headersObj = newHeaders.reduce(
-      (acc, { key, value }) => {
-        if (key.trim()) {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    const headersObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+      if (key.trim()) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
     updateSession('headers', Object.keys(headersObj).length > 0 ? headersObj : undefined);
   };
 
@@ -156,7 +155,10 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
         </p>
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div key={index} className="flex items-center gap-2">
+            <div
+              key={index}
+              className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center"
+            >
               <Input
                 value={header.key}
                 onChange={(e) => updateHeader(index, 'key', e.target.value)}
@@ -173,8 +175,9 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label={`Remove header ${index + 1}`}
                 onClick={() => removeHeader(index)}
-                className="shrink-0"
+                className="self-end shrink-0 sm:self-auto"
               >
                 <Trash2 className="size-4 text-muted-foreground" />
               </Button>
@@ -273,9 +276,13 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
 };
 
 interface SessionsTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+}
+
+interface SessionRequest {
+  prompt?: string;
 }
 
 interface TestResult {
@@ -285,10 +292,10 @@ interface TestResult {
   error?: string;
   details?: {
     sessionId?: string;
-    request1?: any;
-    response1?: any;
-    request2?: any;
-    response2?: any;
+    request1?: SessionRequest;
+    response1?: unknown;
+    request2?: SessionRequest;
+    response2?: unknown;
     sessionSource?: string;
     hasSessionIdTemplate?: boolean;
     hasSessionParser?: boolean;
@@ -340,8 +347,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
         body: JSON.stringify({
           provider: selectedTarget,
           sessionConfig: {
-            sessionSource: selectedTarget.config.sessionSource,
-            sessionParser: selectedTarget.config.sessionParser,
+            sessionSource: selectedTarget.config?.sessionSource,
+            sessionParser: selectedTarget.config?.sessionParser,
           },
           // Pass the main input variable for multi-input configurations
           mainInputVariable,
@@ -381,55 +388,18 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
     <div className="space-y-5">
       {/* Stateful Configuration Section */}
       <div>
-        <p className="mb-0.5 text-sm font-medium">Does your system maintain conversation state?</p>
-        <p className="mb-3 text-sm text-muted-foreground">
-          This determines whether your application remembers context from previous messages in a
-          conversation.
-        </p>
+        <p className="mb-3 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
 
-        <div className="space-y-1">
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-            <input
-              type="radio"
-              name="stateful"
-              value="true"
-              checked={String(selectedTarget.config.stateful ?? false) === 'true'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm">Yes - my system is stateful</p>
-              <p className="text-xs text-muted-foreground">
-                The system maintains conversation history and context across messages
-              </p>
-            </div>
-          </label>
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
-            <input
-              type="radio"
-              name="stateful"
-              value="false"
-              checked={String(selectedTarget.config.stateful ?? false) === 'false'}
-              onChange={(e) => {
-                updateCustomTarget('stateful', e.target.value === 'true');
-                setTestResult(null);
-              }}
-              className="mt-0.5"
-            />
-            <div>
-              <p className="text-sm">No - my system is not stateful</p>
-              <p className="text-xs text-muted-foreground">
-                The full conversation history must be sent with every request
-              </p>
-            </div>
-          </label>
-        </div>
+        <StatefulnessRadioGroup
+          value={String(selectedTarget.config?.stateful ?? false)}
+          onValueChange={(value) => {
+            updateCustomTarget('stateful', value === 'true');
+            setTestResult(null);
+          }}
+        />
 
         {/* Info alert when system is not stateful */}
-        {selectedTarget.config.stateful === false && (
+        {selectedTarget.config?.stateful === false && (
           <Alert variant="info" className="mt-3">
             <Info className="size-4" />
             <AlertContent>
@@ -444,7 +414,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       </div>
 
       {/* Only show session management options if the system is stateful */}
-      {selectedTarget.config.stateful !== false && (
+      {selectedTarget.config?.stateful !== false && (
         <>
           <Separator />
 
@@ -462,8 +432,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   name="sessionSource"
                   value="server"
                   checked={
-                    selectedTarget.config.sessionSource === 'server' ||
-                    !selectedTarget.config.sessionSource
+                    selectedTarget.config?.sessionSource === 'server' ||
+                    !selectedTarget.config?.sessionSource
                   }
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
@@ -487,7 +457,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   type="radio"
                   name="sessionSource"
                   value="client"
-                  checked={selectedTarget.config.sessionSource === 'client'}
+                  checked={selectedTarget.config?.sessionSource === 'client'}
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
                     if (e.target.value === 'client') {
@@ -510,12 +480,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                   type="radio"
                   name="sessionSource"
                   value="endpoint"
-                  checked={selectedTarget.config.sessionSource === 'endpoint'}
+                  checked={selectedTarget.config?.sessionSource === 'endpoint'}
                   onChange={(e) => {
                     updateCustomTarget('sessionSource', e.target.value);
                     updateCustomTarget('sessionParser', undefined);
                     // Initialize session endpoint config if not present
-                    if (!selectedTarget.config.session) {
+                    if (!selectedTarget.config?.session) {
                       updateCustomTarget('session', {
                         url: '',
                         method: 'POST',
@@ -537,8 +507,8 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           </div>
 
           {/* Server-generated session ID configuration */}
-          {(selectedTarget.config.sessionSource === 'server' ||
-            selectedTarget.config.sessionSource == null) && (
+          {(selectedTarget.config?.sessionSource === 'server' ||
+            selectedTarget.config?.sessionSource == null) && (
             <>
               <div>
                 <Label htmlFor="session-parser" className="text-sm font-medium">
@@ -550,7 +520,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 </p>
                 <Input
                   id="session-parser"
-                  value={selectedTarget.config.sessionParser || ''}
+                  value={(selectedTarget.config?.sessionParser as string) || ''}
                   placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
                   onChange={(e) => {
                     updateCustomTarget('sessionParser', e.target.value);
@@ -588,7 +558,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           )}
 
           {/* Client-generated session ID configuration */}
-          {selectedTarget.config.sessionSource === 'client' && (
+          {selectedTarget.config?.sessionSource === 'client' && (
             <Alert variant="info">
               <Info className="size-4" />
               <AlertContent>
@@ -621,9 +591,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           )}
 
           {/* Session endpoint configuration */}
-          {selectedTarget.config.sessionSource === 'endpoint' && (
+          {selectedTarget.config?.sessionSource === 'endpoint' && (
             <SessionEndpointConfig
-              session={selectedTarget.config.session}
+              session={selectedTarget.config?.session as SessionEndpointConfigProps['session']}
               onUpdate={(session) => {
                 updateCustomTarget('session', session);
                 setTestResult(null);
@@ -651,7 +621,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={isTestRunning || !selectedTarget.config.url}
+                disabled={isTestRunning || !selectedTarget.config?.url}
                 size="sm"
                 className="mb-3"
               >
@@ -663,7 +633,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
-              {!selectedTarget.config.url && (
+              {!selectedTarget.config?.url && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
                   <AlertContent>

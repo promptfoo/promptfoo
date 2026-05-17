@@ -45,7 +45,7 @@ export default function CustomIntentSection() {
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(() => {
     const plugin = config.plugins.find(
       (p) => typeof p === 'object' && 'id' in p && p.id === 'intent',
-    ) as { id: string; config: any } | undefined;
+    ) as { id: string; config: PluginConfig } | undefined;
     return plugin?.config || { intent: [''] };
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -83,7 +83,7 @@ export default function CustomIntentSection() {
             : Array.isArray(intent) && intent.length > 0,
         );
         if (nonEmptyIntents.length === 0) {
-          updatePlugins([...otherPlugins] as Array<string | { id: string; config: any }>);
+          updatePlugins([...otherPlugins] as Array<string | { id: string; config: PluginConfig }>);
           return;
         }
 
@@ -95,7 +95,7 @@ export default function CustomIntentSection() {
         };
 
         updatePlugins([...otherPlugins, intentPlugin] as Array<
-          string | { id: string; config: any }
+          string | { id: string; config: PluginConfig }
         >);
       }, DEBOUNCE_MS);
 
@@ -233,7 +233,7 @@ export default function CustomIntentSection() {
         const records = parse(text, {
           skip_empty_lines: true,
           columns: true,
-        });
+        }) as Array<Record<string, unknown>>;
 
         // Get the first column header name for more reliable parsing
         const headers = Object.keys(records[0] || {});
@@ -243,7 +243,7 @@ export default function CustomIntentSection() {
         const firstColumn = headers[0];
 
         return records
-          .map((record: any) => record[firstColumn] as string)
+          .map((record) => record[firstColumn] as string)
           .filter((intent: string) => intent?.trim() !== '');
       } catch (error) {
         throw new Error(
@@ -363,6 +363,7 @@ export default function CustomIntentSection() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Dismiss upload error"
                 className="size-5"
                 onClick={() => setUploadError(null)}
               >
@@ -434,6 +435,7 @@ export default function CustomIntentSection() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove intent ${actualIndex + 1}`}
                     onClick={() => removeArrayItem('intent', index)}
                     disabled={(localConfig.intent || []).length <= 1}
                     className="self-start"
@@ -541,7 +543,7 @@ export default function CustomIntentSection() {
                 </Alert>
               )}
             </div>
-            <div className="max-h-[300px] overflow-auto rounded-lg border bg-background">
+            <div className="max-h-[300px] overflow-auto rounded-lg border border-border bg-background">
               {previewDialog?.intents.slice(0, 10).map((intent, index) => (
                 <React.Fragment key={index}>
                   <div className="px-4 py-3">

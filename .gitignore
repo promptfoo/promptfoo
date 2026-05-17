@@ -14,6 +14,7 @@ dist
 .vite
 **/*.tsbuildinfo
 task.md
+!examples/openai-agents-advanced/workspace/task.md
 plan.md
 
 # pnpm-specific
@@ -26,6 +27,9 @@ __pycache__
 # Jest and test-related
 .coverage
 .ruff_cache
+coverage/
+src/app/coverage/
+site/coverage/
 
 # IDE-specific
 .idea/

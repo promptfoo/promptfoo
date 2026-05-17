@@ -5,11 +5,12 @@
  * This is extracted to avoid circular dependency issues.
  */
 
-import type { Agent } from 'http';
+import { createHmac } from 'crypto';
 
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
@@ -27,6 +28,87 @@ export interface BedrockOptions {
   trace?: Trace;
   showThinking?: boolean;
   endpoint?: string;
+}
+
+const BEDROCK_CACHE_KEY_HMAC_KEY = 'promptfoo:bedrock:cache-key:v1';
+
+function hashBedrockCacheValue(value: unknown) {
+  return createHmac('sha256', BEDROCK_CACHE_KEY_HMAC_KEY)
+    .update(JSON.stringify(value) ?? '')
+    .digest('hex');
+}
+
+function getNonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function fingerprintBedrockAuthValue(authSource: string, value: string, index: number) {
+  return createHmac('sha256', value)
+    .update(`${BEDROCK_CACHE_KEY_HMAC_KEY}:${authSource}:${index}`)
+    .digest('hex');
+}
+
+function getBedrockAuthCacheNamespace(authSource: string, values: (string | undefined)[]) {
+  return hashBedrockCacheValue([
+    authSource,
+    ...values.map((value, index) =>
+      value ? fingerprintBedrockAuthValue(authSource, value, index) : undefined,
+    ),
+  ]);
+}
+
+function createBedrockAuthCacheMetadata({ config }: { config: BedrockOptions }) {
+  const bearerConfig = getNonEmptyString(config.apiKey);
+  const bearerEnv = getNonEmptyString(getEnvString('AWS_BEARER_TOKEN_BEDROCK'));
+  const accessKeyId = getNonEmptyString(config.accessKeyId);
+  const secretAccessKey = getNonEmptyString(config.secretAccessKey);
+  const sessionToken = getNonEmptyString(config.sessionToken);
+  const profile = getNonEmptyString(config.profile);
+  const hasExplicitCredentials = Boolean(accessKeyId && secretAccessKey);
+  const authSource = hasExplicitCredentials
+    ? 'explicit-credentials'
+    : bearerConfig
+      ? 'bearer-config'
+      : bearerEnv
+        ? 'bearer-env'
+        : profile
+          ? 'profile'
+          : 'default';
+  const credentialNamespace =
+    authSource === 'bearer-config'
+      ? getBedrockAuthCacheNamespace(authSource, [bearerConfig])
+      : authSource === 'bearer-env'
+        ? getBedrockAuthCacheNamespace(authSource, [bearerEnv])
+        : authSource === 'explicit-credentials'
+          ? getBedrockAuthCacheNamespace(authSource, [accessKeyId, secretAccessKey, sessionToken])
+          : authSource === 'profile'
+            ? getBedrockAuthCacheNamespace(authSource, [profile])
+            : undefined;
+
+  return {
+    authSource,
+    credentialNamespace,
+    endpoint: config.endpoint,
+    hasExplicitCredentials,
+    hasSessionToken: hasExplicitCredentials && Boolean(sessionToken),
+  };
+}
+
+export function createBedrockCacheKeyHash({
+  config,
+  params,
+  region,
+}: {
+  config: BedrockOptions;
+  params: unknown;
+  region: string;
+}) {
+  const authFingerprint = hashBedrockCacheValue(createBedrockAuthCacheMetadata({ config }));
+
+  return `${authFingerprint}:${hashBedrockCacheValue({
+    params,
+    region,
+  })}`;
 }
 
 export abstract class AwsBedrockGenericProvider {
@@ -59,6 +141,10 @@ export abstract class AwsBedrockGenericProvider {
 
   toString(): string {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
+  }
+
+  requiresApiKey(): boolean {
+    return false;
   }
 
   protected getApiKey(): string | undefined {
@@ -108,45 +194,7 @@ export abstract class AwsBedrockGenericProvider {
 
   async getBedrockInstance() {
     if (!this.bedrock) {
-      let handler;
-      const apiKey = this.getApiKey();
-
-      // Create request handler for proxy or API key scenarios
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-          const { ProxyAgent } = await import('proxy-agent');
-
-          // Create handler with proxy support if needed
-          const proxyAgent =
-            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
-              ? new ProxyAgent()
-              : undefined;
-
-          handler = new NodeHttpHandler({
-            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
-            requestTimeout: 300000, // 5 minutes
-          });
-
-          // Add Bearer token middleware for API key authentication
-          if (apiKey) {
-            const originalHandle = handler.handle.bind(handler);
-            handler.handle = async (request: any, options?: any) => {
-              // Add Authorization header with Bearer token
-              request.headers = {
-                ...request.headers,
-                Authorization: `Bearer ${apiKey}`,
-              };
-              return originalHandle(request, options);
-            };
-          }
-        } catch {
-          const reason = apiKey
-            ? 'API key authentication requires the @smithy/node-http-handler package'
-            : 'Proxy configuration requires the @smithy/node-http-handler package';
-          throw new Error(`${reason}. Please install it in your project or globally.`);
-        }
-      }
+      const handler = await createBedrockRequestHandler({ apiKey: this.getApiKey() });
 
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
@@ -156,8 +204,8 @@ export abstract class AwsBedrockGenericProvider {
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
+          requestHandler: handler,
           ...(credentials ? { credentials } : {}),
-          ...(handler ? { requestHandler: handler } : {}),
           ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 

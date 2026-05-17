@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import http from 'http';
 import https from 'https';
 import path from 'path';
@@ -13,22 +13,45 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
+import {
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+  pathExists,
+} from '../util/file';
+import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
-import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
-import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
+import {
+  isSecretField,
+  looksLikeSecret,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  HttpMultipartConfigSchema,
+  type RenderedHttpMultipartBody,
+  renderHttpMultipartBody,
+} from './httpMultipart';
 import {
   createTransformRequest,
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import {
+  getRequestTimeoutMs,
+  type ToolFormat,
+  transformToolChoice,
+  transformTools,
+} from './shared';
+import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+
+export { loadTransformModule } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -323,7 +346,7 @@ export async function generateSignature(
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
+          privateKey = await fs.readFile(resolvedPath, 'utf8');
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
         } else if (signatureAuth.certificateContent) {
@@ -367,7 +390,7 @@ export async function generateSignature(
         } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = fs.readFileSync(resolvedPath);
+          keystoreData = await fs.readFile(resolvedPath);
         } else {
           throw new Error(
             'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
@@ -463,7 +486,7 @@ export async function generateSignature(
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
-                const stat = await fs.promises.stat(resolvedPath);
+                const stat = await fs.stat(resolvedPath);
                 logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
               } catch (e) {
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
@@ -525,15 +548,20 @@ export async function generateSignature(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
 
-              // Read the private key directly from the key file
-              if (!fs.existsSync(resolvedKeyPath)) {
-                throw new Error(`Key file not found: ${resolvedKeyPath}`);
-              }
-              if (!fs.existsSync(resolvedCertPath)) {
+              // Verify the cert path resolves; the cert contents aren't consumed
+              // here, only its presence is validated for early operator feedback.
+              if (!(await pathExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
-
-              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              try {
+                // Read the key directly — readFile surfaces ENOENT with the path.
+                privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+              } catch (err) {
+                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                  throw new Error(`Key file not found: ${resolvedKeyPath}`);
+                }
+                throw err;
+              }
               logger.debug(
                 `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
               );
@@ -791,13 +819,29 @@ const ApiKeyAuthSchema = z.object({
   keyName: z.string(),
 });
 
+const FileAuthSchema = z.object({
+  type: z.literal('file'),
+  path: z.string().min(1),
+});
+
 const AuthSchema = z.union([
   OAuthClientCredentialsSchema,
   OAuthPasswordSchema,
   BasicAuthSchema,
   BearerAuthSchema,
   ApiKeyAuthSchema,
+  FileAuthSchema,
 ]);
+
+const FileAuthResultSchema = z.object({
+  token: z.string().min(1),
+  expiration: z.number().finite().nullable().optional(),
+});
+
+type FileAuthResult = {
+  token: string;
+  expiration?: number;
+};
 
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
@@ -826,8 +870,24 @@ export const HttpProviderConfigSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
+  multipart: HttpMultipartConfigSchema.optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
+  /**
+   * Tools to make available to the model, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
+   */
+  tools: z.array(z.any()).optional(),
+  /**
+   * Tool choice configuration, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
+   */
+  tool_choice: z.any().optional(),
+  /**
+   * Transform OpenAI-format tools/tool_choice to provider-specific format.
+   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
+   */
+  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
   useHttps: z
     .boolean()
     .optional()
@@ -839,7 +899,7 @@ export const HttpProviderConfigSchema = z.object({
    */
   session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server']).optional(),
+  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
   stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
@@ -883,49 +943,63 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+function removeMultipartContentType(headers: Record<string, string>): void {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-type') {
+      delete headers[key];
+    }
+  }
+}
+
+function sanitizeMultipartFields(fields: RenderedHttpMultipartBody['fields']) {
+  return fields.map((field) => ({
+    ...field,
+    value: isSecretField(field.field) || looksLikeSecret(field.value) ? REDACTED : field.value,
+  }));
+}
+
+function sanitizeMultipartFiles(files: RenderedHttpMultipartBody['files']) {
+  return files.map((file) => ({
+    field: isSecretField(file.field) ? REDACTED : file.field,
+    filename: looksLikeSecret(file.filename) ? REDACTED : file.filename,
+    contentType: file.contentType,
+    sizeBytes: file.sizeBytes,
+    source: file.source,
+  }));
+}
+
+function validateMultipartConfig(config: HttpProviderConfig): void {
+  if (!config.multipart) {
+    return;
+  }
+  if (config.request) {
+    throw new Error('HTTP provider config cannot include both request and multipart');
+  }
+  if (config.body != null) {
+    throw new Error('HTTP provider config cannot include both body and multipart');
+  }
+}
+
 interface SessionParserData {
   headers?: Record<string, string> | null;
   body?: Record<string, any> | string | null;
 }
 
-/**
- * Loads a module from a file:// reference if needed
- * This function should be called before passing transforms to createTransformResponse/createTransformRequest
- *
- * @param transform - The transform config (string or function)
- * @returns The loaded function, or the original value if not a file:// reference
- */
-export async function loadTransformModule(
-  transform: string | Function | undefined,
-): Promise<string | Function | undefined> {
-  if (!transform) {
-    return transform;
+function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function parseFileAuthReference(filePath: string): { filePath: string; functionName?: string } {
+  return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
+}
+
+function formatFileAuthFreshness(expiration?: number | null): string {
+  if (expiration == null) {
+    return 'never expires';
   }
-  if (typeof transform === 'function') {
-    return transform;
-  }
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  }
-  // For string expressions, return as-is
-  return transform;
+
+  const freshForSeconds = Math.max(0, Math.ceil((expiration - Date.now()) / 1000));
+  return `expires in ${freshForSeconds} seconds`;
 }
 
 export async function createSessionParser(
@@ -938,14 +1012,7 @@ export async function createSessionParser(
     return (response) => parser(response);
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(parser);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
@@ -1004,24 +1071,19 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        // Only parse strings that are clearly JSON objects or arrays
-        // This preserves strings that would parse to primitives (numbers, booleans, null)
         const trimmed = obj.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          // Parse JSON objects and arrays (e.g. from pre-serialized template vars)
           try {
             const parsed = JSON.parse(obj);
-            // Only return parsed value if it's an object or array
-            // This prevents primitive values (numbers, booleans, null) from being converted
             if (typeof parsed === 'object' && parsed !== null) {
               return parsed;
             }
-            // If it parsed to a primitive, keep the original string
             return obj;
           } catch {
             return obj;
           }
         }
-        // Not a JSON object/array, return as-is
         return obj;
       }
       return obj;
@@ -1119,12 +1181,12 @@ function parseRawRequest(input: string) {
     return {
       method: requestModel.method,
       url: requestModel.target,
-      headers: requestModel.headers.reduce(
+      headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
-        {} as Record<string, string>,
+        {},
       ),
       body: requestModel.body,
     };
@@ -1203,14 +1265,7 @@ export async function createValidateStatus(
 
   if (typeof validator === 'string') {
     if (validator.startsWith('file://')) {
-      let filename = validator.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
+      const { filename, functionName } = parseFileTransformReference(validator);
       try {
         const requiredModule = await importModule(
           path.resolve(cliState.basePath || '', filename),
@@ -1265,18 +1320,44 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
  */
 async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
   const tlsOptions: https.AgentOptions = {};
+  const basePath = cliState.basePath || '';
+  const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+
+  // Kick off all independent file reads in parallel. JKS and cert/key are
+  // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
+  type ReadResult = { resolved: string; contents: string | Buffer } | undefined;
+  const readUtf8 = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved, 'utf8') };
+  };
+  const readBuffer = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved) };
+  };
+
+  const [caResult, certResult, keyResult, pfxResult] = await Promise.all([
+    tlsConfig.ca ? Promise.resolve(undefined) : readUtf8(tlsConfig.caPath),
+    !usingJks && !tlsConfig.cert ? readUtf8(tlsConfig.certPath) : Promise.resolve(undefined),
+    !usingJks && !tlsConfig.key ? readUtf8(tlsConfig.keyPath) : Promise.resolve(undefined),
+    tlsConfig.pfx ? Promise.resolve(undefined) : readBuffer(tlsConfig.pfxPath),
+  ]);
 
   // Load CA certificates
   if (tlsConfig.ca) {
     tlsOptions.ca = tlsConfig.ca;
-  } else if (tlsConfig.caPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
-    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
-    logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
+  } else if (caResult) {
+    tlsOptions.ca = caResult.contents;
+    logger.debug(`[HTTP Provider] Loaded CA certificate from ${caResult.resolved}`);
   }
 
   // Handle JKS certificates for TLS (extract cert and key)
-  if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
+  if (usingJks) {
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
@@ -1285,7 +1366,6 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       });
       const jks = jksModule as any;
 
-      let keystoreData: Buffer;
       const keystorePassword =
         (tlsConfig as any).keystorePassword ||
         tlsConfig.passphrase ||
@@ -1297,15 +1377,14 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         );
       }
 
+      let keystoreData: Buffer;
       if ((tlsConfig as any).jksContent) {
-        // Use base64 encoded content
         logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
         keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
       } else if ((tlsConfig as any).jksPath) {
-        // Use file path
-        const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
+        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = fs.readFileSync(resolvedPath);
+        keystoreData = await fs.readFile(resolvedPath);
       } else {
         throw new Error('JKS content or path is required');
       }
@@ -1352,19 +1431,17 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     // Load client certificate (non-JKS)
     if (tlsConfig.cert) {
       tlsOptions.cert = tlsConfig.cert;
-    } else if (tlsConfig.certPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+    } else if (certResult) {
+      tlsOptions.cert = certResult.contents;
+      logger.debug(`[HTTP Provider] Loaded client certificate from ${certResult.resolved}`);
     }
 
     // Load private key (non-JKS)
     if (tlsConfig.key) {
       tlsOptions.key = tlsConfig.key;
-    } else if (tlsConfig.keyPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+    } else if (keyResult) {
+      tlsOptions.key = keyResult.contents;
+      logger.debug(`[HTTP Provider] Loaded private key from ${keyResult.resolved}`);
     }
   }
 
@@ -1386,10 +1463,9 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.pfx = tlsConfig.pfx;
       logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
     }
-  } else if (tlsConfig.pfxPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = fs.readFileSync(resolvedPath);
-    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  } else if (pfxResult) {
+    tlsOptions.pfx = pfxResult.contents;
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${pfxResult.resolved}`);
   }
 
   // Set passphrase if provided
@@ -1441,7 +1517,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
   private lastToken?: string;
   private lastTokenExpiresAt?: number;
-  private tokenRefreshPromise?: Promise<void>;
+  private tokenRefreshLock?: TokenRefreshLock;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
   /**
@@ -1456,6 +1532,7 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
@@ -1489,7 +1566,7 @@ export class HttpProvider implements ApiProvider {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
       invariant(
-        this.config.body || this.config.method === 'GET',
+        this.config.body || this.config.multipart || this.config.method === 'GET',
         `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
           this.config,
         )}`,
@@ -1575,67 +1652,24 @@ export class HttpProvider implements ApiProvider {
               : undefined,
           }
         : baseConfig;
-    const now = Date.now();
-
-    // Check if token exists and is still valid (with buffer before expiry)
-    if (
-      this.lastToken &&
-      this.lastTokenExpiresAt &&
-      now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt
-    ) {
+    if (this.hasValidCachedToken()) {
       logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
       return;
     }
 
-    // If a refresh is already in progress, wait for it instead of making a new request
-    if (this.tokenRefreshPromise != null) {
-      logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
-      try {
-        await this.tokenRefreshPromise;
-        // If we successfully waited for the refresh, verify token is still valid
-        // (it might have expired while we were waiting)
-        const stillValid =
-          this.lastToken &&
-          this.lastTokenExpiresAt &&
-          Date.now() + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
-        if (stillValid) {
-          return;
-        }
-        // Token expired while waiting, fall through to refresh again
-        logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
-      } catch {
-        // If the in-progress refresh failed, we'll try again below
-        logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
-      }
-    }
-
-    // Start a new token refresh and store the promise for deduplication
-    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
-    const refreshPromise = this.performTokenRefresh(oauthConfig, now);
-    this.tokenRefreshPromise = refreshPromise;
-
-    try {
-      await refreshPromise;
-    } finally {
-      // Only clear the promise if it's still the one we created (prevents race conditions)
-      if (this.tokenRefreshPromise === refreshPromise) {
-        this.tokenRefreshPromise = undefined;
-      }
-    }
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
+    await this.refreshTokenWithLock(() => this.performTokenRefresh(oauthConfig));
   }
 
-  private async performTokenRefresh(
-    oauthConfig: {
-      grantType: string;
-      clientId?: string;
-      clientSecret?: string;
-      tokenUrl: string;
-      scopes?: string[];
-      username?: string;
-      password?: string;
-    },
-    now: number,
-  ): Promise<void> {
+  private async performTokenRefresh(oauthConfig: {
+    grantType: string;
+    clientId?: string;
+    clientSecret?: string;
+    tokenUrl: string;
+    scopes?: string[];
+    username?: string;
+    password?: string;
+  }): Promise<void> {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
@@ -1677,7 +1711,7 @@ export class HttpProvider implements ApiProvider {
       const response = await fetchWithCache(
         oauthConfig.tokenUrl,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         true, // Always bust cache for token requests
         0, // No retries for token requests
@@ -1700,7 +1734,7 @@ export class HttpProvider implements ApiProvider {
       // Calculate expiration time
       // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
       const expiresInSeconds = tokenData.expires_in || 3600;
-      this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
+      this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
 
       logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
     } catch (err) {
@@ -1709,6 +1743,128 @@ export class HttpProvider implements ApiProvider {
     }
 
     invariant(this.lastToken, 'OAuth token should be defined at this point');
+  }
+
+  private hasValidCachedToken(now = Date.now()): boolean {
+    if (!this.lastToken) {
+      return false;
+    }
+
+    if (this.lastTokenExpiresAt == null) {
+      return this.config.auth?.type === 'file';
+    }
+
+    return now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
+  }
+
+  private async waitForInFlightTokenRefresh(): Promise<boolean> {
+    const refreshPromise = this.tokenRefreshLock?.promise;
+    if (refreshPromise == null) {
+      return false;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
+
+    try {
+      await refreshPromise;
+      if (this.hasValidCachedToken()) {
+        return true;
+      }
+      logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+    } catch {
+      logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
+    }
+
+    return false;
+  }
+
+  private async refreshTokenWithLock(
+    refreshToken: () => Promise<void>,
+    onLockAcquired?: () => void,
+  ): Promise<void> {
+    while (this.tokenRefreshLock != null) {
+      if (await this.waitForInFlightTokenRefresh()) {
+        return;
+      }
+    }
+
+    const refreshLock = { promise: Promise.resolve() as Promise<void> };
+    this.tokenRefreshLock = refreshLock;
+    onLockAcquired?.();
+    refreshLock.promise = refreshToken();
+
+    try {
+      await refreshLock.promise;
+    } finally {
+      // Only clear the lock if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshLock === refreshLock) {
+        this.tokenRefreshLock = undefined;
+      }
+    }
+  }
+
+  private async refreshFileTokenIfNeeded(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'file') {
+      logger.debug('[HTTP Provider Auth]: No file auth configured');
+      return;
+    }
+
+    if (this.hasValidCachedToken()) {
+      logger.debug('[HTTP Provider Auth]: Using cached file auth token');
+      return;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
+    await this.refreshTokenWithLock(
+      () => this.performFileTokenRefresh(prompt, vars, context),
+      () => {
+        logger.debug('[HTTP Provider Auth]: Acquired file auth refresh lock');
+      },
+    );
+  }
+
+  private async performFileTokenRefresh(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    invariant(this.config.auth?.type === 'file', 'File auth should be configured');
+
+    const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
+    const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
+    const authContext: CallApiContextParams = {
+      ...(context ?? {}),
+      prompt: context?.prompt ?? ({ raw: prompt, label: prompt } as CallApiContextParams['prompt']),
+      vars,
+    };
+
+    try {
+      logger.debug(
+        `[HTTP Provider Auth]: Invoking file auth function ${filePath}#${functionName ?? defaultFunctionName}`,
+      );
+      const authFn = await loadFunction<
+        (authContext: CallApiContextParams) => Promise<FileAuthResult> | FileAuthResult
+      >({
+        filePath,
+        functionName,
+        defaultFunctionName,
+      });
+      const result = FileAuthResultSchema.parse(await authFn(authContext));
+      this.lastToken = result.token;
+      this.lastTokenExpiresAt = result.expiration ?? undefined;
+      logger.info(
+        `[HTTP Provider Auth]: Successfully refreshed file auth token (${formatFileAuthFreshness(result.expiration)})`,
+      );
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
+      throw new Error(`Failed to refresh file auth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'File auth token should be defined at this point');
   }
 
   private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
@@ -1853,7 +2009,7 @@ export class HttpProvider implements ApiProvider {
     const response = await fetchWithCache(
       url,
       fetchOptions,
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       true, // Always bust cache for session requests
       this.config.maxRetries,
@@ -1919,6 +2075,9 @@ export class HttpProvider implements ApiProvider {
 
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
+      return {};
+    }
+    if (this.config.multipart) {
       return {};
     }
     if (typeof body === 'object' && body !== null) {
@@ -2039,14 +2198,73 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Transform tools and tool_choice if transformToolsFormat is specified
+    // Merge prompt.config with this.config (prompt.config takes precedence)
+    const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
+    const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
+    const format = this.config.transformToolsFormat as ToolFormat | undefined;
+
+    const transformedTools = format ? transformTools(rawTools, format) : rawTools;
+    const transformedToolChoice = format
+      ? transformToolChoice(rawToolChoice, format)
+      : rawToolChoice;
+
+    // Warn if tool_choice is set but tools is empty or undefined
+    if (
+      transformedToolChoice &&
+      (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
+    ) {
+      logger.warn(
+        '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
+      );
+    }
+
+    // Pre-serialize tools and tool_choice as JSON strings so templates can use
+    // {{ tools }} and {{ tool_choice }} without the dump filter. processJsonBody
+    // will parse JSON strings starting with { or [ back into objects/arrays.
+    // String values (e.g. tool_choice: 'required') are passed through as-is.
+    const serializeForTemplate = (value: unknown): unknown =>
+      typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
+      // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
+      ...(transformedTools === undefined ? {} : { tools: serializeForTemplate(transformedTools) }),
+      ...(transformedToolChoice === undefined
+        ? {}
+        : { tool_choice: serializeForTemplate(transformedToolChoice) }),
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+    } else if (this.config.auth?.type === 'file') {
+      await this.refreshFileTokenIfNeeded(prompt, vars, context);
+      invariant(this.lastToken, 'File auth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+      if (hasOwnProperty(vars, 'expiration')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+      vars.expiration = this.lastTokenExpiresAt;
     }
 
     // Add signature values to vars if signature auth is enabled
@@ -2094,7 +2312,11 @@ export class HttpProvider implements ApiProvider {
       headers.tracestate = context.tracestate;
     }
 
-    this.validateContentTypeAndBody(headers, this.config.body);
+    if (this.config.multipart) {
+      removeMultipartContentType(headers);
+    } else {
+      this.validateContentTypeAndBody(headers, this.config.body);
+    }
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
@@ -2104,14 +2326,19 @@ export class HttpProvider implements ApiProvider {
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
-      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
-      headers,
-      body: determineRequestBody(
-        contentTypeIsJson(headers),
-        transformedPrompt,
-        this.config.body,
+      method: getNunjucksEngine().renderString(
+        this.config.method || (this.config.multipart ? 'POST' : 'GET'),
         vars,
       ),
+      headers,
+      body: this.config.multipart
+        ? undefined
+        : determineRequestBody(
+            contentTypeIsJson(headers),
+            transformedPrompt,
+            this.config.body,
+            vars,
+          ),
       queryParams: (() => {
         const baseQueryParams = this.config.queryParams
           ? Object.fromEntries(
@@ -2138,6 +2365,9 @@ export class HttpProvider implements ApiProvider {
 
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
+    if (this.config.multipart && ['GET', 'HEAD'].includes(method.toUpperCase())) {
+      throw new Error(`HTTP provider ${method} requests cannot use multipart`);
+    }
 
     // Template the base URL first, then construct URL with query parameters
     let url = renderedConfig.url as string;
@@ -2161,6 +2391,17 @@ export class HttpProvider implements ApiProvider {
       config: renderedConfig,
     });
 
+    const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
+      ? await renderHttpMultipartBody(
+          this.config.multipart,
+          {
+            ...vars,
+            prompt: transformedPrompt,
+          },
+          options?.abortSignal,
+        )
+      : undefined;
+
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
@@ -2168,6 +2409,11 @@ export class HttpProvider implements ApiProvider {
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
+        multipartBody && {
+          body: multipartBody.body,
+        }),
+      ...(method !== 'GET' &&
+        !multipartBody &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
             ? typeof renderedConfig.body === 'string'
@@ -2202,9 +2448,9 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
-        context?.bustCache ?? context?.debug,
+        multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
       ));
     } catch (err) {
@@ -2235,7 +2481,14 @@ export class HttpProvider implements ApiProvider {
     };
     if (context?.debug) {
       ret.metadata.transformedRequest = transformedPrompt;
-      ret.metadata.finalRequestBody = renderedConfig.body;
+      if (multipartBody) {
+        ret.metadata.multipart = {
+          fields: sanitizeMultipartFields(multipartBody.fields),
+          files: sanitizeMultipartFiles(multipartBody.files),
+        };
+      } else {
+        ret.metadata.finalRequestBody = renderedConfig.body;
+      }
     }
 
     const rawText = data as string;
@@ -2426,7 +2679,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,
@@ -2476,9 +2729,19 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
 
+    // Always include HTTP status for error detection (e.g., aborting on non-transient errors)
+    ret.metadata = {
+      ...ret.metadata,
+      http: {
+        status,
+        statusText,
+      },
+    };
+
     if (context?.debug) {
       ret.raw = data;
       ret.metadata = {
+        ...ret.metadata,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt

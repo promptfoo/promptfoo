@@ -101,7 +101,7 @@ export default function PluginConfigDialog({
       case 'policy':
         // Show read-only list of all configured policies
         const policyPlugins = redTeamConfig.plugins.filter(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'policy',
         );
 
@@ -137,7 +137,7 @@ export default function PluginConfigDialog({
       case 'intent':
         // Show read-only list of all configured custom intents
         const intentPlugin = redTeamConfig.plugins.find(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'intent',
         );
 
@@ -151,9 +151,9 @@ export default function PluginConfigDialog({
         }
 
         const intents = intentPlugin.config.intent;
-        const flatIntents = intents
-          .flat()
-          .filter((intent: any) => typeof intent === 'string' && intent.trim());
+        const flatIntents = (Array.isArray(intents) ? intents.flat() : [intents]).filter(
+          (intent: unknown) => typeof intent === 'string' && intent.trim(),
+        );
 
         if (flatIntents.length === 0) {
           specificConfig = (
@@ -242,6 +242,7 @@ export default function PluginConfigDialog({
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove ${arrayKeyToLabel(arrayKey)} ${index + 1}`}
                     onClick={() => removeArrayItem(arrayKey, index)}
                   >
                     <Minus className="size-4" />
@@ -348,12 +349,12 @@ export default function PluginConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{getDialogTitle()}</DialogTitle>
         </DialogHeader>
-        <div className="py-4">{renderConfigInputs()}</div>
-        <DialogFooter>
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">{renderConfigInputs()}</div>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>

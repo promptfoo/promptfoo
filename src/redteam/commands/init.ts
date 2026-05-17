@@ -1,9 +1,9 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
@@ -30,6 +30,7 @@ import {
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
+import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
@@ -210,8 +211,8 @@ export async function redteamInit(directory: string | undefined) {
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
-  if (projectDir !== '.' && !fs.existsSync(projectDir)) {
-    fs.mkdirSync(projectDir, { recursive: true });
+  if (projectDir !== '.') {
+    await fs.mkdir(projectDir, { recursive: true });
   }
 
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
@@ -313,6 +314,10 @@ export async function redteamInit(directory: string | undefined) {
       { name: `I'll choose later`, value: 'Other' },
       { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
       { name: 'openai:gpt-5', value: 'openai:gpt-5' },
+      {
+        name: 'anthropic:claude-opus-4-6',
+        value: 'anthropic:messages:claude-opus-4-6',
+      },
       {
         name: 'anthropic:claude-opus-4-5-20251101',
         value: 'anthropic:messages:claude-opus-4-5-20251101',
@@ -614,10 +619,10 @@ export async function redteamInit(directory: string | undefined) {
     providers,
     descriptions: subCategoryDescriptions,
   });
-  fs.writeFileSync(configPath, redteamConfig, 'utf8');
+  await fs.writeFile(configPath, redteamConfig, 'utf8');
 
   if (writeChatPy) {
-    fs.writeFileSync(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
+    await fs.writeFile(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
   }
 
   console.clear();
@@ -648,16 +653,25 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose generate', { value: readyToGenerate });
 
     if (readyToGenerate) {
-      await doGenerateRedteam({
-        purpose,
-        plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-        cache: false,
-        write: false,
-        output: 'redteam.yaml',
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-        numTests,
-      });
+      try {
+        await doGenerateRedteam({
+          purpose,
+          plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+          cache: false,
+          write: false,
+          output: 'redteam.yaml',
+          defaultConfig: {},
+          defaultConfigPath: configPath,
+          numTests,
+        });
+      } catch (error) {
+        if (error instanceof ProbeLimitExceededError) {
+          // doGenerateRedteam already logged the user-facing quota message.
+          process.exitCode = 1;
+          return;
+        }
+        throw error;
+      }
     } else {
       logger.info(
         '\n' +
@@ -702,7 +716,7 @@ export function initCommand(program: Command) {
             await redteamInit(directory);
           }
         } catch (err) {
-          if (err instanceof ExitPromptError) {
+          if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
             logger.info(
               '\n' +
                 chalk.blue(
@@ -715,7 +729,8 @@ export function initCommand(program: Command) {
                 chalk.green('https://www.promptfoo.dev/contact/'),
             );
             await recordOnboardingStep('early exit');
-            process.exit(130);
+            process.exitCode = 130;
+            return;
           } else {
             throw err;
           }

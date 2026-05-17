@@ -8,23 +8,31 @@ prompts:
     Question: {{question}}
 
 providers:
-  # Mistral Large - Most capable Mistral model
-  - id: azure:chat:Mistral-Large-2411
-    label: mistral-large
+  # Mistral Large 3 - Most capable Mistral model
+  - id: azure:chat:Mistral-Large-3
+    label: mistral-large-3
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7
 
-  # Ministral 3B - Fast and lightweight
-  - id: azure:chat:Ministral-3B-2410
-    label: ministral-3b
+  # Mistral Small 2503 - Fast and cost-effective
+  - id: azure:chat:mistral-small-2503
+    label: mistral-small-2503
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 1024
       temperature: 0.7
+
+defaultTest:
+  options:
+    provider:
+      id: azure:chat:Mistral-Large-3
+      config:
+        apiHost: 'your-deployment.services.ai.azure.com'
+        apiVersion: '2025-04-01-preview'
 
 tests:
   - vars:

@@ -24,9 +24,9 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools } from './util';
+import { normalizeTools, stripExecutableToolFileReferences } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -157,6 +157,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    *
    * @returns The API key or undefined
    */
+  requiresApiKey(): boolean {
+    // Vertex AI supports OAuth/ADC authentication without an API key
+    return !this.isVertexMode;
+  }
+
   getApiKey(): string | undefined {
     const { apiKey } = GoogleAuthManager.getApiKey(this.config, this.env, this.isVertexMode);
     if (apiKey) {
@@ -208,9 +213,12 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Get all tools for the request, combining MCP tools and config tools.
    *
    * @param context - Call context with variables
-   * @returns Array of normalized tools
+   * @returns Array of Google-format tools
    */
-  protected async getAllTools(context?: CallApiContextParams): Promise<Tool[]> {
+  protected async getAllTools(
+    context?: CallApiContextParams,
+    options: { skipExecutableToolFiles?: boolean } = {},
+  ): Promise<Tool[]> {
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -218,15 +226,23 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // This allows per-prompt tool overrides in test cases
     const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
     const configTools = promptConfig?.tools ?? this.config.tools;
-    const fileTools = configTools
-      ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
+    const requestTools = options.skipExecutableToolFiles
+      ? stripExecutableToolFileReferences(configTools, context?.vars)
+      : configTools;
+    const loadedTools = requestTools
+      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
       : [];
 
-    // Combine and normalize all tools
-    const allTools = [
-      ...mcpTools,
-      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
-    ];
+    // Transform tools to Google format if needed
+    const transformedTools = Array.isArray(loadedTools)
+      ? (transformTools(loadedTools, 'google') as Tool[])
+      : loadedTools
+        ? [loadedTools]
+        : [];
+    const normalizedTools = normalizeTools(transformedTools);
+
+    // Combine all tools
+    const allTools = [...mcpTools, ...normalizedTools];
 
     return allTools;
   }
@@ -388,7 +404,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Get the request timeout in milliseconds.
    */
   protected getTimeout(): number {
-    return this.config.timeoutMs || REQUEST_TIMEOUT_MS;
+    return this.config.timeoutMs || getRequestTimeoutMs();
   }
 }
 

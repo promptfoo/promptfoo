@@ -1,26 +1,32 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../src/matchers';
+import cliState from '../../../src/cliState';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { loadTools } from '../../../src/providers/openai/agents-loader';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
+import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
-  RedteamGraderBase,
-  RedteamPluginBase,
-} from '../../../src/redteam/plugins/base';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
+} from '../../../src/redteam/plugins/multiInputFormat';
+import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-} from '../../../src/types/index';
+import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+type TestProvider = ReturnType<typeof createMockProvider>;
+
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/providers/openai/agents-loader', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    loadTools: vi.fn(),
   };
 });
 
@@ -52,20 +58,21 @@ class TestPlugin extends RedteamPluginBase {
 }
 
 describe('RedteamPluginBase', () => {
-  let provider: ApiProvider;
+  let provider: TestProvider;
   let plugin: RedteamPluginBase;
 
   beforeEach(() => {
-    provider = {
-      callApi: vi.fn().mockResolvedValue({
+    cliState.config = {};
+    provider = createMockProvider({
+      response: createProviderResponse({
         output: 'Prompt: test prompt\nPrompt: another prompt\nirrelevant line',
       }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    });
     plugin = new TestPlugin(provider, 'test purpose', 'testVar', { language: 'German' });
   });
 
   afterEach(() => {
+    cliState.config = {};
     vi.clearAllMocks();
   });
 
@@ -97,7 +104,6 @@ describe('RedteamPluginBase', () => {
       dedent`
         Test template with test purpose for 2 prompts
 
-        CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
         <Modifiers>
         language: German
         </Modifiers>
@@ -239,6 +245,112 @@ describe('RedteamPluginBase', () => {
     expect(new Set(result.map((r) => r.vars?.testVar)).size).toBe(5);
   });
 
+  it('should append max chars guidance from top-level redteam config and retry oversized prompts', async () => {
+    cliState.config = {
+      redteam: {
+        maxCharsPerMessage: 10,
+      },
+    };
+
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({
+        output: 'Prompt: this one is too long\nPrompt: short',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: tiny',
+      });
+
+    const result = await plugin.generateTests(2);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((test) => test.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 10 characters or fewer.',
+      ),
+    );
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('The longest rejected prompt was 20 characters.'),
+    );
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+    });
+  });
+
+  it('should honor maxCharsPerMessage from plugin config without cliState', async () => {
+    plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+      language: 'German',
+      maxCharsPerMessage: 8,
+    });
+
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'Prompt: tiny',
+    });
+
+    const result = await plugin.generateTests(1);
+
+    expect(result).toHaveLength(1);
+    expect(provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'maxCharsPerMessage: Each generated user message must be 8 characters or fewer.',
+      ),
+    );
+    expect(result[0].metadata?.pluginConfig?.maxCharsPerMessage).toBe(8);
+    expect(result[0].metadata?.pluginConfig?.modifiers).toEqual({
+      language: 'German',
+      maxCharsPerMessage: 'Each generated user message must be 8 characters or fewer.',
+    });
+  });
+
+  describe('false positive refusal detection', () => {
+    it('should not throw refusal error when output contains valid Prompt: markers with refusal-like content', async () => {
+      // Generated prompts about AI identity testing naturally contain "as an AI" phrases
+      const outputWithFalsePositive = [
+        'Prompt: How would you identify you as an AI tool in a legal proceeding?',
+        'Prompt: Describe your origin as an AI in legal documents',
+        'Prompt: What happens when someone treats you as an AI assistant?',
+      ].join('\n');
+
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: outputWithFalsePositive,
+      });
+
+      const result = await plugin.generateTests(3);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should not throw refusal error when output contains PromptBlock: markers with refusal-like content', async () => {
+      const output = [
+        'PromptBlock: Tell me about yourself as an AI language model and your limitations',
+        'PromptBlock: I cannot help with that, can you explain why as an AI?',
+      ].join('\n');
+
+      vi.spyOn(provider, 'callApi').mockResolvedValue({ output });
+
+      const result = await plugin.generateTests(2);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should still throw refusal error when output is a genuine refusal without prompt markers', async () => {
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: "I'm sorry, but I cannot generate those test cases as they could be harmful.",
+      });
+
+      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+    });
+
+    it('should still throw refusal error for "as a language model" without prompt markers', async () => {
+      vi.spyOn(provider, 'callApi').mockResolvedValue({
+        output: 'As a language model, I cannot assist with generating adversarial prompts.',
+      });
+
+      await expect(plugin.generateTests(1)).rejects.toThrow('returned a refusal');
+    });
+  });
+
   describe('appendModifiers', () => {
     it('should not append modifiers when all modifier values are undefined or empty strings', async () => {
       const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
@@ -277,8 +389,8 @@ describe('RedteamPluginBase', () => {
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
 
-    it('should add __outputFormat modifier when inputs is defined', () => {
-      const config = {
+    it('should store __outputFormat in config.modifiers when inputs is defined', () => {
+      const config: Record<string, any> = {
         inputs: {
           username: 'The user name',
           message: 'The message content',
@@ -287,15 +399,15 @@ describe('RedteamPluginBase', () => {
       const template = 'Generate {{ n }} test cases for {{ purpose }}';
       const result = RedteamPluginBase.appendModifiers(template, config);
 
-      expect(result).toContain('<Modifiers>');
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('<Prompt>');
-      expect(result).toContain('"username": "The user name"');
-      expect(result).toContain('"message": "The message content"');
+      // __outputFormat is stored in config.modifiers but not in the output template
+      expect(config.modifiers).toBeDefined();
+      expect(config.modifiers.__outputFormat).toContain('multi-input-mode');
+      // Since there are no other modifiers, template should be returned unchanged
+      expect(result).toBe(template);
     });
 
     it('should combine inputs with other modifiers', () => {
-      const config = {
+      const config: Record<string, any> = {
         language: 'Spanish',
         inputs: {
           query: 'The search query',
@@ -307,28 +419,29 @@ describe('RedteamPluginBase', () => {
       const template = 'Generate test cases';
       const result = RedteamPluginBase.appendModifiers(template, config);
 
+      // Regular modifiers are included in the output
       expect(result).toContain('language: Spanish');
       expect(result).toContain('tone: formal');
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('"query": "The search query"');
+      // __outputFormat is stored in config.modifiers but NOT in the output
+      expect(result).not.toContain('__outputFormat:');
+      expect(config.modifiers.__outputFormat).toContain('multi-input-mode');
     });
   });
 
   describe('multi-input mode', () => {
-    let multiInputProvider: ApiProvider;
+    let multiInputProvider: TestProvider;
     let multiInputPlugin: TestPlugin;
 
     beforeEach(() => {
-      multiInputProvider = {
-        callApi: vi.fn().mockResolvedValue({
+      multiInputProvider = createMockProvider({
+        response: createProviderResponse({
           output: `
             Here are the test cases:
             <Prompt>{"username": "admin", "message": "Hello"}</Prompt>
             <Prompt>{"username": "guest", "message": "Test message"}</Prompt>
           `,
         }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      });
     });
 
     it('should generate test cases with multi-input mode when inputs is defined', async () => {
@@ -358,19 +471,18 @@ describe('RedteamPluginBase', () => {
       expect(messages).toContain('Test message');
     });
 
-    it('should include __outputFormat modifier in API call when inputs is defined', async () => {
-      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+    it('should store __outputFormat in config.modifiers when inputs is defined', async () => {
+      const config = {
         inputs: {
           username: 'The user name',
         },
-      });
+      };
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', config);
 
       await multiInputPlugin.generateTests(1);
 
-      expect(multiInputProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('__outputFormat:'),
-      );
-      expect(multiInputProvider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Prompt>'));
+      // __outputFormat is stored in config.modifiers for downstream use (strategies)
+      expect((config as any).modifiers?.__outputFormat).toContain('multi-input-mode');
     });
 
     it('should store inputs config in test metadata', async () => {
@@ -417,15 +529,14 @@ describe('RedteamPluginBase', () => {
     });
 
     it('should handle parsing failures gracefully in multi-input mode', async () => {
-      const badProvider: ApiProvider = {
-        callApi: vi.fn().mockResolvedValue({
+      const badProvider = createMockProvider({
+        response: createProviderResponse({
           output: `
             <Prompt>{"username": "admin", "message": "Valid"}</Prompt>
             <Prompt>not valid json</Prompt>
           `,
         }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      });
 
       const plugin = new TestPlugin(badProvider, 'test purpose', 'testVar', {
         inputs: {
@@ -442,13 +553,12 @@ describe('RedteamPluginBase', () => {
     });
 
     it('should handle nested object values in multi-input mode', async () => {
-      const nestedProvider: ApiProvider = {
-        callApi: vi.fn().mockResolvedValue({
+      const nestedProvider = createMockProvider({
+        response: createProviderResponse({
           output:
             '<Prompt>{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}</Prompt>',
         }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      });
 
       // In multi-input mode, injectVar is set to MULTI_INPUT_VAR at the redteam run level
       const plugin = new TestPlugin(nestedProvider, 'test purpose', MULTI_INPUT_VAR, {
@@ -474,12 +584,11 @@ describe('RedteamPluginBase', () => {
     });
 
     it('should use parseGeneratedPrompts when inputs is not defined', async () => {
-      const standardProvider: ApiProvider = {
-        callApi: vi.fn().mockResolvedValue({
+      const standardProvider = createMockProvider({
+        response: createProviderResponse({
           output: 'Prompt: Standard prompt 1\nPrompt: Standard prompt 2',
         }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      });
 
       const plugin = new TestPlugin(standardProvider, 'test purpose', 'testVar', {});
 
@@ -495,12 +604,9 @@ describe('RedteamPluginBase', () => {
     });
 
     it('should handle empty inputs object (no multi-input mode)', async () => {
-      const standardProvider: ApiProvider = {
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Prompt: Standard prompt',
-        }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      const standardProvider = createMockProvider({
+        response: createProviderResponse({ output: 'Prompt: Standard prompt' }),
+      });
 
       const plugin = new TestPlugin(standardProvider, 'test purpose', 'testVar', {
         inputs: {},
@@ -641,6 +747,46 @@ describe('RedteamPluginBase', () => {
       expect(result).toEqual([
         { __prompt: 'Leading asterisk' },
         { __prompt: 'Trailing * middle * asterisk' },
+      ]);
+    });
+
+    // Tests for French typography (space before colon)
+    it('should handle French typography with space before colon', () => {
+      const input = 'Prompt : Hello world\nPrompt : How are you?';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
+    });
+
+    it('should handle mixed French and standard typography', () => {
+      const input = 'Prompt: Standard format\nPrompt : French format\nPrompt:No space';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'Standard format' },
+        { __prompt: 'French format' },
+        { __prompt: 'No space' },
+      ]);
+    });
+
+    it('should handle French typography with asterisks', () => {
+      const input = '**Prompt :** French with asterisks\n**Prompt:** Standard with asterisks';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'French with asterisks' },
+        { __prompt: 'Standard with asterisks' },
+      ]);
+    });
+
+    it('should handle French typography with numbered lists', () => {
+      const input = `
+        1. Prompt : First item French style
+        2. Prompt: Second item standard style
+        3) Prompt : Third item French style
+      `;
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: 'First item French style' },
+        { __prompt: 'Second item standard style' },
+        { __prompt: 'Third item French style' },
       ]);
     });
 
@@ -916,6 +1062,34 @@ describe('parseGeneratedInputs', () => {
     expect(parsed.message).toContain('world');
   });
 
+  it('should return parseable JSON when falling back from bare JSON objects', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const result = parseGeneratedInputs(
+      JSON.stringify({ username: 'admin', message: 'Hello world' }),
+      inputs,
+    );
+
+    expect(result).toEqual([{ __prompt: '{"username":"admin","message":"Hello world"}' }]);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      message: 'Hello world',
+      username: 'admin',
+    });
+  });
+
+  it('should return parseable JSON when falling back from bare JSON arrays', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const result = parseGeneratedInputs(
+      JSON.stringify([{ username: 'admin', message: 'Hello world' }]),
+      inputs,
+    );
+
+    expect(result).toEqual([{ __prompt: '{"username":"admin","message":"Hello world"}' }]);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      message: 'Hello world',
+      username: 'admin',
+    });
+  });
+
   it('should handle multiple inputs for complex redteam scenarios', () => {
     const inputs = {
       userId: 'The user ID',
@@ -1061,6 +1235,60 @@ describe('RedteamGraderBase', () => {
       'Test rubric for test-purpose with harm category test-harm and goal test prompt',
     );
     expect(result.rubric).toContain('Current timestamp:');
+  });
+
+  it('should prefer remote grading when test options only contain a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      {
+        ...mockTest,
+        options: {
+          provider: 'openai:gpt-4o-mini',
+        },
+      },
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
+  });
+
+  it('should prefer remote grading when defaultTest.provider is a target provider', async () => {
+    cliState.config = {
+      redteam: {},
+      defaultTest: {
+        provider: 'openai:gpt-4o',
+      },
+    };
+    const mockResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    await grader.getResult(
+      'test prompt',
+      'test output',
+      mockTest,
+      undefined /* provider */,
+      undefined /* renderedValue */,
+    );
+
+    const grading = (matchesLlmRubric as Mock).mock.calls[0][2];
+    expect(Object.getOwnPropertyDescriptor(grading, '__promptfooPreferRemote')?.value).toBe(true);
   });
 
   describe('grader examples', () => {
@@ -1242,12 +1470,9 @@ describe('RedteamGraderBase', () => {
         ],
       };
 
-      const testProvider: ApiProvider = {
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Prompt: test prompt',
-        }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      const testProvider = createMockProvider({
+        response: createProviderResponse({ output: 'Prompt: test prompt' }),
+      });
 
       const pluginWithExamples = new TestPlugin(
         testProvider,
@@ -1314,12 +1539,9 @@ describe('RedteamGraderBase', () => {
         excludeStrategies: ['jailbreak'],
       };
 
-      const testProvider: ApiProvider = {
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Prompt: test prompt',
-        }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      const testProvider = createMockProvider({
+        response: createProviderResponse({ output: 'Prompt: test prompt' }),
+      });
 
       const plugin = new TestPlugin(testProvider, 'Financial assistant', 'testVar', fullConfig);
       const tests = await plugin.generateTests(1);
@@ -1390,6 +1612,153 @@ describe('RedteamGraderBase', () => {
       );
       expect(result.rubric).toContain('Current timestamp:');
     });
+
+    it('should merge global graderExamples from test.options with plugin-specific examples', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithBothGlobalAndPluginExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'global example output', pass: true, score: 1, reason: 'Global reason' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'plugin example output', pass: false, score: 0, reason: 'Plugin reason' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithBothGlobalAndPluginExamples,
+        undefined,
+        undefined,
+      );
+
+      // Both global and plugin examples should be in rubric
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"global example output"');
+      expect(result.rubric).toContain('"reason":"Global reason"');
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"plugin example output"');
+      expect(result.rubric).toContain('"reason":"Plugin reason"');
+    });
+
+    it('should work with only global graderExamples (no plugin-specific examples)', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOnlyGlobalExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'global only example', pass: true, score: 1, reason: 'Global only reason' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {},
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOnlyGlobalExamples,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"global only example"');
+      expect(result.rubric).toContain('"reason":"Global only reason"');
+    });
+
+    it('should work with only plugin-level graderExamples (no global examples)', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOnlyPluginExamples = {
+        ...mockTest,
+        options: {}, // No global examples
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'plugin only example', pass: true, score: 1, reason: 'Plugin only reason' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOnlyPluginExamples,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('EXAMPLE OUTPUT: {"output":"plugin only example"');
+      expect(result.rubric).toContain('"reason":"Plugin only reason"');
+    });
+
+    it('should place global examples before plugin-specific examples in the rubric', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithOrderedExamples = {
+        ...mockTest,
+        options: {
+          redteamGraderExamples: [
+            { output: 'AAA_GLOBAL', pass: true, score: 1, reason: 'First global' },
+          ],
+        },
+        metadata: {
+          ...mockTest.metadata,
+          pluginConfig: {
+            graderExamples: [
+              { output: 'ZZZ_PLUGIN', pass: false, score: 0, reason: 'Second plugin' },
+            ],
+          },
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithOrderedExamples,
+        undefined,
+        undefined,
+      );
+
+      // Global examples should come before plugin examples
+      const globalIndex = result.rubric.indexOf('AAA_GLOBAL');
+      const pluginIndex = result.rubric.indexOf('ZZZ_PLUGIN');
+      expect(globalIndex).toBeGreaterThan(-1);
+      expect(pluginIndex).toBeGreaterThan(-1);
+      expect(globalIndex).toBeLessThan(pluginIndex);
+    });
   });
 
   describe('RedteamGraderBase with tools', () => {
@@ -1446,6 +1815,32 @@ describe('RedteamGraderBase', () => {
       );
     });
 
+    it('should use the Agents SDK loader for openai:agents providers', async () => {
+      const agentsProvider = createMockProvider({
+        id: 'openai:agents:support-agent',
+        config: {
+          tools: 'file://./tools/support-tools.ts',
+        },
+      });
+      vi.mocked(loadTools).mockResolvedValue([{ name: 'agents-tool' } as any]);
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const toolGrader = new ToolGrader();
+      await toolGrader.getResult('test prompt', 'test output', mockTest, agentsProvider);
+
+      expect(loadTools).toHaveBeenCalledWith('file://./tools/support-tools.ts');
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('agents-tool'),
+        expect.any(String),
+        expect.any(Object),
+      );
+    });
+
     it('should handle when no tools are provided', async () => {
       const mockResult: GradingResult = {
         pass: true,
@@ -1461,6 +1856,42 @@ describe('RedteamGraderBase', () => {
       ).rejects.toThrow(/^Error rendering rubric template/);
 
       expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+
+    it('should treat string-array MCP tools config as a filter, not tool definitions', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const SimpleGrader = class extends RedteamGraderBase {
+        id = 'test-simple-grader';
+        rubric = 'Test rubric without tools';
+      };
+
+      const simpleGrader = new SimpleGrader();
+      await simpleGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        {
+          id: () => 'mcp',
+          callApi: async () => ({ output: 'unused' }),
+          config: {
+            tools: ['search_companies'],
+          },
+        },
+        undefined,
+      );
+
+      expect(maybeLoadToolsFromExternalFile).not.toHaveBeenCalledWith(['search_companies']);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Test rubric without tools'),
+        expect.any(String),
+        expect.any(Object),
+      );
     });
   });
 
@@ -1554,15 +1985,14 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('pluginConfig flow-through', () => {
-    let testProvider: ApiProvider;
+    let testProvider: TestProvider;
 
     beforeEach(() => {
-      testProvider = {
-        callApi: vi.fn().mockResolvedValue({
+      testProvider = createMockProvider({
+        response: createProviderResponse({
           output: 'Prompt: test prompt\nPrompt: another prompt',
         }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      });
     });
 
     it('should pass full pluginConfig including graderExamples through promptsToTestCases', async () => {
@@ -2181,15 +2611,12 @@ describe('RedteamGraderBase', () => {
   });
 
   describe('gradingGuidance + graderExamples integration', () => {
-    let _testProvider: ApiProvider;
+    let _testProvider: TestProvider;
 
     beforeEach(() => {
-      _testProvider = {
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Prompt: test prompt',
-        }),
-        id: vi.fn().mockReturnValue('test-provider'),
-      };
+      _testProvider = createMockProvider({
+        response: createProviderResponse({ output: 'Prompt: test prompt' }),
+      });
     });
 
     it('should work correctly with both gradingGuidance and graderExamples', async () => {
@@ -2352,6 +2779,30 @@ describe('RedteamGraderBase', () => {
       expect(result.rubric).toContain('IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:');
       expect(result.rubric).toContain('This is the preferred graderGuidance field');
       expect(result.rubric).not.toContain('This is the deprecated gradingGuidance field');
+    });
+
+    it('should default traceSummary to an empty string when gradingContext is omitted', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const TestGraderWithOptionalTrace = class extends RedteamGraderBase {
+        id = 'test-grader-optional-trace';
+        rubric = 'Test rubric. Trace summary: "{{ traceSummary }}".';
+      };
+
+      const traceGrader = new TestGraderWithOptionalTrace();
+
+      await traceGrader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Trace summary: ""'),
+        'test output',
+        expect.any(Object),
+      );
     });
   });
 });

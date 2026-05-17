@@ -1,116 +1,313 @@
 ---
 title: QuiverAI Provider
 sidebar_label: QuiverAI
-description: Configure QuiverAI for chat completions optimized for SVG vector graphics generation.
+description: Generate and vectorize SVG vector graphics with QuiverAI's Arrow models in promptfoo.
+sidebar_position: 42
+keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorization]
 ---
 
 # QuiverAI
 
-[QuiverAI](https://quiver.ai) provides an OpenAI-compatible chat API optimized for generating SVG vector graphics. The provider extends the [OpenAI provider](/docs/providers/openai/) and supports all standard chat completion options.
+The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`. Promptfoo also indexes valid single-SVG outputs in the Media Library while preserving the original SVG text for assertions and exports.
+
+Two endpoints are supported:
+
+- **Text → SVG** (`quiverai:<model>`) calls `POST /v1/svgs/generations`.
+- **Image → SVG** (`quiverai:vectorize:<model>`) calls `POST /v1/svgs/vectorizations`.
 
 ## Setup
 
-1. Get an API key from [QuiverAI](https://quiver.ai)
-2. Set `QUIVERAI_API_KEY` environment variable or specify `apiKey` in your config
+1. Create an API key at [app.quiver.ai](https://app.quiver.ai/settings/api-keys)
+2. Set the environment variable:
 
-## Available Models
-
-| Model               | Description                                |
-| ------------------- | ------------------------------------------ |
-| `arrow-0.5`         | Flagship SVG generation model              |
-| `arrow-0.5-preview` | Preview version with experimental features |
-
-Both models support text and image inputs, and output SVG graphics in various styles (flat, outline, duotone, gradient) and modes (icon, illustration, logo).
-
-## Provider Formats
-
-| Format                     | Description                 |
-| -------------------------- | --------------------------- |
-| `quiverai:model-name`      | Chat completions (default)  |
-| `quiverai:chat:model-name` | Chat completions (explicit) |
-
-## Configuration
-
-```yaml
-providers:
-  - id: quiverai:arrow-0.5
-    config:
-      temperature: 0.7
-      max_tokens: 4096
+```bash
+export QUIVERAI_API_KEY=your-api-key
 ```
 
-All [OpenAI configuration options](/docs/providers/openai/#configuring-parameters) are supported, including `temperature`, `top_p`, `max_tokens`, `frequency_penalty`, and `presence_penalty`.
+## Models
 
-## SVG Generation Example
+Run `GET /v1/models` for the live list. The currently released Arrow models are:
 
-QuiverAI's Arrow model generates SVG graphics via chat completions:
+| Model         | Provider id              | Use case                                                                |
+| ------------- | ------------------------ | ----------------------------------------------------------------------- |
+| Arrow 1.1     | `quiverai:arrow-1.1`     | Default. Best general-purpose tradeoff between quality and credit cost. |
+| Arrow 1.1 Max | `quiverai:arrow-1.1-max` | Higher fidelity for dense illustrations, logos, and technical drawings. |
+| Arrow 1.0     | `quiverai:arrow-1.0`     | Previous-generation model retained for parity.                          |
+
+The default model is `arrow-1.1`.
+
+## Provider format
+
+```text
+quiverai:<model-name>             # text → SVG (default)
+quiverai:vectorize:<model-name>   # image → SVG
+quiverai:generate:<model-name>    # explicit text → SVG (alias)
+```
+
+`quiverai:chat:<model-name>` is a legacy alias for the generation endpoint.
+
+## Text → SVG
 
 ```yaml
 providers:
-  - id: quiverai:arrow-0.5
+  - id: quiverai:arrow-1.1
     config:
-      max_tokens: 4096
+      temperature: 0.7
+      max_output_tokens: 8192
+      instructions: 'flat design, minimal color palette'
+```
+
+With reference images (URL string shorthand or `{ url }` / `{ base64 }`):
+
+```yaml
+providers:
+  - id: quiverai:arrow-1.1
+    config:
+      references:
+        - https://example.com/style-reference.png
+        - { url: https://example.com/another.png }
+      instructions: 'Match the style of the reference image'
+```
+
+### Generation parameters
+
+| Parameter           | Type    | Default | Description                                                                                                                     |
+| ------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`      | string  | —       | Style guidance separate from the prompt                                                                                         |
+| `references`        | array   | —       | Reference images: URL string, `{ url }`, or `{ base64 }`. Arrow 1.1 accepts up to 4 references; Arrow 1.1 Max accepts up to 16. |
+| `temperature`       | number  | 1       | Randomness (0–2)                                                                                                                |
+| `top_p`             | number  | 1       | Nucleus sampling (0–1)                                                                                                          |
+| `presence_penalty`  | number  | 0       | Penalize repeated patterns (-2 to 2)                                                                                            |
+| `max_output_tokens` | integer | —       | Maximum output tokens (1–131,072)                                                                                               |
+| `n`                 | integer | 1       | Number of SVGs to generate (1–16)                                                                                               |
+| `stream`            | boolean | true    | Set `false` to enable response caching                                                                                          |
+| `apiKey`            | string  | —       | API key (overrides environment variable)                                                                                        |
+| `apiBaseUrl`        | string  | —       | Custom API base URL                                                                                                             |
+
+When `n > 1`, multiple SVGs are joined with double newlines and ordered by the response's `index`.
+
+## Image → SVG
+
+The vectorize endpoint converts a raster image (PNG, JPEG, WebP) to SVG. The image can come from the prompt or from `config.image`.
+
+```yaml
+providers:
+  - id: quiverai:vectorize:arrow-1.1
+    config:
+      auto_crop: true
+      target_size: 1024
 
 prompts:
-  - file://prompt.json
+  - '{{image_url}}'
 
 tests:
   - vars:
-      subject: a red heart icon
+      image_url: https://example.com/logo.png
     assert:
-      - type: contains
-        value: '<svg'
-      - type: contains
-        value: '</svg>'
+      - type: is-xml
 ```
 
-Where `prompt.json` contains:
+Accepted prompt forms:
 
-```json
-[
-  {
-    "role": "system",
-    "content": "You are a vector graphics designer. Output valid SVG code only."
-  },
-  { "role": "user", "content": "Create an SVG of: {{subject}}" }
-]
+- A plain `https://...` URL
+- A `data:image/...;base64,...` data URL
+- A JSON object string like `{"url": "..."}` or `{"base64": "..."}`
+- A raw base64 payload (treated as `{ base64: ... }`)
+
+When using an inline data URL in a YAML config, pass it through a variable such as
+`'{{image_data}}'` or set `config.image.base64`. A bare `data:` string in
+`prompts:` is interpreted by Promptfoo's prompt loader before the QuiverAI
+provider sees it.
+
+You can also provide the image directly in the config and use the prompt for unrelated context:
+
+```yaml
+providers:
+  - id: quiverai:vectorize:arrow-1.1
+    config:
+      image:
+        url: https://example.com/logo.png
+      auto_crop: true
 ```
 
-### Sample Outputs
+### Vectorize parameters
 
-Here are examples of SVGs generated by QuiverAI's Arrow model:
+| Parameter           | Type    | Default | Description                                                                |
+| ------------------- | ------- | ------- | -------------------------------------------------------------------------- |
+| `image`             | object  | —       | Override image input (`{ url }` or `{ base64 }`); falls back to the prompt |
+| `auto_crop`         | boolean | false   | Auto-crop to the dominant subject before vectorization                     |
+| `target_size`       | integer | —       | Square resize target in pixels (128–4,096)                                 |
+| `temperature`       | number  | 1       | Randomness (0–2)                                                           |
+| `top_p`             | number  | 1       | Nucleus sampling (0–1)                                                     |
+| `presence_penalty`  | number  | 0       | Penalize repeated patterns (-2 to 2)                                       |
+| `max_output_tokens` | integer | —       | Maximum output tokens (1–131,072)                                          |
+| `stream`            | boolean | true    | Set `false` to enable response caching                                     |
+| `apiKey`            | string  | —       | API key (overrides environment variable)                                   |
+| `apiBaseUrl`        | string  | —       | Custom API base URL                                                        |
 
-<div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center', margin: '1.5rem 0'}}>
-  <figure style={{margin: 0, textAlign: 'center'}}>
-    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="66" viewBox="0 0 350 192" fill="none">
-      <rect width="350" height="192" fill="#F3F3F0"/>
-      <path d="M 174.86,51.7 C 168.1,33.87 152.72,21.74 134.28,21.74 C 110.25,21.74 92,42.48 92,64.85 C 92,90.58 118.42,117.69 138.86,138.62 L 174.86,171.37 L 210.86,136.25 C 231.3,115.32 257.72,88.21 257.72,64.85 C 257.72,42.48 239.47,21.74 215.44,21.74 C 197,21.74 181.62,33.87 174.86,51.7 Z" fill="#A00324"/>
-      <path d="M 216.4,21.74 C 197.96,21.74 184.24,32.5 174.86,51.7 V 171.37 L 210.86,136.25 C 231.3,115.32 257.72,88.21 257.72,64.85 C 257.72,42.48 240.43,21.74 216.4,21.74 Z" fill="#8E031F"/>
-    </svg>
-    <figcaption style={{fontSize: '0.85rem', color: '#666'}}>red heart icon</figcaption>
-  </figure>
-  <figure style={{margin: 0, textAlign: 'center'}}>
-    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="66" viewBox="0 0 336 184" fill="none">
-      <rect width="336" height="184" fill="#F2F2EF"/>
-      <path d="M 168,19 L 190.5,68.29 L 244.5,73.94 L 204.25,111.5 L 215.5,165.5 L 168,137.75 L 120.5,165.5 L 131.75,111.5 L 90.5,74.44 L 144.5,68.29 L 168,19 Z" fill="#C89222"/>
-    </svg>
-    <figcaption style={{fontSize: '0.85rem', color: '#666'}}>yellow star</figcaption>
-  </figure>
-  <figure style={{margin: 0, textAlign: 'center'}}>
-    <svg xmlns="http://www.w3.org/2000/svg" width="120" height="66" viewBox="0 0 276 152" fill="none">
-      <rect width="276" height="152" fill="#FAFCFC"/>
-      <path d="M 138.5,151 C 178.54,151 213,117.8 213,76.5 C 213,35.2 179.8,1 138.5,1 C 97.2,1 62,34.2 62,75.5 C 62,116.8 94.2,151 138.5,151 Z" fill="#E8ECEC"/>
-      <path d="M 127.02,58.46 L 113.49,58.16 L 94.73,77.52 L 114.98,78.12 L 127.02,58.46 Z" fill="#33B1A7"/>
-      <path d="M 137.27,99.45 L 138.17,120.01 L 157.23,101.25 L 156.63,87.72 L 144.89,96.76 L 137.27,99.45 Z" fill="#24968E"/>
-      <path d="M 116.18,84.73 C 116.18,84.73 132.43,32.72 181.44,31.82 C 181.44,31.82 182.64,59.06 159.68,81.72 C 145.85,95.56 130.81,99.45 130.81,99.45 L 116.18,84.73 Z" fill="#33B1A7"/>
-      <path d="M 114.98,100.05 L 128.52,78.42 L 143.25,71.4 L 136.52,84.93 L 114.98,100.05 Z" fill="#24968E"/>
-      <path d="M 181.44,31.82 C 181.44,31.82 182.64,59.06 159.68,81.72 C 145.85,95.56 130.81,99.45 130.81,99.45 L 125.22,93.86 L 136.67,85.23 L 143.25,71.4 L 181.44,31.82 Z" fill="#24968E"/>
-      <path d="M 114.98,87.12 C 114.98,87.12 103.84,85.33 96.52,101.25 L 104.14,100.05 C 104.14,100.05 98.26,108.48 97.06,118.72 C 97.06,118.72 106.7,117.82 115.43,110.8 L 114.23,118.72 C 114.23,118.72 130.21,111.4 128.41,99.45 L 123.42,94.76 L 114.98,87.12 Z" fill="#F16727"/>
-      <path d="M 114.98,87.12 L 123.42,94.76 C 123.42,94.76 125.82,103.49 119.03,107.08 L 119.93,103.49 C 119.93,103.49 113.44,108.18 106.7,108.78 C 106.7,108.78 108.2,99.45 110.89,97.06 H 105.6 C 105.6,97.06 108.89,89.42 114.98,87.12 Z" fill="#FDC053"/>
-    </svg>
-    <figcaption style={{fontSize: '0.85rem', color: '#666'}}>rocket with flames</figcaption>
-  </figure>
-</div>
+## Streaming
+
+Streaming is on by default. The provider receives `generating`, `reasoning`, and `draft` events while the SVG is being produced and assembles the final SVG from the `content` event(s). Set `stream: false` to use the JSON endpoint and enable response caching.
+
+## Billing and metadata
+
+QuiverAI bills in **credits**, not USD. Each successful response surfaces credit cost on the response (top-level `credits` for non-streaming, per-output `credits` on streaming `content` events). Promptfoo exposes both fields via response metadata:
+
+```ts
+result.metadata.responseId; // server-generated request/output id
+result.metadata.credits; // total credits debited for this call
+```
+
+The deprecated `usage` token block is also propagated to `tokenUsage` for backwards compatibility, even though the API now zeros those values.
+
+## Pipeline: GPT Image → QuiverAI vectorize
+
+Chaining a high-quality raster generator (such as OpenAI's `gpt-image-2`) into QuiverAI's vectorizer is one of the cleanest ways to produce a consistent, editable SVG icon set. Wrap the two calls in a custom JS provider so the pipeline is one provider in your eval and works with normal `is-xml`, `contains`, and `llm-rubric` assertions.
+
+```javascript title="pipeline-provider.js"
+class GptImageToQuiverPipeline {
+  constructor(options = {}) {
+    this.providerId = options.id || 'pipeline:gpt-image-2->quiverai-vectorize';
+    this.config = options.config || {};
+  }
+
+  id() {
+    return this.providerId;
+  }
+
+  async callApi(prompt) {
+    // 1. Generate raster with OpenAI gpt-image-2.
+    const imgRes = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: this.config.imageModel || 'gpt-image-2',
+        prompt,
+        size: '1024x1024',
+        quality: 'high',
+        background: 'auto', // gpt-image-2 does not accept 'transparent'
+        n: 1,
+      }),
+    });
+    if (!imgRes.ok) {
+      throw new Error(`OpenAI image step failed: HTTP ${imgRes.status}`);
+    }
+    const img = await imgRes.json();
+    const rasterB64 = img.data?.[0]?.b64_json;
+    if (!rasterB64) {
+      throw new Error('OpenAI image step returned no image data');
+    }
+
+    // 2. Vectorize with QuiverAI Arrow.
+    const svgRes = await fetch('https://api.quiver.ai/v1/svgs/vectorizations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.QUIVERAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: this.config.vectorizeModel || 'arrow-1.1',
+        image: { base64: rasterB64 },
+        auto_crop: true,
+        target_size: 1024,
+      }),
+    });
+    if (!svgRes.ok) {
+      throw new Error(`QuiverAI vectorize step failed: HTTP ${svgRes.status}`);
+    }
+    const svg = await svgRes.json();
+    const outputSvg = svg.data?.[0]?.svg;
+    if (!outputSvg) {
+      throw new Error('QuiverAI vectorize step returned no SVG data');
+    }
+    return {
+      output: outputSvg,
+      metadata: { credits: svg.credits, responseId: svg.id },
+    };
+  }
+}
+
+module.exports = GptImageToQuiverPipeline;
+```
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Centered icon of {{subject}}, flat vector illustration, bold shapes, minimal palette, clear silhouette.'
+
+providers:
+  - id: file://pipeline-provider.js
+    label: 'GPT Image-2 → Arrow 1.1'
+    config:
+      imageModel: gpt-image-2
+      vectorizeModel: arrow-1.1
+  - id: file://pipeline-provider.js
+    label: 'GPT Image-2 → Arrow 1.1 Max'
+    config:
+      imageModel: gpt-image-2
+      vectorizeModel: arrow-1.1-max
+
+tests:
+  - vars:
+      subject: a friendly red panda mascot facing forward
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: A clearly recognizable red panda face with reddish-orange fur and dark facial markings.
+```
+
+A complete working example, including red-panda-themed prompts and side-by-side Arrow 1.1 / Arrow 1.1 Max configs, lives at [`examples/provider-quiverai/promptfooconfig.pipeline.yaml`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-quiverai). In the May 2026 verification run behind this example, Arrow 1.1 debited 15 credits per vectorize and Arrow 1.1 Max debited 20 — both surfaced via `metadata.credits` so you can budget per eval. Read the live `GET /v1/models` response for current `pricing_credits`.
+
+:::tip
+Each pipeline call hits two providers serially, so individual evaluations take longer than a pure generation run. Lower `--max-concurrency` if you start hitting QuiverAI's per-minute rate limit, and prefer `stream: false` on the vectorize step when you want response caching across re-runs.
+:::
+
+## Example
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Create a simple SVG icon of: {{subject}}'
+
+providers:
+  - id: quiverai:arrow-1.1
+    config:
+      max_output_tokens: 8192
+
+tests:
+  - vars:
+      subject: a red heart
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a heart shape in red color
+
+  - vars:
+      subject: a yellow star
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a star shape in yellow/gold color
+```
+
+:::note
+`llm-rubric` assertions require a [grading provider](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader). By default this uses OpenAI, so set `OPENAI_API_KEY` or configure a different grader.
+:::
+
+## Troubleshooting
+
+| Error                   | Cause                              | Fix                                                                             |
+| ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------- |
+| `insufficient_credits`  | Account has no credits             | Add credits at [app.quiver.ai](https://app.quiver.ai)                           |
+| `invalid_api_key`       | Key is missing or invalid          | Check `QUIVERAI_API_KEY` is set correctly                                       |
+| `rate_limit_exceeded`   | Per-minute rate limit hit          | Reduce `--max-concurrency` or add delays between requests                       |
+| `weekly_limit_exceeded` | Org weekly quota hit               | Wait for the rolling weekly window or contact support — retries cannot recover. |
+| `account_frozen`        | Account is frozen                  | Contact QuiverAI support                                                        |
+| `model_not_found`       | Invalid model name                 | Use one of `arrow-1.1`, `arrow-1.1-max`, `arrow-1.0`                            |
+| `upstream_error`        | Transient upstream dependency fail | Retry — this is usually transient                                               |
+
+Error messages include a `request_id` for debugging with QuiverAI support.
 
 ## Environment Variables
 
@@ -120,5 +317,7 @@ Here are examples of SVGs generated by QuiverAI's Arrow model:
 
 ## See Also
 
-- [OpenAI Provider](/docs/providers/openai/) - Compatible chat configuration options
-- [QuiverAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/quiverai)
+- [QuiverAI example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-quiverai) — generation, vectorization, and pipeline configs
+- [QuiverAI API docs](https://docs.quiver.ai)
+- [Custom JS providers](/docs/providers/custom-api) — the pipeline pattern
+- [Configuration Reference](/docs/configuration/reference)

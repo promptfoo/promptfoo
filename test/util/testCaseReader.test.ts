@@ -10,6 +10,7 @@ import { importModule } from '../../src/esm';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
+import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
@@ -20,12 +21,13 @@ import {
   readTestFiles,
   readTests,
 } from '../../src/util/testCaseReader';
+import { createMockProvider } from '../factories/provider';
 
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
-import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
+import type { ProviderOptions } from '../../src/types/providers';
 
 // Spy on logger.warn for tests that check warnings
-vi.spyOn(logger, 'warn');
+vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 vi.mock('../../src/util/fetch', () => ({
@@ -58,18 +60,26 @@ vi.mock('fs', () => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('fs/promises', () => ({
-  // Delegate to fs.readFileSync mock for shared test data
-  readFile: vi.fn((...args: unknown[]) => {
-    try {
-      return Promise.resolve(mockReadFileSync(...args));
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }),
-  writeFile: vi.fn(),
-  mkdir: vi.fn(),
-}));
+vi.mock('fs/promises', () => {
+  const promisesFs = {
+    // Delegate to fs.readFileSync mock for shared test data
+    readFile: vi.fn((...args: unknown[]) => {
+      try {
+        return Promise.resolve(mockReadFileSync(...args));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+    access: vi.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    ...promisesFs,
+    default: promisesFs,
+  };
+});
 
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
@@ -77,6 +87,10 @@ vi.mock('../../src/database', () => ({
 
 vi.mock('../../src/googleSheets', () => ({
   fetchCsvFromGoogleSheet: vi.fn(),
+}));
+
+vi.mock('../../src/microsoftSharepoint', () => ({
+  fetchCsvFromSharepoint: vi.fn(),
 }));
 
 vi.mock('../../src/envars', async () => ({
@@ -124,7 +138,7 @@ vi.mock('../../src/util/file', () => ({
     }
 
     // Handle objects (but not arrays)
-    if (config && typeof config === 'object' && config !== null) {
+    if (typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -156,6 +170,7 @@ const clearAllMocks = () => {
   vi.mocked(getEnvBool).mockReset();
   vi.mocked(getEnvString).mockReset();
   vi.mocked(fetchCsvFromGoogleSheet).mockReset();
+  vi.mocked(fetchCsvFromSharepoint).mockReset();
   vi.mocked(loadApiProvider).mockReset();
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
@@ -179,7 +194,7 @@ describe('readStandaloneTestsFile', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -349,6 +364,31 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should prefer SharePoint URL handling over local JSON parsing when URL ends with .json', async () => {
+    const sharepointUrls = [
+      'https://example.sharepoint.com/sites/team/tests.json',
+      'https://example.sharepoint.com/:x:/r/sites/team/tests.json',
+    ];
+    vi.mocked(fetchCsvFromSharepoint).mockResolvedValue([
+      { var1: 'value1', __expected: 'expected1' },
+    ]);
+
+    for (const sharepointUrl of sharepointUrls) {
+      const result = await readStandaloneTestsFile(sharepointUrl);
+
+      expect(fetchCsvFromSharepoint).toHaveBeenCalledWith(sharepointUrl);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1' },
+        },
+      ]);
+    }
+  });
+
   it('should read JS file and return test cases', async () => {
     const mockTestCases = [
       { vars: { var1: 'value1', var2: 'value2' } },
@@ -508,32 +548,34 @@ describe('readStandaloneTestsFile', () => {
     // Only run if read-excel-file is actually installed (in dev environment)
     try {
       await import('read-excel-file/node');
-      const fs = require('fs');
-
-      if (fs.existsSync(exampleFile)) {
-        const result = await readStandaloneTestsFile(exampleFile);
-
-        // Verify the structure matches expected test cases
-        expect(result).toHaveLength(4); // Based on the known test data
-        expect(result[0]).toMatchObject({
-          vars: expect.objectContaining({
-            language: expect.any(String),
-            body: expect.any(String),
-          }),
-          assert: expect.any(Array),
-        });
-
-        // Verify specific test case content
-        const frenchTest = result.find((test) => test.vars?.language === 'French');
-        expect(frenchTest).toBeDefined();
-        expect(frenchTest?.vars?.body).toBe('Hello world');
-      } else {
-        console.log('Skipping integration test - example Excel file not found');
-      }
-    } catch (error) {
+    } catch {
       // Skip test if read-excel-file is not installed
-      console.log('Skipping integration test - read-excel-file not available:', error);
+      return;
     }
+
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    if (!actualFs.existsSync(exampleFile)) {
+      return;
+    }
+
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
+
+    const result = await readStandaloneTestsFile(exampleFile);
+
+    // Verify the structure matches expected test cases
+    expect(result).toHaveLength(4); // Based on the known test data
+    expect(result[0]).toMatchObject({
+      vars: expect.objectContaining({
+        language: expect.any(String),
+        body: expect.any(String),
+      }),
+      assert: expect.any(Array),
+    });
+
+    // Verify specific test case content
+    const frenchTest = result.find((test) => test.vars?.language === 'French');
+    expect(frenchTest).toBeDefined();
+    expect(frenchTest?.vars?.body).toBe('Hello world');
   });
 
   it('should handle Python files with default function name', async () => {
@@ -596,7 +638,7 @@ describe('readStandaloneTestsFile', () => {
         });
       }
 
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -673,7 +715,7 @@ describe('readTest', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -762,7 +804,7 @@ describe('readTest', () => {
 
   describe('readTest with provider', () => {
     it('should load provider when provider is a string', async () => {
-      const mockProvider = { callApi: vi.fn(), id: vi.fn().mockReturnValue('mock-provider') };
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const testCase: TestCase = {
@@ -778,10 +820,7 @@ describe('readTest', () => {
     });
 
     it('should load provider when provider is an object with id', async () => {
-      const mockProvider = {
-        callApi: vi.fn(),
-        id: vi.fn().mockReturnValue('mock-provider'),
-      } as ApiProvider;
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const providerInput: ProviderOptions & { callApi: ReturnType<typeof vi.fn> } = {
@@ -932,7 +971,7 @@ describe('readTests', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -1594,7 +1633,7 @@ describe('readVarsFiles', () => {
       }
 
       // Handle objects (but not arrays)
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {

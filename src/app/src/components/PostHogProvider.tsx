@@ -50,7 +50,8 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
           session_recording: {
             maskAllInputs: true,
             maskTextFn(text, element) {
-              if (!['eval-output-cell', 'eval-output-cell-text'].includes(element?.id ?? '')) {
+              const elementId = element?.id ?? '';
+              if (!elementId.startsWith('eval-output-cell-')) {
                 return text;
               }
               return '*'.repeat(text.trim().length);

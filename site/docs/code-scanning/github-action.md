@@ -40,23 +40,30 @@ When using the GitHub App:
 
 Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-| Input              | Description                                                      | Default                     |
-| ------------------ | ---------------------------------------------------------------- | --------------------------- |
-| `api-host`         | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
-| `min-severity`     | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
-| `minimum-severity` | Alias for `min-severity`                                         | `medium`                    |
-| `config-path`      | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
-| `guidance`         | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
-| `guidance-file`    | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
-| `enable-fork-prs`  | Enable scanning PRs from forked repositories                     | `false`                     |
+| Input               | Description                                                      | Default                     |
+| ------------------- | ---------------------------------------------------------------- | --------------------------- |
+| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app` |
+| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
+| `minimum-severity`  | Alias for `min-severity`                                         | `medium`                    |
+| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
+| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
+| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
+| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                     |
+| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                        |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
+
+### Triggering Additional Scans
+
+If you made changes to your PR and want to run another scan, you can trigger a new scan by commenting on the PR with `@promptfoo-scanner`.
 
 ### Fork Pull Requests
 
 By default, code scanning is disabled for fork PRs. This is because any GitHub user can open a fork PR on public repositories.
 
-To enable scanning of fork PRs, add `enable-fork-prs: true` to your workflow:
+To trigger a scan on a fork PR, a maintainer with `write` permissions on the repository can comment on the PR with `@promptfoo-scanner`.
+
+To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your workflow file (`.github/workflows/promptfoo-code-scan.yml` in the main branch):
 
 ```yaml
 - name: Run Promptfoo Code Scan
@@ -64,10 +71,6 @@ To enable scanning of fork PRs, add `enable-fork-prs: true` to your workflow:
   with:
     enable-fork-prs: true
 ```
-
-If you experience any issues, you can disable this setting at any time.
-
-Alternatively, maintainers can trigger scans on specific fork PRs by requesting a review from `@promptfoo-scanner`. This requires write access to the repository.
 
 ### Examples
 
@@ -107,6 +110,25 @@ Alternatively, maintainers can trigger scans on specific fork PRs by requesting 
   uses: promptfoo/code-scan-action@v1
   with:
     config-path: .promptfoo-code-scan.yaml
+```
+
+**Write SARIF output for GitHub Code Scanning:**
+
+The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional. Intentionally skipped scans do not publish a clean Code Scanning result.
+
+```yaml
+- name: Run Promptfoo Code Scan
+  id: promptfoo-code-scan
+  uses: promptfoo/code-scan-action@v1
+  with:
+    sarif-output-path: promptfoo-code-scan.sarif
+
+- name: Upload SARIF to GitHub Code Scanning
+  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+  uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
+    category: promptfoo-code-scan
 ```
 
 ### Configuration File
@@ -152,6 +174,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -160,13 +183,22 @@ jobs:
           fetch-depth: 0
 
       - name: Run Promptfoo Code Scan
+        id: promptfoo-code-scan
         uses: promptfoo/code-scan-action@v1
         env:
           PROMPTFOO_API_KEY: ${{ secrets.PROMPTFOO_API_KEY }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           min-severity: medium # or any other severity threshold: low, medium, high, critical
+          sarif-output-path: promptfoo-code-scan.sarif
           # ... other configuration options...
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
+          category: promptfoo-code-scan
 ```
 
 ## See Also
