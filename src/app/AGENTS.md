@@ -79,7 +79,7 @@ src/app/src/
 If `vite` or `vitest` fails to start, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so install behavior matches CI.
 
 ```bash
-npm run dev:app    # From root, runs on localhost:5173
+npm run dev:app    # From root, runs on localhost:3000
 ```
 
 ## Testing with Vitest
