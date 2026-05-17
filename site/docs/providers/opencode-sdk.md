@@ -409,7 +409,8 @@ Promptfoo normalizes OpenCode's native `skill` tool parts into
 works the same way it does for Claude Agent SDK. Each normalized entry keeps the
 requested skill name and tool input, records tool failures with `is_error: true`,
 and includes the loaded `SKILL.md` path when OpenCode returns the skill directory
-in its result metadata.
+in its result metadata. Those errored entries remain available for diagnostics,
+but they do not count as successful `skill-used` matches.
 
 ## Session Management
 
