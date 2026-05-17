@@ -414,6 +414,27 @@ interface ToolDispatchResult {
   handledIndexes: Set<number>;
 }
 
+interface StreamingResponseCollection {
+  output: string;
+  reasoning: string;
+  stopReason?: string;
+  usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  toolUseBlocks: StreamingToolUseBlock[];
+}
+
+interface StreamingResponseAccumulator {
+  output: string;
+  reasoning: string;
+  stopReason?: string;
+  usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  toolUseBlocks: Map<number, StreamingToolUseBlock>;
+}
+
+interface StreamingResponseMetadata {
+  metadata: Record<string, unknown>;
+  malformedError?: string;
+}
+
 /**
  * Parses streaming tool_use input that arrived as concatenated JSON deltas.
  * Always returns a plain object (the only shape `MCPClient.callTool` accepts);
@@ -1445,6 +1466,220 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return this.buildParsedProviderResponse(context, output, context.malformedError);
   }
 
+  private async buildConverseStreamRequest(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<{
+    input: ConverseStreamCommandInput;
+    toolsDisabled: boolean;
+    messageCount: number;
+  }> {
+    const { messages, system } = parseConverseMessages(prompt);
+    const promptConfig = context?.prompt?.config as Partial<BedrockConverseOptions> | undefined;
+    const inferenceConfig = this.buildInferenceConfig();
+    const toolConfig = await this.buildToolConfig(context?.vars, promptConfig);
+    const toolsDisabled = isDisabledToolChoice(this.getEffectiveToolChoice(promptConfig));
+    const guardrailConfig = this.buildGuardrailConfig();
+    const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
+    const performanceConfig = this.buildPerformanceConfig();
+    const serviceTier = this.buildServiceTier();
+
+    return {
+      input: {
+        modelId: this.modelName,
+        messages,
+        ...(system ? { system } : {}),
+        ...(inferenceConfig ? { inferenceConfig } : {}),
+        ...(toolConfig ? { toolConfig } : {}),
+        ...(guardrailConfig ? { guardrailConfig } : {}),
+        ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
+        ...(performanceConfig ? { performanceConfig } : {}),
+        ...(serviceTier ? { serviceTier } : {}),
+      },
+      toolsDisabled,
+      messageCount: messages.length,
+    };
+  }
+
+  private async collectStreamingResponse(
+    stream: AsyncIterable<Record<string, any>> | undefined,
+  ): Promise<StreamingResponseCollection> {
+    const accumulator: StreamingResponseAccumulator = {
+      output: '',
+      reasoning: '',
+      usage: {},
+      toolUseBlocks: new Map<number, StreamingToolUseBlock>(),
+    };
+
+    if (!stream) {
+      return {
+        output: accumulator.output,
+        reasoning: accumulator.reasoning,
+        stopReason: accumulator.stopReason,
+        usage: accumulator.usage,
+        toolUseBlocks: [],
+      };
+    }
+
+    for await (const event of stream) {
+      this.handleStreamingBlockStart(event, accumulator);
+      this.handleStreamingBlockDelta(event, accumulator);
+      this.handleStreamingMetadata(event, accumulator);
+    }
+
+    return {
+      output: accumulator.output,
+      reasoning: accumulator.reasoning,
+      stopReason: accumulator.stopReason,
+      usage: accumulator.usage,
+      toolUseBlocks: Array.from(accumulator.toolUseBlocks.values()),
+    };
+  }
+
+  private handleStreamingBlockStart(
+    event: Record<string, any>,
+    accumulator: StreamingResponseAccumulator,
+  ): void {
+    if (!('contentBlockStart' in event) || !event.contentBlockStart) {
+      return;
+    }
+
+    const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
+    const start = event.contentBlockStart.start;
+    if (!start || !('toolUse' in start) || !start.toolUse) {
+      return;
+    }
+
+    accumulator.toolUseBlocks.set(blockIndex, {
+      toolUseId: start.toolUse.toolUseId,
+      name: start.toolUse.name,
+      input: '',
+    });
+  }
+
+  private handleStreamingBlockDelta(
+    event: Record<string, any>,
+    accumulator: StreamingResponseAccumulator,
+  ): void {
+    if (!('contentBlockDelta' in event) || !event.contentBlockDelta?.delta) {
+      return;
+    }
+
+    const delta = event.contentBlockDelta.delta;
+    const blockIndex = event.contentBlockDelta.contentBlockIndex ?? 0;
+    if ('text' in delta && delta.text) {
+      accumulator.output += delta.text;
+    }
+
+    if (
+      'reasoningContent' in delta &&
+      delta.reasoningContent &&
+      this.config.showThinking !== false
+    ) {
+      const reasoningContent = delta.reasoningContent as { text?: string };
+      if (reasoningContent.text) {
+        accumulator.reasoning += reasoningContent.text;
+      }
+    }
+
+    if ('toolUse' in delta && delta.toolUse) {
+      const toolBlock = accumulator.toolUseBlocks.get(blockIndex);
+      if (toolBlock && delta.toolUse.input) {
+        toolBlock.input += delta.toolUse.input;
+      }
+    }
+  }
+
+  private handleStreamingMetadata(
+    event: Record<string, any>,
+    accumulator: StreamingResponseAccumulator,
+  ): void {
+    if ('messageStop' in event && event.messageStop) {
+      accumulator.stopReason = event.messageStop.stopReason;
+    }
+    if ('metadata' in event && event.metadata?.usage) {
+      accumulator.usage = event.metadata.usage;
+    }
+  }
+
+  private buildStreamingOutput(
+    collection: StreamingResponseCollection,
+    toolUseParts: string[],
+  ): string {
+    const parts: string[] = [];
+    if (collection.reasoning) {
+      parts.push(`<thinking>\n${collection.reasoning}\n</thinking>`);
+    }
+    if (collection.output) {
+      parts.push(collection.output);
+    }
+    if (toolUseParts.length > 0) {
+      parts.push(...toolUseParts);
+    }
+    return parts.join('\n\n');
+  }
+
+  private buildStreamingMetadata(stopReason?: string): StreamingResponseMetadata {
+    const metadata: Record<string, unknown> = {};
+    if (stopReason) {
+      metadata.stopReason = stopReason;
+    }
+
+    if (stopReason === 'malformed_model_output') {
+      metadata.isModelError = true;
+      return {
+        metadata,
+        malformedError: 'Model produced invalid output. The response could not be parsed correctly.',
+      };
+    }
+
+    if (stopReason === 'malformed_tool_use') {
+      metadata.isModelError = true;
+      return {
+        metadata,
+        malformedError:
+          'Model produced a malformed tool use request. Check tool configuration and input schema.',
+      };
+    }
+
+    return { metadata };
+  }
+
+  private buildStreamingProviderResponse({
+    collection,
+    toolUseParts,
+    mcpErrors,
+  }: {
+    collection: StreamingResponseCollection;
+    toolUseParts: string[];
+    mcpErrors: string[];
+  }): ProviderResponse {
+    const finalOutput = this.buildStreamingOutput(collection, toolUseParts);
+    const { metadata, malformedError } = this.buildStreamingMetadata(collection.stopReason);
+    const tokenUsage: Partial<TokenUsage> = {
+      prompt: collection.usage.inputTokens,
+      completion: collection.usage.outputTokens,
+      total:
+        collection.usage.totalTokens ||
+        (collection.usage.inputTokens || 0) + (collection.usage.outputTokens || 0),
+      numRequests: 1,
+    };
+    const cost = calculateBedrockConverseCost(
+      this.modelName,
+      collection.usage.inputTokens,
+      collection.usage.outputTokens,
+    );
+    const error = malformedError ?? joinMcpErrors(mcpErrors);
+
+    return {
+      output: finalOutput,
+      tokenUsage,
+      ...(cost === undefined ? {} : { cost }),
+      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      ...(error ? { error } : {}),
+    };
+  }
+
   /**
    * Streaming API call using ConverseStream.
    *
@@ -1470,165 +1705,31 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return initErrorResponse;
     }
 
-    // Parse the prompt into messages
-    const { messages, system } = parseConverseMessages(prompt);
-
-    // Build the request (same as non-streaming)
-    const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(
-      context?.vars,
-      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+    const { input, toolsDisabled, messageCount } = await this.buildConverseStreamRequest(
+      prompt,
+      context,
     );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
-    const guardrailConfig = this.buildGuardrailConfig();
-    const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
-    const performanceConfig = this.buildPerformanceConfig();
-    const serviceTier = this.buildServiceTier();
-
-    const converseStreamInput: ConverseStreamCommandInput = {
-      modelId: this.modelName,
-      messages,
-      ...(system ? { system } : {}),
-      ...(inferenceConfig ? { inferenceConfig } : {}),
-      ...(toolConfig ? { toolConfig } : {}),
-      ...(guardrailConfig ? { guardrailConfig } : {}),
-      ...(additionalModelRequestFields ? { additionalModelRequestFields } : {}),
-      ...(performanceConfig ? { performanceConfig } : {}),
-      ...(serviceTier ? { serviceTier } : {}),
-    };
 
     logger.debug('Calling AWS Bedrock ConverseStream API', {
       modelId: this.modelName,
-      messageCount: messages.length,
+      messageCount,
     });
 
     try {
       const bedrockInstance = await this.getBedrockInstance();
       const { ConverseStreamCommand } = await import('@aws-sdk/client-bedrock-runtime');
-      const command = new ConverseStreamCommand(converseStreamInput);
+      const command = new ConverseStreamCommand(input);
       const response = await bedrockInstance.send(command);
-
-      // Collect the full response while also providing a stream
-      let output = '';
-      let reasoning = '';
-      let stopReason: string | undefined;
-      let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
-
-      // Track tool use blocks being streamed
-      const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
-
-      const showThinking = this.config.showThinking !== false;
-
-      // Process the stream
-      if (response.stream) {
-        for await (const event of response.stream) {
-          // Handle content block start - includes tool use and image initialization
-          if ('contentBlockStart' in event && event.contentBlockStart) {
-            const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
-            const start = event.contentBlockStart.start;
-            if (start && 'toolUse' in start && start.toolUse) {
-              toolUseBlocks.set(blockIndex, {
-                toolUseId: start.toolUse.toolUseId,
-                name: start.toolUse.name,
-                input: '',
-              });
-            }
-          }
-
-          if ('contentBlockDelta' in event && event.contentBlockDelta?.delta) {
-            const delta = event.contentBlockDelta.delta;
-            const blockIndex = event.contentBlockDelta.contentBlockIndex ?? 0;
-
-            if ('text' in delta && delta.text) {
-              output += delta.text;
-            }
-            if ('reasoningContent' in delta && delta.reasoningContent && showThinking) {
-              const rc = delta.reasoningContent as { text?: string };
-              if (rc.text) {
-                reasoning += rc.text;
-              }
-            }
-            // Handle streaming tool use input
-            if ('toolUse' in delta && delta.toolUse) {
-              const toolBlock = toolUseBlocks.get(blockIndex);
-              if (toolBlock && delta.toolUse.input) {
-                toolBlock.input += delta.toolUse.input;
-              }
-            }
-          }
-          if ('messageStop' in event && event.messageStop) {
-            stopReason = event.messageStop.stopReason;
-          }
-          if ('metadata' in event && event.metadata?.usage) {
-            usage = event.metadata.usage;
-          }
-        }
-      }
+      const collection = await this.collectStreamingResponse(
+        response.stream as AsyncIterable<Record<string, any>> | undefined,
+      );
 
       // Format tool use blocks for output (same as non-streaming)
       const { toolUseParts, mcpErrors } = await this.formatStreamingToolUseBlocks(
-        Array.from(toolUseBlocks.values()),
+        collection.toolUseBlocks,
         toolsDisabled,
       );
-
-      // Combine reasoning, output, and tool use
-      const parts: string[] = [];
-      if (reasoning) {
-        parts.push(`<thinking>\n${reasoning}\n</thinking>`);
-      }
-      if (output) {
-        parts.push(output);
-      }
-      if (toolUseParts.length > 0) {
-        parts.push(...toolUseParts);
-      }
-      const finalOutput = parts.join('\n\n');
-
-      // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
-      let malformedError: string | undefined;
-      const metadata: Record<string, unknown> = {};
-      if (stopReason) {
-        metadata.stopReason = stopReason;
-      }
-      if (stopReason === 'malformed_model_output') {
-        malformedError =
-          'Model produced invalid output. The response could not be parsed correctly.';
-        metadata.isModelError = true;
-      } else if (stopReason === 'malformed_tool_use') {
-        malformedError =
-          'Model produced a malformed tool use request. Check tool configuration and input schema.';
-        metadata.isModelError = true;
-      }
-
-      const tokenUsage: Partial<TokenUsage> = {
-        prompt: usage.inputTokens,
-        completion: usage.outputTokens,
-        total: usage.totalTokens || (usage.inputTokens || 0) + (usage.outputTokens || 0),
-        numRequests: 1,
-      };
-
-      const cost = calculateBedrockConverseCost(
-        this.modelName,
-        usage.inputTokens,
-        usage.outputTokens,
-      );
-
-      // Surface MCP failures via the response `error` field. If the model also
-      // produced a malformed-output stop reason, that takes precedence since it
-      // is a model-level failure rather than a tool-level one.
-      const error = malformedError ?? joinMcpErrors(mcpErrors);
-
-      return {
-        output: finalOutput,
-        tokenUsage,
-        ...(cost === undefined ? {} : { cost }),
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-        ...(error ? { error } : {}),
-      };
+      return this.buildStreamingProviderResponse({ collection, toolUseParts, mcpErrors });
     } catch (err: any) {
       return {
         error: `Bedrock ConverseStream API error: ${err?.message || String(err)}`,
