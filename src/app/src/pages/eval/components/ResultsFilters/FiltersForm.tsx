@@ -47,6 +47,170 @@ function solelyHasEqualsOperator(type: ResultsFilter['type']): boolean {
   return ['strategy', 'severity', 'policy'].includes(type);
 }
 
+function buildFilterTypeOptions(options: ReturnType<typeof useTableStore.getState>['filters']['options']) {
+  const result: { value: string; label: string }[] = [];
+  if (options.metric.length > 0) {
+    result.push({ value: 'metric', label: TYPE_LABELS.metric });
+  }
+  result.push({ value: 'metadata', label: TYPE_LABELS.metadata });
+  for (const type of ['plugin', 'strategy', 'severity', 'policy'] as const) {
+    if ((options[type]?.length ?? 0) > 0) {
+      result.push({ value: type, label: TYPE_LABELS[type] });
+    }
+  }
+  return result;
+}
+
+function buildOperatorOptions(type: ResultsFilter['type']) {
+  if (type === 'metric') {
+    return ['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].map((value) => ({
+      value,
+      label: OPERATOR_LABELS[value as keyof typeof OPERATOR_LABELS],
+    }));
+  }
+  if (type === 'plugin') {
+    return ['equals', 'not_equals'].map((value) => ({
+      value,
+      label: OPERATOR_LABELS[value as keyof typeof OPERATOR_LABELS],
+    }));
+  }
+  if (solelyHasEqualsOperator(type)) {
+    return [{ value: 'equals', label: OPERATOR_LABELS.equals }];
+  }
+  return ['equals', 'contains', 'not_contains', 'exists'].map((value) => ({
+    value,
+    label: OPERATOR_LABELS[value as keyof typeof OPERATOR_LABELS],
+  }));
+}
+
+function buildValueOptions({
+  type,
+  options,
+  policyIdToNameMap,
+}: {
+  type: ResultsFilter['type'];
+  options: ReturnType<typeof useTableStore.getState>['filters']['options'];
+  policyIdToNameMap?: Record<string, string>;
+}) {
+  if (type !== 'plugin' && !solelyHasEqualsOperator(type)) {
+    return [];
+  }
+
+  return (options[type] ?? [])
+    .map((optionValue) => {
+      let displayName: string | null = null;
+      if (type === 'plugin' || type === 'strategy') {
+        displayName = displayNameOverrides[optionValue as keyof typeof displayNameOverrides] || null;
+      }
+      if (type === 'severity') {
+        displayName = severityDisplayNames[optionValue as keyof typeof severityDisplayNames] || null;
+      }
+      if (type === 'policy') {
+        displayName = policyIdToNameMap?.[optionValue] ?? formatPolicyIdentifierAsMetric(optionValue);
+      }
+      return {
+        value: optionValue,
+        label: displayName ?? optionValue,
+        sortValue: displayName ?? optionValue,
+      };
+    })
+    .sort((a, b) => a.sortValue.localeCompare(b.sortValue));
+}
+
+function getFilterValuePlaceholder(type: ResultsFilter['type'], metadataKey: string) {
+  switch (type) {
+    case 'plugin':
+      return 'Choose plugin...';
+    case 'strategy':
+      return 'Choose strategy...';
+    case 'severity':
+      return 'Choose severity...';
+    case 'policy':
+      return 'Choose policy...';
+    case 'metric':
+      return '0.0';
+    case 'metadata':
+      return metadataKey ? `Enter ${metadataKey} value...` : 'Select a key first';
+    default:
+      return 'Enter value...';
+  }
+}
+
+function buildUpdatedFilterForType(filter: ResultsFilter, type: ResultsFilter['type']) {
+  const updatedFilter = { ...filter, type, value: '' };
+
+  if (type !== 'metadata' && type !== 'metric') {
+    updatedFilter.field = undefined;
+  }
+
+  if (solelyHasEqualsOperator(type) && filter.operator !== 'equals') {
+    updatedFilter.operator = 'equals';
+  }
+  if (type === 'plugin' && !['equals', 'not_equals'].includes(filter.operator)) {
+    updatedFilter.operator = 'equals';
+  }
+  if (
+    type === 'metric' &&
+    !['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator)
+  ) {
+    updatedFilter.operator = 'is_defined';
+  }
+
+  return updatedFilter;
+}
+
+function shouldFetchMetadataKeys({
+  type,
+  evalId,
+  metadataKeysLoading,
+  metadataKeys,
+}: {
+  type: ResultsFilter['type'];
+  evalId?: string;
+  metadataKeysLoading: boolean;
+  metadataKeys?: string[];
+}) {
+  return (
+    type === 'metadata' &&
+    Boolean(evalId) &&
+    !metadataKeysLoading &&
+    (!metadataKeys || metadataKeys.length === 0)
+  );
+}
+
+function shouldPrefetchMetadataValues({
+  evalId,
+  metadataKey,
+  hasMetadataValueCache,
+  metadataValuesAreLoading,
+  metadataValuesHadError,
+}: {
+  evalId?: string;
+  metadataKey: string;
+  hasMetadataValueCache: boolean;
+  metadataValuesAreLoading: boolean;
+  metadataValuesHadError: boolean;
+}) {
+  return (
+    Boolean(evalId) &&
+    Boolean(metadataKey) &&
+    !hasMetadataValueCache &&
+    !metadataValuesAreLoading &&
+    !metadataValuesHadError
+  );
+}
+
+function getDisplayLogicOperator(
+  filter: ResultsFilter,
+  filterValues: Record<string, ResultsFilter>,
+) {
+  const filterWithSortIndex1 = Object.values(filterValues).find((value) => value.sortIndex === 1);
+  if (filter.sortIndex === 1) {
+    return filter.logicOperator ?? 'and';
+  }
+  return filterWithSortIndex1?.logicOperator ?? filter.logicOperator ?? 'and';
+}
+
 function DebouncedInput({
   value,
   onChange,
@@ -77,6 +241,306 @@ function DebouncedInput({
       onChange={(e) => setLocalValue(e.target.value)}
       placeholder={placeholder}
       className={className}
+    />
+  );
+}
+
+function LogicOperatorSelector({
+  index,
+  totalFilters,
+  displayLogicOperator,
+  filterSortIndex,
+  onChange,
+}: {
+  index: number;
+  totalFilters: number;
+  displayLogicOperator: ResultsFilter['logicOperator'];
+  filterSortIndex: number;
+  onChange: (logicOperator: ResultsFilter['logicOperator']) => void;
+}) {
+  if (index === 0 && totalFilters > 1) {
+    return <span className="w-[70px] shrink-0" />;
+  }
+  if (index === 0) {
+    return null;
+  }
+  return (
+    <Select
+      value={displayLogicOperator}
+      onValueChange={(v) => onChange(v as ResultsFilter['logicOperator'])}
+      disabled={filterSortIndex > 1}
+    >
+      <SelectTrigger className="h-8 w-[70px] shrink-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="and">and</SelectItem>
+        <SelectItem value="or">or</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function MetadataFieldSelector({
+  filter,
+  metadataKeys,
+  metadataKeysLoading,
+  metadataKeysError,
+  onChange,
+}: {
+  filter: ResultsFilter;
+  metadataKeys?: string[];
+  metadataKeysLoading: boolean;
+  metadataKeysError?: string | null;
+  onChange: (field: string) => void;
+}) {
+  if (metadataKeysLoading) {
+    return (
+      <div className="relative w-[140px]">
+        <Input value="" placeholder="Loading keys..." disabled className="h-8 pr-8" />
+        <Spinner className="size-3 absolute right-2 top-2.5" />
+      </div>
+    );
+  }
+  if (metadataKeys && metadataKeys.length > 0) {
+    return (
+      <Select value={filter.field || ''} onValueChange={onChange}>
+        <SelectTrigger className="h-8 w-[140px] shrink-0">
+          <SelectValue placeholder="Choose key..." />
+        </SelectTrigger>
+        <SelectContent>
+          {metadataKeys.map((key) => (
+            <SelectItem key={key} value={key}>
+              {key}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+  return (
+    <Input
+      value={filter.field || ''}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={metadataKeysError ? 'Error loading keys' : 'Enter key name...'}
+      className={cn('h-8 w-[140px]', metadataKeysError && 'border-destructive')}
+    />
+  );
+}
+
+function MetricFieldSelector({
+  filter,
+  metrics,
+  onChange,
+}: {
+  filter: ResultsFilter;
+  metrics: string[];
+  onChange: (field: string) => void;
+}) {
+  if (metrics.length === 0) {
+    return null;
+  }
+  return (
+    <Select value={filter.field || ''} onValueChange={onChange}>
+      <SelectTrigger className="h-8 w-[140px] shrink-0">
+        <SelectValue placeholder="Choose metric..." />
+      </SelectTrigger>
+      <SelectContent>
+        {metrics.map((metric) => (
+          <SelectItem key={metric} value={metric}>
+            {metric}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FilterTypeSelector({
+  filter,
+  typeOptions,
+  onChange,
+}: {
+  filter: ResultsFilter;
+  typeOptions: Array<{ value: string; label: string }>;
+  onChange: (type: ResultsFilter['type']) => void;
+}) {
+  return (
+    <Select value={filter.type} onValueChange={(value) => onChange(value as ResultsFilter['type'])}>
+      <SelectTrigger className="h-8 w-[110px] shrink-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {typeOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FilterFieldSelector({
+  filter,
+  metadataKeys,
+  metadataKeysLoading,
+  metadataKeysError,
+  metrics,
+  onChange,
+}: {
+  filter: ResultsFilter;
+  metadataKeys?: string[];
+  metadataKeysLoading: boolean;
+  metadataKeysError?: string | null;
+  metrics: string[];
+  onChange: (field: string) => void;
+}) {
+  if (filter.type === 'metadata') {
+    return (
+      <MetadataFieldSelector
+        filter={filter}
+        metadataKeys={metadataKeys}
+        metadataKeysLoading={metadataKeysLoading}
+        metadataKeysError={metadataKeysError}
+        onChange={onChange}
+      />
+    );
+  }
+  if (filter.type === 'metric') {
+    return <MetricFieldSelector filter={filter} metrics={metrics} onChange={onChange} />;
+  }
+  return null;
+}
+
+function FilterOperatorSelector({
+  filter,
+  operatorOptions,
+  onChange,
+}: {
+  filter: ResultsFilter;
+  operatorOptions: Array<{ value: string; label: string }>;
+  onChange: (operator: ResultsFilter['operator']) => void;
+}) {
+  return (
+    <Select
+      value={filter.operator}
+      onValueChange={(value) => onChange(value as ResultsFilter['operator'])}
+    >
+      <SelectTrigger className="h-8 w-[110px] shrink-0">
+        <SelectValue placeholder="Operator..." />
+      </SelectTrigger>
+      <SelectContent>
+        {operatorOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function FilterValueInput({
+  filter,
+  valuePlaceholder,
+  currentValueLabel,
+  valueOptions,
+  selectedValues,
+  metadataValueInput,
+  setMetadataValueInput,
+  handleValueChange,
+  metadataKey,
+  evalId,
+  fetchMetadataValues,
+  metadataValuesHadError,
+  metadataValuesAreLoading,
+  metadataValueOptions,
+}: {
+  filter: ResultsFilter;
+  valuePlaceholder: string;
+  currentValueLabel: string;
+  valueOptions: Array<{ value: string; label: string }>;
+  selectedValues: string[];
+  metadataValueInput: string;
+  setMetadataValueInput: (value: string) => void;
+  handleValueChange: (value: string) => void;
+  metadataKey: string;
+  evalId?: string;
+  fetchMetadataValues: (evalId: string, metadataKey: string) => void;
+  metadataValuesHadError: boolean;
+  metadataValuesAreLoading: boolean;
+  metadataValueOptions: string[];
+}) {
+  if (filter.operator === 'exists' || filter.operator === 'is_defined') {
+    return null;
+  }
+
+  if (filter.type === 'plugin' || solelyHasEqualsOperator(filter.type)) {
+    return (
+      <Select value={filter.value} onValueChange={handleValueChange}>
+        <SelectTrigger className="h-8 flex-1 min-w-[150px]">
+          <SelectValue placeholder={valuePlaceholder}>{currentValueLabel}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {valueOptions.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value} disabled={selectedValues.includes(opt.value)}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  if (filter.type === 'metric' && ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator)) {
+    return (
+      <NumberInput
+        value={filter.value === '' ? undefined : Number(filter.value)}
+        onChange={(v) => handleValueChange(v === undefined ? '' : String(v))}
+        allowDecimals
+        step={0.1}
+        placeholder={valuePlaceholder}
+        className="h-8 flex-1 min-w-[100px]"
+      />
+    );
+  }
+
+  if (filter.type === 'metadata' && filter.operator === 'equals') {
+    return (
+      <div className="relative flex-1 min-w-[150px]">
+        <Input
+          list={`metadata-values-${filter.id}`}
+          value={metadataValueInput}
+          onChange={(e) => {
+            setMetadataValueInput(e.target.value);
+            handleValueChange(e.target.value);
+          }}
+          onFocus={() => {
+            if (metadataKey && evalId) {
+              fetchMetadataValues(evalId, metadataKey);
+            }
+          }}
+          placeholder={valuePlaceholder}
+          disabled={!metadataKey || !evalId}
+          className={cn('h-8', metadataValuesHadError && 'border-destructive')}
+        />
+        {metadataValuesAreLoading && <Spinner className="size-3 absolute right-2 top-2.5" />}
+        <datalist id={`metadata-values-${filter.id}`}>
+          {metadataValueOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+      </div>
+    );
+  }
+
+  return (
+    <DebouncedInput
+      value={filter.value}
+      onChange={handleValueChange}
+      placeholder={valuePlaceholder}
+      className="h-8 flex-1 min-w-[150px]"
     />
   );
 }
@@ -138,11 +602,13 @@ function FilterRow({
 
   useEffect(() => {
     if (
-      !evalId ||
-      !metadataKey ||
-      hasMetadataValueCache ||
-      metadataValuesAreLoading ||
-      metadataValuesHadError
+      !shouldPrefetchMetadataValues({
+        evalId,
+        metadataKey,
+        hasMetadataValueCache,
+        metadataValuesAreLoading,
+        metadataValuesHadError,
+      })
     ) {
       return;
     }
@@ -159,30 +625,15 @@ function FilterRow({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTypeChange = useCallback(
     (type: ResultsFilter['type']) => {
-      const updatedFilter = { ...filter, type, value: '' };
-
-      if (type !== 'metadata' && type !== 'metric') {
-        updatedFilter.field = undefined;
-      }
-
-      if (solelyHasEqualsOperator(type) && filter.operator !== 'equals') {
-        updatedFilter.operator = 'equals';
-      }
-      if (type === 'plugin' && !['equals', 'not_equals'].includes(filter.operator)) {
-        updatedFilter.operator = 'equals';
-      }
-      if (
-        type === 'metric' &&
-        !['is_defined', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator)
-      ) {
-        updatedFilter.operator = 'is_defined';
-      }
+      const updatedFilter = buildUpdatedFilterForType(filter, type);
 
       if (
-        type === 'metadata' &&
-        evalId &&
-        !metadataKeysLoading &&
-        (!metadataKeys || metadataKeys.length === 0)
+        shouldFetchMetadataKeys({
+          type,
+          evalId,
+          metadataKeysLoading,
+          metadataKeys,
+        })
       ) {
         fetchMetadataKeys(evalId);
       }
@@ -223,95 +674,24 @@ function FilterRow({
     [filter.sortIndex, updateAllFilterLogicOperators],
   );
 
-  // Get logic operator from second filter
-  const filterWithSortIndex1 = Object.values(filters.values).find((f) => f.sortIndex === 1);
-  const displayLogicOperator =
-    filter.sortIndex === 1
-      ? (filter.logicOperator ?? 'and')
-      : (filterWithSortIndex1?.logicOperator ?? filter.logicOperator ?? 'and');
+  const displayLogicOperator = getDisplayLogicOperator(filter, filters.values);
 
   // Build type options
-  const typeOptions = useMemo(() => {
-    const opts: { value: string; label: string }[] = [];
-    if (filters.options.metric.length > 0) {
-      opts.push({ value: 'metric', label: TYPE_LABELS.metric });
-    }
-    opts.push({ value: 'metadata', label: TYPE_LABELS.metadata });
-    if ((filters.options.plugin?.length ?? 0) > 0) {
-      opts.push({ value: 'plugin', label: TYPE_LABELS.plugin });
-    }
-    if ((filters.options.strategy?.length ?? 0) > 0) {
-      opts.push({ value: 'strategy', label: TYPE_LABELS.strategy });
-    }
-    if ((filters.options.severity?.length ?? 0) > 0) {
-      opts.push({ value: 'severity', label: TYPE_LABELS.severity });
-    }
-    if ((filters.options.policy?.length ?? 0) > 0) {
-      opts.push({ value: 'policy', label: TYPE_LABELS.policy });
-    }
-    return opts;
-  }, [filters.options]);
+  const typeOptions = useMemo(() => buildFilterTypeOptions(filters.options), [filters.options]);
 
   // Build operator options based on type
-  const operatorOptions = useMemo(() => {
-    if (filter.type === 'metric') {
-      return [
-        { value: 'is_defined', label: OPERATOR_LABELS.is_defined },
-        { value: 'eq', label: OPERATOR_LABELS.eq },
-        { value: 'neq', label: OPERATOR_LABELS.neq },
-        { value: 'gt', label: OPERATOR_LABELS.gt },
-        { value: 'gte', label: OPERATOR_LABELS.gte },
-        { value: 'lt', label: OPERATOR_LABELS.lt },
-        { value: 'lte', label: OPERATOR_LABELS.lte },
-      ];
-    }
-    if (filter.type === 'plugin') {
-      return [
-        { value: 'equals', label: OPERATOR_LABELS.equals },
-        { value: 'not_equals', label: OPERATOR_LABELS.not_equals },
-      ];
-    }
-    if (solelyHasEqualsOperator(filter.type)) {
-      return [{ value: 'equals', label: OPERATOR_LABELS.equals }];
-    }
-    return [
-      { value: 'equals', label: OPERATOR_LABELS.equals },
-      { value: 'contains', label: OPERATOR_LABELS.contains },
-      { value: 'not_contains', label: OPERATOR_LABELS.not_contains },
-      { value: 'exists', label: OPERATOR_LABELS.exists },
-    ];
-  }, [filter.type]);
+  const operatorOptions = useMemo(() => buildOperatorOptions(filter.type), [filter.type]);
 
   // Build value options for select types
-  const valueOptions = useMemo(() => {
-    if (filter.type === 'plugin' || solelyHasEqualsOperator(filter.type)) {
-      return (filters.options[filter.type] ?? [])
-        .map((optionValue) => {
-          let displayName: string | null = null;
-          if (filter.type === 'plugin' || filter.type === 'strategy') {
-            displayName =
-              displayNameOverrides[optionValue as keyof typeof displayNameOverrides] || null;
-          }
-          if (filter.type === 'severity') {
-            displayName =
-              severityDisplayNames[optionValue as keyof typeof severityDisplayNames] || null;
-          }
-          if (filter.type === 'policy') {
-            const policyName = filters.policyIdToNameMap?.[optionValue];
-            displayName = policyName ?? formatPolicyIdentifierAsMetric(optionValue);
-          }
-          return {
-            value: optionValue,
-            label: displayName ?? optionValue,
-            sortValue: displayName ?? optionValue,
-          };
-        })
-        .sort((a, b) => a.sortValue.localeCompare(b.sortValue));
-    }
-    return [];
-  }, [filter.type, filters.options, filters.policyIdToNameMap]);
-
-  const showValueInput = filter.operator !== 'exists' && filter.operator !== 'is_defined';
+  const valueOptions = useMemo(
+    () =>
+      buildValueOptions({
+        type: filter.type,
+        options: filters.options,
+        policyIdToNameMap: filters.policyIdToNameMap,
+      }),
+    [filter.type, filters.options, filters.policyIdToNameMap],
+  );
 
   // Get display name for current value (for select types)
   const currentValueLabel = useMemo(() => {
@@ -320,187 +700,55 @@ function FilterRow({
   }, [valueOptions, filter.value]);
 
   // Context-aware placeholders
-  const valuePlaceholder = useMemo(() => {
-    switch (filter.type) {
-      case 'plugin':
-        return 'Choose plugin...';
-      case 'strategy':
-        return 'Choose strategy...';
-      case 'severity':
-        return 'Choose severity...';
-      case 'policy':
-        return 'Choose policy...';
-      case 'metric':
-        return '0.0';
-      case 'metadata':
-        return metadataKey ? `Enter ${metadataKey} value...` : 'Select a key first';
-      default:
-        return 'Enter value...';
-    }
-  }, [filter.type, metadataKey]);
+  const valuePlaceholder = useMemo(
+    () => getFilterValuePlaceholder(filter.type, metadataKey),
+    [filter.type, metadataKey],
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {/* AND/OR selector (spacer for first filter only when multiple filters exist) */}
-      {index === 0 && totalFilters > 1 ? (
-        <span className="w-[70px] shrink-0" />
-      ) : index > 0 ? (
-        <Select
-          value={displayLogicOperator}
-          onValueChange={(v) => handleLogicOperatorChange(v as ResultsFilter['logicOperator'])}
-          disabled={filter.sortIndex > 1}
-        >
-          <SelectTrigger className="h-8 w-[70px] shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="and">and</SelectItem>
-            <SelectItem value="or">or</SelectItem>
-          </SelectContent>
-        </Select>
-      ) : null}
+      <LogicOperatorSelector
+        index={index}
+        totalFilters={totalFilters}
+        displayLogicOperator={displayLogicOperator}
+        filterSortIndex={filter.sortIndex}
+        onChange={handleLogicOperatorChange}
+      />
 
-      {/* Type selector */}
-      <Select
-        value={filter.type}
-        onValueChange={(v) => handleTypeChange(v as ResultsFilter['type'])}
-      >
-        <SelectTrigger className="h-8 w-[110px] shrink-0">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {typeOptions.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <FilterTypeSelector filter={filter} typeOptions={typeOptions} onChange={handleTypeChange} />
 
-      {/* Field selector for metadata */}
-      {filter.type === 'metadata' &&
-        (metadataKeysLoading ? (
-          <div className="relative w-[140px]">
-            <Input value="" placeholder="Loading keys..." disabled className="h-8 pr-8" />
-            <Spinner className="size-3 absolute right-2 top-2.5" />
-          </div>
-        ) : metadataKeys && metadataKeys.length > 0 ? (
-          <Select value={filter.field || ''} onValueChange={handleFieldChange}>
-            <SelectTrigger className="h-8 w-[140px] shrink-0">
-              <SelectValue placeholder="Choose key..." />
-            </SelectTrigger>
-            <SelectContent>
-              {metadataKeys.map((key) => (
-                <SelectItem key={key} value={key}>
-                  {key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <Input
-            value={filter.field || ''}
-            onChange={(e) => handleFieldChange(e.target.value)}
-            placeholder={metadataKeysError ? 'Error loading keys' : 'Enter key name...'}
-            className={cn('h-8 w-[140px]', metadataKeysError && 'border-destructive')}
-          />
-        ))}
+      <FilterFieldSelector
+        filter={filter}
+        metadataKeys={metadataKeys}
+        metadataKeysLoading={metadataKeysLoading}
+        metadataKeysError={metadataKeysError}
+        metrics={filters.options.metric}
+        onChange={handleFieldChange}
+      />
 
-      {/* Field selector for metric */}
-      {filter.type === 'metric' && filters.options.metric.length > 0 && (
-        <Select value={filter.field || ''} onValueChange={handleFieldChange}>
-          <SelectTrigger className="h-8 w-[140px] shrink-0">
-            <SelectValue placeholder="Choose metric..." />
-          </SelectTrigger>
-          <SelectContent>
-            {filters.options.metric.map((metric) => (
-              <SelectItem key={metric} value={metric}>
-                {metric}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      {/* Operator selector */}
-      <Select
-        value={filter.operator}
-        onValueChange={(v) => handleOperatorChange(v as ResultsFilter['operator'])}
-      >
-        <SelectTrigger className="h-8 w-[110px] shrink-0">
-          <SelectValue placeholder="Operator..." />
-        </SelectTrigger>
-        <SelectContent>
-          {operatorOptions.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <FilterOperatorSelector
+        filter={filter}
+        operatorOptions={operatorOptions}
+        onChange={handleOperatorChange}
+      />
 
       {/* Value input */}
-      {showValueInput &&
-        (filter.type === 'plugin' || solelyHasEqualsOperator(filter.type) ? (
-          <Select value={filter.value} onValueChange={handleValueChange}>
-            <SelectTrigger className="h-8 flex-1 min-w-[150px]">
-              <SelectValue placeholder={valuePlaceholder}>{currentValueLabel}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {valueOptions.map((opt) => (
-                <SelectItem
-                  key={opt.value}
-                  value={opt.value}
-                  disabled={selectedValues.includes(opt.value)}
-                >
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : filter.type === 'metric' &&
-          ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(filter.operator) ? (
-          <NumberInput
-            value={filter.value === '' ? undefined : Number(filter.value)}
-            onChange={(v) => handleValueChange(v === undefined ? '' : String(v))}
-            allowDecimals
-            step={0.1}
-            placeholder={valuePlaceholder}
-            className="h-8 flex-1 min-w-[100px]"
-          />
-        ) : filter.type === 'metadata' && filter.operator === 'equals' ? (
-          <div className="relative flex-1 min-w-[150px]">
-            <Input
-              list={`metadata-values-${filter.id}`}
-              value={metadataValueInput}
-              onChange={(e) => {
-                setMetadataValueInput(e.target.value);
-                handleValueChange(e.target.value);
-              }}
-              onFocus={() => {
-                if (metadataKey && evalId) {
-                  fetchMetadataValues(evalId, metadataKey);
-                }
-              }}
-              placeholder={valuePlaceholder}
-              disabled={!metadataKey || !evalId}
-              className={cn('h-8', metadataValuesHadError && 'border-destructive')}
-            />
-            {metadataValuesAreLoading && <Spinner className="size-3 absolute right-2 top-2.5" />}
-            <datalist id={`metadata-values-${filter.id}`}>
-              {metadataValueOptions.map((option) => (
-                <option key={option} value={option} />
-              ))}
-            </datalist>
-          </div>
-        ) : (
-          <DebouncedInput
-            value={filter.value}
-            onChange={handleValueChange}
-            placeholder={valuePlaceholder}
-            className="h-8 flex-1 min-w-[150px]"
-          />
-        ))}
+      <FilterValueInput
+        filter={filter}
+        valuePlaceholder={valuePlaceholder}
+        currentValueLabel={currentValueLabel}
+        valueOptions={valueOptions}
+        selectedValues={selectedValues}
+        metadataValueInput={metadataValueInput}
+        setMetadataValueInput={setMetadataValueInput}
+        handleValueChange={handleValueChange}
+        metadataKey={metadataKey}
+        evalId={evalId}
+        fetchMetadataValues={fetchMetadataValues}
+        metadataValuesHadError={metadataValuesHadError}
+        metadataValuesAreLoading={metadataValuesAreLoading}
+        metadataValueOptions={metadataValueOptions}
+      />
 
       {/* Remove button */}
       <Button
