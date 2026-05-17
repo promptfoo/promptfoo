@@ -3,6 +3,7 @@ import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
+import type { EventSource } from '../types/eventSource';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
@@ -334,6 +335,7 @@ export interface RedteamRunOptions {
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;
+  eventSource?: EventSource;
 }
 
 export interface SavedRedteamConfig {
@@ -476,5 +478,23 @@ export class PartialGenerationError extends Error {
     super(message);
     this.name = 'PartialGenerationError';
     this.failedPlugins = failedPlugins;
+  }
+}
+
+/**
+ * Raised when a local user has exhausted the monthly free redteam probe quota.
+ * CLI handlers translate this into an exit code; package callers can catch it.
+ */
+export class ProbeLimitExceededError extends Error {
+  public readonly used: number;
+  public readonly limit: number;
+
+  constructor(used: number, limit: number) {
+    super(
+      `Monthly redteam probe limit reached: ${used.toLocaleString('en-US')}/${limit.toLocaleString('en-US')}`,
+    );
+    this.name = 'ProbeLimitExceededError';
+    this.used = used;
+    this.limit = limit;
   }
 }

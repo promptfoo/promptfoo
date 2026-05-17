@@ -57,7 +57,31 @@ def call_api(query, options, context):
     return result
 ```
 
-In practice, your retrieval logic is probably more complicated than the above (e.g. query transformations and fanout). Substitute `retrieval.py` with a script of your own that prepares the query and talks to your database.
+In practice, your retrieval logic is probably more complicated than the above (e.g. query transformations and fanout). Substitute `retrieve.py` with a script of your own that prepares the query and talks to your database.
+
+### How Promptfoo runs Python retrieval scripts
+
+The `file://retrieve.py` provider is still run from the normal Node-based Promptfoo CLI. When `promptfoo eval` reaches that provider, it starts a Python worker, imports `retrieve.py`, and calls `call_api(prompt, options, context)` for each test case. The first argument is the rendered prompt, which is the `{{ query }}` value in this example. You do not need a separate Promptfoo Python package or server.
+
+You do need Python 3 and any libraries your retrieval script imports. If the script uses LangChain, Chroma, a database client, or your own package, install those dependencies into the Python environment that Promptfoo will use:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+npx promptfoo@latest eval
+```
+
+If you do not want to activate the virtual environment before running Promptfoo, point the provider at the environment's Python executable:
+
+```yaml
+providers:
+  - id: file://retrieve.py
+    config:
+      pythonExecutable: ./.venv/bin/python
+```
+
+You can also set `PROMPTFOO_PYTHON=/path/to/python` as a global default when the provider does not specify `pythonExecutable`. See the [Python provider docs](/docs/providers/python#environment-configuration) for more options.
 
 ### Configuration
 

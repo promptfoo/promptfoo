@@ -328,14 +328,39 @@ describe('gcg strategy', () => {
 
     let concurrentCalls = 0;
     let maxConcurrentCalls = 0;
+    // Concurrency barrier: hold every in-flight call until CONCURRENCY of them
+    // have started, then release that wave together. If the SUT exceeds the
+    // limit, maxConcurrentCalls will record the violation regardless of pacing.
+    let releaseWave: (() => void) | undefined;
+    let waveBarrier = new Promise<void>((resolve) => {
+      releaseWave = resolve;
+    });
 
     mockFetchWithCache.mockImplementation(async function (): Promise<
       FetchWithCacheResult<GcgGenerationResponse>
     > {
       concurrentCalls++;
       maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      if (concurrentCalls >= CONCURRENCY) {
+        releaseWave?.();
+      }
+      let resolveFallback!: () => void;
+      const fallback = new Promise<void>((r) => {
+        resolveFallback = r;
+      });
+      const fallbackHandle = setTimeout(() => resolveFallback(), 100);
+      try {
+        await Promise.race([waveBarrier, fallback]);
+      } finally {
+        clearTimeout(fallbackHandle);
+      }
       concurrentCalls--;
+      // Reset the barrier for the next wave so a slow SUT can still progress.
+      if (concurrentCalls === 0) {
+        waveBarrier = new Promise<void>((resolve) => {
+          releaseWave = resolve;
+        });
+      }
       return {
         data: { responses: mockResponses[0] },
         cached: false,

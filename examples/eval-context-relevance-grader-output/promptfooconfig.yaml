@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Context relevance grader output
+
+prompts:
+  - 'Answer this question: {{ query }}'
+
+providers:
+  - id: echo
+    label: Echo target
+
+tests:
+  - description: Judge output appears with the assertion result
+    vars:
+      query: What is the capital of France?
+      context: |-
+        Paris is the capital of France.
+        France is in Europe.
+    assert:
+      - type: context-relevance
+        threshold: 0.8
+    options:
+      provider:
+        text:
+          id: file://./judge-provider.mjs
+          label: Demo judge

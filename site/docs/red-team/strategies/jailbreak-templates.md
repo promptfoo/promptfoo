@@ -113,5 +113,4 @@ strategies:
 - [Iterative Jailbreak](/docs/red-team/strategies/iterative) - AI-generated adaptive attacks
 - [Composite Jailbreak](/docs/red-team/strategies/composite-jailbreaks) - Multi-technique attacks
 - [Tree Jailbreak](/docs/red-team/strategies/tree) - Tree-search optimization
-
-For a comprehensive overview of LLM vulnerabilities, visit [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types).
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
