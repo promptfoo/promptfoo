@@ -778,6 +778,59 @@ describe('TestCasesSection', () => {
       expect(mockShowToast).toHaveBeenCalledWith('Deleted 1 test case', 'success');
     });
 
+    it('closes delete-selected confirmation if the test case list changes underneath it', async () => {
+      const user = userEvent.setup();
+      const initialTestCases = [
+        {
+          description: 'Keep me',
+          vars: { input: 'keep' },
+        },
+        {
+          description: 'Delete me',
+          vars: { input: 'delete' },
+        },
+      ];
+      (useStore as any).mockReturnValue({
+        config: { tests: initialTestCases },
+        updateConfig: mockUpdateConfig,
+      });
+
+      const { rerender } = render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Select' }));
+      await user.click(screen.getByRole('button', { name: 'Select test case 2' }));
+      await user.click(screen.getByRole('button', { name: 'Delete Selected (1)' }));
+
+      expect(screen.getByText('Delete 1 selected test case?')).toBeInTheDocument();
+
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            ...initialTestCases,
+            {
+              description: 'Imported later',
+              vars: { input: 'imported' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Delete 1 selected test case?')).not.toBeInTheDocument();
+      });
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
+    });
+
     it('deletes every test case after delete-all confirmation', async () => {
       const user = userEvent.setup();
       (useStore as any).mockReturnValue({
@@ -809,6 +862,56 @@ describe('TestCasesSection', () => {
         tests: [],
       });
       expect(mockShowToast).toHaveBeenCalledWith('Deleted 2 test cases', 'success');
+    });
+
+    it('closes delete-all confirmation if the test case list changes underneath it', async () => {
+      const user = userEvent.setup();
+      const initialTestCases = [
+        {
+          description: 'First test',
+          vars: { input: 'first' },
+        },
+        {
+          description: 'Second test',
+          vars: { input: 'second' },
+        },
+      ];
+      (useStore as any).mockReturnValue({
+        config: { tests: initialTestCases },
+        updateConfig: mockUpdateConfig,
+      });
+
+      const { rerender } = render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Delete All' }));
+      expect(screen.getByText('Delete all 2 test cases?')).toBeInTheDocument();
+
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            ...initialTestCases,
+            {
+              description: 'Imported later',
+              vars: { input: 'imported' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      rerender(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Delete all 2 test cases?')).not.toBeInTheDocument();
+      });
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
     });
   });
 });

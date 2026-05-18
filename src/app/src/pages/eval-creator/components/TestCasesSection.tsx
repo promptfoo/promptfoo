@@ -105,6 +105,11 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     const testCasesChanged = previousTestCasesRef.current !== testCases;
     previousTestCasesRef.current = testCases;
 
+    if (testCasesChanged) {
+      setDeleteSelectedDialogOpen(false);
+      setDeleteAllDialogOpen(false);
+    }
+
     if (!selectionMode || testCasesChanged) {
       setSelectedIndices((current) => (current.size === 0 ? current : new Set()));
     }
