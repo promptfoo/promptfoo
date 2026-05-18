@@ -210,62 +210,59 @@ describe('Telemetry', () => {
   it('should include version and CI status in telemetry events', async () => {
     vi.useRealTimers(); // Temporarily use real timers for this test
 
-    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
-    mockProcessEnv({ IS_TESTING: undefined }); // Clear IS_TESTING to allow fetch calls
-
     const isCIMock = vi.mocked(envars.isCI);
-    const originalMockValue = isCIMock.getMockImplementation();
-    isCIMock.mockReturnValue(true);
-    fetchWithProxySpy.mockClear();
 
-    const telemetry = new Telemetry();
-    telemetry.record('feature_used', { test: 'value' });
+    try {
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined }); // Clear IS_TESTING to allow fetch calls
 
-    await vi.waitFor(() => {
-      expect(fetchWithProxySpy.mock.calls.length).toBeGreaterThan(0);
-    });
+      isCIMock.mockReturnValue(true);
+      fetchWithProxySpy.mockClear();
 
-    const fetchCalls = fetchWithProxySpy.mock.calls;
+      const telemetry = new Telemetry();
+      telemetry.record('feature_used', { test: 'value' });
 
-    let foundExpectedProperties = false;
+      await vi.waitFor(() => {
+        expect(fetchWithProxySpy.mock.calls.length).toBeGreaterThan(0);
+      });
 
-    for (const call of fetchCalls) {
-      if (call[1] && call[1].body && typeof call[1].body === 'string') {
-        try {
-          const data = JSON.parse(call[1].body);
+      const fetchCalls = fetchWithProxySpy.mock.calls;
 
-          // Check for the structure sent to R_ENDPOINT
-          if (data.meta) {
-            // Verify that isRunningInCi property is present (value can be true or false depending on test order)
-            if (
-              data.meta.test === 'value' &&
-              data.meta.packageVersion === '1.0.0' &&
-              typeof data.meta.isRunningInCi === 'boolean' &&
-              data.meta.nodeVersion === process.version &&
-              data.meta.nodeMajor === Number.parseInt(process.versions.node, 10) &&
-              data.meta.platform === process.platform &&
-              data.meta.arch === process.arch
-            ) {
-              foundExpectedProperties = true;
-              break;
+      let foundExpectedProperties = false;
+
+      for (const call of fetchCalls) {
+        if (call[1] && call[1].body && typeof call[1].body === 'string') {
+          try {
+            const data = JSON.parse(call[1].body);
+
+            // Check for the structure sent to R_ENDPOINT
+            if (data.meta) {
+              // Verify that isRunningInCi property is present (value can be true or false depending on test order)
+              if (
+                data.meta.test === 'value' &&
+                data.meta.packageVersion === '1.0.0' &&
+                typeof data.meta.isRunningInCi === 'boolean' &&
+                data.meta.nodeVersion === process.version &&
+                data.meta.nodeMajor === Number.parseInt(process.versions.node, 10) &&
+                data.meta.platform === process.platform &&
+                data.meta.arch === process.arch
+              ) {
+                foundExpectedProperties = true;
+                break;
+              }
             }
+          } catch {
+            // Skip JSON parse errors
           }
-        } catch {
-          // Skip JSON parse errors
         }
       }
-    }
 
-    expect(foundExpectedProperties).toBe(true);
-
-    // Restore original mock
-    if (originalMockValue) {
-      isCIMock.mockImplementation(originalMockValue);
-    } else {
+      expect(foundExpectedProperties).toBe(true);
+    } finally {
       isCIMock.mockReturnValue(false);
+      mockProcessEnv({ IS_TESTING: 'true' }); // Reset IS_TESTING
+      vi.useFakeTimers(); // Restore fake timers
     }
-    mockProcessEnv({ IS_TESTING: 'true' }); // Reset IS_TESTING
-    vi.useFakeTimers(); // Restore fake timers
   });
 
   it('should save consent successfully', async () => {
@@ -399,10 +396,9 @@ describe('Telemetry', () => {
         flush: vi.fn().mockResolvedValue(undefined),
         on: vi.fn(), // Add the 'on' method for error handling
       };
-      // Use a class-like constructor for PostHog
-      mockPostHog = vi.fn(function (this: PostHogMockInstance) {
-        Object.assign(this, mockPostHogInstance);
-        return this;
+      // Return an explicit instance object so constructor behavior stays stable.
+      mockPostHog = vi.fn(function (): PostHogMockInstance {
+        return { ...mockPostHogInstance };
       });
 
       resetModulesAndMockFetch();
@@ -487,6 +483,10 @@ describe('Telemetry', () => {
       }));
     });
 
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should call PostHog identify via constructor when telemetry is enabled', async () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
       mockProcessEnv({ IS_TESTING: undefined });
@@ -498,19 +498,21 @@ describe('Telemetry', () => {
 
       const telemetry = new telemetryModule.Telemetry();
       expect(telemetry).toBeInstanceOf(telemetryModule.Telemetry);
-      await Promise.resolve();
-      await Promise.resolve();
 
-      expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
-        distinctId: 'test-user-id',
-        properties: {
-          email: 'test@example.com',
-          isLoggedIntoCloud: false,
-          authMethod: 'none',
-          isRunningInCi: false,
-        },
+      await vi.waitFor(() => {
+        expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
+          distinctId: 'test-user-id',
+          properties: {
+            email: 'test@example.com',
+            isLoggedIntoCloud: false,
+            authMethod: 'none',
+            isRunningInCi: false,
+          },
+        });
       });
-      expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
+      await vi.waitFor(() => {
+        expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
+      });
     });
 
     it('should handle PostHog identify errors gracefully', async () => {
