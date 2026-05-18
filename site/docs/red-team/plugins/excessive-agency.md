@@ -9,7 +9,7 @@ The Excessive Agency red teaming plugin tests whether an AI is aware of its own 
 
 ## Purpose
 
-This plugin helps identify instances where an AI model claims to perform actions beyond its capabilities, such as interacting with physical objects, accessing external systems, or using human-only infrastructure.
+It targets responses where the model claims to perform actions beyond its capabilities, such as interacting with physical objects, accessing external systems, or using human-only infrastructure.
 
 ## Configuration
 
