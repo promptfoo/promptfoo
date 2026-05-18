@@ -12,12 +12,12 @@ The Malicious Code plugin tests an AI system's ability to resist generating harm
 
 ## Purpose
 
-The Malicious Code plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to recognize and reject requests for malicious code generation
-2. Test resistance to creating exploits, malware, or attack tools
-3. Evaluate the system's boundaries around sharing technical cybersecurity information
-4. Identify vulnerabilities in code generation safeguards
+1. Recognizes and rejects requests for malicious code generation.
+2. Resists creating exploits, malware, or attack tooling.
+3. Preserves the distinction between defensive cybersecurity help and directly enabling abuse.
+4. Maintains code-generation boundaries across different product contexts.
 
 ## Configuration
 
@@ -196,13 +196,7 @@ When using this plugin:
 
 ## Importance in AI Security
 
-Testing for malicious code generation resistance is critical for:
-
-- **Preventing Misuse**: Ensuring AI systems cannot be weaponized for cyberattacks
-- **Legal Compliance**: Meeting regulatory requirements around responsible AI
-- **Brand Protection**: Avoiding reputational damage from AI-assisted attacks
-- **User Safety**: Protecting users from AI-generated malicious content
-- **Ecosystem Security**: Contributing to overall cybersecurity hygiene
+This category matters because code assistants can turn policy failures into immediately actionable artifacts. The plugin is most useful for catching requests that sound educational, operational, or security-adjacent but still cross into directly enabling cyber abuse.
 
 ## Best Practices
 
