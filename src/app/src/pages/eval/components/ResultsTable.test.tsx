@@ -4249,7 +4249,6 @@ describe('ResultsTable header horizontal scrolling', () => {
     expect(headerScrollContainer.scrollLeft).toBe(180);
   });
 });
-
 describe('ResultsTable default column sizing', () => {
   const mockTable = {
     body: [
