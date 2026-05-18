@@ -97,20 +97,17 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const [deleteSelectedDialogOpen, setDeleteSelectedDialogOpen] = React.useState(false);
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = React.useState(false);
   const { showToast } = useToast();
+  const previousTestCasesRef = React.useRef(testCases);
 
   // Reset selection if test cases change underneath us (e.g. after import) or selection mode exits.
   // Selections are stored as row indices, so any list mutation can make them point to different rows.
   React.useEffect(() => {
-    if (selectedIndices.size === 0) {
-      return;
-    }
+    const testCasesChanged = previousTestCasesRef.current !== testCases;
+    previousTestCasesRef.current = testCases;
 
-    if (!selectionMode || selectedIndices.size > testCases.length) {
-      setSelectedIndices(new Set());
-      return;
+    if (!selectionMode || testCasesChanged) {
+      setSelectedIndices((current) => (current.size === 0 ? current : new Set()));
     }
-
-    setSelectedIndices(new Set());
   }, [selectionMode, testCases]);
 
   const toggleSelected = (index: number) => {
@@ -504,11 +501,19 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                         <button
                           type="button"
                           onClick={(event) => {
+                            if (selectionMode) {
+                              return;
+                            }
+
                             event.stopPropagation();
                             setEditingTestCaseIndex(index);
                             setTestCaseDialogOpen(true);
                           }}
-                          aria-label={`Open test case ${index + 1} for editing`}
+                          aria-label={
+                            selectionMode
+                              ? `${isSelected ? 'Deselect' : 'Select'} test case ${index + 1}`
+                              : `Open test case ${index + 1} for editing`
+                          }
                           className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {hasMissingVars && (
