@@ -38,6 +38,8 @@ const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsP
     setShowPassFail,
     showPassReasons,
     setShowPassReasons,
+    showMetricPills,
+    setShowMetricPills,
     showInferenceDetails,
     setShowInferenceDetails,
     maxTextLength,
@@ -116,6 +118,14 @@ const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsP
           checked={showPassReasons}
           onChange={setShowPassReasons}
           tooltipText="Show reasons for passing assertions (e.g., from llm-rubric)"
+          disabled={!showPassFail}
+        />
+
+        <CompactToggle
+          label="Metrics pills"
+          checked={showMetricPills}
+          onChange={setShowMetricPills}
+          tooltipText="Show custom metric pills in each results table cell"
           disabled={!showPassFail}
         />
 
