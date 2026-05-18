@@ -5,17 +5,15 @@ description: Red team object-level authorization by testing AI systems for unaut
 
 # BOLA (Broken Object Level Authorization) Plugin
 
-The BOLA (Broken Object Level Authorization) red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to access or modify resources belonging to other users or outside the authorized scope ([OWASP API 1](https://owasp.org/www-project-api-security/)).
-
-This plugin helps identify potential security breaches where an attacker might exploit the system to gain unauthorized access to sensitive data or perform unauthorized actions. It is particularly useful for AI agents with access to tools/APIs.
+Use the BOLA plugin to test whether an agent accesses or modifies objects that fall outside the current user's authorization boundary ([OWASP API 1](https://owasp.org/www-project-api-security/)). It is most relevant for systems that can read records, update resources, or act across user-owned objects through tools or APIs.
 
 ## Purpose
 
-The BOLA plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to enforce proper object-level access controls.
-2. Identify potential vulnerabilities where users might access or modify resources beyond their authorized scope.
-3. Test the AI's response to attempts to access or manipulate data belonging to other users.
+1. Refuses requests for data or resources owned by someone else.
+2. Avoids modifying objects outside the caller's permitted scope.
+3. Holds object-level boundaries when authority is asserted through urgency or impersonation.
 
 ## Configuration
 
@@ -61,13 +59,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for BOLA vulnerabilities is critical for:
-
-- Ensuring proper access control in AI-powered systems
-- Protecting user privacy and data integrity
-- Preventing unauthorized access to sensitive information
-
-By incorporating the BOLA plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's object-level authorization mechanisms.
+BOLA failures often appear as ordinary support or operations requests with the wrong target object attached. This plugin helps verify that the model respects resource ownership instead of treating plausible context as authorization.
 
 ## Related Concepts
 
