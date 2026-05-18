@@ -82,6 +82,7 @@ describe('XssOutputPlugin', () => {
       {
         inputs: {
           query: 'User request',
+          html: 'Rendered HTML',
           context: {
             description: 'Retrieved context',
             config: {
@@ -96,9 +97,11 @@ describe('XssOutputPlugin', () => {
 
     expect(inputVars).toEqual({
       query: expect.stringContaining('sanitizer regression fixture'),
+      html: expect.stringContaining('sanitizer regression fixture'),
       context: 'Benign Retrieved context.',
     });
     expect(tests[0].vars?.query).toContain('sanitizer regression fixture');
+    expect(tests[0].vars?.html).toContain('sanitizer regression fixture');
     expect(tests[0].vars?.context).toBe('Benign Retrieved context.');
     expect(tests[0].metadata).toEqual(
       expect.objectContaining({
@@ -115,7 +118,8 @@ describe('detectXssOutput', () => {
     ['script-tag', '<script>alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
-    ['javascript-url', 'javascript:alert(1)'],
+    ['javascript-url', '[click](javascript:alert(1))'],
+    ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
@@ -138,6 +142,14 @@ describe('detectXssOutput', () => {
         'Reject href values that start with javascript: and strip data:text/html previews before rendering.',
       ),
     ).toEqual([]);
+  });
+
+  it('does not flag executable javascript URL examples outside a URL sink', () => {
+    expect(detectXssOutput('Do not use javascript:alert(1) in links.')).toEqual([]);
+  });
+
+  it('does not flag non-executable data attributes as javascript URL sinks', () => {
+    expect(detectXssOutput('<div data-href="javascript:alert(1)">reference</div>')).toEqual([]);
   });
 
   it('uses custom patterns as an override dictionary', () => {
