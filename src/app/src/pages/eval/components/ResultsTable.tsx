@@ -525,8 +525,9 @@ function getNumberFormatter(
   locale?: string | string[],
 ): Intl.NumberFormat {
   let normalizedLocale = 'default';
-  if (Array.isArray(locale)) {
-    normalizedLocale = locale.join(',');
+  const localeArray = Array.isArray(locale) ? locale : undefined;
+  if (localeArray) {
+    normalizedLocale = localeArray.join(',');
   } else if (typeof locale === 'string') {
     normalizedLocale = locale;
   }
