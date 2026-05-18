@@ -282,15 +282,20 @@ describeEvaluator('evaluator execution control', () => {
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
-    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
-    await secondCallStarted;
+      await secondCallStarted;
 
-    expect(addPromptsSpy).toHaveBeenCalledTimes(1);
-    expect(addPromptsSpy.mock.calls[0][0][0].metrics?.testPassCount).toBe(1);
+      // One startup write plus one grouped-step refresh before the second step completes.
+      expect(addPromptsSpy).toHaveBeenCalledTimes(2);
+      expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
 
-    releaseSecondCall();
-    await evalPromise;
+      releaseSecondCall();
+      await evalPromise;
+    } finally {
+      addPromptsSpy.mockRestore();
+    }
   });
 
   it('skips delay for cached responses', async () => {

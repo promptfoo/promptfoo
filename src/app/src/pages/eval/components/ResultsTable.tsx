@@ -1414,7 +1414,9 @@ function ResultsTableHeader({
         className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
         <table
-          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          className={`results-table results-table-header-table firefox-fix ${
+            maxTextLength <= 25 ? 'compact' : ''
+          }`}
           style={{
             wordBreak,
             width: `${tableWidth}px`,
