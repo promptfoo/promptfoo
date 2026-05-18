@@ -22,6 +22,8 @@ describe('SettingsPanel', () => {
     setShowPassFail: vi.fn(),
     showPassReasons: false,
     setShowPassReasons: vi.fn(),
+    showMetricPills: true,
+    setShowMetricPills: vi.fn(),
     showInferenceDetails: true,
     setShowInferenceDetails: vi.fn(),
     maxTextLength: 500,
@@ -74,6 +76,12 @@ describe('SettingsPanel', () => {
       name: 'Inference details',
       initialState: true,
       setter: 'setShowInferenceDetails' as const,
+      expectedNewValue: false,
+    },
+    {
+      name: 'Metrics pills',
+      initialState: true,
+      setter: 'setShowMetricPills' as const,
       expectedNewValue: false,
     },
     {
@@ -178,6 +186,25 @@ describe('SettingsPanel', () => {
 
     const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
     expect(passReasonsToggle).not.toBeDisabled();
+  });
+
+  it('should disable Metrics pills when Pass/fail indicators is off', () => {
+    mockedUseResultsViewSettingsStore.mockReturnValue({
+      ...mockStore,
+      showPassFail: false,
+    });
+
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
+
+    const metricPillsToggle = screen.getByRole('checkbox', { name: 'Metrics pills' });
+    expect(metricPillsToggle).toBeDisabled();
+  });
+
+  it('should enable Metrics pills when Pass/fail indicators is on', () => {
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
+
+    const metricPillsToggle = screen.getByRole('checkbox', { name: 'Metrics pills' });
+    expect(metricPillsToggle).not.toBeDisabled();
   });
 
   it('should update results zoom when a new zoom option is selected', async () => {
