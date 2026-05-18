@@ -139,6 +139,51 @@ describe('loadFunction', () => {
       expect(result1).toBe(mockFn);
     });
 
+    it('should keep cached functions isolated by resolved path', async () => {
+      const mockFn1 = vi.fn();
+      const mockFn2 = vi.fn();
+      mockResolve.mockImplementation((basePath, filePath) => `${basePath}/${filePath}`);
+      vi.mocked(importModule).mockResolvedValueOnce(mockFn1).mockResolvedValueOnce(mockFn2);
+
+      const result1 = await loadFunction({
+        filePath: 'function.js',
+        basePath: '/base/one',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.js',
+        basePath: '/base/two',
+        useCache: true,
+      });
+
+      expect(importModule).toHaveBeenCalledTimes(2);
+      expect(importModule).toHaveBeenNthCalledWith(1, '/base/one/function.js', undefined);
+      expect(importModule).toHaveBeenNthCalledWith(2, '/base/two/function.js', undefined);
+      expect(result1).toBe(mockFn1);
+      expect(result2).toBe(mockFn2);
+    });
+
+    it('should keep cached functions isolated by default function name', async () => {
+      const mockFn1 = vi.fn();
+      const mockFn2 = vi.fn();
+      vi.mocked(importModule).mockResolvedValue({ first: mockFn1, second: mockFn2 });
+
+      const result1 = await loadFunction({
+        filePath: 'function.js',
+        defaultFunctionName: 'first',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.js',
+        defaultFunctionName: 'second',
+        useCache: true,
+      });
+
+      expect(importModule).toHaveBeenCalledTimes(2);
+      expect(result1).toBe(mockFn1);
+      expect(result2).toBe(mockFn2);
+    });
+
     it('should not use cache when disabled', async () => {
       const mockFn1 = vi.fn();
       const mockFn2 = vi.fn();
@@ -187,6 +232,27 @@ describe('loadFunction', () => {
       expect(typeof result).toBe('function');
       await result('test input');
       expect(runPython).toHaveBeenCalledWith(TEST_PY_PATH, 'func', ['test input']);
+    });
+
+    it('should keep cached Python functions isolated by default function name', async () => {
+      const result1 = await loadFunction({
+        filePath: 'function.py',
+        defaultFunctionName: 'first',
+        useCache: true,
+      });
+      const result2 = await loadFunction({
+        filePath: 'function.py',
+        defaultFunctionName: 'second',
+        useCache: true,
+      });
+
+      expect(result1).not.toBe(result2);
+
+      await result1('first input');
+      await result2('second input');
+
+      expect(runPython).toHaveBeenNthCalledWith(1, TEST_PY_PATH, 'first', ['first input']);
+      expect(runPython).toHaveBeenNthCalledWith(2, TEST_PY_PATH, 'second', ['second input']);
     });
   });
 

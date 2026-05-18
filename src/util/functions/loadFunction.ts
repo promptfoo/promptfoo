@@ -32,13 +32,14 @@ export async function loadFunction<T extends Function>({
   basePath = cliState.basePath,
   useCache = true,
 }: LoadFunctionOptions): Promise<T> {
-  const cacheKey = `${filePath}${functionName ? `:${functionName}` : ''}`;
+  const resolvedPath = basePath ? path.resolve(basePath, filePath) : filePath;
+  const cacheKey = `${resolvedPath}:${
+    functionName ? `named:${functionName}` : `default:${defaultFunctionName}`
+  }`;
 
   if (useCache && functionCache[cacheKey]) {
     return functionCache[cacheKey] as T;
   }
-
-  const resolvedPath = basePath ? path.resolve(basePath, filePath) : filePath;
 
   if (!isJavascriptFile(resolvedPath) && !resolvedPath.endsWith('.py')) {
     throw new Error(
