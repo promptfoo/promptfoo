@@ -949,6 +949,7 @@ function renderStatusBlock({
   scoreString,
   providerOverride,
   failReasons,
+  showMetricPills,
   showPassReasons,
   passReasons,
 }: {
@@ -959,6 +960,7 @@ function renderStatusBlock({
   scoreString: string;
   providerOverride: React.ReactNode;
   failReasons: string[];
+  showMetricPills: boolean;
   showPassReasons: boolean;
   passReasons: string[];
 }): React.ReactNode {
@@ -975,7 +977,7 @@ function renderStatusBlock({
         </div>
         {providerOverride}
       </div>
-      <CustomMetrics lookup={namedScores} />
+      {showMetricPills && <CustomMetrics lookup={namedScores} />}
       {failReasons.length > 0 && (
         <span className="fail-reason">
           <FailReasonCarousel failReasons={failReasons} />
@@ -1351,6 +1353,7 @@ function EvalOutputCell({
     prettifyJson,
     showPrompts,
     showPassFail,
+    showMetricPills,
     showPassReasons,
     maxImageWidth,
     maxImageHeight,
@@ -1717,6 +1720,7 @@ function EvalOutputCell({
         scoreString,
         providerOverride,
         failReasons,
+        showMetricPills,
         showPassReasons,
         passReasons,
       })}

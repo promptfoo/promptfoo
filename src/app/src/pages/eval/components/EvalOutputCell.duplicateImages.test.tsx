@@ -28,6 +28,7 @@ vi.mock('./store', () => ({
     renderMarkdown: false,
     showPassFail: false,
     showPassReasons: false,
+    showMetricPills: true,
     showPrompts: false,
     maxImageWidth: 256,
     maxImageHeight: 256,
