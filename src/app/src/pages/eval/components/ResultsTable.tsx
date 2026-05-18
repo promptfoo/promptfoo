@@ -1436,7 +1436,8 @@ function ResultsTableHeader({
                       style={{
                         width: header.getSize(),
                         borderLeft: headerIndex === 0 ? undefined : 'none',
-                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                        borderBottom:
+                          !isMetadataCol && isFinalRow ? '2px solid var(--border-color)' : 'none',
                         height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >

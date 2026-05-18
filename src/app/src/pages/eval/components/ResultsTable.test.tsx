@@ -337,9 +337,9 @@ describe('ResultsTable Metrics Display', () => {
 
     const promptHeaderCell = screen.getByText('test-provider').closest('th');
 
-    expect(promptHeaderCell).toHaveStyle({
-      borderBottom: '2px solid #888',
-    });
+    expect((promptHeaderCell as HTMLElement).style.borderBottom).toBe(
+      '2px solid var(--border-color)',
+    );
   });
 
   it('keeps the header/body boundary border on the scroll container', () => {
