@@ -28,6 +28,8 @@ function createMockStore() {
     setShowPassFail: vi.fn(),
     showPassReasons: false,
     setShowPassReasons: vi.fn(),
+    showMetricPills: true,
+    setShowMetricPills: vi.fn(),
     stickyHeader: true,
     setStickyHeader: vi.fn(),
     maxImageWidth: 500,
@@ -115,6 +117,7 @@ describe('useSettingsState', () => {
     expect(mockStore.setShowPrompts).toHaveBeenCalledWith(false);
     expect(mockStore.setShowPassFail).toHaveBeenCalledWith(true);
     expect(mockStore.setShowPassReasons).toHaveBeenCalledWith(false);
+    expect(mockStore.setShowMetricPills).toHaveBeenCalledWith(true);
     expect(mockStore.setShowInferenceDetails).toHaveBeenCalledWith(true);
     expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(500);
     expect(mockStore.setMaxImageWidth).toHaveBeenCalledWith(500);
