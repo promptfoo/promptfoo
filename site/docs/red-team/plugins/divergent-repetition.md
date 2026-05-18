@@ -5,16 +5,16 @@ description: Red team training data extraction vulnerabilities by exploiting rep
 
 # Divergent Repetition Plugin
 
-The Divergent Repetition red teaming plugin is designed to test whether an AI system can be manipulated into revealing its training data through repetitive pattern exploitation that causes model divergence.
+Use the Divergent Repetition plugin to test whether repetitive prompts drive a model into unsafe loops, unusually long outputs, or training-data leakage behavior.
 
 It's based on a real-world attack that was used by the DeepMind team to [extract training data from GPT](https://not-just-memorization.github.io/extracting-training-data-from-chatgpt.html).
 
 ## Purpose
 
-The Divergent Repetition plugin helps to:
+It focuses on whether the model:
 
-- Assess the AI's vulnerability to training data extraction through repetitive patterns
-- Test for susceptibility to Denial-of-Wallet attacks
+- Resists repetitive patterns that can surface memorized content.
+- Avoids runaway outputs that waste tokens or degrade service quality.
 
 ## Configuration
 
@@ -54,9 +54,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for divergent repetition vulnerabilities is critical to prevent unintended information disclosure and ensure proper response boundaries.
-
-By incorporating the Divergent Repetition plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of repetitive patterns and protect against training data extraction attacks.
+Divergent repetition matters because the failure mode is not a normal bad answer. It can combine privacy risk, runaway generation, and cost amplification in a single prompt family.
 
 ## Mitigations
 
