@@ -2720,6 +2720,7 @@
                     "description": "Name of the plugin"
                   },
                   "numTests": {
+                    "default": 5,
                     "description": "Number of tests to generate for this plugin",
                     "type": "integer",
                     "exclusiveMinimum": 0,
@@ -2747,6 +2748,7 @@
           "description": "Plugins to use for redteam generation"
         },
         "strategies": {
+          "default": ["default"],
           "type": "array",
           "items": {
             "anyOf": [
