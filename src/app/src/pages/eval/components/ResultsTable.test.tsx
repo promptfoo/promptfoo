@@ -332,6 +332,61 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
   });
 
+  it('keeps the prompt header divider visible above streamed result rows', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const promptHeaderCell = screen.getByText('test-provider').closest('th');
+
+    expect(promptHeaderCell).toHaveStyle({
+      borderBottom: '2px solid #888',
+    });
+  });
+
+  it('keeps the header/body boundary border on the scroll container', () => {
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
+
+    expect(tableContainer.style.borderTopWidth).toBe('1px');
+    expect(tableContainer.style.borderTopStyle).toBe('solid');
+    expect(tableContainer.style.borderColor).toBe('var(--border-color)');
+  });
+
+  it('keeps adjacent prompt header cells from drawing duplicate left borders', () => {
+    const mockTableWithTwoPrompts = {
+      ...mockTable,
+      head: {
+        ...mockTable.head,
+        prompts: [
+          { metrics: mockTable.head.prompts[0].metrics, provider: 'test-provider-1' },
+          { metrics: mockTable.head.prompts[0].metrics, provider: 'test-provider-2' },
+        ],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithTwoPrompts,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const secondPromptHeaderCell = screen.getByText('test-provider-2').closest('th');
+
+    expect((secondPromptHeaderCell as HTMLElement).style.borderLeftStyle).toBe('none');
+  });
+
   describe('Keyboard Navigation', () => {
     it('should handle keyboard navigation with Tab between cells and actions within cell', async () => {
       renderWithProviders(<ResultsTable {...defaultProps} />);

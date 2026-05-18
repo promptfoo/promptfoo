@@ -248,6 +248,51 @@ describeEvaluator('evaluator execution control', () => {
     expect(secondRenderedPrompt).toContain('now=Turn 2');
   });
 
+  it('persists updated prompt metrics between serial eval steps for live result refreshes', async () => {
+    let releaseSecondCall!: () => void;
+    let markSecondCallStarted!: () => void;
+    const secondCallStarted = new Promise<void>((resolve) => {
+      markSecondCallStarted = resolve;
+    });
+
+    let callCount = 0;
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async () => {
+        callCount += 1;
+        if (callCount === 2) {
+          markSecondCallStarted();
+          await new Promise<void>((resolve) => {
+            releaseSecondCall = resolve;
+          });
+        }
+
+        return {
+          output: 'Test output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ options: { runSerially: true } }, { options: { runSerially: true } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    await secondCallStarted;
+
+    expect(addPromptsSpy).toHaveBeenCalledTimes(1);
+    expect(addPromptsSpy.mock.calls[0][0][0].metrics?.testPassCount).toBe(1);
+
+    releaseSecondCall();
+    await evalPromise;
+  });
+
   it('skips delay for cached responses', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

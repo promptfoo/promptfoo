@@ -1424,7 +1424,8 @@ function ResultsTableHeader({
           <thead ref={theadRef}>
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
+                {headerGroup.headers.map((header, headerIndex) => {
+                  const isMetadataCol = isMetadataColumn(header.column.id);
                   const isFinalRow = headerGroup.depth === 1;
 
                   return (
@@ -1434,7 +1435,8 @@ function ResultsTableHeader({
                       colSpan={header.colSpan}
                       style={{
                         width: header.getSize(),
-                        borderBottom: 'none',
+                        borderLeft: headerIndex === 0 ? undefined : 'none',
+                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
                         height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >
@@ -2223,7 +2225,9 @@ function ResultsTable({
         id="results-table-container"
         style={{
           zoom,
-          borderTop: 'none',
+          borderTopWidth: '1px',
+          borderTopStyle: 'solid',
+          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,

@@ -3394,6 +3394,7 @@ class Evaluator {
           isWebUI,
           processingContext,
           processedIndices,
+          prompts,
           serialRunEvalOptions,
         });
         await this.runConcurrentEvalSteps({
@@ -3554,6 +3555,7 @@ class Evaluator {
     isWebUI,
     processingContext,
     processedIndices,
+    prompts,
     serialRunEvalOptions,
   }: {
     checkAbort: () => void;
@@ -3561,6 +3563,7 @@ class Evaluator {
     isWebUI: boolean;
     processingContext: EvalProcessingContext;
     processedIndices: Set<number>;
+    prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
   }) {
     for (const evalStep of serialRunEvalOptions) {
@@ -3569,6 +3572,7 @@ class Evaluator {
       const idx = evalStepIndexMap.get(evalStep)!;
       await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
       processedIndices.add(idx);
+      await this.evalRecord.addPrompts(prompts);
     }
   }
 
