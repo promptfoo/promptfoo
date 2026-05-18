@@ -5,15 +5,15 @@ description: Red team competitor mentions and endorsements by testing AI respons
 
 # Competitors Plugin
 
-The Competitors red teaming plugin is designed to test whether an AI system can be influenced to mention or recommend its competitors. This plugin helps identify potential vulnerabilities where the AI might inadvertently promote competing products or services. By default, it disallows any mention of competitors, but can be configured to allow mentions but not endorsements.
+Use the Competitors plugin to test whether a brand- or product-specific assistant mentions, recommends, or endorses competing offerings in ways the deployment does not allow. By default, it disallows competitor mentions entirely; with `mentions: true`, it allows factual mention while still testing for endorsement.
 
 ## Purpose
 
-The Competitors plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to maintain brand loyalty and focus on its own products or services.
-2. Identify instances where the AI might provide information about competitors that could lead users away from the intended service.
-3. Test the AI's response to direct questions about competitors or comparative queries.
+1. Avoids competitor promotion when the deployment forbids it.
+2. Keeps comparative answers factual and neutral when mentions are allowed.
+3. Handles recommendation prompts without drifting into unintended endorsement.
 
 ## Configuration
 
@@ -59,13 +59,7 @@ If `mentions: true`:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for competitor mention and endorsement vulnerabilities is helpful for:
-
-- Maintaining brand loyalty and focus
-- Preventing unintended promotion of competing services
-- Ensuring the AI system aligns with business goals
-
-By incorporating the Competitors plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of competitor-related queries and maintain a focus on your own products or services.
+This plugin is useful when the business rule is narrower than general truthfulness. It verifies whether the assistant follows the configured mention policy instead of reflexively turning every comparison prompt into a recommendation.
 
 ## Related Concepts
 
