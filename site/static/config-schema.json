@@ -2098,8 +2098,8 @@
                 "description": "Unique identifier for the context"
               },
               "purpose": {
-                "type": "string",
-                "description": "Purpose/context for this context - used for generation and grading"
+                "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
+                "type": "string"
               },
               "vars": {
                 "description": "Variables passed to provider (e.g., context_file, user_role)",
@@ -2112,7 +2112,7 @@
                 }
               }
             },
-            "required": ["id", "purpose"],
+            "required": ["id"],
             "additionalProperties": false
           }
         },
