@@ -2720,7 +2720,6 @@
                     "description": "Name of the plugin"
                   },
                   "numTests": {
-                    "default": 5,
                     "description": "Number of tests to generate for this plugin",
                     "type": "integer",
                     "exclusiveMinimum": 0,
@@ -2740,7 +2739,7 @@
                     "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
-                "required": ["id", "numTests"],
+                "required": ["id"],
                 "additionalProperties": false
               }
             ]
