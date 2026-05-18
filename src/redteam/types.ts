@@ -229,7 +229,7 @@ export interface PluginActionParams {
 // Context for testing multiple security contexts/states
 export interface RedteamContext {
   id: string;
-  purpose: string;
+  purpose?: string;
   vars?: Record<string, string>;
 }
 

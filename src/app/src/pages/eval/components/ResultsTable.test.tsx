@@ -56,9 +56,21 @@ vi.mock('react-router-dom', async () => ({
 
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(
-    ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
+    ({
+      onRating,
+      promptIndex,
+      searchText,
+    }: {
+      onRating: any;
+      promptIndex?: number;
+      searchText?: string;
+    }) => {
       return (
-        <div data-testid="eval-output-cell" data-searchtext={searchText}>
+        <div
+          data-testid="eval-output-cell"
+          data-prompt-index={promptIndex}
+          data-searchtext={searchText}
+        >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
           </button>
@@ -2840,7 +2852,7 @@ describe('ResultsTable Pass Rate Display', () => {
       fetchEvalData: vi.fn(),
       filters: {
         values: {},
-        appliedCount: 0,
+        appliedCount: 1,
         options: {
           metric: [],
         },
@@ -4238,6 +4250,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Only 1 column visible (prompt 1 has results, prompt 2 has zero results)
     expect(outputCells).toHaveLength(1);
+    expect(outputCells.map((cell) => cell.dataset.promptIndex)).toEqual(['0']);
   });
 
   it('shows all prompt columns when filteredMetrics is null (no filters active)', () => {
@@ -4259,6 +4272,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Both columns visible since no filters are active
     expect(outputCells).toHaveLength(2);
+    expect(outputCells.map((cell) => cell.dataset.promptIndex)).toEqual(['0', '1']);
   });
 
   it('keeps manually hidden columns hidden regardless of filteredMetrics', () => {
@@ -4300,6 +4314,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Only prompt 2 visible (prompt 1 manually hidden)
     expect(outputCells).toHaveLength(1);
+    expect(outputCells.map((cell) => cell.dataset.promptIndex)).toEqual(['1']);
   });
 
   it('shows columns that have results even when other columns are auto-hidden', () => {
@@ -4349,5 +4364,106 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
     const outputCells = screen.getAllByTestId('eval-output-cell');
     // Prompt 1 (7 results) and Prompt 3 (1 error) visible; Prompt 2 (0 results) hidden
     expect(outputCells).toHaveLength(2);
+    expect(outputCells.map((cell) => cell.dataset.promptIndex)).toEqual(['0', '2']);
+  });
+});
+
+describe('ResultsTable header horizontal scrolling', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{ provider: 'test-provider' }],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('exposes a horizontally scrollable header container', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('results-table-header-scroll-container')).toHaveClass(
+      'overflow-x-auto',
+      'overflow-y-hidden',
+    );
+  });
+
+  it('syncs header scrolling into the table body', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const headerScrollContainer = screen.getByTestId('results-table-header-scroll-container');
+    const tableContainer = document.getElementById('results-table-container');
+
+    expect(tableContainer).not.toBeNull();
+
+    act(() => {
+      headerScrollContainer.scrollLeft = 120;
+      headerScrollContainer.dispatchEvent(new Event('scroll'));
+    });
+
+    expect(tableContainer?.scrollLeft).toBe(120);
+  });
+
+  it('keeps body scrolling mirrored in the header', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const headerScrollContainer = screen.getByTestId('results-table-header-scroll-container');
+    const tableContainer = document.getElementById('results-table-container');
+
+    expect(tableContainer).not.toBeNull();
+
+    act(() => {
+      if (tableContainer) {
+        tableContainer.scrollLeft = 180;
+        tableContainer.dispatchEvent(new Event('scroll'));
+      }
+    });
+
+    expect(headerScrollContainer.scrollLeft).toBe(180);
   });
 });
