@@ -117,10 +117,14 @@ describe('detectXssOutput', () => {
   it.each([
     ['script-tag', '<script>alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
+    ['event-handler-attribute', '<svg/onload=alert(1)>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
+    ['javascript-url', '<a href="jav&#x61;script:alert(1)">click</a>'],
+    ['javascript-url', '<a href="javascript&colon;alert(1)">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
+    ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
     ['svg-script', '<svg onload=alert(1)>'],
@@ -134,6 +138,17 @@ describe('detectXssOutput', () => {
         'Escape user input as &lt;script&gt;alert(1)&lt;/script&gt; before rendering.',
       ),
     ).toEqual([]);
+  });
+
+  it('does not flag escaped HTML anchor examples', () => {
+    expect(
+      detectXssOutput(
+        'Escape links as &lt;a href=&quot;jav&#x61;script:alert(1)&quot;&gt;click&lt;/a&gt;.',
+      ),
+    ).toEqual([]);
+    expect(detectXssOutput('Escape links as &#60;a href="jav&#x61;script:alert(1)"&#62;.')).toEqual(
+      [],
+    );
   });
 
   it('does not flag safe scheme guidance without executable payloads', () => {
