@@ -1382,10 +1382,13 @@ describe('doGenerateRedteam', () => {
         providers: [mockProvider],
         prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
         tests: [],
+        defaultTest: {
+          vars: { user_name: 'Alice' },
+        },
       },
       config: {
         redteam: {
-          purpose: 'Original purpose',
+          purpose: 'Original purpose for {{ user_name }}',
         },
       },
     });
@@ -1410,9 +1413,12 @@ describe('doGenerateRedteam', () => {
 
     await doGenerateRedteam(options);
 
+    const synthesizePurpose = vi.mocked(synthesize).mock.calls[0][0].purpose;
+    expect(synthesizePurpose).toContain('Original purpose for Alice');
+    expect(synthesizePurpose).toContain('"name":"search_companies"');
+    expect(synthesizePurpose).not.toContain('{{ user_name }}');
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        purpose: expect.stringContaining('"name":"search_companies"'),
         testGenerationInstructions: expect.stringContaining(
           'Generate every test case prompt as a json string',
         ),
@@ -2782,6 +2788,110 @@ describe('doGenerateRedteam', () => {
   });
 
   describe('contexts support', () => {
+    it('should render standalone root purpose templates with defaultTest vars and preserve the authored template', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+          defaultTest: {
+            vars: { user_name: 'Alice' },
+          },
+        },
+        config: {
+          redteam: {
+            purpose: 'Root purpose for {{ user_name }}',
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Root purpose for Alice',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      });
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'Root purpose for Alice',
+        }),
+      );
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: expect.objectContaining({
+            metadata: expect.objectContaining({
+              purpose: 'Root purpose for Alice',
+            }),
+          }),
+          redteam: expect.objectContaining({
+            purpose: 'Root purpose for {{ user_name }}',
+          }),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
+    });
+
+    it('should infer purpose when no root or context purpose resolves', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Inferred purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      });
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: '',
+        }),
+      );
+    });
+
     it('should generate tests for each context when contexts are defined', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
@@ -2849,6 +2959,146 @@ describe('doGenerateRedteam', () => {
       );
     });
 
+    it('should inherit root purpose for omitted or blank context purposes and render merged vars', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+          defaultTest: {
+            vars: {
+              application_name: 'SupportDesk',
+              user_name: 'fallback-user',
+            },
+          },
+        },
+        config: {
+          redteam: {
+            purpose: 'Testing {{ application_name }} as {{ user_name }}',
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'omitted-purpose', vars: { user_name: 'Alice' } },
+              { id: 'blank-purpose', purpose: '   ', vars: { user_name: 'Bob' } },
+            ],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Resolved purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      });
+
+      expect(synthesize).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          purpose: 'Testing SupportDesk as Alice',
+        }),
+      );
+      expect(synthesize).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          purpose: 'Testing SupportDesk as Bob',
+        }),
+      );
+    });
+
+    it('should render a context override without appending root purpose and preserve authored templates', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+          defaultTest: {
+            vars: { user_name: 'fallback-user' },
+          },
+        },
+        config: {
+          redteam: {
+            purpose: 'Root purpose for {{ user_name }}',
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              {
+                id: 'admin',
+                purpose: 'Context purpose for {{ user_name }}',
+                vars: { user_name: 'admin' },
+              },
+            ],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Context purpose for admin',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      });
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'Context purpose for admin',
+        }),
+      );
+      expect(vi.mocked(synthesize).mock.calls[0][0].purpose).not.toContain('Root purpose');
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          redteam: expect.objectContaining({
+            purpose: 'Root purpose for {{ user_name }}',
+            contexts: [
+              {
+                id: 'admin',
+                purpose: 'Context purpose for {{ user_name }}',
+                vars: { user_name: 'admin' },
+              },
+            ],
+          }),
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              metadata: expect.objectContaining({
+                contextId: 'admin',
+                purpose: 'Context purpose for admin',
+              }),
+            }),
+          ]),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
+    });
+
     it('should tag test cases with context metadata', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
@@ -2902,7 +3152,7 @@ describe('doGenerateRedteam', () => {
             expect.objectContaining({
               metadata: expect.objectContaining({
                 contextId: 'test_context',
-                purpose: 'Test context purpose',
+                purpose: 'Test purpose',
                 contextVars: { key: 'value' },
               }),
             }),
@@ -3092,7 +3342,7 @@ describe('doGenerateRedteam', () => {
             expect.objectContaining({
               metadata: expect.objectContaining({
                 contextId: 'no_vars_context',
-                purpose: 'Context without vars',
+                purpose: 'Test purpose',
               }),
             }),
           ]),

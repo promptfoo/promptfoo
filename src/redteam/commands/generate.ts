@@ -38,7 +38,7 @@ import {
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
-import { printBorder, setupEnv } from '../../util/index';
+import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
@@ -125,6 +125,51 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
       `Continuing with partial results. Use ${chalk.bold('--strict')} flag to fail on plugin generation errors.`,
     ),
   );
+}
+
+function getDefaultPurposeVars(testSuite: TestSuite): Record<string, unknown> {
+  return typeof testSuite.defaultTest === 'object' && testSuite.defaultTest?.vars
+    ? testSuite.defaultTest.vars
+    : {};
+}
+
+function renderPurposeTemplate(purpose: string | undefined, vars: Record<string, unknown>): string {
+  if (!purpose?.trim()) {
+    return '';
+  }
+
+  return renderVarsInObject(purpose, vars as Record<string, any>);
+}
+
+function appendPurposeDetails(purpose: string, extraDetails: string): string {
+  if (!extraDetails) {
+    return purpose;
+  }
+
+  return purpose ? `${purpose}\n\n${extraDetails}\n\n` : extraDetails;
+}
+
+function resolveEffectivePurpose({
+  contextPurpose,
+  contextVars,
+  extraDetails,
+  rootPurpose,
+  testSuite,
+}: {
+  contextPurpose?: string;
+  contextVars?: Record<string, string>;
+  extraDetails: string;
+  rootPurpose?: string;
+  testSuite: TestSuite;
+}): string {
+  const selectedPurpose = contextPurpose?.trim() ? contextPurpose : rootPurpose;
+  const purposeVars = {
+    ...getDefaultPurposeVars(testSuite),
+    ...(contextVars || {}),
+  };
+  const renderedPurpose = renderPurposeTemplate(selectedPurpose, purposeVars);
+
+  return appendPurposeDetails(renderedPurpose, extraDetails);
 }
 
 function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): string {
@@ -570,15 +615,14 @@ async function doGenerateRedteamInternal(
     `Extracted ${targetIds.length} target IDs from config providers: ${JSON.stringify(targetIds)}`,
   );
 
-  // Extract MCP tools information and add to purpose
-  let enhancedPurpose = parsedConfig.data.purpose || '';
+  // Extract MCP tools information and add it after purpose templating is resolved.
+  const rootPurpose = parsedConfig.data.purpose;
+  let purposeDetails = '';
   let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
   try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
-      enhancedPurpose = enhancedPurpose
-        ? `${enhancedPurpose}\n\n${mcpToolsInfo}\n\n`
-        : mcpToolsInfo;
+      purposeDetails = mcpToolsInfo;
       logger.info('Added MCP tools information to red team purpose');
       augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
@@ -604,11 +648,18 @@ async function doGenerateRedteamInternal(
 
     // Collect failed plugins across all contexts
     const allFailedPlugins: { pluginId: string; requested: number }[] = [];
+    let firstContextPurpose: string | undefined;
 
     for (const context of contexts) {
       logger.info(`  Generating tests for context: ${context.id}`);
 
-      const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
+      const contextPurpose = resolveEffectivePurpose({
+        contextPurpose: context.purpose,
+        contextVars: context.vars,
+        extraDetails: purposeDetails,
+        rootPurpose,
+        testSuite,
+      });
 
       const contextResult = await withGenerationConcurrency(
         config.maxConcurrency,
@@ -633,6 +684,7 @@ async function doGenerateRedteamInternal(
       if (contextResult.failedPlugins.length > 0) {
         allFailedPlugins.push(...contextResult.failedPlugins);
       }
+      firstContextPurpose ??= contextResult.purpose;
 
       for (const [pluginId, result] of Object.entries(contextResult.pluginResults)) {
         pluginResults[pluginId] = pluginResults[pluginId] ?? { requested: 0, generated: 0 };
@@ -656,7 +708,7 @@ async function doGenerateRedteamInternal(
         },
         metadata: {
           ...test.metadata,
-          purpose: context.purpose, // Override purpose for graders/strategies
+          purpose: contextResult.purpose,
           contextId: context.id,
           contextVars: context.vars,
         },
@@ -676,18 +728,23 @@ async function doGenerateRedteamInternal(
     // Store failed plugins for handling after the try block starts
     failedPlugins = allFailedPlugins;
 
-    // Use first context's purpose for backward compatibility in output
-    purpose = contexts[0].purpose;
+    // Use the first generated context purpose for backward compatibility in shared metadata.
+    purpose = firstContextPurpose || '';
     logger.info(
       `Generated ${redteamTests.length} total test cases across ${contexts.length} contexts`,
     );
   } else {
     // Single purpose mode (existing behavior)
+    const effectivePurpose = resolveEffectivePurpose({
+      extraDetails: purposeDetails,
+      rootPurpose,
+      testSuite,
+    });
     const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
       synthesize({
         ...parsedConfig.data,
         inputs: targetInputs,
-        purpose: enhancedPurpose,
+        purpose: effectivePurpose,
         numTests: config.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
         maxConcurrency: config.maxConcurrency,
@@ -740,8 +797,14 @@ async function doGenerateRedteamInternal(
       return { config: null, pluginResults, strategyResults };
     }
 
+    const authoredPurpose =
+      typeof redteamConfig?.purpose === 'string'
+        ? redteamConfig.purpose
+        : typeof options.purpose === 'string'
+          ? options.purpose
+          : undefined;
     const updatedRedteamConfig = {
-      purpose,
+      purpose: authoredPurpose ?? purpose,
       entities,
       strategies: strategyObjs || [],
       plugins: plugins || [],
