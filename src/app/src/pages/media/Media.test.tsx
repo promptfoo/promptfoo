@@ -186,7 +186,7 @@ describe('Media page URL state machine', () => {
     });
 
     // Click the first card's button (aria-label includes eval description)
-    const cardButton = screen.getByLabelText(/First item/);
+    const cardButton = screen.getByRole('button', { name: 'Image: First item' });
     await user.click(cardButton);
 
     await waitFor(() => {
@@ -316,7 +316,7 @@ describe('Media page URL state machine', () => {
     });
 
     // Click to open a card
-    const cardButton = screen.getByLabelText(/First item/);
+    const cardButton = screen.getByRole('button', { name: 'Image: First item' });
     await user.click(cardButton);
 
     await waitFor(() => {
