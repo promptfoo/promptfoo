@@ -1087,6 +1087,7 @@ function renderOutputActions({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleCopy}
                 onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy output to clipboard"
               >
                 {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
               </button>
