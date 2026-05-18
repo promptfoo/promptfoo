@@ -1142,6 +1142,8 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 
 No configuration is needed. When IAM pricing credentials are unavailable, Promptfoo falls back to built-in pricing for known models.
 
+Automatic pricing can identify direct Bedrock model IDs and system-defined inference profile ARNs because those identifiers include the underlying model ID. Application inference profile ARNs are opaque profile resources, so Promptfoo does not infer pricing from their names. Add a `cost` override when you need deterministic cost reporting for application inference profile calls.
+
 ### Supported Models
 
 Real-time pricing supports Bedrock models returned by the AWS Pricing API, including:

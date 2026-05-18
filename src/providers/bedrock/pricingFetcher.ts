@@ -44,15 +44,21 @@ const pricingFetchPromises = new Map<string, Promise<BedrockPricingData | null>>
  * Handles model IDs with region prefixes (e.g., us.anthropic.claude-3-5-sonnet-20241022-v2:0)
  * by stripping the prefix before matching.
  */
+function isApplicationInferenceProfileArn(modelId: string): boolean {
+  return modelId.includes(':application-inference-profile/');
+}
+
 function getPricingModelId(modelId: string): string {
-  const inferenceProfileId = modelId.match(
-    /(?:inference-profile|application-inference-profile)\/([a-zA-Z0-9-:.]+)$/,
-  )?.[1];
+  const inferenceProfileId = modelId.match(/inference-profile\/([a-zA-Z0-9-:.]+)$/)?.[1];
 
   return (inferenceProfileId ?? modelId).replace(/:\d+$/, '');
 }
 
 export function mapBedrockModelIdToApiName(modelId: string): string {
+  if (isApplicationInferenceProfileArn(modelId)) {
+    return modelId;
+  }
+
   // Extract base model name (remove version suffix like :0, :1, :2)
   let baseId = getPricingModelId(modelId);
 
@@ -530,6 +536,10 @@ const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
  * Matches common model name patterns against known pricing.
  */
 function getFallbackPricing(modelId: string): BedrockModelPricing | undefined {
+  if (isApplicationInferenceProfileArn(modelId)) {
+    return undefined;
+  }
+
   // Normalize model ID: remove region prefix, version suffix
   // Must match the same prefixes as mapBedrockModelIdToApiName
   const normalized = getPricingModelId(modelId)
@@ -582,6 +592,14 @@ export function calculateCostWithFetchedPricing(
     promptTokens < 0 ||
     completionTokens < 0
   ) {
+    return undefined;
+  }
+
+  if (isApplicationInferenceProfileArn(modelId)) {
+    logger.debug(
+      '[Bedrock Pricing]: Skipping automatic pricing for application inference profile ARN',
+      { modelId },
+    );
     return undefined;
   }
 

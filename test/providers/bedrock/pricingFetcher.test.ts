@@ -107,6 +107,13 @@ describe('pricingFetcher', () => {
       ).toBe('Claude 3.5 Sonnet v2');
     });
 
+    it('should leave application inference-profile ARNs opaque', () => {
+      const profileArn =
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-4-5-prod';
+
+      expect(mapBedrockModelIdToApiName(profileArn)).toBe(profileArn);
+    });
+
     it('should return base ID for unknown models', () => {
       expect(mapBedrockModelIdToApiName('unknown.model-v1:0')).toBe('unknown.model-v1');
     });
@@ -146,6 +153,17 @@ describe('pricingFetcher', () => {
 
       // Expected: 1000 * 0.000003 + 500 * 0.000015 = 0.003 + 0.0075 = 0.0105
       expect(cost).toBeCloseTo(0.0105, 6);
+    });
+
+    it('should not infer fallback pricing from application inference-profile ARN names', () => {
+      const cost = calculateCostWithFetchedPricing(
+        'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-4-5-prod',
+        null,
+        10,
+        5,
+      );
+
+      expect(cost).toBeUndefined();
     });
 
     it('should calculate cost for Nova Micro correctly', () => {
