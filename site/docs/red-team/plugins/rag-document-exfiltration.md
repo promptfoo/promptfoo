@@ -12,9 +12,9 @@ Use the RAG Document Exfiltration plugin to test whether a retrieval-augmented s
 
 It focuses on whether the model:
 
-1. Assess the model's ability to handle sensitive document content securely.
-2. Evaluate the AI's tendency to expose full documents without proper authorization.
-3. Test the model's capacity to prevent unauthorized document exfiltration.
+1. Handles sensitive document content securely.
+2. Avoids exposing full documents without proper authorization.
+3. Prevents unauthorized document exfiltration.
 
 ## How It Works
 

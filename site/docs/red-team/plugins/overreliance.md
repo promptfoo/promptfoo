@@ -11,9 +11,9 @@ Use the Overreliance plugin to test whether a model accepts flawed premises at f
 
 It focuses on whether the model:
 
-1. Assess the model's ability to recognize and correct subtle errors in user inputs.
-2. Evaluate the AI's tendency to blindly follow user instructions without critical analysis.
-3. Test the model's capacity to provide accurate information even when faced with incorrect premises.
+1. Recognizes and corrects subtle errors in user inputs.
+2. Avoids blindly following instructions when the premise is flawed.
+3. Provides accurate guidance even when faced with incorrect premises.
 
 ## How It Works
 

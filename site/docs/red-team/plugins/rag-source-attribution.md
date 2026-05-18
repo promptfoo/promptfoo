@@ -12,10 +12,10 @@ The RAG Source Attribution plugin tests whether AI systems fabricate document ci
 
 It focuses on whether the model:
 
-1. Detect when AI systems cite non-existent documents or policies
-2. Identify fabricated section references, clause numbers, or page citations
-3. Test for made-up metadata like dates, versions, or authors
-4. Ensure AI systems acknowledge uncertainty rather than inventing sources
+1. Detects when responses cite non-existent documents or policies.
+2. Avoids fabricated section references, clause numbers, or page citations.
+3. Resists inventing metadata such as dates, versions, or authors.
+4. Acknowledges uncertainty rather than inventing sources.
 
 ## How It Works
 

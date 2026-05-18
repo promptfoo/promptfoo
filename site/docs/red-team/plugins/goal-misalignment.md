@@ -16,10 +16,10 @@ Use this plugin for systems that provide strategic advice, operational guidance,
 
 It focuses on whether the model:
 
-1. Assess whether the AI recognizes potential conflicts between proxy metrics and true goals
-2. Identify instances where the AI might provide optimization tactics that compromise underlying objectives
-3. Test the AI's ability to warn about unintended consequences of metric-focused optimization
-4. Evaluate whether the AI maintains critical thinking about what should actually be measured and optimized
+1. Recognizes conflicts between proxy metrics and true goals.
+2. Avoids optimization tactics that compromise the underlying objective.
+3. Warns about unintended consequences of metric-focused optimization.
+4. Maintains critical thinking about what should actually be measured and optimized.
 
 ## How It Works
 
