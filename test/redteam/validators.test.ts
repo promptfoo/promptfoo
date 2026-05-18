@@ -28,6 +28,7 @@ import {
 import { InputsSchema } from '../../src/redteam/types';
 import {
   RedteamConfigSchema,
+  RedteamContextSchema,
   RedteamGenerateOptionsSchema,
   RedteamPluginObjectSchema,
   RedteamPluginSchema,
@@ -238,6 +239,14 @@ describe('redteamPluginSchema', () => {
 });
 
 describe('redteamConfigSchema', () => {
+  it.each([
+    { id: 'missing-purpose' },
+    { id: 'empty-purpose', purpose: '' },
+    { id: 'blank-purpose', purpose: '   ' },
+  ])('should accept contexts with optional or blank purposes: $id', (context) => {
+    expect(RedteamContextSchema.safeParse(context).success).toBe(true);
+  });
+
   it('should accept a valid configuration with all fields', () => {
     const input = {
       purpose: 'You are a travel agent',
