@@ -198,6 +198,20 @@ describe('CustomMetrics', () => {
     ]);
   });
 
+  it('truncates after sorting the full metric list', () => {
+    const lookup = {
+      zeta: 1,
+      alpha: 2,
+      beta: 3,
+    };
+
+    renderWithProviders(<CustomMetrics lookup={lookup} truncationCount={2} />);
+
+    expect(screen.getByTestId('metric-name-alpha')).toBeInTheDocument();
+    expect(screen.getByTestId('metric-name-beta')).toBeInTheDocument();
+    expect(screen.queryByTestId('metric-name-zeta')).not.toBeInTheDocument();
+  });
+
   it('handles missing metrics in counts/totals objects', () => {
     const lookup = { metric1: 10, metric2: 20 };
     const counts = { metric1: 20 };
