@@ -91,6 +91,7 @@ describe('fetchWithProxy compressed responses', () => {
     ['deflate', 200],
     ['gzip', 500],
     ['br', 500],
+    ['deflate', 500],
   ] as const)('decodes %s responses with HTTP %s', async (encoding, statusCode) => {
     const url = await startCompressedServer(encoding, statusCode);
     const response = await fetchWithProxy(url);
@@ -151,12 +152,16 @@ describe('fetchWithProxy compressed responses', () => {
   });
 
   it('preserves streamed native Request bodies on the pooled dispatcher path', async () => {
-    let received = '';
+    let resolveReceived!: (value: string) => void;
+    const receivedPromise = new Promise<string>((resolve) => {
+      resolveReceived = resolve;
+    });
+
     const url = await startServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on('data', (chunk) => chunks.push(chunk));
       req.on('end', () => {
-        received = Buffer.concat(chunks).toString('utf8');
+        resolveReceived(Buffer.concat(chunks).toString('utf8'));
         const body = gzipSync(Buffer.from(JSON.stringify(payload)));
         res.writeHead(200, {
           'content-encoding': 'gzip',
@@ -173,7 +178,7 @@ describe('fetchWithProxy compressed responses', () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(await response.text())).toEqual(payload);
-    expect(received).toBe('hello-streamed');
+    expect(await receivedPromise).toBe('hello-streamed');
   });
 
   it('lets callers clear an inherited aborted signal with signal: null', async () => {
