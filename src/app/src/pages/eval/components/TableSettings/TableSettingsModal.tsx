@@ -16,13 +16,25 @@ import { useSettingsState } from './hooks/useSettingsState';
 interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
+  resultsTableZoom: number;
+  onResultsTableZoomChange: (zoom: number) => void;
 }
 
-const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
+const TableSettingsModal = ({
+  open,
+  onClose,
+  resultsTableZoom,
+  onResultsTableZoomChange,
+}: SettingsModalProps) => {
   const { resetToDefaults } = useSettingsState(open);
 
   const handleClose = () => {
     onClose();
+  };
+
+  const handleResetToDefaults = () => {
+    resetToDefaults();
+    onResultsTableZoomChange(1);
   };
 
   return (
@@ -36,14 +48,17 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
         </DialogHeader>
 
         <div className="min-h-0 overflow-y-auto p-0">
-          <SettingsPanel />
+          <SettingsPanel
+            resultsTableZoom={resultsTableZoom}
+            onResultsTableZoomChange={onResultsTableZoomChange}
+          />
         </div>
 
         <Separator className="opacity-60" />
 
         <DialogFooter className="shrink-0 justify-between px-5 py-3">
           <Button
-            onClick={resetToDefaults}
+            onClick={handleResetToDefaults}
             variant="ghost"
             size="sm"
             aria-label="Reset settings to defaults"
