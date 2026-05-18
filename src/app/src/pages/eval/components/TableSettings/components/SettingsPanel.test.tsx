@@ -12,6 +12,7 @@ vi.mock('../../store', () => ({
 const mockedUseResultsViewSettingsStore = vi.mocked(useResultsViewSettingsStore);
 
 describe('SettingsPanel', () => {
+  const mockOnResultsTableZoomChange = vi.fn();
   const mockStore = {
     stickyHeader: true,
     setStickyHeader: vi.fn(),
@@ -38,6 +39,10 @@ describe('SettingsPanel', () => {
     wordBreak: 'break-word',
     setWordBreak: vi.fn(),
   } as const;
+  const defaultProps = {
+    resultsTableZoom: 1,
+    onResultsTableZoomChange: mockOnResultsTableZoomChange,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -98,7 +103,7 @@ describe('SettingsPanel', () => {
     expectedNewValue,
   }) => {
     const user = userEvent.setup();
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const toggle = screen.getByRole('checkbox', { name });
     expect(toggle).toBeInTheDocument();
@@ -117,7 +122,7 @@ describe('SettingsPanel', () => {
 
   it('should call setMaxTextLength when slider value is committed via keyboard', async () => {
     const user = userEvent.setup();
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const slider = screen.getByRole('slider', { name: /max text length/i });
     expect(slider).toBeInTheDocument();
@@ -137,7 +142,7 @@ describe('SettingsPanel', () => {
       maxTextLength: Number.POSITIVE_INFINITY,
     });
 
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const slider = screen.getByRole('slider', {
       name: /max text length/i,
@@ -148,7 +153,7 @@ describe('SettingsPanel', () => {
   });
 
   it('should have slider for max text length', () => {
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const slider = screen.getByRole('slider', {
       name: /max text length/i,
@@ -158,7 +163,7 @@ describe('SettingsPanel', () => {
   });
 
   it('stacks the settings sections before the small breakpoint', () => {
-    const { container } = renderWithProviders(<SettingsPanel />);
+    const { container } = renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     expect(container.firstElementChild).toHaveClass('grid-cols-1', 'sm:grid-cols-[1fr_1px_1fr]');
     expect(container.querySelector('.bg-border\\/10')).toHaveClass('hidden', 'sm:block');
@@ -170,14 +175,14 @@ describe('SettingsPanel', () => {
       showPassFail: false,
     });
 
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
     expect(passReasonsToggle).toBeDisabled();
   });
 
   it('should enable Pass reasons when Pass/fail indicators is on', () => {
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
     expect(passReasonsToggle).not.toBeDisabled();
@@ -189,16 +194,26 @@ describe('SettingsPanel', () => {
       showPassFail: false,
     });
 
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const metricPillsToggle = screen.getByRole('checkbox', { name: 'Metrics pills' });
     expect(metricPillsToggle).toBeDisabled();
   });
 
   it('should enable Metrics pills when Pass/fail indicators is on', () => {
-    renderWithProviders(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
 
     const metricPillsToggle = screen.getByRole('checkbox', { name: 'Metrics pills' });
     expect(metricPillsToggle).not.toBeDisabled();
+  });
+
+  it('should update results zoom when a new zoom option is selected', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPanel {...defaultProps} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Results zoom' }));
+    await user.click(screen.getByRole('option', { name: '150%' }));
+
+    expect(mockOnResultsTableZoomChange).toHaveBeenCalledWith(1.5);
   });
 });
