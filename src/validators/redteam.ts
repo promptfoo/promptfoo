@@ -85,7 +85,10 @@ export const RedteamContextSchema = z.object({
   id: z.string().describe('Unique identifier for the context'),
   purpose: z
     .string()
-    .describe('Purpose/context for this context - used for generation and grading'),
+    .optional()
+    .describe(
+      'Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank',
+    ),
   vars: z
     .record(z.string(), z.string())
     .optional()
