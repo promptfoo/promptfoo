@@ -5,17 +5,15 @@ description: Red team AI systems against reasoning-based denial of service attac
 
 # Reasoning DoS Plugin
 
-Reasoning DoS (Denial of Service) is a new vulnerability introduced by reasoning models.
-
-This red teaming plugin is designed to test whether an AI system can be protected against computational resource exhaustion through excessive reasoning patterns.
+Reasoning DoS (Denial of Service) covers prompts that push reasoning-capable models into unnecessary work, long runtimes, or inflated inference cost. Use this plugin to test whether the system handles those pressure cases without giving the attacker an easy resource-exhaustion path.
 
 ## Purpose
 
-The Reasoning DoS plugin helps to:
+It focuses on whether the system:
 
-1. Identify scenarios where the AI might engage in unnecessary recursive reasoning
-2. Test the system's resilience against prompts designed to trigger excessive computation
-3. Protect against increased operational costs from malicious inputs
+1. Avoids unnecessary recursive reasoning.
+2. Resists prompts designed to trigger excessive computation.
+3. Preserves reasonable cost and latency under adversarial input.
 
 ## Configuration
 
@@ -51,13 +49,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for reasoning DoS vulnerabilities is critical because:
-
-- It helps prevent operational cost inflation through malicious inputs
-- Protects system resources from exhaustion
-- Ensures consistent response times for all users
-- Maintains service quality under attack conditions
-- Prevents denial of service through computational overload
+These tests matter when a model can spend far more effort on a prompt than the user spent crafting it. The risk is operational: degraded latency, higher cost, and reduced service quality under targeted abuse.
 
 ## Related Concepts
 
