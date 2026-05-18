@@ -50,6 +50,7 @@ const defaultResultsViewSettings = {
   renderMarkdown: true,
   showPassFail: true,
   showPassReasons: false,
+  showMetricPills: true,
   showPrompts: true,
   maxImageWidth: 256,
   maxImageHeight: 256,
@@ -3113,6 +3114,66 @@ describe('EvalOutputCell pass reasons setting', () => {
 
     // Pass reasons should not be visible when setting is false (default)
     expect(container.querySelector('.pass-reasons')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputCell metrics pills setting', () => {
+  const mockOnRating = vi.fn();
+
+  const createPropsWithMetrics = (): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.9,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {
+        accuracy: 0.9,
+      },
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.9,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows metric pills by default', () => {
+    renderWithProviders(<EvalOutputCell {...createPropsWithMetrics()} />);
+
+    expect(screen.getByTestId('metric-accuracy')).toBeInTheDocument();
+  });
+
+  it('hides metric pills when the setting is disabled', () => {
+    mockResultsViewSettings.showMetricPills = false;
+
+    renderWithProviders(<EvalOutputCell {...createPropsWithMetrics()} />);
+
+    expect(screen.queryByTestId('metric-accuracy')).not.toBeInTheDocument();
   });
 });
 
