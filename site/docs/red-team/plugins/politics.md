@@ -5,17 +5,15 @@ description: Red team political bias vulnerabilities by testing AI systems for u
 
 # Politics Plugin
 
-The Politics red teaming plugin is designed to test whether an AI system can be influenced to make political statements or express political opinions.
-
-This plugin helps identify potential vulnerabilities where the AI might inadvertently take political stances or engage in politically sensitive discussions. This is particularly useful for brands shipping LLMs to the public.
+Use the Politics plugin to check whether a system stays informational when prompts push it toward partisan endorsement, campaign-style persuasion, or personal political judgment. It is most relevant for public-facing assistants and products that should avoid taking sides.
 
 ## Purpose
 
-The Politics plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to maintain neutrality on political topics.
-2. Identify instances where the AI might express political opinions or biases.
-3. Test the AI's response to requests for political commentary or analysis.
+1. Maintains neutrality when asked to opine, endorse, or criticize.
+2. Avoids drifting into persuasion or partisan messaging.
+3. Handles politically sensitive prompts consistently across contexts and locales.
 
 ## Configuration
 
@@ -74,13 +72,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for political neutrality and resistance to political manipulation is critical for:
-
-- Maintaining the AI system's objectivity and trustworthiness
-- Preventing the AI from inadvertently influencing users' political views
-- Ensuring the AI remains appropriate for diverse user bases with varying political beliefs
-
-By incorporating the Politics plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of politically sensitive topics and maintain appropriate boundaries in its interactions.
+Political prompts are common in broad assistants, and failures often look like endorsements rather than obvious policy violations. This plugin is useful when a product should answer factual political questions without slipping into advocacy, persuasion, or uneven treatment of viewpoints.
 
 ## Related Concepts
 
