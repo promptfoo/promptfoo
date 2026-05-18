@@ -4467,3 +4467,162 @@ describe('ResultsTable header horizontal scrolling', () => {
     expect(headerScrollContainer.scrollLeft).toBe(180);
   });
 });
+describe('ResultsTable default column sizing', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        test: {},
+        vars: [
+          'ok',
+          'diff --git a/src/example.ts b/src/example.ts\n+const token = payload.value;'.repeat(4),
+        ],
+      },
+    ],
+    head: {
+      prompts: [{ provider: 'test-provider' }],
+      vars: ['short_value', 'large_metadata'],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('gives larger metadata columns more initial width than compact metadata columns', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const compactMetadataHeader = screen
+      .getByText('short_value')
+      .closest('th') as HTMLElement | null;
+    const largeMetadataHeader = screen
+      .getByText('large_metadata')
+      .closest('th') as HTMLElement | null;
+    const finalHeaderRow = screen.getByTestId('results-table-header').querySelectorAll('tr')[1];
+    const finalHeaderCells = finalHeaderRow?.querySelectorAll('th');
+    const outputHeader = finalHeaderCells?.[finalHeaderCells.length - 1] as HTMLElement | undefined;
+
+    expect(compactMetadataHeader).not.toBeNull();
+    expect(largeMetadataHeader).not.toBeNull();
+    expect(outputHeader).toBeDefined();
+
+    const compactMetadataWidth = Number.parseFloat(compactMetadataHeader?.style.width || '0');
+    const largeMetadataWidth = Number.parseFloat(largeMetadataHeader?.style.width || '0');
+    const outputWidth = Number.parseFloat(outputHeader?.style.width || '0');
+
+    expect(compactMetadataWidth).toBeGreaterThanOrEqual(160);
+    expect(largeMetadataWidth).toBeGreaterThan(compactMetadataWidth);
+    expect(largeMetadataWidth).toBeLessThanOrEqual(360);
+    expect(outputWidth).toBe(480);
+  });
+
+  it('renders matching header and body colgroups for the computed widths', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const headerCols = screen.getByTestId('results-table-header').querySelectorAll('colgroup col');
+    const bodyCols = document.querySelectorAll('#results-table-container colgroup col');
+
+    expect(headerCols).toHaveLength(3);
+    expect(bodyCols).toHaveLength(3);
+    expect((headerCols[0] as HTMLElement).style.width).toBe(
+      (bodyCols[0] as HTMLElement).style.width,
+    );
+    expect((headerCols[1] as HTMLElement).style.width).toBe(
+      (bodyCols[1] as HTMLElement).style.width,
+    );
+    expect((headerCols[2] as HTMLElement).style.width).toBe(
+      (bodyCols[2] as HTMLElement).style.width,
+    );
+  });
+
+  it('sizes injected prompt columns from the rendered provider prompt', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {
+        redteam: {
+          injectVar: 'prompt',
+        },
+      },
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                pass: true,
+                score: 1,
+                text: 'test output',
+                response: {
+                  prompt: 'provider rewritten prompt '.repeat(24),
+                },
+              },
+            ],
+            test: {},
+            vars: ['{{prompt}}'],
+          },
+        ],
+        head: {
+          prompts: [{ provider: 'test-provider' }],
+          vars: ['prompt'],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const promptHeader = screen.getByText('prompt').closest('th') as HTMLElement | null;
+    const promptWidth = Number.parseFloat(promptHeader?.style.width || '0');
+
+    expect(promptHeader).not.toBeNull();
+    expect(promptWidth).toBeGreaterThan(160);
+    expect(promptWidth).toBeLessThanOrEqual(360);
+  });
+});
