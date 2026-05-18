@@ -2086,8 +2086,8 @@
                 "description": "Unique identifier for the context"
               },
               "purpose": {
-                "type": "string",
-                "description": "Purpose/context for this context - used for generation and grading"
+                "description": "Optional purpose/context for this context - used for generation and grading, or inherited from the root redteam purpose when omitted or blank",
+                "type": "string"
               },
               "maxConcurrency": {
                 "description": "Maximum number of concurrent eval test cases for this context",
@@ -2106,7 +2106,7 @@
                 }
               }
             },
-            "required": ["id", "purpose"],
+            "required": ["id"],
             "additionalProperties": false
           }
         },
