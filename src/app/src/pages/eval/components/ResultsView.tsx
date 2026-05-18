@@ -12,7 +12,6 @@ import {
 } from '@app/components/ui/dialog';
 import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
 import { SearchInput } from '@app/components/ui/search-input';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -845,28 +844,6 @@ export default function ResultsView({
                     />
                     <FiltersForm />
                     <div className="flex-1" />
-                    <Select
-                      value={String(resultsTableZoom)}
-                      onValueChange={(val) => setResultsTableZoom(Number(val))}
-                    >
-                      <SelectTrigger aria-label="Results zoom" className="w-[115px] h-8 text-xs">
-                        <span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            ZOOM
-                          </span>{' '}
-                          {Math.round(resultsTableZoom * 100)}%
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0.5">50%</SelectItem>
-                        <SelectItem value="0.75">75%</SelectItem>
-                        <SelectItem value="0.9">90%</SelectItem>
-                        <SelectItem value="1">100%</SelectItem>
-                        <SelectItem value="1.25">125%</SelectItem>
-                        <SelectItem value="1.5">150%</SelectItem>
-                        <SelectItem value="2">200%</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <ColumnSelector
                       columnData={columnData}
                       selectedColumns={currentColumnState.selectedColumns}
@@ -1016,7 +993,12 @@ export default function ResultsView({
         filterByDatasetId
       />
       <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
-      <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <SettingsModal
+        open={viewSettingsModalOpen}
+        onClose={() => setViewSettingsModalOpen(false)}
+        resultsTableZoom={resultsTableZoom}
+        onResultsTableZoomChange={setResultsTableZoom}
+      />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}
         onClose={() => setEditNameDialogOpen(false)}
