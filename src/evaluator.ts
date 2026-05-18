@@ -3650,7 +3650,6 @@ class Evaluator {
     const contextConcurrencyLimits = getContextConcurrencyLimits(processingContext.testSuite);
 
     if (contextConcurrencyLimits.size > 0) {
-      const globalSemaphore = new Semaphore(processingContext.concurrency);
       const contextSemaphores = new Map<string, Semaphore>();
       const getContextSemaphore = (contextId: string, maxConcurrency: number) => {
         if (!contextSemaphores.has(contextId)) {
@@ -3659,8 +3658,10 @@ class Evaluator {
         return contextSemaphores.get(contextId)!;
       };
 
-      await Promise.all(
-        concurrentRunEvalOptions.map(async (evalStep) => {
+      await async.forEachOfLimit(
+        concurrentRunEvalOptions,
+        processingContext.concurrency,
+        async (evalStep) => {
           checkAbort();
           const contextId = evalStep.test.metadata?.contextId;
           const contextLimit = getEvalStepContextConcurrencyLimit(
@@ -3671,7 +3672,6 @@ class Evaluator {
             typeof contextId === 'string' && contextLimit !== undefined
               ? await getContextSemaphore(contextId, contextLimit).acquire()
               : undefined;
-          const releaseGlobal = await globalSemaphore.acquire();
 
           try {
             checkAbort();
@@ -3684,10 +3684,9 @@ class Evaluator {
               await this.evalRecord.addPrompts(prompts);
             }
           } finally {
-            releaseGlobal();
             releaseContext?.();
           }
-        }),
+        },
       );
       return;
     }
