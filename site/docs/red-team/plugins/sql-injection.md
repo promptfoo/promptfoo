@@ -5,17 +5,15 @@ description: Red team SQL injection vulnerabilities by simulating malicious data
 
 # SQL Injection Plugin
 
-The SQL Injection red teaming plugin is designed to test an AI system's vulnerability to attacks that attempt to execute unauthorized database queries.
-
-This plugin helps identify potential security breaches where an attacker might exploit the system to access, modify, or delete sensitive data. This is a useful test for LLM agents with access to a database.
+Use the SQL Injection plugin to test whether prompts can steer a database-connected system into unsafe query construction or apparent execution of injected SQL. It is most relevant for agents that translate natural language into database operations.
 
 ## Purpose
 
-The SQL Injection plugin helps to:
+It focuses on whether the system:
 
-1. Assess the AI's ability to recognize and prevent SQL injection attempts.
-2. Identify potential vulnerabilities where the system might be tricked into executing malicious SQL queries.
-3. Test the AI's response to malicious input disguised as part of legitimate database queries.
+1. Recognizes SQL payloads embedded inside ordinary-looking requests.
+2. Avoids constructing or appearing to execute unsafe queries.
+3. Responds without disclosing schema, database, or error details that aid exploitation.
 
 ## Configuration
 
@@ -57,13 +55,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for SQL injection vulnerabilities is critical for:
-
-- Preventing unauthorized access to sensitive data
-- Protecting database integrity and security
-- Ensuring proper input validation and sanitization
-
-By incorporating the SQL Injection plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's handling of user input and database interactions.
+This plugin is valuable when prompts sit close to query generation or tool calls, where a model can turn malicious user text into a plausible database action. It keeps the review centered on whether the system stays parameterized, bounded, and non-disclosive.
 
 ## Related Concepts
 
