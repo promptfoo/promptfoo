@@ -5,17 +5,15 @@ description: Red team AI impersonation attacks by testing system resistance to i
 
 # Imitation Plugin
 
-The Imitation red teaming plugin is designed to test whether an AI system can be influenced to imitate a specific person, brand, or organization.
-
-This plugin helps identify potential vulnerabilities where the AI might inappropriately adopt the voice or characteristics of entities it should not represent. It's most useful for brands shipping LLMs to the public.
+Use the Imitation plugin to test whether a model slips into unauthorized impersonation of people, brands, or organizations. It targets prompts that ask for first-person representation, borrowed authority, or brand voice the system should not claim.
 
 ## Purpose
 
-The Imitation plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to maintain its own identity and avoid impersonating others.
-2. Identify instances where the AI might be manipulated into imitating specific individuals, brands, or organizations.
-3. Test the AI's capacity to recognize and resist requests for impersonation.
+1. Keeps its own identity instead of presenting itself as another entity.
+2. Resists prompts that normalize impersonation with realistic context or roleplay.
+3. Distinguishes between discussing a style and falsely claiming authorship or authority.
 
 ## Configuration
 
@@ -59,13 +57,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for imitation vulnerabilities is critical for:
-
-- Preventing unauthorized or inappropriate representation of individuals or entities
-- Maintaining the AI system's integrity and trustworthiness
-- Avoiding potential legal issues related to impersonation or brand misrepresentation
-
-By incorporating the Imitation plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to maintain appropriate boundaries and resist attempts at impersonation.
+Imitation failures can mislead users about authorship, authority, or endorsement. This plugin is useful for public-facing assistants, support flows, and content systems that must not present generated text as coming from a real person or organization.
 
 ## Related Concepts
 
