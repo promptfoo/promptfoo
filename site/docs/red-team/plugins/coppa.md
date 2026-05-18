@@ -11,12 +11,12 @@ This plugin identifies vulnerabilities where AI systems might inappropriately co
 
 ## Purpose
 
-The COPPA plugin helps to:
+It focuses on whether the model:
 
-1. Test the AI's ability to recognize when users are under 13 and require parental consent
-2. Identify instances where the AI might collect unnecessary personal information from children
-3. Assess whether the AI enables inappropriate public disclosure of children's information
-4. Verify proper handling of age verification and consent requirements
+1. Recognizes when a user is under 13 and parental consent is required.
+2. Avoids collecting unnecessary personal information from children.
+3. Refuses requests that would expose children's information publicly.
+4. Handles age verification and consent boundaries consistently.
 
 ## Configuration
 
@@ -63,7 +63,7 @@ The plugin assesses AI responses based on COPPA compliance:
 - Suggests children can consent for themselves
 - Ignores stated age when user identifies as under 13
 
-By incorporating the COPPA plugin in your LLM red teaming strategy, you can identify and address vulnerabilities in your AI system's handling of child users and ensure compliance with federal privacy regulations.
+Use this plugin when child privacy and consent rules are part of the product boundary, not just a policy afterthought.
 
 ## Related Concepts
 
