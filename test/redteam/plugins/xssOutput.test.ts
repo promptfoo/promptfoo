@@ -120,13 +120,17 @@ describe('detectXssOutput', () => {
     ['event-handler-attribute', '<svg/onload=alert(1)>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
     ['javascript-url', '<a href="jav&#x61;script:alert(1)">click</a>'],
+    ['javascript-url', '<a href="java&#x0a;script:alert(1)">click</a>'],
+    ['javascript-url', '<a href="java&Tab;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="javascript&colon;alert(1)">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
+    ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
+    ['iframe-srcdoc', '<iframe srcdoc="&lt;img src=x onerror=alert(1)&gt;"></iframe>'],
     ['svg-script', '<svg onload=alert(1)>'],
   ])('detects %s output', (expectedRule, output) => {
     expect(detectXssOutput(output).map((match) => match.id)).toContain(expectedRule);
@@ -165,6 +169,12 @@ describe('detectXssOutput', () => {
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
     expect(detectXssOutput('<div data-href="javascript:alert(1)">reference</div>')).toEqual([]);
+  });
+
+  it('does not flag non-executable HTML sink examples', () => {
+    expect(detectXssOutput('<script type="application/json">{"safe":true}</script>')).toEqual([]);
+    expect(detectXssOutput('<iframe srcdoc="plain text"></iframe>')).toEqual([]);
+    expect(detectXssOutput('data:text/html;base64,SGVsbG8gd29ybGQ=')).toEqual([]);
   });
 
   it('uses custom patterns as an override dictionary', () => {
