@@ -132,8 +132,8 @@ const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
 const DESCRIPTION_COLUMN_SIZE_PX = 100;
 const MEDIA_MIME_PATTERNS = {
-  audio: /(?:^|[;,\s=])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
-  image: /(?:^|[;,\s=])image\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+  audio: /(?:^|[;,\s=:])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+  image: /(?:^|[;,\s=:])image\/[a-z0-9.+-]+(?:$|[;,\s])/i,
 } as const;
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
@@ -524,7 +524,12 @@ function getNumberFormatter(
   options: Intl.NumberFormatOptions,
   locale?: string | string[],
 ): Intl.NumberFormat {
-  const normalizedLocale = Array.isArray(locale) ? locale.join(',') : locale || 'default';
+  let normalizedLocale = 'default';
+  if (Array.isArray(locale)) {
+    normalizedLocale = locale.join(',');
+  } else if (typeof locale === 'string') {
+    normalizedLocale = locale;
+  }
   const normalizedOptions = Object.entries(options)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}:${String(value)}`)
