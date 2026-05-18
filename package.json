@@ -266,6 +266,7 @@
     "@inquirer/core": "^11.1.5",
     "@inquirer/editor": "^5.0.8",
     "@inquirer/input": "^5.0.8",
+    "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.17.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
