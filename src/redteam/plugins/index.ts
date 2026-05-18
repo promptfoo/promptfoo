@@ -73,6 +73,7 @@ import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
+import { validateXssOutputPluginConfig, XssOutputPlugin } from './xssOutput';
 import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
@@ -522,6 +523,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),
   createPluginFactory(VLSUPlugin, 'vlsu'),
+  createPluginFactory(XssOutputPlugin, 'xss-output', validateXssOutputPluginConfig),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {

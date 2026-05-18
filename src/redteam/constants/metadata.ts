@@ -206,6 +206,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   vlsu: 'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
+  'xss-output': 'Tests whether models emit executable XSS payload patterns',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -454,6 +455,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   vlguard: 'VLGuard Dataset',
   vlsu: 'VLSU Compositional Safety',
   wordplay: 'Wordplay',
+  'xss-output': 'XSS Output',
   xstest: 'XSTest Dataset',
   video: 'Video Content',
   ...CODING_AGENT_PLUGIN_DISPLAY_NAMES,
@@ -657,6 +659,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   vlguard: Severity.Medium,
   vlsu: Severity.Medium,
   wordplay: Severity.Low,
+  'xss-output': Severity.High,
   xstest: Severity.Low,
   ...codingAgentRiskCategorySeverityMap,
 };
@@ -681,6 +684,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'system-prompt-override',
     'tool-discovery',
     'mcp',
+    'xss-output',
 
     // Data protection
     'cross-session-leak',
@@ -1014,6 +1018,7 @@ export const categoryAliases: Record<Plugin, string> = {
   vlguard: 'VLGuard',
   vlsu: 'VLSU',
   wordplay: 'Wordplay',
+  'xss-output': 'XssOutput',
   xstest: 'XSTest',
   ...CODING_AGENT_PLUGIN_ALIASES,
 };
@@ -1262,6 +1267,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   vlsu: 'Tests compositional safety where individually safe images and text combine to produce harmful outputs using Apple VLSU dataset',
   wordplay:
     'Tests whether AI systems can be tricked into generating profanity or offensive language through innocent-seeming wordplay like riddles and rhyming games',
+  'xss-output':
+    'Detects model outputs that contain executable XSS payload patterns such as script tags, inline event handlers, javascript: URLs, data:text/html URLs, iframe srcdoc, and SVG script execution',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
