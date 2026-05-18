@@ -24,11 +24,13 @@ export function DataTableColumnToggle<TData>({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {table
-          .getAllColumns()
+          .getAllLeafColumns()
           .filter((column) => column.getCanHide())
           .map((column) => {
             const header = column.columnDef.header;
-            const headerText = typeof header === 'string' ? header : column.id;
+            const headerText =
+              column.columnDef.meta?.columnToggleLabel ??
+              (typeof header === 'string' ? header : column.id);
             const isVisible = columnVisibility[column.id] !== false;
 
             return (
