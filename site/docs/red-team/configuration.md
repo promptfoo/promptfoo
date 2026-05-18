@@ -50,7 +50,7 @@ redteam:
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
-  contexts: Array<{ id: string, purpose: string, vars?: Record<string, string> }>
+  contexts: Array<{ id: string, purpose?: string, vars?: Record<string, string> }>
   language: string | string[]
   testGenerationInstructions: string
   graderExamples: Array<object>
@@ -670,11 +670,11 @@ Use contexts when you need to test:
 
 Each context has:
 
-| Field     | Type                     | Description                                                                                |
-| --------- | ------------------------ | ------------------------------------------------------------------------------------------ |
-| `id`      | `string`                 | Unique identifier for the context                                                          |
-| `purpose` | `string`                 | Context-specific purpose that guides attack generation and grading                         |
-| `vars`    | `Record<string, string>` | Optional variables passed to your [custom provider script](/docs/providers/custom-script/) |
+| Field     | Type                     | Description                                                                                                                              |
+| --------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`      | `string`                 | Unique identifier for the context                                                                                                        |
+| `purpose` | `string`                 | Optional context-specific purpose that guides attack generation and grading. Blank or omitted values inherit the root `redteam.purpose`. |
+| `vars`    | `Record<string, string>` | Optional variables passed to your [custom provider script](/docs/providers/custom-script/)                                               |
 
 #### Example: Testing a Customer Support Chatbot
 
@@ -702,9 +702,34 @@ redteam:
     - rbac
 ```
 
-When contexts are defined, promptfoo generates tests for each context separately. The context's `purpose` overrides the global purpose for both attack generation and grading, ensuring that attacks and pass/fail criteria are tailored to each specific scenario.
+When contexts are defined, promptfoo generates tests for each context separately. A non-empty context `purpose` overrides the root `redteam.purpose` for both attack generation and grading. If a context `purpose` is omitted or blank, it inherits the root purpose instead.
 
 The `vars` are merged into each test case and passed to your provider, allowing your [custom provider script](/docs/providers/custom-script/) to set up the appropriate test environment (e.g., loading a specific session, setting user permissions).
+
+#### Purpose Templates
+
+Root and context purposes support the same Nunjucks-style string templating used elsewhere in Promptfoo. Root purpose templates render with `defaultTest.vars`. Context purpose templates render with `defaultTest.vars` plus that context's `vars`, with context vars taking precedence when keys overlap.
+
+```yaml
+defaultTest:
+  vars:
+    application_name: SupportDesk
+    user_name: fallback-user
+
+redteam:
+  purpose: 'You are testing {{ application_name }} as user {{ user_name }}'
+  contexts:
+    - id: alice
+      purpose: 'You are testing {{ application_name }} as user {{ user_name }}'
+      vars:
+        user_name: alice
+
+    - id: inherited-purpose
+      vars:
+        user_name: bob
+```
+
+The `alice` context renders its own purpose as `You are testing SupportDesk as user alice`. The `inherited-purpose` context inherits the root purpose and renders it as `You are testing SupportDesk as user bob`.
 
 #### Loading File Content in Vars
 
