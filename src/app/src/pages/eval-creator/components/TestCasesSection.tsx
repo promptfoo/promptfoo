@@ -98,12 +98,20 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const [deleteAllDialogOpen, setDeleteAllDialogOpen] = React.useState(false);
   const { showToast } = useToast();
 
-  // Reset selection if test cases change underneath us (e.g. after import) or selection mode exits
+  // Reset selection if test cases change underneath us (e.g. after import) or selection mode exits.
+  // Selections are stored as row indices, so any list mutation can make them point to different rows.
   React.useEffect(() => {
-    if (!selectionMode && selectedIndices.size > 0) {
-      setSelectedIndices(new Set());
+    if (selectedIndices.size === 0) {
+      return;
     }
-  }, [selectionMode, selectedIndices.size]);
+
+    if (!selectionMode || selectedIndices.size > testCases.length) {
+      setSelectedIndices(new Set());
+      return;
+    }
+
+    setSelectedIndices(new Set());
+  }, [selectionMode, testCases]);
 
   const toggleSelected = (index: number) => {
     setSelectedIndices((prev) => {
