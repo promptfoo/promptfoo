@@ -129,7 +129,12 @@ const CustomMetrics = ({
             >
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="metric-content" onClick={() => handleClick(metric)}>
+                  <button
+                    type="button"
+                    className="metric-content"
+                    aria-label={`Filter by metric ${displayLabel}`}
+                    onClick={() => handleClick(metric)}
+                  >
                     <span data-testid={`metric-name-${metric}`} className="metric-name">
                       {displayLabel}
                     </span>
@@ -141,7 +146,7 @@ const CustomMetrics = ({
                         metricTotals={metricTotals}
                       />
                     </span>
-                  </div>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
                   <div className="space-y-2 max-w-[400px]">

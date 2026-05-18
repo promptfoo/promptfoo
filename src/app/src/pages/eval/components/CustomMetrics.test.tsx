@@ -188,6 +188,16 @@ describe('CustomMetrics', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Click to filter by this metric');
   });
 
+  it('exposes the filter hint from a keyboard-focusable metric control', async () => {
+    renderWithProviders(<CustomMetrics lookup={{ metric1: 10 }} />);
+
+    const metricButton = screen.getByRole('button', { name: 'Filter by metric metric1' });
+    metricButton.focus();
+
+    expect(metricButton).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Click to filter by this metric');
+  });
+
   it('keeps policy details alongside the filter hint tooltip', async () => {
     const user = userEvent.setup();
     const policyMetric = 'policy:policy-1';
