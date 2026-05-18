@@ -47,6 +47,8 @@ def model_call_patch(fail_log: str, relevant_files: dict) -> str:
                 {"role": "user", "content": user_msg},
             ],
         )
+        if not resp.choices or resp.choices[0].message is None:
+            raise ValueError("LLM returned empty or filtered response")
         patch = resp.choices[0].message.content.strip()
         return patch
 
