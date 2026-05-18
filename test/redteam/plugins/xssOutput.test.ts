@@ -119,13 +119,17 @@ describe('detectXssOutput', () => {
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
     ['event-handler-attribute', '<svg/onload=alert(1)>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
+    ['javascript-url', '<a href="javascript:history.back()">go back</a>'],
     ['javascript-url', '<a href="jav&#x61;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="java&#x0a;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="java&Tab;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="javascript&colon;alert(1)">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
+    ['javascript-url', '[click](<javascript:alert(1)>)'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
+    ['data-html-url', '<a href="data:text/html,<img src=x onerror=alert(1)>">preview</a>'],
+    ['data-html-url', 'data:text/html;foo=bar,<script>alert(1)</script>'],
     ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
@@ -195,6 +199,17 @@ describe('detectXssOutput', () => {
         evidence: '<object data=',
       },
     ]);
+    expect(
+      detectXssOutput('<script>alert(1)</script>', {
+        xssOutputPatterns: [
+          {
+            id: 'object-data',
+            pattern: '<object\\b[^>]*data\\s*=',
+            description: 'object data sink',
+          },
+        ],
+      }),
+    ).toEqual([]);
   });
 });
 

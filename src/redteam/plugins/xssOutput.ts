@@ -181,15 +181,16 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
+const JAVASCRIPT_URL_SINK_PAYLOAD_PATTERN = String.raw`javascript\s*:\s*(?!(?:urls?|uris?|schemes?|protocols?)\b)[^"'\s<>)]`;
 const JAVASCRIPT_EXECUTABLE_PATTERN = String.raw`javascript\s*:\s*(?!(?:urls?|uris?|schemes?|protocols?)\b)(?:[^"'\s<>)]*\s*)?(?:alert|confirm|document|eval|fetch|function|import|location|prompt|setinterval|settimeout|void|window|\()`;
 const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
-  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|'[^']*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|[^\s>]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN})|\]\(\s*${JAVASCRIPT_EXECUTABLE_PATTERN}[^)]*\))`,
+  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_URL_SINK_PAYLOAD_PATTERN}|'[^']*?\b${JAVASCRIPT_URL_SINK_PAYLOAD_PATTERN}|[^\s>]*?\b${JAVASCRIPT_URL_SINK_PAYLOAD_PATTERN})|\]\(\s*(?:<\s*)?${JAVASCRIPT_URL_SINK_PAYLOAD_PATTERN}[^)]*?(?:\s*>)?\))`,
   'i',
 );
 const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i;
 const IFRAME_SRCDOC_PATTERN = /<\s*iframe\b[^>]*\bsrcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
 const DATA_HTML_URL_PATTERN =
-  /\bdata\s*:\s*text\/html(?:\s*;\s*charset=[^,;\s]+)?(?:\s*;\s*base64)?\s*,[^\s"']+/i;
+  /\bdata\s*:\s*text\/html(?:\s*;\s*[^,;\s]+(?:\s*=\s*[^,;\s]+)?)*\s*,(?:[^"'\s][^"']*?(?=["'])|[^\s"']+)/i;
 const EVENT_HANDLER_ATTRIBUTE_PATTERN =
   /<\s*[\w:-]+\b[^>]*[\s/]+on[a-z]+\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)/i;
 const EXECUTABLE_XSS_CONTENT_PATTERN = new RegExp(
@@ -351,10 +352,6 @@ function getRules(config?: PluginConfig): XssOutputRule[] {
   return DEFAULT_XSS_OUTPUT_RULES;
 }
 
-function resetPattern(pattern: RegExp): void {
-  pattern.lastIndex = 0;
-}
-
 function getGlobalPattern(pattern: RegExp): RegExp {
   const flags = pattern.flags.replace('y', '');
   return new RegExp(pattern.source, flags.includes('g') ? flags : `${flags}g`);
@@ -375,7 +372,6 @@ function findRuleEvidence(output: string, rule: XssOutputRule): string | undefin
     }
   }
 
-  resetPattern(rule.pattern);
   return undefined;
 }
 
