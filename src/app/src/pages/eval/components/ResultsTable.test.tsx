@@ -4208,3 +4208,103 @@ describe('ResultsTable minimal scroll room detection', () => {
     expect(stickyContainer.className).toContain('relative');
   });
 });
+
+describe('ResultsTable header horizontal scrolling', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{ provider: 'test-provider' }],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('exposes a horizontally scrollable header container', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('results-table-header-scroll-container')).toHaveClass(
+      'overflow-x-auto',
+      'overflow-y-hidden',
+    );
+  });
+
+  it('syncs header scrolling into the table body', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const headerScrollContainer = screen.getByTestId('results-table-header-scroll-container');
+    const tableContainer = document.getElementById('results-table-container');
+
+    expect(tableContainer).not.toBeNull();
+
+    act(() => {
+      headerScrollContainer.scrollLeft = 120;
+      headerScrollContainer.dispatchEvent(new Event('scroll'));
+    });
+
+    expect(tableContainer?.scrollLeft).toBe(120);
+  });
+
+  it('keeps body scrolling mirrored in the header', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const headerScrollContainer = screen.getByTestId('results-table-header-scroll-container');
+    const tableContainer = document.getElementById('results-table-container');
+
+    expect(tableContainer).not.toBeNull();
+
+    act(() => {
+      if (tableContainer) {
+        tableContainer.scrollLeft = 180;
+        tableContainer.dispatchEvent(new Event('scroll'));
+      }
+    });
+
+    expect(headerScrollContainer.scrollLeft).toBe(180);
+  });
+});
