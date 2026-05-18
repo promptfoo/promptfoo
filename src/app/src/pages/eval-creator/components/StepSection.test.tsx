@@ -24,16 +24,6 @@ describe('StepSection', () => {
       expect(screen.getByText('Test content')).toBeInTheDocument();
     });
 
-    it('renders children content', () => {
-      render(
-        <StepSection {...defaultProps}>
-          <div data-testid="child-content">Child element</div>
-        </StepSection>,
-      );
-
-      expect(screen.getByTestId('child-content')).toBeInTheDocument();
-    });
-
     it('renders complex JSX children', () => {
       render(
         <StepSection {...defaultProps}>
@@ -113,16 +103,6 @@ describe('StepSection', () => {
 
       expect(screen.getByText('5 configured')).toBeInTheDocument();
       expect(screen.queryByText('Configured')).not.toBeInTheDocument();
-    });
-
-    it('shows singular count correctly', () => {
-      render(
-        <StepSection {...defaultProps} isComplete={true} count={1}>
-          <div>Content</div>
-        </StepSection>,
-      );
-
-      expect(screen.getByText('1 configured')).toBeInTheDocument();
     });
 
     it('shows zero count correctly', () => {

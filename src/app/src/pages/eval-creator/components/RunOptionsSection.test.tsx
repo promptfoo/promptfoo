@@ -89,6 +89,9 @@ describe('RunOptionsSection', () => {
 
       const input = screen.getByLabelText('Delay between API calls (ms)');
       expect(input).not.toBeDisabled();
+
+      const label = screen.getByText('Delay between API calls (ms)');
+      expect(label).not.toHaveClass('text-muted-foreground');
     });
 
     it('is enabled when maxConcurrency is 1', () => {
@@ -103,6 +106,8 @@ describe('RunOptionsSection', () => {
 
       const input = screen.getByLabelText('Delay between API calls (ms)');
       expect(input).toBeDisabled();
+      const label = screen.getByText('Delay between API calls (ms)');
+      expect(label).toHaveClass('text-muted-foreground');
       expect(
         screen.getByText('To set a delay, max concurrent requests must be 1'),
       ).toBeInTheDocument();
@@ -122,21 +127,7 @@ describe('RunOptionsSection', () => {
       });
     });
 
-    it('calls onChange with parsed number when valid delay is entered', async () => {
-      const user = userEvent.setup();
-      render(<RunOptionsSection onChange={mockOnChange} />);
-
-      const input = screen.getByLabelText('Delay between API calls (ms)');
-      await user.type(input, '5');
-
-      expect(mockOnChange).toHaveBeenLastCalledWith({
-        description: undefined,
-        delay: 5,
-        maxConcurrency: 1,
-      });
-    });
-
-    it('sets maxConcurrency to 1 when delay is set to a positive value', async () => {
+    it('parses positive delay values and forces maxConcurrency to 1', async () => {
       const user = userEvent.setup();
       render(<RunOptionsSection onChange={mockOnChange} />);
 
@@ -186,6 +177,9 @@ describe('RunOptionsSection', () => {
 
       const input = screen.getByLabelText('Max concurrent requests');
       expect(input).not.toBeDisabled();
+
+      const label = screen.getByText('Max concurrent requests');
+      expect(label).not.toHaveClass('text-muted-foreground');
     });
 
     it('is enabled when delay is 0', () => {
@@ -200,6 +194,8 @@ describe('RunOptionsSection', () => {
 
       const input = screen.getByLabelText('Max concurrent requests');
       expect(input).toBeDisabled();
+      const label = screen.getByText('Max concurrent requests');
+      expect(label).toHaveClass('text-muted-foreground');
       expect(screen.getByText('To set max concurrency, delay must be 0')).toBeInTheDocument();
     });
 
@@ -217,7 +213,7 @@ describe('RunOptionsSection', () => {
       });
     });
 
-    it('calls onChange with parsed number when valid maxConcurrency is entered', async () => {
+    it('parses maxConcurrency values above 1 and resets delay to 0', async () => {
       const user = userEvent.setup();
       render(<RunOptionsSection onChange={mockOnChange} />);
 
@@ -229,20 +225,6 @@ describe('RunOptionsSection', () => {
         description: undefined,
         delay: 0,
         maxConcurrency: 8,
-      });
-    });
-
-    it('sets delay to 0 when maxConcurrency is set to a value greater than 1', async () => {
-      const user = userEvent.setup();
-      render(<RunOptionsSection onChange={mockOnChange} />);
-
-      const input = screen.getByLabelText('Max concurrent requests');
-      await user.type(input, '4');
-
-      expect(mockOnChange).toHaveBeenLastCalledWith({
-        description: undefined,
-        delay: 0,
-        maxConcurrency: 4,
       });
     });
 
@@ -314,36 +296,6 @@ describe('RunOptionsSection', () => {
       render(<RunOptionsSection onChange={mockOnChange} />);
 
       expect(screen.getByTestId('run-test-suite-button')).toBeInTheDocument();
-    });
-  });
-
-  describe('Label styling based on enabled state', () => {
-    it('applies muted styling to delay label when disabled', () => {
-      render(<RunOptionsSection maxConcurrency={4} onChange={mockOnChange} />);
-
-      const label = screen.getByText('Delay between API calls (ms)');
-      expect(label).toHaveClass('text-muted-foreground');
-    });
-
-    it('does not apply muted styling to delay label when enabled', () => {
-      render(<RunOptionsSection onChange={mockOnChange} />);
-
-      const label = screen.getByText('Delay between API calls (ms)');
-      expect(label).not.toHaveClass('text-muted-foreground');
-    });
-
-    it('applies muted styling to maxConcurrency label when disabled', () => {
-      render(<RunOptionsSection delay={100} onChange={mockOnChange} />);
-
-      const label = screen.getByText('Max concurrent requests');
-      expect(label).toHaveClass('text-muted-foreground');
-    });
-
-    it('does not apply muted styling to maxConcurrency label when enabled', () => {
-      render(<RunOptionsSection onChange={mockOnChange} />);
-
-      const label = screen.getByText('Max concurrent requests');
-      expect(label).not.toHaveClass('text-muted-foreground');
     });
   });
 
