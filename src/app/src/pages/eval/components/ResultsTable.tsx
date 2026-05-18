@@ -1336,6 +1336,7 @@ function ResultsTableHeader({
   tableWidth,
   maxTextLength,
   wordBreak,
+  headerScrollRef,
   theadRef,
   stickyHeader,
   setStickyHeader,
@@ -1346,6 +1347,7 @@ function ResultsTableHeader({
   tableWidth: number;
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
+  headerScrollRef: React.RefObject<HTMLDivElement | null>;
   theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
@@ -1371,46 +1373,52 @@ function ResultsTableHeader({
           <X className="size-4" />
         </button>
       </div>
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-        style={{
-          wordBreak,
-          width: `${tableWidth}px`,
-          zoom,
-        }}
+      <div
+        ref={headerScrollRef}
+        data-testid="results-table-header-scroll-container"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
-        <thead ref={theadRef}>
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => {
-                const isFinalRow = headerGroup.depth === 1;
+        <table
+          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          style={{
+            wordBreak,
+            width: `${tableWidth}px`,
+            zoom,
+          }}
+        >
+          <thead ref={theadRef}>
+            {reactTable.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="header">
+                {headerGroup.headers.map((header) => {
+                  const isFinalRow = headerGroup.depth === 1;
 
-                return (
-                  <th
-                    key={header.id}
-                    tabIndex={0}
-                    colSpan={header.colSpan}
-                    style={{
-                      width: header.getSize(),
-                      borderBottom: 'none',
-                      height: isFinalRow ? 'fit-content' : 'auto',
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    <div
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                    />
-                  </th>
-                );
-              })}
-            </tr>
-          ))}
-        </thead>
-      </table>
+                  return (
+                    <th
+                      key={header.id}
+                      tabIndex={0}
+                      colSpan={header.colSpan}
+                      style={{
+                        width: header.getSize(),
+                        borderBottom: 'none',
+                        height: isFinalRow ? 'fit-content' : 'auto',
+                      }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                      />
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+          </thead>
+        </table>
+      </div>
     </div>
   );
 }
@@ -2068,8 +2076,9 @@ function ResultsTable({
   // This automatically handles both column visibility changes and user-initiated column resizing.
   const tableWidth = reactTable.getTotalSize();
 
-  // Listen for scroll events on the table container and sync the header horizontally
+  // Keep the standalone header and the scrollable table body aligned in both directions.
   const tableRef = useRef<HTMLDivElement>(null);
+  const headerScrollRef = useRef<HTMLDivElement>(null);
   const theadRef = useRef<HTMLTableSectionElement>(null);
 
   // Detect if there's minimal scroll room - in this case, disable height collapse
@@ -2100,38 +2109,39 @@ function ResultsTable({
   }, [filteredResultsCount, checkScrollRoom]);
 
   useEffect(() => {
-    if (!tableRef.current || !theadRef.current) {
+    if (!tableRef.current || !headerScrollRef.current) {
       return;
     }
 
-    const container = tableRef.current;
-    let rafId: number | null = null;
+    const tableContainer = tableRef.current;
+    const headerContainer = headerScrollRef.current;
 
-    const handleScroll = () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
+    const syncScrollLeft = (source: HTMLDivElement, target: HTMLDivElement) => {
+      if (target.scrollLeft !== source.scrollLeft) {
+        target.scrollLeft = source.scrollLeft;
       }
-      rafId = requestAnimationFrame(() => {
-        if (theadRef.current) {
-          const xScroll = container.scrollLeft;
-          theadRef.current.style.transform = `translateX(-${xScroll}px)`;
-        }
-      });
     };
 
-    container.addEventListener('scroll', handleScroll, { passive: true });
+    const handleTableScroll = () => {
+      syncScrollLeft(tableContainer, headerContainer);
+    };
+
+    const handleHeaderScroll = () => {
+      syncScrollLeft(headerContainer, tableContainer);
+    };
+
+    tableContainer.addEventListener('scroll', handleTableScroll, { passive: true });
+    headerContainer.addEventListener('scroll', handleHeaderScroll, { passive: true });
 
     // Initial sync
-    handleScroll();
+    handleTableScroll();
     // Keep in sync on resize
-    window.addEventListener('resize', handleScroll);
+    window.addEventListener('resize', handleTableScroll);
 
     return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      container.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
+      tableContainer.removeEventListener('scroll', handleTableScroll);
+      headerContainer.removeEventListener('scroll', handleHeaderScroll);
+      window.removeEventListener('resize', handleTableScroll);
     };
   }, []);
 
@@ -2155,6 +2165,7 @@ function ResultsTable({
         tableWidth={tableWidth}
         maxTextLength={maxTextLength}
         wordBreak={wordBreak}
+        headerScrollRef={headerScrollRef}
         theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
