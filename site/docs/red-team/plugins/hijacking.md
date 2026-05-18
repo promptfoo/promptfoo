@@ -5,17 +5,15 @@ description: Red team AI system hijacking attacks by testing prompt redirection 
 
 # Hijacking Plugin
 
-The Hijacking red teaming plugin is designed to test whether a large language model can be distracted from its intended system purpose.
-
-This plugin helps identify potential vulnerabilities where the AI might be led astray from its primary function, potentially providing irrelevant or inappropriate responses. It's most useful if you are publishing an LLM endpoint publicly, to avoid "open proxy" risk.
+Use the Hijacking plugin to test whether a scoped assistant can be redirected into unrelated work that falls outside its intended purpose. It is especially useful for public endpoints where the risk is becoming a general-purpose proxy instead of staying tied to the configured task.
 
 ## Purpose
 
-The Hijacking plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to stay focused on its intended purpose when faced with tangential or unrelated queries.
-2. Identify instances where the AI might be manipulated into performing tasks outside its designated role.
-3. Test the AI's capacity to recognize and resist attempts to redirect its functionality.
+1. Stays within the configured task when prompts are adjacent but off-scope.
+2. Refuses unrelated work instead of opportunistically answering it.
+3. Redirects the user back to the intended workflow without overcomplying.
 
 ## Configuration
 
@@ -55,13 +53,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for hijacking vulnerabilities is critical for:
-
-- Ensuring the AI system maintains focus on its intended purpose
-- Preventing misuse of the AI for unintended tasks
-- Identifying areas where the AI's role and limitations need to be more clearly defined
-
-By incorporating the Hijacking plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to maintain its designated role and resist attempts to redirect its functionality.
+Hijacking tests are useful when a request looks plausible enough to tempt the model into helping, even though it has no business answering. That makes them a practical check on scope discipline, not just generic refusal behavior.
 
 ## Related Concepts
 
