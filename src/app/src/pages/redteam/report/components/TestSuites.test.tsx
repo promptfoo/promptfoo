@@ -105,6 +105,19 @@ describe('TestSuites Component', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not sort the Risk column when opening its tooltip trigger', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const riskButton = screen.getByRole('button', { name: 'Explain risk score' });
+    const riskHeader = riskButton.closest('th');
+    expect(riskHeader).toHaveAttribute('aria-sort', 'none');
+
+    await user.click(riskButton);
+
+    expect(riskHeader).toHaveAttribute('aria-sort', 'none');
+  });
+
   it('should render without errors and handle unknown severity gracefully during sorting', () => {
     const propsWithUnknownSeverity = {
       ...defaultProps,

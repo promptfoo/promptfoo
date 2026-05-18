@@ -43,7 +43,8 @@ describe('ReportIndex virtualization layout', () => {
     expect(container.firstElementChild).toHaveClass(
       'flex',
       'flex-col',
-      'overflow-hidden',
+      'overflow-x-hidden',
+      'overflow-y-auto',
       'min-h-0',
     );
 

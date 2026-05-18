@@ -9,7 +9,7 @@ export default function ReportIndex() {
   const navigate = useNavigate();
 
   return (
-    <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex min-h-0 flex-col overflow-x-hidden overflow-y-auto">
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-bold tracking-tight">Red Team Reports</h1>
