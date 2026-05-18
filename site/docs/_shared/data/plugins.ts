@@ -2469,6 +2469,20 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Security and Access Control',
+    description: 'Detects model outputs that contain executable XSS payload patterns',
+    label: 'technical',
+    link: '/docs/red-team/plugins/xss-output/',
+    name: 'XSS Output',
+    pluginId: 'xss-output',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
     category: 'Dataset',
     description:
       'Tests how well LLMs handle ambiguous words (homonyms) that can have both harmful and benign interpretations',
