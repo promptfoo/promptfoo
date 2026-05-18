@@ -28,7 +28,6 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 ## Toolbar
 
 - **Eval selector** - Switch between evals
-- **Zoom** - Scale columns (50%-200%)
 - **Display mode** - Filter: All, Failures, Passes, Errors, Different, Highlights
 - **Search** - Text or regex
 - **Filters** - By metrics, metadata, pass/fail. Operators: `=`, `contains`, `>`, `<`
@@ -40,6 +39,7 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 ![Table Settings dialog](/img/docs/web-ui-table-settings.png)
 
 - **Columns** - Toggle variable and prompt visibility
+- **Zoom** - Scale columns (50%-200%)
 - **Truncation** - Max text length, word wrap
 - **Rendering** - Markdown, JSON prettification
 - **Inference details** - Tokens, latency, cost, tokens/sec
