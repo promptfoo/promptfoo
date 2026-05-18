@@ -173,6 +173,7 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
   return (
     <th
       key={header.id}
+      colSpan={header.colSpan}
       className={cn(
         'group py-3 text-sm font-medium relative bg-white dark:bg-zinc-900',
         isRightAligned ? 'text-right' : 'text-left',
