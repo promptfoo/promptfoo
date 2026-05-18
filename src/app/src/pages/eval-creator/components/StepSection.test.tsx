@@ -138,16 +138,21 @@ describe('StepSection', () => {
 
   describe('Guidance section', () => {
     it('does not render guidance section when guidance is not provided', () => {
-      const { container } = render(
+      const { rerender } = render(
+        <StepSection {...defaultProps} guidance="Temporary guidance">
+          <div>Content</div>
+        </StepSection>,
+      );
+
+      expect(screen.getByText('Temporary guidance')).toBeInTheDocument();
+
+      rerender(
         <StepSection {...defaultProps}>
           <div>Content</div>
         </StepSection>,
       );
 
-      // Check that there are no extra divs beyond the expected structure
-      const allDivs = container.querySelectorAll('div');
-      // Should have: section wrapper, header space-y-2, flex container, content min-w-0, and child content
-      expect(allDivs.length).toBeLessThanOrEqual(6);
+      expect(screen.queryByText('Temporary guidance')).not.toBeInTheDocument();
     });
 
     it('renders guidance when provided as text', () => {
