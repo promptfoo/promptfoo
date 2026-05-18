@@ -295,6 +295,10 @@ export const RedteamConfigSchema = z
       .describe('Names of people, brands, or organizations related to your LLM application'),
     contexts: z
       .array(RedteamContextSchema)
+      .refine(
+        (contexts) => new Set(contexts.map((context) => context.id)).size === contexts.length,
+        'Context IDs must be unique',
+      )
       .optional()
       .describe('Security contexts for testing multiple states - each context has its own purpose'),
     plugins: z
@@ -316,7 +320,7 @@ export const RedteamConfigSchema = z
       .int()
       .positive()
       .optional()
-      .describe('Maximum number of concurrent API calls'),
+      .describe('Maximum number of concurrent generation requests and eval test cases'),
     maxCharsPerMessage: z
       .int()
       .positive()

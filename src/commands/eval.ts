@@ -480,15 +480,16 @@ export async function doEval(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency);
 
+    let providerMaxConcurrencyHint: number | undefined;
     if (delay > 0) {
       maxConcurrency = 1;
       // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
-      cliState.maxConcurrency = 1;
+      providerMaxConcurrencyHint = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
     } else if (explicitMaxConcurrency !== undefined || redteamEvalMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = maxConcurrency;
+      providerMaxConcurrencyHint = maxConcurrency;
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
@@ -727,6 +728,9 @@ export async function doEval(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      if (providerMaxConcurrencyHint !== undefined) {
+        cliState.maxConcurrency = providerMaxConcurrencyHint;
+      }
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
@@ -759,6 +763,9 @@ export async function doEval(
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      if (providerMaxConcurrencyHint !== undefined) {
+        cliState.maxConcurrency = undefined;
+      }
     }
 
     // Clear resume flag after run completes

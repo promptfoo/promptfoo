@@ -3,6 +3,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   doEval,
   EvalRunError,
@@ -571,6 +572,39 @@ describe('evalCommand', () => {
       expect(process.exitCode).toBeUndefined();
     } finally {
       vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('does not leak redteam eval concurrency hints when preflight exits early', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    cliState.maxConcurrency = undefined;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: { redteam: { maxConcurrency: 3 } } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(checkProviderApiKeys).mockReturnValueOnce(
+      new Map([['OPENAI_API_KEY', ['openai:gpt-4']]]),
+    );
+
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toEqual(
+        expect.objectContaining<EvalRunError>({
+          name: 'EvalRunError',
+          exitCode: 1,
+          message: expect.stringContaining('Missing required API keys'),
+        }),
+      );
+      expect(cliState.maxConcurrency).toBeUndefined();
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
+      cliState.maxConcurrency = undefined;
       process.exitCode = previousExitCode;
     }
   });

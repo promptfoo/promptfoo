@@ -124,32 +124,6 @@ const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
 
-class Semaphore {
-  private activeCount = 0;
-  private queue: Array<() => void> = [];
-
-  constructor(private readonly maxConcurrency: number) {}
-
-  async acquire(): Promise<() => void> {
-    if (this.activeCount >= this.maxConcurrency) {
-      await new Promise<void>((resolve) => {
-        this.queue.push(resolve);
-      });
-    }
-
-    this.activeCount += 1;
-    let released = false;
-    return () => {
-      if (released) {
-        return;
-      }
-      released = true;
-      this.activeCount -= 1;
-      this.queue.shift()?.();
-    };
-  }
-}
-
 function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
   if (cached !== undefined) {
@@ -3647,47 +3621,90 @@ class Evaluator {
   }) {
     let lastPromptsFlush = 0;
     const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+    const flushPromptsIfNeeded = async () => {
+      const now = Date.now();
+      if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+        lastPromptsFlush = now;
+        await this.evalRecord.addPrompts(prompts);
+      }
+    };
     const contextConcurrencyLimits = getContextConcurrencyLimits(processingContext.testSuite);
 
     if (contextConcurrencyLimits.size > 0) {
-      const contextSemaphores = new Map<string, Semaphore>();
-      const getContextSemaphore = (contextId: string, maxConcurrency: number) => {
-        if (!contextSemaphores.has(contextId)) {
-          contextSemaphores.set(contextId, new Semaphore(maxConcurrency));
-        }
-        return contextSemaphores.get(contextId)!;
-      };
+      const pendingEvalSteps = [...concurrentRunEvalOptions];
+      const activeEvalSteps = new Set<Promise<void>>();
+      const activeByContext = new Map<string, number>();
 
-      await async.forEachOfLimit(
-        concurrentRunEvalOptions,
-        processingContext.concurrency,
-        async (evalStep) => {
-          checkAbort();
+      const getRunnableEvalStepIndex = () =>
+        pendingEvalSteps.findIndex((evalStep) => {
           const contextId = evalStep.test.metadata?.contextId;
           const contextLimit = getEvalStepContextConcurrencyLimit(
             evalStep,
             contextConcurrencyLimits,
           );
-          const releaseContext =
-            typeof contextId === 'string' && contextLimit !== undefined
-              ? await getContextSemaphore(contextId, contextLimit).acquire()
-              : undefined;
+          if (typeof contextId !== 'string' || contextLimit === undefined) {
+            return true;
+          }
+          return (activeByContext.get(contextId) ?? 0) < contextLimit;
+        });
 
+      const launchEvalStep = (evalStep: RunEvalOptions) => {
+        const contextId = evalStep.test.metadata?.contextId;
+        const contextLimit = getEvalStepContextConcurrencyLimit(
+          evalStep,
+          contextConcurrencyLimits,
+        );
+        const hasContextLimit = typeof contextId === 'string' && contextLimit !== undefined;
+        if (hasContextLimit) {
+          activeByContext.set(contextId, (activeByContext.get(contextId) ?? 0) + 1);
+        }
+
+        const task = (async () => {
           try {
             checkAbort();
             const idx = evalStepIndexMap.get(evalStep)!;
             await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
             processedIndices.add(idx);
-            const now = Date.now();
-            if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-              lastPromptsFlush = now;
-              await this.evalRecord.addPrompts(prompts);
-            }
+            await flushPromptsIfNeeded();
           } finally {
-            releaseContext?.();
+            if (hasContextLimit) {
+              const nextActiveCount = (activeByContext.get(contextId) ?? 1) - 1;
+              if (nextActiveCount > 0) {
+                activeByContext.set(contextId, nextActiveCount);
+              } else {
+                activeByContext.delete(contextId);
+              }
+            }
           }
-        },
-      );
+        })();
+
+        activeEvalSteps.add(task);
+        task.then(
+          () => activeEvalSteps.delete(task),
+          () => activeEvalSteps.delete(task),
+        );
+      };
+
+      while (pendingEvalSteps.length > 0 || activeEvalSteps.size > 0) {
+        checkAbort();
+        while (
+          pendingEvalSteps.length > 0 &&
+          activeEvalSteps.size < processingContext.concurrency
+        ) {
+          const runnableIndex = getRunnableEvalStepIndex();
+          if (runnableIndex === -1) {
+            break;
+          }
+          const [evalStep] = pendingEvalSteps.splice(runnableIndex, 1);
+          invariant(evalStep, 'Expected a runnable redteam eval step');
+          launchEvalStep(evalStep);
+        }
+
+        if (activeEvalSteps.size === 0) {
+          throw new Error('Unable to schedule redteam eval steps within context concurrency limits');
+        }
+        await Promise.race(activeEvalSteps);
+      }
       return;
     }
 
@@ -3699,11 +3716,7 @@ class Evaluator {
         const idx = evalStepIndexMap.get(evalStep)!;
         await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
         processedIndices.add(idx);
-        const now = Date.now();
-        if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-          lastPromptsFlush = now;
-          await this.evalRecord.addPrompts(prompts);
-        }
+        await flushPromptsIfNeeded();
       },
     );
   }

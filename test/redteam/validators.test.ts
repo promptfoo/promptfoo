@@ -275,6 +275,25 @@ describe('redteamConfigSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject duplicate context ids', () => {
+    expect(
+      RedteamConfigSchema.safeParse({
+        contexts: [
+          {
+            id: 'shared-user',
+            purpose: 'First context',
+            maxConcurrency: 1,
+          },
+          {
+            id: 'shared-user',
+            purpose: 'Second context',
+            maxConcurrency: 4,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should accept a valid configuration with all fields', () => {
     const input = {
       purpose: 'You are a travel agent',

@@ -239,8 +239,12 @@ describeEvaluator('evaluator execution control', () => {
     let activeTotal = 0;
     let maxActiveTotal = 0;
     let releaseHold: (() => void) | undefined;
+    let resolveStartedThree: (() => void) | undefined;
     const holdPromise = new Promise<void>((resolve) => {
       releaseHold = resolve;
+    });
+    const startedThree = new Promise<void>((resolve) => {
+      resolveStartedThree = resolve;
     });
 
     const callApi = vi
@@ -258,18 +262,12 @@ describeEvaluator('evaluator execution control', () => {
           maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
 
           if (activeTotal >= 3) {
-            releaseHold?.();
+            resolveStartedThree?.();
           }
 
-          let resolveFallback!: () => void;
-          const fallback = new Promise<void>((resolve) => {
-            resolveFallback = resolve;
-          });
-          const fallbackHandle = setTimeout(() => resolveFallback(), 100);
           try {
-            await Promise.race([holdPromise, fallback]);
+            await holdPromise;
           } finally {
-            clearTimeout(fallbackHandle);
             activeByContext.set(contextId, (activeByContext.get(contextId) || 1) - 1);
             activeTotal -= 1;
           }
@@ -308,38 +306,39 @@ describeEvaluator('evaluator execution control', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    const evaluationPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    await startedThree;
 
-    expect(callApi).toHaveBeenCalledTimes(6);
     expect(maxActiveByContext.get('alice')).toBe(1);
     expect(maxActiveByContext.get('bob')).toBe(2);
     expect(maxActiveTotal).toBe(3);
     releaseHold?.();
+    await evaluationPromise;
+
+    expect(callApi).toHaveBeenCalledTimes(6);
   });
 
   it('uses redteam maxConcurrency as the global eval ceiling', async () => {
     let activeTotal = 0;
     let maxActiveTotal = 0;
     let releaseHold: (() => void) | undefined;
+    let resolveStartedTwo: (() => void) | undefined;
     const holdPromise = new Promise<void>((resolve) => {
       releaseHold = resolve;
+    });
+    const startedTwo = new Promise<void>((resolve) => {
+      resolveStartedTwo = resolve;
     });
     const callApi = vi.fn().mockImplementation(async () => {
       activeTotal += 1;
       maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
-      if (activeTotal >= 4) {
-        releaseHold?.();
+      if (activeTotal >= 2) {
+        resolveStartedTwo?.();
       }
 
-      let resolveFallback!: () => void;
-      const fallback = new Promise<void>((resolve) => {
-        resolveFallback = resolve;
-      });
-      const fallbackHandle = setTimeout(() => resolveFallback(), 100);
       try {
-        await Promise.race([holdPromise, fallback]);
+        await holdPromise;
       } finally {
-        clearTimeout(fallbackHandle);
         activeTotal -= 1;
       }
 
@@ -371,11 +370,14 @@ describeEvaluator('evaluator execution control', () => {
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
+    const evaluationPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
+    await startedTwo;
 
-    expect(callApi).toHaveBeenCalledTimes(4);
     expect(maxActiveTotal).toBe(2);
     releaseHold?.();
+    await evaluationPromise;
+
+    expect(callApi).toHaveBeenCalledTimes(4);
   });
 
   it('propagates prior turn output into _conversation on the next serial call', async () => {
