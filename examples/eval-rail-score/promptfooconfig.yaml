@@ -13,11 +13,11 @@
 
 description: 'RAIL Score - responsible AI evaluation'
 
-providers:
-  - openai:gpt-4o-mini
-
 prompts:
   - '{{question}}'
+
+providers:
+  - openai:gpt-4o-mini
 
 defaultTest:
   assert:

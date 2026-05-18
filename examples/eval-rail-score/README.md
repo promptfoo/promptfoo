@@ -11,7 +11,8 @@ cd eval-rail-score
 
 ```bash
 pip install -r requirements.txt
-export RAIL_API_KEY="rail_..."  # Free tier at https://responsibleailabs.ai
+export RAIL_API_KEY="rail_..."    # Free tier at https://responsibleailabs.ai
+export OPENAI_API_KEY="sk-..."   # Required for gpt-4o-mini provider
 ```
 
 ## Usage

@@ -29,22 +29,12 @@ def get_assert(output, context):
         logger.error("RAIL_API_KEY not set")
         return 0
 
-    if not output or len(str(output).strip()) < 10:
+    if not output or not str(output).strip():
         return 0
 
     mode = config.get("mode", "basic")
     domain = config.get("domain", "general")
     threshold = float(config.get("threshold", 5.0))
-
-    # Extract prompt context from test variables
-    prompt_context = ""
-    if isinstance(context, dict):
-        vars_dict = context.get("vars", {})
-        if isinstance(vars_dict, dict):
-            for key in ("prompt", "question", "input", "query"):
-                if key in vars_dict:
-                    prompt_context = str(vars_dict[key])
-                    break
 
     client = RailScoreClient(api_key=api_key)
 
@@ -54,7 +44,6 @@ def get_assert(output, context):
                 content=str(output),
                 mode=mode,
                 domain=domain,
-                context=prompt_context if prompt_context else None,
                 include_explanations=(mode == "deep"),
             )
             break

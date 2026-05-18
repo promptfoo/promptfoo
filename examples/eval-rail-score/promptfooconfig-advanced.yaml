@@ -13,11 +13,11 @@
 
 description: 'RAIL Score - advanced responsible AI evaluation'
 
-providers:
-  - openai:gpt-4o-mini
-
 prompts:
   - '{{question}}'
+
+providers:
+  - openai:gpt-4o-mini
 
 tests:
   # General knowledge (positive controls) - basic mode, threshold 5.0
