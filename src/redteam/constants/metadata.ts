@@ -206,7 +206,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   vlsu: 'Tests compositional safety where individually safe images and text combine to produce harmful outputs',
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
-  'xss-output': 'Tests whether models emit executable XSS payload patterns',
+  'xss-output': 'Tests whether models emit XSS-shaped HTML and URL sink patterns',
   xstest: 'Tests for XSTest attacks',
   video: 'Tests handling of video content',
   'other-encodings':
@@ -1268,7 +1268,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   wordplay:
     'Tests whether AI systems can be tricked into generating profanity or offensive language through innocent-seeming wordplay like riddles and rhyming games',
   'xss-output':
-    'Detects model outputs that contain executable XSS payload patterns such as script tags, inline event handlers, javascript: URLs, data:text/html URLs, iframe srcdoc, and SVG script execution',
+    'Detects model outputs that contain XSS-shaped HTML and URL sink patterns such as script tags, inline event handlers, javascript: URLs, data:text/html URLs, iframe srcdoc, and SVG script execution',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',

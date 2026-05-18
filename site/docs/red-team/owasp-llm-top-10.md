@@ -204,7 +204,7 @@ Test for improper output handling with:
 
 - **Output validation**: Define expected output formats and use Promptfoo's [assertion capabilities](/docs/configuration/expected-outputs/).
 - **Sanitization testing**: Generate outputs that may contain malicious content and verify proper sanitization.
-- **XSS payload emission**: Use the [`xss-output`](/docs/red-team/plugins/xss-output/) plugin to detect script tags, inline event handlers, `javascript:` URLs, and other executable HTML patterns.
+- **XSS output sinks**: Use the [`xss-output`](/docs/red-team/plugins/xss-output/) plugin to detect script tags, inline event handlers, `javascript:` URLs, and other XSS-shaped HTML or URL sink patterns.
 
 Example test case:
 
