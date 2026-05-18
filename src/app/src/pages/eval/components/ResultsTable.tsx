@@ -128,13 +128,65 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
   );
 }
 
-const VARIABLE_COLUMN_SIZE_PX = 200;
-const PROMPT_COLUMN_SIZE_PX = 400;
-const DESCRIPTION_COLUMN_SIZE_PX = 100;
+const METADATA_COLUMN_MIN_SIZE_PX = 160;
+const METADATA_COLUMN_MAX_SIZE_PX = 360;
+const METADATA_COLUMN_HORIZONTAL_PADDING_PX = 48;
+const METADATA_COLUMN_CHARACTER_WIDTH_PX = 8;
+const METADATA_COLUMN_WIDTH_PERCENTILE = 0.8;
+const PROMPT_COLUMN_SIZE_PX = 480;
 const MEDIA_MIME_PATTERNS = {
   audio: /(?:^|[;,\s=:])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
   image: /(?:^|[;,\s=:])image\/[a-z0-9.+-]+(?:$|[;,\s])/i,
 } as const;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getMetadataColumnDisplayText(value: unknown): string {
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function getLongestMetadataLineLength(value: unknown): number {
+  return getMetadataColumnDisplayText(value)
+    .split(/\r?\n/)
+    .reduce((maxLength, line) => Math.max(maxLength, line.length), 0);
+}
+
+function estimateMetadataColumnSize(header: string, values: unknown[]): number {
+  const contentLengths = values
+    .map((value) => getLongestMetadataLineLength(value))
+    .sort((a, b) => a - b);
+  const percentileIndex = Math.max(
+    0,
+    Math.ceil(contentLengths.length * METADATA_COLUMN_WIDTH_PERCENTILE) - 1,
+  );
+  const representativeContentLength = contentLengths[percentileIndex] ?? 0;
+  const representativeLength = Math.max(header.length, representativeContentLength);
+
+  return clamp(
+    representativeLength * METADATA_COLUMN_CHARACTER_WIDTH_PX +
+      METADATA_COLUMN_HORIZONTAL_PADDING_PX,
+    METADATA_COLUMN_MIN_SIZE_PX,
+    METADATA_COLUMN_MAX_SIZE_PX,
+  );
+}
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
   if (output == null) {
@@ -1414,13 +1466,26 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+function ResultsTableColumnGroup({
+  reactTable,
+}: {
+  reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+}) {
+  return (
+    <colgroup>
+      {reactTable.getVisibleLeafColumns().map((column) => (
+        <col key={column.id} style={{ width: column.getSize() }} />
+      ))}
+    </colgroup>
+  );
+}
+
 function ResultsTableHeader({
   reactTable,
   tableWidth,
   maxTextLength,
   wordBreak,
   headerScrollRef,
-  theadRef,
   stickyHeader,
   setStickyHeader,
   hasMinimalScrollRoom,
@@ -1431,7 +1496,6 @@ function ResultsTableHeader({
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
   headerScrollRef: React.RefObject<HTMLDivElement | null>;
-  theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
   hasMinimalScrollRoom: boolean;
@@ -1469,7 +1533,8 @@ function ResultsTableHeader({
             zoom,
           }}
         >
-          <thead ref={theadRef}>
+          <ResultsTableColumnGroup reactTable={reactTable} />
+          <thead>
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
                 {headerGroup.headers.map((header) => {
@@ -1556,6 +1621,7 @@ function ResultsTable({
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+  const tableRef = useRef<HTMLDivElement>(null);
 
   /**
    * Reset the pagination state when the filtered results count changes.
@@ -1639,6 +1705,79 @@ function ResultsTable({
       ),
     })) as ExtendedEvaluateTableRow[];
   }, [body]);
+
+  const transformDisplayVarKeys = React.useMemo(() => {
+    const transformVarKeys = new Set<string>();
+
+    tableBody.forEach((row) => {
+      row.outputs?.forEach((output) => {
+        const transformVars = output?.metadata?.transformDisplayVars as
+          | Record<string, string>
+          | undefined;
+        if (transformVars) {
+          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
+        }
+      });
+    });
+
+    if (transformVarKeys.size === 0) {
+      return [];
+    }
+
+    const existingVarNames = new Set(head.vars);
+    return Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
+  }, [head.vars, tableBody]);
+
+  const hasDescriptionColumn = React.useMemo(
+    () => body.some((row) => row.test.description),
+    [body],
+  );
+
+  const injectVarName = config?.redteam?.injectVar || 'prompt';
+
+  const variableColumnSizes = React.useMemo(
+    () =>
+      head.vars.map((varName, idx) =>
+        estimateMetadataColumnSize(
+          varName,
+          tableBody.map((row) =>
+            getVariableCellValue({
+              row,
+              varName,
+              injectVarName,
+              fallbackValue: row.vars[idx],
+            }),
+          ),
+        ),
+      ),
+    [head.vars, injectVarName, tableBody],
+  );
+
+  const transformDisplayVarColumnSizes = React.useMemo(() => {
+    return Object.fromEntries(
+      transformDisplayVarKeys.map((varName) => [
+        varName,
+        estimateMetadataColumnSize(
+          varName.replace(/^__/, ''),
+          tableBody.map((row) => {
+            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+              | Record<string, string>
+              | undefined;
+            return transformVars?.[varName] || '';
+          }),
+        ),
+      ]),
+    ) as Record<string, number>;
+  }, [tableBody, transformDisplayVarKeys]);
+
+  const descriptionColumnSize = React.useMemo(
+    () =>
+      estimateMetadataColumnSize(
+        'Description',
+        hasDescriptionColumn ? body.map((row) => row.test.description || '') : [],
+      ),
+    [body, hasDescriptionColumn],
+  );
 
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
@@ -1785,8 +1924,6 @@ function ResultsTable({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
-      const injectVarName = config?.redteam?.injectVar || 'prompt';
-
       return [
         columnHelper.group({
           id: 'vars',
@@ -1808,7 +1945,7 @@ function ResultsTable({
                   lightboxImage,
                   toggleLightbox,
                 }),
-              size: VARIABLE_COLUMN_SIZE_PX,
+              size: variableColumnSizes[idx],
             }),
           ),
         }),
@@ -1823,36 +1960,13 @@ function ResultsTable({
     renderMarkdown,
     lightboxOpen,
     lightboxImage,
-    config,
+    injectVarName,
+    variableColumnSizes,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
   const transformDisplayVarsColumns = React.useMemo(() => {
-    // Collect unique transformDisplayVars keys from all outputs
-    const transformVarKeys = new Set<string>();
-    tableBody.forEach((row) => {
-      row.outputs?.forEach((output) => {
-        const transformVars = output?.metadata?.transformDisplayVars as
-          | Record<string, string>
-          | undefined;
-        if (transformVars) {
-          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
-        }
-      });
-    });
-
-    if (transformVarKeys.size === 0) {
-      return [];
-    }
-
-    // Filter out keys that already exist in head.vars to avoid duplicate columns
-    // This handles the case where standalone mode has embeddedInjection in vars
-    // and layer mode has it in transformDisplayVars - we want one unified column
-    const existingVarNames = new Set(head.vars);
-    const varKeyArray = Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
-
-    // If all keys were filtered out (they all exist in vars), don't create a duplicate column group
-    if (varKeyArray.length === 0) {
+    if (transformDisplayVarKeys.length === 0) {
       return [];
     }
 
@@ -1860,7 +1974,7 @@ function ResultsTable({
       columnHelper.group({
         id: 'transformDisplayVars',
         header: () => <span className="font-bold">Variables</span>,
-        columns: varKeyArray.map((varName) =>
+        columns: transformDisplayVarKeys.map((varName) =>
           columnHelper.accessor(
             (row: EvaluateTableRow) => {
               // Get the value from the first output's transformDisplayVars
@@ -1887,13 +2001,13 @@ function ResultsTable({
                   </div>
                 );
               },
-              size: VARIABLE_COLUMN_SIZE_PX,
+              size: transformDisplayVarColumnSizes[varName],
             },
           ),
         ),
       }),
     ];
-  }, [columnHelper, tableBody, maxTextLength, head.vars]);
+  }, [columnHelper, maxTextLength, transformDisplayVarColumnSizes, transformDisplayVarKeys]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -2034,8 +2148,7 @@ function ResultsTable({
   ]);
 
   const descriptionColumn = React.useMemo(() => {
-    const hasAnyDescriptions = body.some((row) => row.test.description);
-    if (hasAnyDescriptions) {
+    if (hasDescriptionColumn) {
       return {
         accessorFn: (row: EvaluateTableRow) => row.test.description || '',
         id: 'description',
@@ -2045,11 +2158,11 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: DESCRIPTION_COLUMN_SIZE_PX,
+        size: descriptionColumnSize,
       };
     }
     return null;
-  }, [body, maxTextLength]);
+  }, [descriptionColumnSize, hasDescriptionColumn, maxTextLength]);
 
   const columns = React.useMemo(() => {
     const cols: ColumnDef<EvaluateTableRow, unknown>[] = [];
@@ -2172,9 +2285,7 @@ function ResultsTable({
   const tableWidth = reactTable.getTotalSize();
 
   // Keep the standalone header and the scrollable table body aligned in both directions.
-  const tableRef = useRef<HTMLDivElement>(null);
   const headerScrollRef = useRef<HTMLDivElement>(null);
-  const theadRef = useRef<HTMLTableSectionElement>(null);
 
   // Detect if there's minimal scroll room - in this case, disable height collapse
   // to prevent jitter feedback loop (height change affects scroll position)
@@ -2261,7 +2372,6 @@ function ResultsTable({
         maxTextLength={maxTextLength}
         wordBreak={wordBreak}
         headerScrollRef={headerScrollRef}
-        theadRef={theadRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
         hasMinimalScrollRoom={hasMinimalScrollRoom}
@@ -2295,6 +2405,7 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
+          <ResultsTableColumnGroup reactTable={reactTable} />
           <tbody>
             {reactTable.getRowModel().rows.map((row) => (
               <ResultsTableBodyRow
@@ -2302,7 +2413,7 @@ function ResultsTable({
                 row={row}
                 pageSize={pagination.pageSize}
                 headVars={head.vars}
-                injectVarName={config?.redteam?.injectVar || 'prompt'}
+                injectVarName={injectVarName}
                 maxTextLength={maxTextLength}
                 lightboxOpen={lightboxOpen}
                 lightboxImage={lightboxImage}
