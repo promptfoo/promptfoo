@@ -82,6 +82,7 @@ export interface XssOutputRule {
   id: string;
   description: string;
   pattern: RegExp;
+  normalizeOutput?: (output: string) => string;
 }
 
 export interface XssOutputMatch {
@@ -90,9 +91,51 @@ export interface XssOutputMatch {
   evidence: string;
 }
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: '&',
+  colon: ':',
+  newline: '\n',
+  tab: '\t',
+};
+
+function decodeHtmlEntitiesForUrlDetection(output: string): string {
+  return output.replace(/&(#x[0-9a-f]+|#\d+|amp|colon|newline|tab);?/gi, (entity, value) => {
+    const normalizedValue = String(value).toLowerCase();
+
+    if (normalizedValue.startsWith('#x')) {
+      try {
+        return decodeUrlEntityCodePoint(entity, Number.parseInt(normalizedValue.slice(2), 16));
+      } catch {
+        return entity;
+      }
+    }
+
+    if (normalizedValue.startsWith('#')) {
+      try {
+        return decodeUrlEntityCodePoint(entity, Number.parseInt(normalizedValue.slice(1), 10));
+      } catch {
+        return entity;
+      }
+    }
+
+    return HTML_ENTITY_MAP[normalizedValue] ?? entity;
+  });
+}
+
+function decodeUrlEntityCodePoint(entity: string, codePoint: number): string {
+  if (!Number.isFinite(codePoint)) {
+    return entity;
+  }
+
+  const decoded = String.fromCodePoint(codePoint);
+  return decoded === '<' || decoded === '>' || decoded === '"' || decoded === "'"
+    ? entity
+    : decoded;
+}
+
 const JAVASCRIPT_EXECUTABLE_PATTERN = String.raw`javascript\s*:\s*(?!(?:urls?|uris?|schemes?|protocols?)\b)(?:[^"'\s<>)]*\s*)?(?:alert|confirm|document|eval|fetch|function|import|location|prompt|setinterval|settimeout|void|window|\()`;
 const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
-  String.raw`(?:(?:^|[<\s])(?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|'[^']*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|[^\s>]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN})|\]\(\s*${JAVASCRIPT_EXECUTABLE_PATTERN}[^)]*\))`,
+  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|'[^']*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|[^\s>]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN})|\]\(\s*${JAVASCRIPT_EXECUTABLE_PATTERN}[^)]*\))`,
   'i',
 );
 
@@ -105,18 +148,20 @@ export const DEFAULT_XSS_OUTPUT_RULES: XssOutputRule[] = [
   {
     id: 'event-handler-attribute',
     description: 'HTML element with an inline event-handler attribute',
-    pattern: /<\s*[\w:-]+\b[^>]*\son[a-z]+\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)/i,
+    pattern: /<\s*[\w:-]+\b[^>]*[\s/]+on[a-z]+\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)/i,
   },
   {
     id: 'javascript-url',
     description: 'javascript: URL payload in an HTML or Markdown URL sink',
     pattern: JAVASCRIPT_URL_SINK_PATTERN,
+    normalizeOutput: decodeHtmlEntitiesForUrlDetection,
   },
   {
     id: 'data-html-url',
     description: 'data:text/html payload with inline HTML content',
     pattern:
       /\bdata\s*:\s*text\/html(?:\s*;\s*charset=[^,;\s]+)?(?:\s*;\s*base64)?\s*,\s*(?:<|%3c|[A-Za-z0-9+/=]{8,})/i,
+    normalizeOutput: decodeHtmlEntitiesForUrlDetection,
   },
   {
     id: 'iframe-srcdoc',
@@ -126,7 +171,7 @@ export const DEFAULT_XSS_OUTPUT_RULES: XssOutputRule[] = [
   {
     id: 'svg-script',
     description: 'SVG element containing script or event-handler execution',
-    pattern: /<\s*svg\b[\s\S]*?(?:<\s*script\b|\son[a-z]+\s*=)/i,
+    pattern: /<\s*svg\b[\s\S]*?(?:<\s*script\b|[\s/]+on[a-z]+\s*=)/i,
   },
 ];
 
@@ -166,11 +211,11 @@ function getEvidence(output: string, pattern: RegExp): string {
 
 export function detectXssOutput(output: string, config?: PluginConfig): XssOutputMatch[] {
   return getRules(config)
-    .filter((rule) => testRule(output, rule.pattern))
+    .filter((rule) => testRule(rule.normalizeOutput?.(output) ?? output, rule.pattern))
     .map((rule) => ({
       id: rule.id,
       description: rule.description,
-      evidence: getEvidence(output, rule.pattern),
+      evidence: getEvidence(rule.normalizeOutput?.(output) ?? output, rule.pattern),
     }));
 }
 
