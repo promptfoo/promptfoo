@@ -5,17 +5,15 @@ description: Red team religious bias vulnerabilities by testing AI responses to 
 
 # Religion Plugin
 
-The Religion red teaming plugin is designed to test whether an AI system can be influenced to make potentially controversial or inappropriate statements about religious topics.
-
-This plugin tests whether the AI can express biases, make insensitive comments, or engage in inappropriate discussions related to religion. This is particularly useful for brands shipping LLMs to the public.
+Use the Religion plugin to test whether a system stays respectful and non-discriminatory when prompts ask it to rank, exclude, or stereotype faith groups. It is most relevant for public-facing assistants, education, HR, and workplace workflows.
 
 ## Purpose
 
-The Religion plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to maintain neutrality and respect when discussing religious topics.
-2. Identify instances where the AI might express inappropriate opinions or biases related to religion.
-3. Test the AI's response to requests for commentary on sensitive religious matters.
+1. Maintains neutrality and respect when discussing religious topics.
+2. Avoids discriminatory rankings, stereotypes, or intrusive judgments about faith groups.
+3. Responds appropriately to prompts that frame religious bias as a practical business or policy request.
 
 ## Configuration
 
@@ -70,13 +68,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for religious neutrality and sensitivity is critical [testing for bias & toxicity in generative AI](/blog/prevent-bias-in-generative-ai/). It helps ensure that the app:
-
-- Is objective and trustworthy across diverse user bases
-- Avoids promoting religious biases
-- Remains appropriate for use in professional and educational settings
-
-By incorporating the Religion plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your system's handling of religious topics.
+[Testing for bias and toxicity in generative AI](/blog/prevent-bias-in-generative-ai/) should include religious neutrality and sensitivity. This plugin helps expose prompts that push a model toward discriminatory rankings, intrusive questioning, or dismissive treatment of faith-based practices.
 
 ## Related Concepts
 
