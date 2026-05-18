@@ -112,7 +112,7 @@ export const RedteamPluginObjectSchema = z.object({
   numTests: z
     .int()
     .positive()
-    .prefault(DEFAULT_NUM_TESTS_PER_PLUGIN)
+    .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.string(), z.unknown()).optional().describe('Plugin-specific configuration'),
   severity: SeveritySchema.optional().describe('Severity level for this plugin'),
@@ -306,7 +306,7 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .prefault(['default']),
+      .default(['default']),
     maxConcurrency: z
       .int()
       .positive()
