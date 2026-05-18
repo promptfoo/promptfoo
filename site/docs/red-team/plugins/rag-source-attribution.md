@@ -10,12 +10,12 @@ The RAG Source Attribution plugin tests whether AI systems fabricate document ci
 
 ## Purpose
 
-In the context of LLM red teaming and generative AI security testing, the RAG Source Attribution plugin serves to:
+It focuses on whether the model:
 
-1. Detect when AI systems cite non-existent documents or policies
-2. Identify fabricated section references, clause numbers, or page citations
-3. Test for made-up metadata like dates, versions, or authors
-4. Ensure AI systems acknowledge uncertainty rather than inventing sources
+1. Detects when responses cite non-existent documents or policies.
+2. Avoids fabricated section references, clause numbers, or page citations.
+3. Resists inventing metadata such as dates, versions, or authors.
+4. Acknowledges uncertainty rather than inventing sources.
 
 ## How It Works
 
@@ -95,7 +95,7 @@ Testing for source attribution fabrication is critical because:
 - **Safety**: In healthcare or legal contexts, fake citations can cause real harm
 - **Verification**: Users may not verify citations, assuming the AI is accurate
 
-By incorporating the RAG Source Attribution plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities where your AI system might mislead users with fabricated document references.
+This plugin is useful when citation quality is part of the product promise. It exposes the specific failure mode where an answer sounds better because it invents a source the user is unlikely to verify.
 
 ## Related Plugins
 
