@@ -49,6 +49,8 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
       const totalTokens = data.usage.total_tokens || promptTokens + completionTokens;
+      const outputTokenDetails =
+        data.usage.completion_tokens_details ?? data.usage.output_tokens_details;
       const cachedInputTokens =
         data.usage.prompt_tokens_details?.cached_tokens ??
         data.usage.input_tokens_details?.cached_tokens ??
@@ -59,12 +61,12 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         prompt: promptTokens,
         completion: completionTokens,
         numRequests: 1,
-        ...(data.usage.completion_tokens_details
+        ...(outputTokenDetails
           ? {
               completionDetails: {
-                reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
-                rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+                reasoning: outputTokenDetails.reasoning_tokens,
+                acceptedPrediction: outputTokenDetails.accepted_prediction_tokens,
+                rejectedPrediction: outputTokenDetails.rejected_prediction_tokens,
                 ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
               },
             }

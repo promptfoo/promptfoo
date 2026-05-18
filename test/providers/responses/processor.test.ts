@@ -50,6 +50,48 @@ describe('ResponsesProcessor', () => {
       });
     });
 
+    it('should include Azure-style output token details in token usage', async () => {
+      const mockData = {
+        id: 'resp_usage_details',
+        model: 'gpt-5-2025-08-07',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Hello with usage details' }],
+          },
+        ],
+        usage: {
+          input_tokens: 11,
+          output_tokens: 7,
+          total_tokens: 21,
+          input_tokens_details: {
+            cached_tokens: 3,
+          },
+          output_tokens_details: {
+            reasoning_tokens: 4,
+            accepted_prediction_tokens: 2,
+            rejected_prediction_tokens: 1,
+          },
+        },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.tokenUsage).toEqual({
+        total: 21,
+        prompt: 11,
+        completion: 7,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 4,
+          acceptedPrediction: 2,
+          rejectedPrediction: 1,
+          cacheReadInputTokens: 3,
+        },
+      });
+    });
+
     it('should process function calls', async () => {
       mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function executed successfully');
 
