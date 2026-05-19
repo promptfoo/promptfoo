@@ -3453,19 +3453,10 @@ class Evaluator {
   }): Promise<void> {
     const providerCallQueue = new ProviderGroupedCallQueue();
     const groupedRows: GroupedRows[] = [];
-    let lastPromptsFlush = 0;
-    const PROMPTS_FLUSH_INTERVAL_MS = 1000;
-    const flushPromptsIfNeeded = async () => {
-      const now = Date.now();
-      if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-        lastPromptsFlush = now;
-        await this.evalRecord.addPrompts(prompts);
-      }
-    };
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
       await this.processEvalStep(evalStep, index, { precomputedRows: rows }, processingContext);
       processedIndices.add(index);
-      await flushPromptsIfNeeded();
+      await this.evalRecord.addPrompts(prompts);
     };
     const flushGroupedRows = () =>
       runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
@@ -3492,7 +3483,7 @@ class Evaluator {
             evalStep,
             groupedRows,
             idx,
-            flushPromptsIfNeeded,
+            prompts,
             processGroupedRows,
             processedIndices,
             rows,
@@ -3527,7 +3518,7 @@ class Evaluator {
     evalStep,
     groupedRows,
     idx,
-    flushPromptsIfNeeded,
+    prompts,
     processGroupedRows,
     processedIndices,
     rows,
@@ -3537,7 +3528,7 @@ class Evaluator {
     evalStep: RunEvalOptions;
     groupedRows: GroupedRows[];
     idx: number;
-    flushPromptsIfNeeded: () => Promise<void>;
+    prompts: CompletedPrompt[];
     processGroupedRows: (entry: GroupedRows) => Promise<void>;
     processedIndices: Set<number>;
     rows: EvaluateResult[];
@@ -3546,7 +3537,7 @@ class Evaluator {
   }) {
     if (!shouldDeferEvalStepGrading) {
       processedIndices.add(idx);
-      await flushPromptsIfNeeded();
+      await this.evalRecord.addPrompts(prompts);
       return processingContext.targetUnavailable;
     }
     if (rows.length === 0) {

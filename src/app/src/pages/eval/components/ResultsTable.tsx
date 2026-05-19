@@ -1429,6 +1429,13 @@ function ResultsTableHeader({
                 {headerGroup.headers.map((header, headerIndex) => {
                   const isMetadataCol = isMetadataColumn(header.column.id);
                   const isFinalRow = headerGroup.depth === 1;
+                  const previousHeader = headerGroup.headers[headerIndex - 1];
+                  const isPreviousPromptHeader =
+                    previousHeader !== undefined &&
+                    !isMetadataColumn(previousHeader.column.id) &&
+                    previousHeader.column.id !== 'prompts';
+                  const isPromptHeader =
+                    !isMetadataCol && header.column.id !== 'prompts' && isFinalRow;
 
                   return (
                     <th
@@ -1437,9 +1444,8 @@ function ResultsTableHeader({
                       colSpan={header.colSpan}
                       style={{
                         width: header.getSize(),
-                        borderLeft: headerIndex === 0 ? undefined : 'none',
-                        borderBottom:
-                          !isMetadataCol && isFinalRow ? '2px solid var(--border-color)' : 'none',
+                        borderLeft: isPromptHeader && isPreviousPromptHeader ? 'none' : undefined,
+                        borderBottom: isFinalRow ? '2px solid var(--border-color)' : 'none',
                         height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >
@@ -2228,9 +2234,7 @@ function ResultsTable({
         id="results-table-container"
         style={{
           zoom,
-          borderTopWidth: '1px',
-          borderTopStyle: 'solid',
-          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
+          borderTop: stickyHeader ? 'none' : '1px solid var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,

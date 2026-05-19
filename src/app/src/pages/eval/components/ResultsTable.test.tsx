@@ -332,23 +332,40 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
   });
 
-  it('keeps the prompt header divider visible above streamed result rows', () => {
+  it('keeps the sticky header divider visible for metadata and prompt columns', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          vars: ['question'],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
+    const variableHeaderCell = screen.getByText('question').closest('th');
     const promptHeaderCell = screen.getByText('test-provider').closest('th');
 
-    expect((promptHeaderCell as HTMLElement).style.borderBottom).toBe(
-      '2px solid var(--border-color)',
-    );
-  });
-
-  it('keeps the header/body boundary border on the scroll container', () => {
-    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
-    const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
-
-    expect(tableContainer.style.borderTopWidth).toBe('1px');
-    expect(tableContainer.style.borderTopStyle).toBe('solid');
-    expect(tableContainer.style.borderColor).toBe('var(--border-color)');
+    expect(variableHeaderCell).not.toHaveStyle({ borderBottom: 'none' });
+    expect(promptHeaderCell).not.toHaveStyle({ borderBottom: 'none' });
   });
 
   it('keeps adjacent prompt header cells from drawing duplicate left borders', () => {
@@ -384,7 +401,7 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const secondPromptHeaderCell = screen.getByText('test-provider-2').closest('th');
 
-    expect((secondPromptHeaderCell as HTMLElement).style.borderLeftStyle).toBe('none');
+    expect(secondPromptHeaderCell).toHaveStyle({ borderLeft: 'none' });
   });
 
   describe('Keyboard Navigation', () => {

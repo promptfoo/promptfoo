@@ -287,7 +287,7 @@ describeEvaluator('evaluator execution control', () => {
 
       await secondCallStarted;
 
-      // One startup write plus one grouped-step refresh before the second step completes.
+      // One startup write plus one serial-step refresh before the second step completes.
       expect(addPromptsSpy).toHaveBeenCalledTimes(2);
       expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
 
