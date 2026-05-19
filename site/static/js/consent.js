@@ -533,7 +533,15 @@
       }
       return parseConsent(getCookie(COOKIE));
     }
-    return raw ? parseConsent(raw) : null;
+    if (!raw) {
+      return null;
+    }
+
+    var parsed = parseConsent(raw);
+    if (!parsed) {
+      deleteCookie(COOKIE);
+    }
+    return parsed;
   }
 
   // ── Init ──

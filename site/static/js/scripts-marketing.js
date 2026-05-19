@@ -10,6 +10,10 @@ window.gtag =
   };
 
 // Google Ads
+if (!window.__pf_gtag_initialized) {
+  gtag('js', new Date());
+  window.__pf_gtag_initialized = true;
+}
 gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
 // Vector.co

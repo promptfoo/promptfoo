@@ -38,6 +38,7 @@ function resetGlobals() {
   (window as any).__pf_analytics_loaded = false;
   (window as any).__pf_marketing_loaded = false;
   (window as any).__pf_gtag_loaded = false;
+  (window as any).__pf_gtag_initialized = false;
   (window as any).__pf_manage_cookies = undefined;
   (window as any).__pf_privacy_region = undefined;
 }
@@ -140,6 +141,15 @@ describe('consent.js', () => {
       expect(getCookie('pf_consent')).toBe('v1.o.1.1');
       expect((window as any).__pf_analytics_loaded).toBe(true);
       expect((window as any).__pf_marketing_loaded).toBe(true);
+    });
+
+    it('deletes malformed v1 consent values before showing the opt-in banner', () => {
+      setCookie('pf_country', 'DE');
+      setCookie('pf_consent', 'v1.i.bad.cookie');
+      runConsent();
+
+      expect(getCookie('pf_consent')).toBeNull();
+      expect(document.getElementById('cc-banner')).not.toBeNull();
     });
   });
 

@@ -51,4 +51,24 @@ describe('ThirdPartyContentGate', () => {
     expect(screen.getByText('Embedded content')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Load Example' })).not.toBeInTheDocument();
   });
+
+  it('keeps third-party content gated until the privacy region is known', () => {
+    render(
+      <ThirdPartyContentGate
+        description="Load an external signup form."
+        serviceName="Example"
+        title="Signup"
+      >
+        <div>Embedded content</div>
+      </ThirdPartyContentGate>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Load Example' })).toBeInTheDocument();
+    expect(screen.queryByText('Embedded content')).not.toBeInTheDocument();
+
+    (window as any).__pf_privacy_region = 'opt_out';
+    fireEvent(window, new Event('pf_consent_change'));
+
+    expect(screen.getByText('Embedded content')).toBeInTheDocument();
+  });
 });

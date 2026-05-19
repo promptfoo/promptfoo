@@ -10,7 +10,10 @@ window.gtag =
   };
 
 // Configure GA4 (gtag.js is loaded by consent.js before this script)
-gtag('js', new Date());
+if (!window.__pf_gtag_initialized) {
+  gtag('js', new Date());
+  window.__pf_gtag_initialized = true;
+}
 gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
 gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
 

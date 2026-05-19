@@ -24,6 +24,11 @@ function getPrivacyRegion(): PrivacyRegion | null {
   return null;
 }
 
+function canAutoloadThirdPartyContent(): boolean {
+  const region = getPrivacyRegion();
+  return region === 'opt_out' || region === 'notice';
+}
+
 function getClassName(className?: string): string {
   return className ? `${styles.gate} ${className}` : styles.gate;
 }
@@ -59,7 +64,26 @@ function ClientThirdPartyContentGate({
   serviceName,
   title,
 }: ThirdPartyContentGateProps): React.ReactElement {
-  const [enabled, setEnabled] = React.useState(() => getPrivacyRegion() !== 'opt_in');
+  const [enabled, setEnabled] = React.useState(canAutoloadThirdPartyContent);
+
+  React.useEffect(() => {
+    if (enabled) {
+      return;
+    }
+
+    const refreshEnabledState = () => {
+      if (canAutoloadThirdPartyContent()) {
+        setEnabled(true);
+      }
+    };
+
+    refreshEnabledState();
+    window.addEventListener('pf_consent_change', refreshEnabledState);
+
+    return () => {
+      window.removeEventListener('pf_consent_change', refreshEnabledState);
+    };
+  }, [enabled]);
 
   if (enabled) {
     return <>{children}</>;

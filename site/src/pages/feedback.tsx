@@ -60,7 +60,7 @@ const FeedbackPageContent = () => {
         >
           <iframe
             src="https://docs.google.com/forms/d/e/1FAIpQLScAnqlqX-ep-aOn6umjXXDVafc1sLTOEd5W6rMAPKllLk0CIA/viewform?embedded=1"
-            title="PromptFoo Feedback Form"
+            title="Promptfoo Feedback Form"
             sandbox="allow-scripts allow-forms allow-same-origin"
             style={iframeStyle}
             loading="lazy"
