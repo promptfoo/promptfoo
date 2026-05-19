@@ -108,7 +108,10 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: vi.fn(),
 }));
 
-vi.mock('../../src/util/azureBlob', () => ({
+vi.mock('../../src/util/azureBlob', async () => ({
+  ...(await vi.importActual<typeof import('../../src/util/azureBlob')>(
+    '../../src/util/azureBlob',
+  )),
   readAzureBlobText: vi.fn(),
 }));
 
@@ -401,6 +404,66 @@ describe('readStandaloneTestsFile', () => {
       {
         description: 'Row #1',
         vars: { review_id: 'review-002' },
+      },
+    ]);
+  });
+
+  it('should read CSV test sets from Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.csv';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      'review_id,__expected\nreview-004,ready',
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'ready' }],
+        description: 'Row #1',
+        options: {},
+        vars: { review_id: 'review-004' },
+      },
+    ]);
+  });
+
+  it('should read JSONL test sets from Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.jsonl';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      '{"vars":{"review_id":"review-005"}}\n{"vars":{"review_id":"review-006"}}',
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-005' },
+      },
+      {
+        description: 'Row #2',
+        vars: { review_id: 'review-006' },
+      },
+    ]);
+  });
+
+  it('should read YML test sets from Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.yml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure YML case
+        vars:
+          review_id: review-007
+        assert:
+          - type: equals
+            value: ready
+    `);
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'ready' }],
+        description: 'Azure YML case',
+        vars: { review_id: 'review-007' },
       },
     ]);
   });
@@ -1126,6 +1189,33 @@ describe('readTests', () => {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YAML case',
         vars: { review_id: 'review-003' },
+      },
+    ]);
+  });
+
+  it('readTests with Azure YAML vars files follows the local YAML normalization path', async () => {
+    const blobUri = 'az://account/container/tests.yaml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure YAML vars case
+        vars: vars1.yaml
+        assert:
+          - type: equals
+            value: ready
+    `);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      yaml.dump({
+        review_id: 'review-008',
+      }),
+    );
+
+    const result = await readTests(blobUri);
+
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'ready' }],
+        description: 'Azure YAML vars case',
+        vars: { review_id: 'review-008' },
       },
     ]);
   });

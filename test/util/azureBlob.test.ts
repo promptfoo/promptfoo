@@ -112,6 +112,19 @@ describe('Azure Blob test-set loading', () => {
     expect(mocks.defaultAzureCredential).not.toHaveBeenCalled();
   });
 
+  it('rejects connection strings that target a different storage account', async () => {
+    vi.mocked(getEnvString).mockReturnValue(
+      'DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=secret',
+    );
+
+    await expect(
+      readAzureBlobText('az://account/container/path/tests.json'),
+    ).rejects.toThrow(
+      'AZURE_STORAGE_CONNECTION_STRING targets storage account "otheraccount", but the az:// URI targets "account".',
+    );
+    expect(mocks.fromConnectionString).not.toHaveBeenCalled();
+  });
+
   it('falls back to DefaultAzureCredential when no SAS or connection string is present', async () => {
     const result = await readAzureBlobText('az://account/container/path/tests.json');
 
@@ -120,6 +133,18 @@ describe('Azure Blob test-set loading', () => {
     expect(mocks.blobServiceClient).toHaveBeenCalledWith('https://account.blob.core.windows.net', {
       credential: 'default',
     });
+  });
+
+  it('rejects non-SAS query strings instead of dropping configured credentials', async () => {
+    vi.mocked(getEnvString).mockReturnValue(
+      'DefaultEndpointsProtocol=https;AccountName=account;AccountKey=secret',
+    );
+
+    await expect(
+      readAzureBlobText('az://account/container/path/tests.json?snapshot=2026-05-19'),
+    ).rejects.toThrow('query string must be a SAS token containing a sig parameter');
+    expect(mocks.fromConnectionString).not.toHaveBeenCalled();
+    expect(mocks.defaultAzureCredential).not.toHaveBeenCalled();
   });
 
   it('redacts SAS query strings from read errors', async () => {

@@ -103,7 +103,7 @@ export async function readStandaloneTestsFile(
   }
 
   if (varsPath.startsWith('az://')) {
-    return await readAzureBlobStandaloneTestsFile(varsPath);
+    return await readAzureBlobStandaloneTestsFile(varsPath, basePath);
   }
 
   let rows: CsvRow[];
@@ -124,7 +124,10 @@ export async function readStandaloneTestsFile(
   return csvRowsToTestCases(rows);
 }
 
-async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestCase[]> {
+async function readAzureBlobStandaloneTestsFile(
+  varsPath: string,
+  basePath: string,
+): Promise<TestCase[]> {
   const fileExtension = getAzureBlobTestFileExtension(varsPath);
   if (!fileExtension) {
     throw new Error(
@@ -155,7 +158,7 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
   telemetry.record('feature_used', {
     feature: 'yaml tests file - azure blob',
   });
-  return parseYamlTestCases(fileContent);
+  return parseYamlTestCases(fileContent, basePath);
 }
 
 function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExtension | undefined {
@@ -369,14 +372,21 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
     });
 }
 
-function parseYamlTestCases(fileContent: string): TestCase[] {
+async function parseYamlTestCases(fileContent: string, basePath: string): Promise<TestCase[]> {
   const rawContent = yaml.load(fileContent);
   const loadedContent = maybeLoadConfigFromExternalFile(rawContent) as TestCase[] | TestCase;
   const testCases = Array.isArray(loadedContent) ? loadedContent : [loadedContent];
-  return testCases.map((item, idx) => ({
-    ...item,
-    description: item.description || `Row #${idx + 1}`,
-  }));
+  const dereferenced = (await $RefParser.dereference(testCases)) as TestCase[];
+
+  return Promise.all(
+    dereferenced.map(async (item, idx) => {
+      const testCase = await readTest(item as TestCaseWithVarsFile, basePath);
+      return {
+        ...testCase,
+        description: testCase.description || `Row #${idx + 1}`,
+      };
+    }),
+  );
 }
 
 async function loadTestWithVars(

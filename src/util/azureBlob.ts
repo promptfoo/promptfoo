@@ -91,6 +91,47 @@ export function parseAzureBlobUri(uri: string): AzureBlobUriParts {
   };
 }
 
+function isAzureBlobSasToken(queryString: string): boolean {
+  const searchParams = new URLSearchParams(queryString.startsWith('?') ? queryString.slice(1) : queryString);
+  return searchParams.has('sig');
+}
+
+function getConnectionStringAccountName(connectionString: string): string | undefined {
+  for (const segment of connectionString.split(';')) {
+    const separatorIndex = segment.indexOf('=');
+    if (separatorIndex < 0) {
+      continue;
+    }
+
+    const key = segment.slice(0, separatorIndex).trim().toLowerCase();
+    if (key === 'accountname') {
+      const accountName = segment.slice(separatorIndex + 1).trim();
+      return accountName || undefined;
+    }
+  }
+
+  return undefined;
+}
+
+function assertConnectionStringMatchesUriAccount(
+  uri: string,
+  parts: AzureBlobUriParts,
+  connectionString: string,
+): void {
+  const connectionStringAccountName = getConnectionStringAccountName(connectionString);
+  if (
+    connectionStringAccountName &&
+    connectionStringAccountName.toLowerCase() !== parts.accountName.toLowerCase()
+  ) {
+    throw formatAzureBlobReadError(
+      uri,
+      new Error(
+        `AZURE_STORAGE_CONNECTION_STRING targets storage account "${connectionStringAccountName}", but the az:// URI targets "${parts.accountName}".`,
+      ),
+    );
+  }
+}
+
 async function loadAzureStorageBlobPackage(uri: string) {
   try {
     return await import('@azure/storage-blob');
@@ -114,11 +155,18 @@ async function createAzureBlobServiceClient(
   const accountUrl = `https://${parts.accountName}.blob.core.windows.net${parts.sasToken}`;
 
   if (parts.sasToken) {
+    if (!isAzureBlobSasToken(parts.sasToken)) {
+      throw createAzureBlobUriError(
+        uri,
+        'query string must be a SAS token containing a sig parameter',
+      );
+    }
     return new BlobServiceClient(accountUrl);
   }
 
   const connectionString = getEnvString('AZURE_STORAGE_CONNECTION_STRING');
   if (connectionString) {
+    assertConnectionStringMatchesUriAccount(uri, parts, connectionString);
     return BlobServiceClient.fromConnectionString(connectionString);
   }
 
