@@ -478,7 +478,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      const res = await request(app)
+      const res = await api
         .patch(`/api/eval/${eval_.id}/author`)
         .send({ author: 'newauthor@example.com' });
 
@@ -496,9 +496,7 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
 
       // Set an author first
-      await request(app)
-        .patch(`/api/eval/${eval_.id}/author`)
-        .send({ author: 'existing@example.com' });
+      await api.patch(`/api/eval/${eval_.id}/author`).send({ author: 'existing@example.com' });
 
       // Verify author was set
       let updatedEval = await Eval.findById(eval_.id);
@@ -506,7 +504,7 @@ describe('eval routes', () => {
       expect(updatedEval.author).toBe('existing@example.com');
 
       // Now clear the author with empty string
-      const res = await request(app).patch(`/api/eval/${eval_.id}/author`).send({ author: '' });
+      const res = await api.patch(`/api/eval/${eval_.id}/author`).send({ author: '' });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('message', 'Author cleared successfully');
@@ -517,7 +515,7 @@ describe('eval routes', () => {
     });
 
     it('should return 404 for non-existent eval', async () => {
-      const res = await request(app)
+      const res = await api
         .patch('/api/eval/non-existent-id/author')
         .send({ author: 'test@example.com' });
 
@@ -529,7 +527,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      const res = await request(app)
+      const res = await api
         .patch(`/api/eval/${eval_.id}/author`)
         .send({ author: 'not-a-valid-email' });
 
@@ -540,7 +538,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      const res = await request(app).patch(`/api/eval/${eval_.id}/author`).send({});
+      const res = await api.patch(`/api/eval/${eval_.id}/author`).send({});
 
       expect(res.status).toBe(400);
     });
@@ -552,7 +550,7 @@ describe('eval routes', () => {
       const originalDescription = eval_.config?.description;
       const originalPromptCount = eval_.prompts.length;
 
-      const res = await request(app)
+      const res = await api
         .patch(`/api/eval/${eval_.id}/author`)
         .send({ author: 'newauthor@example.com' });
 

@@ -53,7 +53,7 @@ describe('AuthorChip', () => {
   });
 
   it('claims the eval with the current user email when cloud is enabled', async () => {
-    renderWithProviders(<AuthorChip {...defaultProps} author="owner@example.com" isCloudEnabled />);
+    renderWithProviders(<AuthorChip {...defaultProps} author={null} isCloudEnabled />);
 
     await userEvent.click(screen.getByRole('button'));
     await userEvent.click(screen.getByRole('button', { name: 'Claim as mine (user@example.com)' }));
@@ -66,19 +66,9 @@ describe('AuthorChip', () => {
     });
   });
 
-  it('shows the current attribution in the cloud claim dialog', async () => {
-    renderWithProviders(<AuthorChip {...defaultProps} author="owner@example.com" isCloudEnabled />);
-
-    await userEvent.click(screen.getByRole('button'));
-
-    expect(
-      screen.getByText('This eval is currently attributed to owner@example.com.'),
-    ).toBeInTheDocument();
-  });
-
   it('keeps the cloud claim dialog open and shows an error when claim fails', async () => {
     mockOnEditAuthor.mockRejectedValueOnce(new Error('Claim failed'));
-    renderWithProviders(<AuthorChip {...defaultProps} author="owner@example.com" isCloudEnabled />);
+    renderWithProviders(<AuthorChip {...defaultProps} author={null} isCloudEnabled />);
 
     await userEvent.click(screen.getByRole('button'));
     await userEvent.click(screen.getByRole('button', { name: 'Claim as mine (user@example.com)' }));

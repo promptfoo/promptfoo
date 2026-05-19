@@ -116,15 +116,11 @@ export default function EvalHeader({
       return true;
     }
 
-    if (!author) {
-      return true;
-    }
-
     if (currentUserEmail === null) {
       return false;
     }
 
-    return author !== currentUserEmail;
+    return !author;
   }, [author, cloudConfigError, currentUserEmail, isCloudConfigLoading, isCloudEnabled]);
 
   const handleEvalIdCopyClick = () => {

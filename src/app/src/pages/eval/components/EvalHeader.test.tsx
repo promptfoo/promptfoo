@@ -181,15 +181,31 @@ describe('EvalHeader author editability', () => {
     });
   });
 
-  it('allows claiming an unassigned cloud eval', () => {
+  it('keeps an unassigned cloud eval non-editable until the current user email resolves', () => {
     setCloudConfig({ isEnabled: true });
+    mockFetchUserEmail.mockImplementationOnce(() => new Promise(() => {}));
 
     renderHeader({ author: null });
 
     expect(lastAuthorChipProps()).toMatchObject({
       author: null,
-      editable: true,
+      editable: false,
       isCloudEnabled: true,
+    });
+  });
+
+  it('allows claiming an unassigned cloud eval once the current user email resolves', async () => {
+    setCloudConfig({ isEnabled: true });
+
+    renderHeader({ author: null });
+
+    await waitFor(() => {
+      expect(lastAuthorChipProps()).toMatchObject({
+        author: null,
+        currentUserEmail: 'current@example.com',
+        editable: true,
+        isCloudEnabled: true,
+      });
     });
   });
 
@@ -207,7 +223,7 @@ describe('EvalHeader author editability', () => {
     });
   });
 
-  it("allows claiming someone else's cloud eval", async () => {
+  it("does not allow claiming someone else's cloud eval", async () => {
     setCloudConfig({ isEnabled: true });
 
     renderHeader({ author: 'owner@example.com' });
@@ -215,7 +231,7 @@ describe('EvalHeader author editability', () => {
     await waitFor(() => {
       expect(lastAuthorChipProps()).toMatchObject({
         currentUserEmail: 'current@example.com',
-        editable: true,
+        editable: false,
         isCloudEnabled: true,
       });
     });

@@ -109,7 +109,7 @@ describe('Eval Routes - Zod Validation', () => {
       mockFindById.mockResolvedValue(mockEval);
       mockSave.mockResolvedValue(undefined);
 
-      const response = await request(app).patch('/api/eval/test-id/author').send({
+      const response = await api.patch('/api/eval/test-id/author').send({
         author: '',
       });
 
