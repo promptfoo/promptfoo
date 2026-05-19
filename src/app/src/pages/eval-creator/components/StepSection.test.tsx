@@ -158,6 +158,16 @@ describe('StepSection', () => {
         'Important: Follow these instructions',
       );
     });
+
+    it('does not render a guidance slot when guidance is omitted', () => {
+      render(
+        <StepSection {...defaultProps}>
+          <div data-testid="step-content">Content</div>
+        </StepSection>,
+      );
+
+      expect(screen.getByTestId('step-content').parentElement?.nextElementSibling).toBeNull();
+    });
   });
 
   describe('Accessibility', () => {
@@ -204,8 +214,8 @@ describe('StepSection', () => {
         </StepSection>,
       );
 
-      const separators = container.querySelectorAll('[aria-hidden="true"]');
-      expect(separators.length).toBeGreaterThan(0);
+      const separators = container.querySelectorAll('span[aria-hidden="true"]');
+      expect(separators).toHaveLength(2);
       separators.forEach((separator) => {
         expect(separator.textContent).toBe('/');
       });
