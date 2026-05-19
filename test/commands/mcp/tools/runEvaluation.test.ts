@@ -224,6 +224,46 @@ describe('runEvaluation tool', () => {
       expect(payload.data.configuration.options.timeoutMs).toBe(9999);
     });
 
+    it('should report effective delay and concurrency from the completed eval runtime options', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = createMockTestSuite();
+          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any);
+          return {
+            ...createMockEvalResult(),
+            runtimeOptions: {
+              delay: 100,
+              maxConcurrency: 1,
+              timeoutMs: 30000,
+            },
+          } as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: 'test-prompt',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(payload.data.configuration.options.delay).toBe(100);
+      expect(payload.data.configuration.options.maxConcurrency).toBe(1);
+    });
+
     it('should return the same suite metadata shape for unfiltered evals', async () => {
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
@@ -341,6 +381,50 @@ describe('runEvaluation tool', () => {
       expect(payload.data.configuration.testCases).toEqual({
         total: 4,
         filtered: 4,
+        filters: {},
+      });
+    });
+
+    it('should count scenarios with explicit empty test arrays as zero generated test cases', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [],
+              },
+            ],
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any);
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 0,
+        filtered: 0,
         filters: {},
       });
     });

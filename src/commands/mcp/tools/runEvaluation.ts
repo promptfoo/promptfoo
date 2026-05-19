@@ -159,7 +159,7 @@ function countRunnableTestCases(testSuite: TestSuite): number {
   }
 
   const scenarioTestCount = testSuite.scenarios.reduce((count, scenario) => {
-    const testsPerScenarioConfig = scenario.tests?.length || 1;
+    const testsPerScenarioConfig = scenario.tests?.length ?? 1;
     return count + scenario.config.length * testsPerScenarioConfig;
   }, 0);
 
@@ -498,6 +498,9 @@ export function registerRunEvaluationTool(server: McpServer) {
 
         const summary = await evalResult.toEvaluateSummary();
         const effectiveTimeoutMs = evalResult.runtimeOptions?.timeoutMs ?? timeoutMs;
+        const effectiveMaxConcurrency =
+          evalResult.runtimeOptions?.maxConcurrency ?? maxConcurrency;
+        const effectiveDelay = evalResult.runtimeOptions?.delay ?? delay;
         const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
           resultLimit,
           resultOffset,
@@ -516,10 +519,10 @@ export function registerRunEvaluationTool(server: McpServer) {
               testCaseIndices,
               promptFilter,
               providerFilter,
-              maxConcurrency,
+              maxConcurrency: effectiveMaxConcurrency,
               timeoutMs: effectiveTimeoutMs,
               repeat,
-              delay,
+              delay: effectiveDelay,
               cache,
               write,
               share,
