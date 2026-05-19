@@ -1427,15 +1427,11 @@ function ResultsTableHeader({
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
                 {headerGroup.headers.map((header, headerIndex) => {
-                  const isMetadataCol = isMetadataColumn(header.column.id);
                   const isFinalRow = headerGroup.depth === 1;
                   const previousHeader = headerGroup.headers[headerIndex - 1];
                   const isPreviousPromptHeader =
-                    previousHeader !== undefined &&
-                    !isMetadataColumn(previousHeader.column.id) &&
-                    previousHeader.column.id !== 'prompts';
-                  const isPromptHeader =
-                    !isMetadataCol && header.column.id !== 'prompts' && isFinalRow;
+                    previousHeader?.column.id.startsWith('Prompt ') ?? false;
+                  const isPromptHeader = header.column.id.startsWith('Prompt ');
 
                   return (
                     <th
