@@ -1447,11 +1447,9 @@ function ResultsTableHeader({
                         key={header.id}
                         tabIndex={0}
                         colSpan={header.colSpan}
-                        data-column-id={String(header.column.id)}
-                        data-parent-column-id={header.column.parent?.id ?? ''}
                         style={{
                           width: header.getSize(),
-                          borderLeft: shouldHidePromptBorder ? 'none' : undefined,
+                          borderLeftWidth: shouldHidePromptBorder ? 0 : undefined,
                           borderBottom: isFinalRow ? '2px solid var(--border-color)' : 'none',
                           height: isFinalRow ? 'fit-content' : 'auto',
                         }}

@@ -401,8 +401,7 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const secondPromptHeaderCell = screen.getByText('test-provider-2').closest('th');
 
-    console.info('second prompt header cell', secondPromptHeaderCell?.outerHTML);
-    expect(secondPromptHeaderCell?.style.borderLeft).toBe('none');
+    expect(secondPromptHeaderCell?.style.borderLeftWidth).toBe('0px');
   });
 
   describe('Keyboard Navigation', () => {
