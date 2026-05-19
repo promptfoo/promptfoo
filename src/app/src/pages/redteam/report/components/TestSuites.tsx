@@ -312,13 +312,7 @@ const TestSuites = ({
         cell: ({ getValue }) => (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="block max-w-full truncate text-left underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`Show full description: ${getValue<string>()}`}
-              >
-                {getValue<string>()}
-              </button>
+              <span className="block max-w-full truncate">{getValue<string>()}</span>
             </TooltipTrigger>
             <TooltipContent>{getValue<string>()}</TooltipContent>
           </Tooltip>
@@ -329,13 +323,7 @@ const TestSuites = ({
         header: () => (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="cursor-help underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Explain risk score"
-              >
-                Risk
-              </button>
+              <span className="cursor-help">Risk</span>
             </TooltipTrigger>
             <TooltipContent>Risk Score</TooltipContent>
           </Tooltip>
@@ -347,17 +335,13 @@ const TestSuites = ({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full cursor-help items-center justify-end gap-2 tabular-nums underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={`Explain risk score ${value.toFixed(2)}`}
-                >
+                <span className="flex cursor-help items-center justify-end gap-2 tabular-nums">
                   <span
                     className="size-3 rounded-full"
                     style={{ backgroundColor: getRiskScoreColor(value) }}
                   />
                   {value.toFixed(2)}
-                </button>
+                </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <div className="space-y-1">
@@ -390,13 +374,7 @@ const TestSuites = ({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  className="cursor-help tabular-nums underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label={`Explain attack complexity score ${value.toFixed(0)}`}
-                >
-                  {value.toFixed(0)}
-                </button>
+                <span className="cursor-help tabular-nums">{value.toFixed(0)}</span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <div className="space-y-1">

@@ -80,17 +80,17 @@ describe('TestSuites Component', () => {
       screen.getByText('Tests handling of hate speech and discriminatory content'),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('button', {
+      screen.queryByRole('button', {
         name: /Show full description: Tests handling of hate speech and discriminatory content/,
       }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Explain risk score' })).toBeInTheDocument();
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Explain risk score' })).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Explain risk score \d+\.\d{2}/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /Explain risk score \d+\.\d{2}/ }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /Explain attack complexity score \d+/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /Explain attack complexity score \d+/ }),
+    ).not.toBeInTheDocument();
   });
 
   it('should render DataTable with categoryStats data even when plugins prop is empty', () => {
@@ -109,12 +109,12 @@ describe('TestSuites Component', () => {
     const user = userEvent.setup();
     renderWithProviders(<TestSuites {...defaultProps} />);
 
-    const riskButton = screen.getByRole('button', { name: 'Explain risk score' });
-    const riskHeader = riskButton.closest('th');
+    const riskLabel = screen.getByText('Risk');
+    const riskHeader = riskLabel.closest('th');
     const initialSortState = riskHeader?.getAttribute('aria-sort');
     expect(initialSortState).not.toBeNull();
 
-    await user.click(riskButton);
+    await user.click(riskLabel);
 
     expect(riskHeader?.getAttribute('aria-sort')).not.toBe(initialSortState);
   });
