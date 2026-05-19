@@ -928,6 +928,7 @@ files need no changes.
 Cases that intentionally do **not** pass:
 
 - Numerically-close-but-unequal values, e.g. `49/106` vs `\frac{23}{53}`
+- Tiny nonzero residuals, e.g. `0` vs `10^{-50}`
 - Same angle modulo 2π is not the same value (`5\pi/3` vs `-\pi/3`)
 - Extra factors like a stray `\pi`
 - Pure prose that contains no parseable expression

@@ -981,6 +981,10 @@ describe('isMathEquivalent', async () => {
       expect((await isMathEquivalent('0.86', '0.67')).pass).toBe(false);
     });
 
+    it('rejects tiny nonzero residuals instead of accepting engine tolerance', async () => {
+      expect((await isMathEquivalent('0', '10^{-50}')).pass).toBe(false);
+    });
+
     it('rejects -3 vs -3/2 (judge FP regression)', async () => {
       expect((await isMathEquivalent('-3', '$-\\frac32$')).pass).toBe(false);
     });

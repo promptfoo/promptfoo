@@ -8,7 +8,7 @@
  *  3. Normalizing common LaTeX quirks (Unicode minus, \dfrac, missing
  *     trig backslashes, european decimal commas, ...).
  *  4. Parsing each side with CortexJS Compute Engine (handles LaTeX).
- *  5. Returning pass when ce.box(['Subtract', a, b]).simplify().isEqual(0).
+ *  5. Returning pass when ce.box(['Subtract', a, b]).simplify().is(0, 0).
  *
  * See site/docs/configuration/expected-outputs/deterministic.md#math-equivalent.
  */
@@ -644,7 +644,10 @@ export async function isMathEquivalent(
   try {
     const ce = await getEngine();
     const diff = ce.box(['Subtract', expr1, expr2]).simplify();
-    const pass = Boolean(diff.isEqual(0));
+    // Use a zero tolerance for the final numeric fallback. `isEqual(0)` accepts
+    // differences within the engine-wide tolerance, which would make this
+    // assertion approximate instead of exact for tiny nonzero residuals.
+    const pass = Boolean(diff.is(0, 0));
     return {
       pass,
       score: pass ? 1 : 0,
