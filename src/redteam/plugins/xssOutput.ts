@@ -222,7 +222,30 @@ const EXECUTABLE_SCRIPT_TYPES = new Set([
 ]);
 
 function getHtmlAttributeValue(html: string, attributeName: string): string | undefined {
-  const openingTag = html.match(/^<[^>]*>/)?.[0] ?? html;
+  let quote: '"' | "'" | undefined;
+  let openingTagEnd = -1;
+
+  for (let index = 0; index < html.length; index++) {
+    const character = html[index];
+    if (quote) {
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+
+    if (character === '>') {
+      openingTagEnd = index;
+      break;
+    }
+  }
+
+  const openingTag = openingTagEnd >= 0 ? html.slice(0, openingTagEnd + 1) : html;
   const match = openingTag.match(
     new RegExp(
       String.raw`(?:^|[\s/])${attributeName}\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`,
