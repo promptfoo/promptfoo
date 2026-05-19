@@ -806,6 +806,73 @@ describe('TestCasesSection', () => {
       expect(mockShowToast).toHaveBeenCalledWith('Deleted 1 test case', 'success');
     });
 
+    it('selects and deselects every test case from the header checkbox', async () => {
+      const user = userEvent.setup();
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            {
+              description: 'First test',
+              vars: { input: 'first' },
+            },
+            {
+              description: 'Second test',
+              vars: { input: 'second' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Select' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Select all test cases' }));
+
+      expect(screen.getByRole('button', { name: 'Delete Selected (2)' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Deselect test case 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Deselect test case 2' })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('checkbox', { name: 'Select all test cases' }));
+
+      expect(screen.getByRole('button', { name: 'Delete Selected (0)' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Select test case 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Select test case 2' })).toBeInTheDocument();
+    });
+
+    it('keeps test cases unchanged when selected deletion is canceled', async () => {
+      const user = userEvent.setup();
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            {
+              description: 'First test',
+              vars: { input: 'first' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Select' }));
+      await user.click(screen.getByRole('button', { name: 'Select test case 1' }));
+      await user.click(screen.getByRole('button', { name: 'Delete Selected (1)' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Delete Selected (1)' })).toBeEnabled();
+    });
+
     it('deletes every test case after delete-all confirmation', async () => {
       const user = userEvent.setup();
       (useStore as any).mockReturnValue({
@@ -837,6 +904,82 @@ describe('TestCasesSection', () => {
         tests: [],
       });
       expect(mockShowToast).toHaveBeenCalledWith('Deleted 2 test cases', 'success');
+    });
+
+    it('keeps test cases unchanged when delete-all is canceled', async () => {
+      const user = userEvent.setup();
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            {
+              description: 'First test',
+              vars: { input: 'first' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Delete All' }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Delete All' })).toBeEnabled();
+    });
+
+    it('exits selection mode when the test-case list changes underneath it', async () => {
+      const user = userEvent.setup();
+      const firstRender = render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            {
+              description: 'First test',
+              vars: { input: 'first' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      firstRender.rerender(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Select' }));
+      await user.click(screen.getByRole('button', { name: 'Select test case 1' }));
+
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            {
+              description: 'Imported test',
+              vars: { input: 'imported' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+      firstRender.rerender(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      expect(screen.getByRole('button', { name: 'Select' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Delete Selected/ })).not.toBeInTheDocument();
     });
   });
 });
