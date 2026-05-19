@@ -168,7 +168,7 @@ const ENCODED_INDICATORS: string[] = [
 const DEEPLY_PERCENT_ENCODED_TRAVERSAL_INDICATOR = /%(?:25){2,3}(?:2e|2f|5c)/i;
 
 const NESTED_QUANTIFIER =
-  /\((?:[^()\\]|\\.)*(?:[+*?]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
+  /\((?:[^()\\]|\\.)*(?:[+*]|\?(?![:=!<])|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
