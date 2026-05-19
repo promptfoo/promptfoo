@@ -1,7 +1,9 @@
 import type { Server } from 'node:http';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getUserEmail } from '../../src/globalConfig/accounts';
+import { cloudConfig } from '../../src/globalConfig/cloud';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -20,6 +22,15 @@ vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
   };
 });
 
+vi.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: vi.fn().mockReturnValue(false),
+  },
+}));
+
+const mockedGetUserEmail = vi.mocked(getUserEmail);
+const mockedCloudConfig = vi.mocked(cloudConfig);
+
 describe('eval routes', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
@@ -33,6 +44,11 @@ describe('eval routes', () => {
       );
     });
     api = request.agent(server);
+  });
+
+  beforeEach(() => {
+    mockedGetUserEmail.mockReturnValue(null);
+    mockedCloudConfig.isEnabled.mockReturnValue(false);
   });
 
   afterAll(async () => {
@@ -561,6 +577,70 @@ describe('eval routes', () => {
       expect(updatedEval.author).toBe('newauthor@example.com');
       expect(updatedEval.config?.description).toBe(originalDescription);
       expect(updatedEval.prompts.length).toBe(originalPromptCount);
+    });
+
+    it('should allow a cloud user to claim an unassigned eval as themselves', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'cloud-user@example.com' });
+
+      expect(res.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('cloud-user@example.com');
+    });
+
+    it('should reject claiming a cloud eval for a different email', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'other-user@example.com' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty(
+        'error',
+        'Cloud evals can only be claimed by the current user',
+      );
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBeNull();
+    });
+
+    it('should reject changing an existing cloud eval author', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.author = 'existing@example.com';
+      await eval_.save();
+
+      const res = await api
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'cloud-user@example.com' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty(
+        'error',
+        'Cloud eval authors cannot be changed once assigned',
+      );
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('existing@example.com');
     });
   });
 });

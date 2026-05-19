@@ -170,8 +170,8 @@ export const AuthorChip = ({
         <TooltipTrigger asChild>
           <Chip
             label="AUTHOR"
-            onClick={handleStartEdit}
-            disabled={!editable}
+            onClick={editable ? handleStartEdit : undefined}
+            aria-disabled={!editable}
             interactive={editable}
             trailingIcon={
               editable ? <Pencil className="size-3.5 text-muted-foreground" /> : undefined

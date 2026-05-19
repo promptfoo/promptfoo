@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
+import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
@@ -285,6 +286,19 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
       return;
+    }
+
+    if (cloudConfig.isEnabled()) {
+      const currentUserEmail = getUserEmail();
+      if (!currentUserEmail || author !== currentUserEmail) {
+        res.status(403).json({ error: 'Cloud evals can only be claimed by the current user' });
+        return;
+      }
+
+      if (eval_.author) {
+        res.status(403).json({ error: 'Cloud eval authors cannot be changed once assigned' });
+        return;
+      }
     }
 
     eval_.author = author || null;

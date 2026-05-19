@@ -81,17 +81,33 @@ describe('AuthorChip', () => {
 
   it('disables the cloud claim action until the current user email is loaded', async () => {
     renderWithProviders(
-      <AuthorChip
-        {...defaultProps}
-        currentUserEmail={null}
-        author="owner@example.com"
-        isCloudEnabled
-      />,
+      <AuthorChip {...defaultProps} currentUserEmail={null} author={null} isCloudEnabled />,
     );
 
     await userEvent.click(screen.getByRole('button'));
 
     expect(screen.getByRole('button', { name: 'Loading...' })).toBeDisabled();
+  });
+
+  it('keeps non-editable cloud authors focusable so the ownership tooltip is reachable', async () => {
+    renderWithProviders(
+      <AuthorChip
+        {...defaultProps}
+        author="owner@example.com"
+        currentUserEmail="user@example.com"
+        editable={false}
+        isCloudEnabled
+      />,
+    );
+
+    const chip = screen.getByRole('button', { name: /authorowner@example.com/i });
+    expect(chip).not.toBeDisabled();
+    expect(chip).toHaveAttribute('aria-disabled', 'true');
+
+    await userEvent.hover(chip);
+    expect(await screen.findAllByText('This eval belongs to owner@example.com')).not.toHaveLength(
+      0,
+    );
   });
 
   it('opens inline edit mode on click', async () => {
