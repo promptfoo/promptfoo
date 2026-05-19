@@ -80,7 +80,6 @@ Test for and prevent sensitive information disclosure:
 
 - **PII detection**: Use Promptfoo's PII plugins to test for leaks of personally identifiable information.
 - **Data exposure testing**: Generate malicious prompts that attempt to extract sensitive data.
-- **Sensitive file emission**: Use the [`path-traversal-output`](./plugins/path-traversal-output.md) plugin to detect when the model emits paths pointing at credential files (`/etc/passwd`, `.aws/credentials`, `.ssh/id_rsa`, `.env*`, `*.tfstate`, Windows SAM, etc.).
 
 ### PII Detection Tools
 
