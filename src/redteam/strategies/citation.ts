@@ -35,6 +35,8 @@ async function generateCitations(
   try {
     const concurrency = 10;
     const allResults: TestCase[] = [];
+    let deferredFailureMessage: string | undefined;
+    let deferredFailureTokenUsage: TokenUsage | undefined;
 
     if (logger.level !== 'debug') {
       progressBar = new SingleBar(
@@ -97,6 +99,13 @@ async function generateCitations(
         if (testCases.length === 1 && data.tokenUsage) {
           throw new CitationGenerationError(data.error, data.tokenUsage);
         }
+        if (data.tokenUsage) {
+          deferredFailureMessage ??= data.error;
+          deferredFailureTokenUsage = mergeProviderTokenUsage(
+            deferredFailureTokenUsage,
+            data.tokenUsage,
+          );
+        }
         if (progressBar) {
           progressBar.increment(1);
         }
@@ -110,6 +119,13 @@ async function generateCitations(
         if (testCases.length === 1 && data.tokenUsage) {
           throw new CitationGenerationError(
             'Citation generation returned invalid response structure',
+            data.tokenUsage,
+          );
+        }
+        if (data.tokenUsage) {
+          deferredFailureMessage ??= 'Citation generation returned invalid response structure';
+          deferredFailureTokenUsage = mergeProviderTokenUsage(
+            deferredFailureTokenUsage,
             data.tokenUsage,
           );
         }
@@ -163,6 +179,34 @@ async function generateCitations(
 
     if (progressBar) {
       progressBar.stop();
+    }
+
+    if (deferredFailureTokenUsage && allResults.length === 0) {
+      throw new CitationGenerationError(
+        deferredFailureMessage ?? 'Citation generation failed',
+        deferredFailureTokenUsage,
+      );
+    }
+
+    if (deferredFailureTokenUsage && allResults.length > 0) {
+      const firstResult = allResults[0];
+      if (!firstResult) {
+        return allResults;
+      }
+      const remainingResults = allResults.slice(1);
+      return [
+        {
+          ...firstResult,
+          metadata: {
+            ...firstResult.metadata,
+            providerTokenUsage: mergeProviderTokenUsage(
+              firstResult.metadata?.providerTokenUsage,
+              deferredFailureTokenUsage,
+            ),
+          },
+        },
+        ...remainingResults,
+      ];
     }
 
     return allResults;

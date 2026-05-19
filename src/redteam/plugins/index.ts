@@ -100,6 +100,24 @@ class RemotePluginGenerationError extends Error {
   }
 }
 
+function attachRemotePluginUsage(
+  testCases: TestCase[],
+  tokenUsage: TokenUsage,
+  usageTargetIndex: number,
+): TestCase[] {
+  return testCases.map((testCase, index) =>
+    index === usageTargetIndex
+      ? {
+          ...testCase,
+          metadata: {
+            ...(testCase.metadata ?? {}),
+            providerTokenUsage: tokenUsage,
+          },
+        }
+      : testCase,
+  );
+}
+
 type PluginClass<T extends PluginConfig> = new (
   provider: ApiProvider,
   purpose: string,
@@ -429,30 +447,13 @@ async function fetchRemoteTestCases(
         data.tokenUsage,
       );
     }
-    if (n === 1 && ret.length === 1 && data.tokenUsage) {
-      const [testCase] = ret;
-      return [
-        {
-          ...testCase,
-          metadata: {
-            ...(testCase.metadata ?? {}),
-            providerTokenUsage: data.tokenUsage,
-          },
-        },
-      ];
-    }
-    if (key === 'cross-session-leak' && n === 1 && ret.length === 2 && data.tokenUsage) {
-      return ret.map((testCase) =>
-        testCase.metadata?.crossSessionLeakMatch
-          ? {
-              ...testCase,
-              metadata: {
-                ...(testCase.metadata ?? {}),
-                providerTokenUsage: data.tokenUsage,
-              },
-            }
-          : testCase,
-      );
+    if (ret.length > 0 && data.tokenUsage) {
+      const preferredUsageTargetIndex =
+        key === 'cross-session-leak'
+          ? ret.findIndex((testCase) => testCase.metadata?.crossSessionLeakMatch)
+          : 0;
+      const usageTargetIndex = preferredUsageTargetIndex >= 0 ? preferredUsageTargetIndex : 0;
+      return attachRemotePluginUsage(ret, data.tokenUsage, usageTargetIndex);
     }
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;

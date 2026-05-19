@@ -95,7 +95,7 @@ export async function generateMathPrompt(
       if (!Array.isArray(data.result)) {
         const errorMessage =
           data.error || 'MathPrompt generation returned invalid response structure';
-        if (batch.length === 1 && data.tokenUsage) {
+        if (data.tokenUsage) {
           throw new MathPromptGenerationError(errorMessage, data.tokenUsage);
         }
         throw new Error(errorMessage);
@@ -195,19 +195,22 @@ export async function addMathPrompt(
     } catch (error) {
       if (
         error instanceof MathPromptGenerationError &&
-        error.tokenUsage &&
-        testCases.length === 1
+        error.tokenUsage
       ) {
-        fallbackTestCases = testCases.map((testCase) => ({
-          ...testCase,
-          metadata: {
-            ...testCase.metadata,
-            providerTokenUsage: mergeProviderTokenUsage(
-              testCase.metadata?.providerTokenUsage,
-              error.tokenUsage,
-            ),
-          },
-        }));
+        fallbackTestCases = testCases.map((testCase, index) =>
+          index === 0
+            ? {
+                ...testCase,
+                metadata: {
+                  ...testCase.metadata,
+                  providerTokenUsage: mergeProviderTokenUsage(
+                    testCase.metadata?.providerTokenUsage,
+                    error.tokenUsage,
+                  ),
+                },
+              }
+            : testCase,
+        );
       } else {
         throw error;
       }

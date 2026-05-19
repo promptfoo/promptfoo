@@ -252,6 +252,54 @@ describe('mathPrompt', () => {
       });
     });
 
+    it('should preserve batched remote failure usage exactly once before local fallback', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          error: 'remote batch parse failed',
+          tokenUsage: { total: 11, prompt: 6, completion: 5, numRequests: 1 },
+        },
+      } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt(
+        [{ vars: { prompt: 'first' } }, { vars: { prompt: 'second' } }] as any,
+        'prompt',
+        { mathConcepts: ['topology'] },
+      );
+
+      expect(result).toHaveLength(2);
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 21,
+        prompt: 11,
+        completion: 10,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect(result[1]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
+      });
+    });
+
     it('should validate mathConcepts config', async () => {
       await expect(addMathPrompt([], 'prompt', { mathConcepts: 'invalid' })).rejects.toThrow(
         'MathPrompt strategy: `mathConcepts` must be an array of strings',

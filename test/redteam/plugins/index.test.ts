@@ -362,6 +362,47 @@ describe('Plugins', () => {
       });
     });
 
+    it('should preserve batched remote generation usage exactly once', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [
+            { vars: { testVar: 'first' } },
+            { vars: { testVar: 'second' } },
+          ],
+          tokenUsage: { total: 29, prompt: 18, completion: 11, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 29,
+        prompt: 18,
+        completion: 11,
+        numRequests: 1,
+      });
+      expect(result?.[1]?.metadata).not.toHaveProperty('providerTokenUsage');
+    });
+
     it('should preserve one-pair cross-session remote generation usage on the graded row', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
