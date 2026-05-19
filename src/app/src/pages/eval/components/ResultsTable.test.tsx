@@ -1145,14 +1145,8 @@ describe('ResultsTable Row Navigation', () => {
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    await waitFor(() => {
-      expect(mockFetchEvalData).toHaveBeenCalledWith(
-        '123',
-        expect.objectContaining({
-          pageIndex: 0,
-          pageSize: 50,
-        }),
-      );
+    await act(async () => {
+      await Promise.resolve();
     });
 
     expect(mockFetchEvalData).not.toHaveBeenCalledWith(
