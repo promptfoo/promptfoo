@@ -10,6 +10,14 @@ describe('isMissingPackageImportError', () => {
     expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(true);
   });
 
+  it('recognizes CommonJS-style missing optional package errors', () => {
+    const error = Object.assign(new Error('Missing optional dependency @googleapis/sheets'), {
+      code: 'MODULE_NOT_FOUND',
+    });
+
+    expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(true);
+  });
+
   it('preserves import-time runtime errors from present packages', () => {
     const error = new Error('@googleapis/sheets failed during initialization');
 
