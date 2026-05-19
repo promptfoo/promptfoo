@@ -18,19 +18,21 @@ const mcpMocks = vi.hoisted(() => {
   const initialize = vi.fn();
   const cleanup = vi.fn();
   const getAllTools = vi.fn().mockReturnValue([]);
+  const callTool = vi.fn();
   const instances: any[] = [];
 
   class MockMCPClient {
     initialize = initialize;
     cleanup = cleanup;
     getAllTools = getAllTools;
+    callTool = callTool;
 
     constructor() {
       instances.push(this);
     }
   }
 
-  return { cleanup, getAllTools, initialize, instances, MockMCPClient };
+  return { callTool, cleanup, getAllTools, initialize, instances, MockMCPClient };
 });
 
 const claudeCodeAuthMocks = vi.hoisted(() => ({
@@ -109,6 +111,7 @@ describe('AnthropicMessagesProvider', () => {
     mcpMocks.instances.length = 0;
     mcpMocks.initialize.mockReset();
     mcpMocks.cleanup.mockReset();
+    mcpMocks.callTool.mockReset();
     mcpMocks.getAllTools.mockReset();
     mcpMocks.getAllTools.mockReturnValue([]);
     claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
@@ -1338,6 +1341,194 @@ describe('AnthropicMessagesProvider', () => {
 
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBe('unknown_reason');
+      });
+    });
+  });
+
+  describe('MCP tool execution', () => {
+    const mcpTool = {
+      name: 'search_companies',
+      description: 'Search sample company records.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+      },
+    };
+
+    beforeEach(() => {
+      disableCache();
+      mcpMocks.getAllTools.mockReturnValue([mcpTool]);
+    });
+
+    afterEach(() => {
+      enableCache();
+    });
+
+    it('executes MCP tool_use blocks and continues the Anthropic conversation with tool_result', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({
+        content: 'Found Acme Solar and Gridwise.',
+      });
+
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.output).toBe('Acme Solar and Gridwise match your query.');
+      expect(result.finishReason).toBe('stop');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 17,
+        completion: 9,
+        total: 26,
+      });
+      expect(mcpMocks.callTool).toHaveBeenCalledWith('search_companies', {
+        query: 'clean energy',
+      });
+      expect(createSpy).toHaveBeenCalledTimes(2);
+
+      const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+      expect(secondRequest.messages.slice(-2)).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_search',
+              content: 'Found Acme Solar and Gridwise.',
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_weather',
+            name: 'get_weather',
+            input: { location: 'San Francisco' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is the weather?');
+
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.output).toContain('"name":"get_weather"');
+    });
+
+    it('returns an error when MCP tool_use continuation exceeds max_tool_calls', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 1,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValue({
+        content: 'Still needs another lookup.',
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_first',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_second',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.error).toContain('Anthropic MCP tool-use loop exceeded max_tool_calls=1');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 18,
+        completion: 9,
+        total: 27,
       });
     });
   });

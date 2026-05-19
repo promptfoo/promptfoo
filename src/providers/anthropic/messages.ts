@@ -38,6 +38,8 @@ import type { EnvOverrides } from '../../types/env';
 import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { AnthropicMessageOptions } from './types';
 
+const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
+
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
     return undefined;
@@ -109,6 +111,99 @@ function getMessagesResponseMetadata(response: Anthropic.Messages.Message) {
   };
 }
 
+function getMaxMcpToolCalls(config: AnthropicMessageOptions): number {
+  if (config.max_tool_calls == null) {
+    return DEFAULT_MAX_MCP_TOOL_CALLS;
+  }
+
+  if (!Number.isFinite(config.max_tool_calls) || config.max_tool_calls < 1) {
+    return DEFAULT_MAX_MCP_TOOL_CALLS;
+  }
+
+  return Math.floor(config.max_tool_calls);
+}
+
+function normalizeMcpToolContent(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
+function coerceMcpToolInput(input: unknown): Record<string, unknown> {
+  if (input == null || input === '') {
+    return {};
+  }
+  if (typeof input === 'string') {
+    const parsed = JSON.parse(input);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+  }
+  return typeof input === 'object' && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : {};
+}
+
+function mergeAnthropicUsage(
+  messages: Anthropic.Messages.Message[],
+): Anthropic.Messages.Message['usage'] | undefined {
+  const usageEntries = messages.map((message) => message.usage).filter((usage) => usage != null);
+
+  if (usageEntries.length === 0) {
+    return undefined;
+  }
+
+  return usageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
+    (acc, usage) => ({
+      ...usage,
+      input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),
+      output_tokens: acc.output_tokens + (usage.output_tokens ?? 0),
+      cache_creation_input_tokens:
+        (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
+      cache_read_input_tokens:
+        (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+    }),
+    {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+    },
+  );
+}
+
+function withMergedAnthropicUsage(
+  response: Anthropic.Messages.Message,
+  responses: Anthropic.Messages.Message[],
+): Anthropic.Messages.Message {
+  const usage = mergeAnthropicUsage(responses);
+  return usage ? { ...response, usage } : response;
+}
+
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
@@ -150,6 +245,130 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
+    }
+  }
+
+  private async resolveMcpToolUse({
+    config,
+    headers,
+    initialResponse,
+    params,
+    shouldStream,
+  }: {
+    config: AnthropicMessageOptions;
+    headers: Record<string, string>;
+    initialResponse: Anthropic.Messages.Message;
+    params: Anthropic.Messages.MessageCreateParams;
+    shouldStream: boolean;
+  }): Promise<{ error?: string; response: Anthropic.Messages.Message }> {
+    if (!this.mcpClient) {
+      return { response: initialResponse };
+    }
+
+    const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
+    if (mcpToolNames.size === 0) {
+      return { response: initialResponse };
+    }
+
+    let response = initialResponse;
+    const responses = [initialResponse];
+    let messages = params.messages;
+    const maxToolCalls = getMaxMcpToolCalls(config);
+
+    for (let iteration = 0; iteration < maxToolCalls; iteration++) {
+      const toolUses = response.content.filter(
+        (block): block is Anthropic.Messages.ToolUseBlock =>
+          block.type === 'tool_use' && mcpToolNames.has(block.name),
+      );
+
+      if (toolUses.length === 0) {
+        return { response: withMergedAnthropicUsage(response, responses) };
+      }
+
+      const toolResultBlocks = await Promise.all(
+        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
+      );
+
+      messages = [
+        ...messages,
+        {
+          role: 'assistant',
+          content: response.content as Anthropic.Messages.ContentBlockParam[],
+        },
+        {
+          role: 'user',
+          content: toolResultBlocks,
+        },
+      ];
+
+      const nextParams = {
+        ...params,
+        messages,
+      };
+
+      if (shouldStream) {
+        const stream = await this.anthropic.messages.stream(nextParams, {
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        });
+        response = await stream.finalMessage();
+      } else {
+        response = (await this.anthropic.messages.create(nextParams, {
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        })) as Anthropic.Messages.Message;
+      }
+
+      logger.debug('Anthropic Messages API MCP follow-up response', {
+        response: getMessagesResponseMetadata(response),
+      });
+      responses.push(response);
+    }
+
+    const unresolvedToolUses = response.content.filter(
+      (block) => block.type === 'tool_use' && mcpToolNames.has(block.name),
+    );
+
+    return {
+      response: withMergedAnthropicUsage(response, responses),
+      ...(unresolvedToolUses.length > 0
+        ? {
+            error: `Anthropic MCP tool-use loop exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+          }
+        : {}),
+    };
+  }
+
+  private async callMcpToolForAnthropic(
+    toolUse: Anthropic.Messages.ToolUseBlock,
+  ): Promise<Anthropic.Messages.ToolResultBlockParam> {
+    try {
+      const result = await this.mcpClient!.callTool(
+        toolUse.name,
+        coerceMcpToolInput(toolUse.input),
+      );
+
+      if (result.error) {
+        return {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: `MCP Tool Error (${toolUse.name}): ${result.error}`,
+          is_error: true,
+        };
+      }
+
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: normalizeMcpToolContent(result.content),
+      };
+    } catch (error) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: `MCP Tool Error (${toolUse.name}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        is_error: true,
+      };
     }
   }
 
@@ -543,16 +762,30 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           finalMessage: getMessagesResponseMetadata(finalMessage),
         });
 
+        const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
+          config,
+          headers,
+          initialResponse: finalMessage,
+          params,
+          shouldStream,
+        });
+        if (error) {
+          return {
+            error,
+            tokenUsage: getTokenUsage(resolvedMessage, false),
+          };
+        }
+
         if (isCacheEnabled()) {
           try {
-            await cache.set(cacheKey, JSON.stringify(finalMessage));
+            await cache.set(cacheKey, JSON.stringify(resolvedMessage));
           } catch (err) {
             logger.error(`Failed to cache response: ${String(err)}`);
           }
         }
 
-        const finishReason = normalizeFinishReason(finalMessage.stop_reason);
-        let output = outputFromMessage(finalMessage, config.showThinking ?? true);
+        const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
+        let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
 
         // Handle structured JSON output parsing
         if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -563,23 +796,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }
         }
 
-        const refusalDetails = getRefusalDetails(finalMessage);
+        const refusalDetails = getRefusalDetails(resolvedMessage);
         if (refusalDetails) {
           logger.warn(refusalDetails);
         }
 
         return {
           output,
-          tokenUsage: getTokenUsage(finalMessage, false),
+          tokenUsage: getTokenUsage(resolvedMessage, false),
           ...(finishReason && { finishReason }),
           ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
           cost: calculateAnthropicCost(
             this.modelName,
             config,
-            finalMessage.usage?.input_tokens,
-            finalMessage.usage?.output_tokens,
-            finalMessage.usage?.cache_read_input_tokens ?? undefined,
-            finalMessage.usage?.cache_creation_input_tokens ?? undefined,
+            resolvedMessage.usage?.input_tokens,
+            resolvedMessage.usage?.output_tokens,
+            resolvedMessage.usage?.cache_read_input_tokens ?? undefined,
+            resolvedMessage.usage?.cache_creation_input_tokens ?? undefined,
           ),
         };
       } else {
@@ -591,16 +824,30 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           response: getMessagesResponseMetadata(response),
         });
 
+        const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
+          config,
+          headers,
+          initialResponse: response,
+          params,
+          shouldStream,
+        });
+        if (error) {
+          return {
+            error,
+            tokenUsage: getTokenUsage(resolvedMessage, false),
+          };
+        }
+
         if (isCacheEnabled()) {
           try {
-            await cache.set(cacheKey, JSON.stringify(response));
+            await cache.set(cacheKey, JSON.stringify(resolvedMessage));
           } catch (err) {
             logger.error(`Failed to cache response: ${String(err)}`);
           }
         }
 
-        const finishReason = normalizeFinishReason(response.stop_reason);
-        let output = outputFromMessage(response, config.showThinking ?? true);
+        const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
+        let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
 
         // Handle structured JSON output parsing
         if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -611,23 +858,23 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           }
         }
 
-        const refusalDetails = getRefusalDetails(response);
+        const refusalDetails = getRefusalDetails(resolvedMessage);
         if (refusalDetails) {
           logger.warn(refusalDetails);
         }
 
         return {
           output,
-          tokenUsage: getTokenUsage(response, false),
+          tokenUsage: getTokenUsage(resolvedMessage, false),
           ...(finishReason && { finishReason }),
           ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
           cost: calculateAnthropicCost(
             this.modelName,
             config,
-            response.usage?.input_tokens,
-            response.usage?.output_tokens,
-            response.usage?.cache_read_input_tokens ?? undefined,
-            response.usage?.cache_creation_input_tokens ?? undefined,
+            resolvedMessage.usage?.input_tokens,
+            resolvedMessage.usage?.output_tokens,
+            resolvedMessage.usage?.cache_read_input_tokens ?? undefined,
+            resolvedMessage.usage?.cache_creation_input_tokens ?? undefined,
           ),
         };
       }

@@ -111,6 +111,12 @@ export interface AnthropicMessageOptions {
   beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10', 'structured-outputs-2025-11-13'
   showThinking?: boolean;
   mcp?: MCPConfig;
+  /**
+   * Maximum number of MCP tool-use continuation rounds for Anthropic Messages.
+   * Defaults to 8. This is enforced locally by promptfoo and is not sent to
+   * Anthropic.
+   */
+  max_tool_calls?: number;
   output_format?: OutputFormat; // Structured outputs - JSON schema for response format
 }
 
