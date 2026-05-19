@@ -609,6 +609,50 @@ describe('evalCommand', () => {
     }
   });
 
+  it('rejects invalid redteam eval concurrency limits before evaluating', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: { redteam: { maxConcurrency: 0 } } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toEqual(
+      expect.objectContaining<EvalRunError>({
+        name: 'EvalRunError',
+        exitCode: 1,
+        message: expect.stringContaining('Invalid redteam configuration'),
+      }),
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate redteam context IDs before evaluating', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {
+        redteam: {
+          contexts: [{ id: 'shared', maxConcurrency: 1 }, { id: 'shared', maxConcurrency: 2 }],
+        },
+      } as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toEqual(
+      expect.objectContaining<EvalRunError>({
+        name: 'EvalRunError',
+        exitCode: 1,
+        message: expect.stringContaining('Invalid redteam configuration'),
+      }),
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it('logs per-key error lines for CLI callers when API keys are missing', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;

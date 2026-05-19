@@ -48,6 +48,7 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
@@ -382,6 +383,18 @@ export async function doEval(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveConfigs(cmdObj, defaultConfig));
+    }
+
+    if (config.redteam) {
+      const parsedRedteamConfig = RedteamConfigSchema.safeParse(config.redteam);
+      if (!parsedRedteamConfig.success) {
+        throw new EvalRunError(
+          `Invalid redteam configuration:\n${z.prettifyError(parsedRedteamConfig.error)}`,
+          1,
+        );
+      }
+      config.redteam = parsedRedteamConfig.data;
+      testSuite.redteam = parsedRedteamConfig.data;
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
