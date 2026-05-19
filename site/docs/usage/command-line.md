@@ -143,6 +143,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
 
+Eval tags merge in this order: top-level config `tags`, then `commandLineOptions.tag`, then repeated CLI `--tag` flags. Later sources override earlier values when they reuse the same key.
+
 For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 
 Use `--filter-range` to shard or rerun a stable slice of test cases by index. The first test has index `0`, the `start` index is included, and the `end` index is excluded:

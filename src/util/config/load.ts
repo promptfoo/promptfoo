@@ -622,8 +622,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
           ? config.outputPath
           : [],
     ),
-    commandLineOptions: configs.reduce(
-      (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
+    commandLineOptions: configs.reduce<NonNullable<UnifiedConfig['commandLineOptions']>>(
+      (prev, curr) => {
+        const next = curr.commandLineOptions;
+        const mergedTags =
+          prev.tag || next?.tag ? { ...(prev.tag || {}), ...(next?.tag || {}) } : undefined;
+
+        return {
+          ...prev,
+          ...next,
+          ...(mergedTags ? { tag: mergedTags } : {}),
+        };
+      },
       {},
     ),
     extensions,

@@ -440,6 +440,38 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('merges command-line tag defaults across multiple configs', async () => {
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(
+        JSON.stringify({
+          commandLineOptions: {
+            tag: {
+              build: 'config-a',
+              shared: 'first',
+            },
+          },
+        }),
+      )
+      .mockReturnValueOnce(
+        JSON.stringify({
+          commandLineOptions: {
+            tag: {
+              source: 'config-b',
+              shared: 'second',
+            },
+          },
+        }),
+      );
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.commandLineOptions?.tag).toEqual({
+      build: 'config-a',
+      source: 'config-b',
+      shared: 'second',
+    });
+  });
+
   it('combines configs with provider-specific prompts', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
