@@ -283,6 +283,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const responses = [initialResponse];
     let messages = params.messages;
     const maxToolCalls = getMaxMcpToolCalls(config);
+    let executedMcpToolCalls = 0;
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
       const responseToolUses = response.content.filter(
@@ -302,6 +303,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         return { response: withMergedAnthropicUsage(response, responses) };
       }
 
+      if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
+        return {
+          response: withMergedAnthropicUsage(response, responses),
+          error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+        };
+      }
+
+      executedMcpToolCalls += toolUses.length;
       const toolResultBlocks = await Promise.all(
         toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
       );
@@ -345,7 +354,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       response: withMergedAnthropicUsage(response, responses),
       ...(unresolvedToolUses.length > 0
         ? {
-            error: `Anthropic MCP tool-use loop exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+            error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
           }
         : {}),
     };

@@ -112,9 +112,9 @@ export interface AnthropicMessageOptions {
   showThinking?: boolean;
   mcp?: MCPConfig;
   /**
-   * Maximum number of MCP tool-use continuation rounds for Anthropic Messages.
-   * Defaults to 8. This is enforced locally by promptfoo and is not sent to
-   * Anthropic.
+   * Maximum number of MCP tool executions across Anthropic Messages
+   * continuations. Defaults to 8. This is enforced locally by promptfoo and is
+   * not sent to Anthropic.
    */
   max_tool_calls?: number;
   output_format?: OutputFormat; // Structured outputs - JSON schema for response format
