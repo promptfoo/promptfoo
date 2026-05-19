@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -152,14 +152,17 @@ describe('RunOptionsSection', () => {
       });
     });
 
-    it('handles negative input by setting delay to 0', async () => {
-      const user = userEvent.setup();
-      render(<ControlledRunOptionsSection />);
+    it('handles negative input by setting delay to 0', () => {
+      render(<RunOptionsSection onChange={mockOnChange} />);
 
       const input = screen.getByLabelText('Delay between API calls (ms)');
-      await user.type(input, '-50');
+      fireEvent.change(input, { target: { value: '-50' } });
 
-      expect(input).toHaveValue(0);
+      expect(mockOnChange).toHaveBeenCalledWith({
+        description: undefined,
+        delay: 0,
+        maxConcurrency: undefined,
+      });
     });
   });
 
@@ -335,7 +338,7 @@ describe('RunOptionsSection', () => {
       ).toBeInTheDocument();
     });
 
-    it('disables delay after max concurrency is raised above one', async () => {
+    it('disables delay after max concurrency is raised above one and re-enables it when cleared', async () => {
       const user = userEvent.setup();
       render(<ControlledRunOptionsSection />);
 
@@ -347,6 +350,13 @@ describe('RunOptionsSection', () => {
       expect(delayInput).toBeDisabled();
       expect(
         screen.getByText('To set a delay, max concurrent requests must be 1'),
+      ).toBeInTheDocument();
+
+      await user.clear(maxConcurrencyInput);
+
+      expect(delayInput).not.toBeDisabled();
+      expect(
+        screen.getByText('Add a delay between API calls to avoid rate limits'),
       ).toBeInTheDocument();
     });
   });

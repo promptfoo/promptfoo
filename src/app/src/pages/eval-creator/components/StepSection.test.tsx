@@ -159,14 +159,14 @@ describe('StepSection', () => {
       );
     });
 
-    it('does not render a guidance slot when guidance is omitted', () => {
+    it('does not render guidance content when guidance is omitted', () => {
       render(
         <StepSection {...defaultProps}>
           <div data-testid="step-content">Content</div>
         </StepSection>,
       );
 
-      expect(screen.getByTestId('step-content').parentElement?.nextElementSibling).toBeNull();
+      expect(screen.queryByTestId('guidance-content')).not.toBeInTheDocument();
     });
   });
 
