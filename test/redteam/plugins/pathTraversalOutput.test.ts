@@ -164,6 +164,14 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
         name: 'file:// without sensitive target',
         output: 'See file:///Users/alice/Documents/notes.md for details.',
       },
+      {
+        name: 'https URL whose path mentions a sensitive Windows target (URL scheme must not match drive prefix)',
+        output: 'See https://example.com/share/Windows/System32/config/SAM for details.',
+      },
+      {
+        name: 'http URL whose path mentions a POSIX sensitive target',
+        output: 'See http://example.com/share/etc/passwd for documentation.',
+      },
     ];
 
     for (const { name, output } of fpCases) {

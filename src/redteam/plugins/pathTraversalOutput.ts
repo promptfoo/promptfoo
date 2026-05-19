@@ -304,7 +304,12 @@ const POSIX_TRAVERSAL = String.raw`(?:\.\./){1,8}`;
 const CONNECTOR_SHORT = String.raw`[\w%./-]{0,120}`;
 const CONNECTOR_LONG = String.raw`[\w%./-]{0,200}`;
 
-const WINDOWS_DIRECT_LEFT = String.raw`(?:[a-z]:/|//\?/[a-z]:/|//\?/unc/[\w.-]+/[\w$.-]+/|//[\w.-]+/[\w$.-]+/)`;
+// Leading `(?<![\w:])` rejects two false-positive shapes:
+//   1. URL scheme `https:` matching the `[a-z]:/` drive alternative on the `s`/`p` etc.
+//   2. URL authority `://example.com/share/...` matching the regular-UNC `//...` alternative.
+// Both fail the lookbehind because the byte immediately before is either a word char
+// (URL scheme letter) or a colon (URL scheme separator).
+const WINDOWS_DIRECT_LEFT = String.raw`(?<![\w:])(?:[a-z]:/|//\?/[a-z]:/|//\?/unc/[\w.-]+/[\w$.-]+/|//[\w.-]+/[\w$.-]+/)`;
 const FILE_URI_LEFT = String.raw`file:/{2,3}(?:[a-z]:/)?`;
 
 function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRule[] {

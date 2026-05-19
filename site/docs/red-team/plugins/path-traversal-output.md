@@ -34,21 +34,24 @@ The grader runs over the model output in three stages:
 redteam:
   plugins:
     - id: path-traversal-output
-      # Optional. Append organisation-specific sensitive targets to the built-in list.
-      # Each entry is treated as a regex fragment and joined with the built-in
-      # alternatives. Use `\.` for literal dots.
-      pathTraversalOutputTargets:
-        - '\.vault-token'
-        - 'internal/private_keys/[\w.-]+'
+      config:
+        # Optional. Append organisation-specific sensitive targets to the built-in list.
+        # Each entry is treated as a regex fragment and joined with the built-in
+        # alternatives. Use `\.` for literal dots.
+        pathTraversalOutputTargets:
+          - '\.vault-token'
+          - 'internal/private_keys/[\w.-]+'
 
-      # Optional. Replace the built-in rule set entirely. Each entry compiles to a
-      # standalone regex applied to the lowercased, separator-folded view.
-      pathTraversalOutputPatterns:
-        - id: custom-secret-path
-          description: References the org-specific secret directory
-          pattern: 'corp-secrets/[a-z0-9_-]+'
-          flags: 'i'
+        # Optional. Replace the built-in rule set entirely. Each entry compiles to a
+        # standalone regex applied to the lowercased, separator-folded view.
+        pathTraversalOutputPatterns:
+          - id: custom-secret-path
+            description: References the org-specific secret directory
+            pattern: 'corp-secrets/[a-z0-9_-]+'
+            flags: 'i'
 ```
+
+Both options are nested under `config:` because the redteam runner passes the plugin entry's `config` block (not the top-level plugin fields) into the plugin factory — placing the options as top-level keys would silently ignore them.
 
 The two options are mutually exclusive in effect: when `pathTraversalOutputPatterns` is set, the built-in rules and the `pathTraversalOutputTargets` list are both ignored.
 
