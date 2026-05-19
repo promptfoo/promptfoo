@@ -69,20 +69,6 @@ export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat 
   return options.json ? CodeScanOutputFormat.JSON : parsed.data;
 }
 
-function shouldDiscoverRepositoryConfig(options: ScanOptions): boolean {
-  if (options.githubPr) {
-    return false;
-  }
-
-  const isPrInfluencedGitHubActionsRun =
-    process.env.GITHUB_ACTIONS === 'true' &&
-    (process.env.GITHUB_EVENT_NAME === 'pull_request' ||
-      process.env.GITHUB_EVENT_NAME === 'pull_request_target' ||
-      process.env.GITHUB_EVENT_NAME === 'merge_group');
-
-  return !isPrInfluencedGitHubActionsRun;
-}
-
 /**
  * Execute a complete security scan
  *
@@ -130,13 +116,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
-  // Repo-root config discovery is a local CLI convenience. PR-aware CI scans must
-  // opt into custom policy through an explicit trusted --config path instead of
-  // inheriting a PR-controlled file from the checked-out branch.
-  const repoPathForConfigDiscovery = shouldDiscoverRepositoryConfig(options)
-    ? absoluteRepoPath
-    : undefined;
-  const baseConfig: Config = loadConfigOrDefault(options.config, repoPathForConfigDiscovery);
+  // Scan policy can affect network targets, file reads, and reporting thresholds.
+  // Only trust config files that callers selected explicitly via --config.
+  const baseConfig: Config = loadConfigOrDefault(options.config);
   const config = mergeConfigWithOptions(baseConfig, options);
 
   // Resolve guidance (CLI options take precedence)

@@ -166,7 +166,7 @@ describe('Scanner machine-readable output', () => {
     expect(setLogLevel).toHaveBeenCalledWith('error');
   });
 
-  it('does not auto-discover repository config for GitHub PR scans without --config', async () => {
+  it('uses built-in defaults for GitHub PR scans without --config', async () => {
     mockNoFilesScanner();
 
     const { executeScan } = await import('../../src/codeScan/scanner/index');
@@ -178,18 +178,11 @@ describe('Scanner machine-readable output', () => {
       json: true,
     });
 
-    expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined, undefined);
+    expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined);
   });
 
-  it.each([
-    'pull_request',
-    'pull_request_target',
-    'merge_group',
-  ])('does not auto-discover repository config for GitHub Actions %s scans without --config', async (eventName) => {
+  it('uses built-in defaults for ordinary scans without --config', async () => {
     mockNoFilesScanner();
-    vi.stubEnv('GITHUB_ACTIONS', 'true');
-    vi.stubEnv('GITHUB_EVENT_NAME', eventName);
-
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { loadConfigOrDefault } = await import('../../src/codeScan/config/loader');
 
@@ -198,6 +191,6 @@ describe('Scanner machine-readable output', () => {
       format: CodeScanOutputFormat.SARIF,
     });
 
-    expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined, undefined);
+    expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined);
   });
 });

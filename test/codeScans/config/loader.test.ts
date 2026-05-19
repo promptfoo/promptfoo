@@ -222,44 +222,12 @@ describe('Configuration Loader', () => {
       });
     });
 
-    it('should keep empty explicit config values on built-in defaults even when repo discovery is available', () => {
-      const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
-      fs.writeFileSync(configPath, 'minimumSeverity: critical\ndiffsOnly: true');
-
-      const config = loadConfigOrDefault('', tempDir);
+    it('should keep empty explicit config values on built-in defaults', () => {
+      const config = loadConfigOrDefault('');
 
       expect(config).toEqual({
         minimumSeverity: CodeScanSeverity.MEDIUM,
         diffsOnly: false,
-      });
-    });
-
-    it('should auto-discover the repository code-scan config when no explicit path is provided', () => {
-      const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
-      fs.writeFileSync(configPath, 'minimumSeverity: high\ndiffsOnly: true');
-
-      const config = loadConfigOrDefault(undefined, tempDir);
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.HIGH,
-        diffsOnly: true,
-      });
-    });
-
-    it('should discover the repository-root code-scan config from a nested working directory', () => {
-      fs.mkdirSync(path.join(tempDir, '.git'));
-
-      const nestedRepoPath = path.join(tempDir, 'packages', 'api');
-      fs.mkdirSync(nestedRepoPath, { recursive: true });
-
-      const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
-      fs.writeFileSync(configPath, 'minimumSeverity: critical\ndiffsOnly: true');
-
-      const config = loadConfigOrDefault(undefined, nestedRepoPath);
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.CRITICAL,
-        diffsOnly: true,
       });
     });
 
@@ -270,7 +238,7 @@ describe('Configuration Loader', () => {
       const explicitConfigPath = path.join(tempDir, 'explicit.yaml');
       fs.writeFileSync(explicitConfigPath, 'minimumSeverity: critical\ndiffsOnly: true');
 
-      const config = loadConfigOrDefault(explicitConfigPath, tempDir);
+      const config = loadConfigOrDefault(explicitConfigPath);
 
       expect(config).toEqual({
         minimumSeverity: CodeScanSeverity.CRITICAL,

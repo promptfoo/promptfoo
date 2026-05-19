@@ -11,25 +11,6 @@ import yaml from 'js-yaml';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
-const DEFAULT_CONFIG_FILENAME = '.promptfoo-code-scan.yaml';
-
-function findRepositoryRoot(repoPath: string): string | undefined {
-  let currentPath = path.resolve(repoPath);
-
-  while (true) {
-    if (fs.existsSync(path.join(currentPath, '.git'))) {
-      return currentPath;
-    }
-
-    const parentPath = path.dirname(currentPath);
-    if (parentPath === currentPath) {
-      return undefined;
-    }
-
-    currentPath = parentPath;
-  }
-}
-
 /**
  * Load configuration from a YAML file
  * @param configPath Path to the configuration file
@@ -93,20 +74,11 @@ export function loadConfig(configPath: string): Config {
 
 /**
  * Load configuration with defaults
- * If no config path is provided, prefer the repository-root convention when available
- * before falling back to the built-in defaults.
+ * If no config path is provided, fall back to the built-in defaults.
  * Returns a clone to prevent mutation of the singleton default
  */
-export function loadConfigOrDefault(configPath?: string, repoPath?: string): Config {
+export function loadConfigOrDefault(configPath?: string): Config {
   if (configPath === undefined) {
-    if (repoPath) {
-      const repositoryRoot = findRepositoryRoot(repoPath) ?? repoPath;
-      const defaultConfigPath = path.join(repositoryRoot, DEFAULT_CONFIG_FILENAME);
-      if (fs.existsSync(defaultConfigPath)) {
-        return loadConfig(defaultConfigPath);
-      }
-    }
-
     return { ...DEFAULT_CONFIG }; // Return clone to prevent singleton mutation
   }
 
