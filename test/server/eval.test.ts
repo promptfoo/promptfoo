@@ -24,7 +24,7 @@ vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
 
 vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
-    isEnabled: vi.fn().mockReturnValue(false),
+    isEnabled: vi.fn(),
   },
 }));
 
@@ -47,6 +47,7 @@ describe('eval routes', () => {
   });
 
   beforeEach(() => {
+    vi.resetAllMocks();
     mockedGetUserEmail.mockReturnValue(null);
     mockedCloudConfig.isEnabled.mockReturnValue(false);
   });
