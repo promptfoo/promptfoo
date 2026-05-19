@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
-import { loadTools } from '../../../src/providers/openai/agents-loader';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import {
@@ -15,6 +14,7 @@ import { createMockProvider, createProviderResponse } from '../../factories/prov
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
 
 type TestProvider = ReturnType<typeof createMockProvider>;
+const mockLoadTools = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
@@ -23,12 +23,9 @@ vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/providers/openai/agents-loader', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    loadTools: vi.fn(),
-  };
-});
+vi.mock('../../../src/providers/openai/agents-loader', () => ({
+  loadTools: mockLoadTools,
+}));
 
 vi.mock('../../../src/util/file', async (importOriginal) => {
   return {
@@ -1822,7 +1819,7 @@ describe('RedteamGraderBase', () => {
           tools: 'file://./tools/support-tools.ts',
         },
       });
-      vi.mocked(loadTools).mockResolvedValue([{ name: 'agents-tool' } as any]);
+      mockLoadTools.mockResolvedValue([{ name: 'agents-tool' } as any]);
       const mockResult: GradingResult = {
         pass: true,
         score: 1,
@@ -1833,7 +1830,7 @@ describe('RedteamGraderBase', () => {
       const toolGrader = new ToolGrader();
       await toolGrader.getResult('test prompt', 'test output', mockTest, agentsProvider);
 
-      expect(loadTools).toHaveBeenCalledWith('file://./tools/support-tools.ts');
+      expect(mockLoadTools).toHaveBeenCalledWith('file://./tools/support-tools.ts');
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('agents-tool'),
         expect.any(String),

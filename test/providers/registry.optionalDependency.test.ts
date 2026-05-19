@@ -2,12 +2,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 describe('Provider registry optional dependencies', () => {
   afterEach(() => {
+    vi.doUnmock('../../src/providers/openai/agents');
     vi.doUnmock('@openai/agents');
     vi.resetModules();
   });
 
-  it('explains how to install the OpenAI Agents SDK when that provider is requested', async () => {
+  it('keeps the public entrypoint loadable when the Agents SDK is unavailable', async () => {
     vi.doMock('@openai/agents', () => {
+      throw new Error('Cannot find package @openai/agents');
+    });
+
+    await expect(import('../../src/index')).resolves.toBeDefined();
+  });
+
+  it('explains how to install the OpenAI Agents SDK when that provider is requested', async () => {
+    vi.doMock('../../src/providers/openai/agents', () => {
       throw new Error('Cannot find package @openai/agents');
     });
 
