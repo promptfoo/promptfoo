@@ -187,6 +187,37 @@ describe('evalCommand', () => {
     expect(helpText).toContain('Set a tag in key=value format. Can be specified multiple times.');
   });
 
+  it('should parse repeated --tag values, preserve embedded equals, and keep empty values', async () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+
+    await cmd.parseAsync([
+      'node',
+      'test',
+      '--tag',
+      'build=first',
+      '--tag',
+      'build=second',
+      '--tag',
+      'token=a=b',
+      '--tag',
+      'empty=',
+    ]);
+
+    expect(cmd.opts().tag).toEqual({
+      build: 'second',
+      token: 'a=b',
+      empty: '',
+    });
+  });
+
+  it.each(['invalid', '=value'])('should reject malformed --tag value %s', async (tagValue) => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+
+    await expect(cmd.parseAsync(['node', 'test', '--tag', tagValue])).rejects.toThrow(
+      '--tag must be specified in key=value format.',
+    );
+  });
+
   it('should apply resolved author when --no-write is used', async () => {
     const cmdObj = { table: false, write: false };
     const config = {} as UnifiedConfig;
