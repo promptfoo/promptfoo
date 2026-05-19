@@ -1437,6 +1437,12 @@ describe('resolveConfigs', () => {
           build: 'config-build',
           team: 'evals',
         },
+        commandLineOptions: {
+          tag: {
+            build: 'command-build',
+            source: 'config-default',
+          },
+        },
       }),
     );
     vi.mocked(globSync).mockReturnValueOnce(['config.json']);
@@ -1446,11 +1452,13 @@ describe('resolveConfigs', () => {
     expect(config.tags).toEqual({
       build: 'cli-build',
       team: 'evals',
+      source: 'config-default',
       runId: 'ci-123',
     });
     expect(testSuite.tags).toEqual({
       build: 'cli-build',
       team: 'evals',
+      source: 'config-default',
       runId: 'ci-123',
     });
   });

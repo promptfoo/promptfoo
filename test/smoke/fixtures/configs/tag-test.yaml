@@ -5,6 +5,11 @@ tags:
   build: config-build
   team: evals
 
+commandLineOptions:
+  tag:
+    build: config-default-build
+    source: smoke-default
+
 providers:
   - echo
 

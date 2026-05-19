@@ -168,6 +168,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
+- `--tag` cannot be combined with `--resume`; resumed evals keep their original tags.
 
 ### Retry Errors
 
@@ -178,6 +179,7 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 - The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
 - **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
+- `--tag` cannot be combined with `--retry-errors`; retried evals keep their original tags.
 - Uses the original eval's configuration and runtime options to ensure consistency.
 
 ## `promptfoo init [directory]`

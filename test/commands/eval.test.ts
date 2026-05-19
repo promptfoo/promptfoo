@@ -509,6 +509,18 @@ describe('evalCommand', () => {
       message:
         'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
     },
+    {
+      name: 'resume + --tag',
+      cmdObj: { resume: 'latest', tag: { build: 'resume' } },
+      message:
+        'Cannot use --tag with --resume. Resume functionality preserves the original evaluation tags.',
+    },
+    {
+      name: 'retry-errors + --tag',
+      cmdObj: { retryErrors: true, tag: { build: 'retry' } },
+      message:
+        'Cannot use --tag with --retry-errors. Retry functionality preserves the original evaluation tags.',
+    },
   ])('throws EvalRunError for library callers: $name', async ({ cmdObj, message }) => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
@@ -535,6 +547,16 @@ describe('evalCommand', () => {
       name: 'retry-errors + --no-write',
       cmdObj: { retryErrors: true, write: false } as Parameters<typeof doEval>[0],
       messageFragment: 'Cannot use --retry-errors with --no-write',
+    },
+    {
+      name: 'resume + --tag',
+      cmdObj: { resume: 'latest', tag: { build: 'resume' } } as Parameters<typeof doEval>[0],
+      messageFragment: 'Cannot use --tag with --resume',
+    },
+    {
+      name: 'retry-errors + --tag',
+      cmdObj: { retryErrors: true, tag: { build: 'retry' } } as Parameters<typeof doEval>[0],
+      messageFragment: 'Cannot use --tag with --retry-errors',
     },
   ])('logs to CLI and sets exitCode for: $name', async ({ cmdObj, messageFragment }) => {
     const previousExitCode = process.exitCode;

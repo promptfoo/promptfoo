@@ -930,6 +930,7 @@ describe('Output Flag Tests', () => {
     expect(parsed.config.tags).toEqual({
       build: 'cli-build',
       team: 'evals',
+      source: 'smoke-default',
       'run-id': 'ci-123',
     });
   });

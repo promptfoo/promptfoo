@@ -268,6 +268,18 @@ export async function doEval(
         isCliInvocation,
       );
     }
+    if (resumeRaw && cmdObj.tag) {
+      return failEvalRun(
+        'Cannot use --tag with --resume. Resume functionality preserves the original evaluation tags.',
+        isCliInvocation,
+      );
+    }
+    if (retryErrors && cmdObj.tag) {
+      return failEvalRun(
+        'Cannot use --tag with --retry-errors. Retry functionality preserves the original evaluation tags.',
+        isCliInvocation,
+      );
+    }
 
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
