@@ -3,9 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>{{ config.description | default('Eval Output') }}</title>
+    <title>{{ config.description | default('Eval Output') | escape }}</title>
     <style>
+      :root {
+        color-scheme: light;
+        --page-bg: #f4f6fb;
+        --surface: #ffffff;
+        --surface-muted: #f7f8fc;
+        --border: #d8deea;
+        --text: #172033;
+        --text-muted: #55627a;
+        --accent: #2157d6;
+        --pass: #147d42;
+        --pass-bg: #e9f8ef;
+        --fail: #b42318;
+        --fail-bg: #fff0ef;
+        --error: #9a3412;
+        --error-bg: #fff4e8;
+        --shadow: 0 18px 45px rgba(23, 32, 51, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--page-bg);
+        color: var(--text);
         font-family:
           -apple-system,
           BlinkMacSystemFont,
@@ -15,46 +41,1000 @@
           Arial,
           sans-serif;
       }
+
+      .page {
+        width: min(1600px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 48px;
+      }
+
+      .hero,
+      .report-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        display: grid;
+        gap: 24px;
+        padding: 28px;
+      }
+
+      .brand-lockup {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        width: fit-content;
+        margin-bottom: 12px;
+      }
+
+      .brand-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        color: #ffffff;
+        background: var(--accent);
+        font-size: 16px;
+        font-weight: 800;
+        line-height: 1;
+      }
+
+      .brand-copy {
+        display: grid;
+        gap: 1px;
+      }
+
+      .brand-name {
+        color: var(--text);
+        font-size: 14px;
+        font-weight: 800;
+        line-height: 1;
+      }
+
+      .brand-context {
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 750;
+        line-height: 1.2;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 3vw, 40px);
+        line-height: 1.1;
+      }
+
+      .meta-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 16px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .meta-list li {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text-muted);
+        background: var(--surface-muted);
+        font-size: 13px;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 14px;
+      }
+
+      .metric {
+        min-height: 112px;
+        padding: 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+
+      .metric-label {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .metric-value {
+        margin: 12px 0 0;
+        font-size: 30px;
+        font-weight: 750;
+        line-height: 1;
+      }
+
+      .metric.pass .metric-value {
+        color: var(--pass);
+      }
+
+      .metric.fail .metric-value {
+        color: var(--fail);
+      }
+
+      .metric.error .metric-value {
+        color: var(--error);
+      }
+
+      .report-panel {
+        margin-top: 20px;
+        overflow: hidden;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .toolbar-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .control {
+        display: grid;
+        gap: 6px;
+      }
+
+      .control label {
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .control input,
+      .control select {
+        min-height: 42px;
+        min-width: 220px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--text);
+        font: inherit;
+        padding: 0 12px;
+      }
+
+      .control input:focus,
+      .control select:focus {
+        outline: 2px solid rgba(33, 87, 214, 0.2);
+        border-color: var(--accent);
+      }
+
+      .toolbar-summary {
+        display: flex;
+        align-items: end;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      .table-shell {
+        max-height: min(72vh, 980px);
+        overflow: auto;
+        background: var(--surface);
+      }
+
       table,
       th,
       td {
-        border: 1px solid black;
         border-collapse: collapse;
+        border-spacing: 0;
         text-align: left;
-        word-break: break-all;
-      }
-      th,
-      td {
-        padding: 5px;
-        min-width: 200px;
-        white-space: pre-wrap;
-        vertical-align: top;
       }
 
-      tr > td[data-content^='[PASS]'] {
-        color: green;
+      table {
+        width: 100%;
+        min-width: 920px;
       }
-      tr > td[data-content^='[FAIL]'] {
-        color: #ad0000;
+
+      thead {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+
+      th {
+        background: #eef2fb;
+        color: #24324b;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+        font-weight: 750;
+      }
+
+      th,
+      td {
+        min-width: 220px;
+        padding: 12px 16px;
+        white-space: pre-wrap;
+        vertical-align: top;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        word-break: break-word;
+      }
+
+      th:last-child,
+      td:last-child {
+        border-right: 0;
+      }
+
+      tbody tr:nth-child(even) {
+        background: #fbfcff;
+      }
+
+      tbody tr:hover {
+        background: #f5f8ff;
+      }
+
+      .cell-content {
+        max-width: 560px;
+        color: var(--text);
+        line-height: 1.55;
+      }
+
+      td[data-status='pass'] {
+        background: linear-gradient(90deg, var(--pass-bg), rgba(255, 255, 255, 0));
+      }
+
+      td[data-status='fail'] {
+        background: linear-gradient(90deg, var(--fail-bg), rgba(255, 255, 255, 0));
+      }
+
+      td[data-status='error'] {
+        background: linear-gradient(90deg, var(--error-bg), rgba(255, 255, 255, 0));
+      }
+
+      .output-cell {
+        display: grid;
+        gap: 10px;
+      }
+
+      .output-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .status-pill,
+      .score-pill,
+      .named-score-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .status-pill.pass {
+        color: var(--pass);
+        background: #daf2e4;
+      }
+
+      .status-pill.fail {
+        color: var(--fail);
+        background: #ffdeda;
+      }
+
+      .status-pill.error {
+        color: var(--error);
+        background: #ffe4c7;
+      }
+
+      .score-pill,
+      .named-score-pill {
+        color: var(--text-muted);
+        background: rgba(23, 32, 51, 0.06);
+      }
+
+      .output-section {
+        display: grid;
+        gap: 4px;
+      }
+
+      .output-section-label {
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .output-text,
+      .output-reason,
+      .variable-text {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .output-text,
+      .variable-text {
+        color: var(--text);
+        line-height: 1.55;
+      }
+
+      .output-reason {
+        margin: 0;
+        padding-left: 12px;
+        border-left: 3px solid rgba(23, 32, 51, 0.14);
+        color: var(--text-muted);
+        line-height: 1.55;
+      }
+
+      .detail-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        background: var(--surface);
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .detail-button:hover,
+      .detail-button:focus-visible {
+        border-color: rgba(33, 87, 214, 0.45);
+        background: #f5f8ff;
+        outline: none;
+      }
+
+      body.detail-open {
+        overflow: hidden;
+      }
+
+      .detail-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: rgba(23, 32, 51, 0.38);
+      }
+
+      .detail-drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 21;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        width: min(620px, calc(100vw - 24px));
+        border-left: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: -20px 0 48px rgba(23, 32, 51, 0.22);
+      }
+
+      .detail-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 24px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-heading {
+        display: grid;
+        gap: 6px;
+      }
+
+      .detail-eyebrow {
+        margin: 0;
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .detail-title {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .detail-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        background: var(--surface);
+        cursor: pointer;
+        font: inherit;
+        font-size: 24px;
+        font-weight: 500;
+        line-height: 1;
+      }
+
+      .detail-close:hover,
+      .detail-close:focus-visible {
+        border-color: rgba(33, 87, 214, 0.45);
+        background: #f5f8ff;
+        outline: none;
+      }
+
+      .detail-body {
+        display: grid;
+        align-content: start;
+        overflow: auto;
+        padding: 24px;
+      }
+
+      .detail-content {
+        display: grid;
+        gap: 24px;
+      }
+
+      .detail-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .detail-metrics {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .detail-metric {
+        display: grid;
+        align-content: center;
+        gap: 8px;
+        min-height: 96px;
+        padding: 18px 20px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+
+      .detail-metric-label,
+      .detail-section-title,
+      .detail-variable-name {
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 750;
+        text-transform: uppercase;
+      }
+
+      .detail-metric-value {
+        color: var(--text);
+        font-size: 16px;
+        font-weight: 750;
+      }
+
+      .detail-section {
+        display: grid;
+        gap: 10px;
+      }
+
+      .detail-copy {
+        margin: 0;
+        padding: 18px 20px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        background: var(--surface-muted);
+        line-height: 1.65;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .detail-reason {
+        border-left: 4px solid rgba(23, 32, 51, 0.16);
+      }
+
+      .detail-variables {
+        display: grid;
+        gap: 0;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface-muted);
+      }
+
+      .detail-variable {
+        display: grid;
+        gap: 6px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .detail-variable:last-child {
+        border-bottom: 0;
+      }
+
+      .detail-variable-value {
+        margin: 0;
+        color: var(--text);
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .empty-state {
+        display: none;
+        margin: 0;
+        padding: 28px 20px;
+        color: var(--text-muted);
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .empty-state.visible {
+        display: block;
+      }
+
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          width: min(100%, calc(100vw - 20px));
+          padding-top: 10px;
+        }
+
+        .hero {
+          padding: 20px;
+        }
+
+        .toolbar {
+          padding: 16px;
+        }
+
+        .toolbar-controls,
+        .control input,
+        .control select {
+          width: 100%;
+        }
+
+        .control {
+          flex: 1 1 100%;
+        }
+
+        .toolbar-summary {
+          width: 100%;
+        }
+
+        .detail-metrics {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </head>
   <body>
-    <table>
-      <thead>
-        {% for header in table[0] %}
-        <th>{{ header | escape }}</th>
-        {% endfor %}
-      </thead>
-      <tbody>
-        {% for row in table.slice(1) %}
-        <tr>
-          {% for cell in row %}
-          <td data-content="{{ cell | escape }}">{{ cell | escape }}</td>
+    <main class="page">
+      <section class="hero" aria-labelledby="report-title">
+        <div>
+          <div class="brand-lockup" aria-label="Promptfoo evaluation report">
+            <span class="brand-mark" aria-hidden="true">P</span>
+            <span class="brand-copy">
+              <span class="brand-name">Promptfoo</span>
+              <span class="brand-context">Evaluation Report</span>
+            </span>
+          </div>
+          <h1 id="report-title">
+            {{ config.description | default('Evaluation Results') | escape }}
+          </h1>
+          <ul class="meta-list" aria-label="Report metadata">
+            <li>Exported {{ metadata.exportedAt | default('unknown') | escape }}</li>
+            {% if metadata.evaluationCreatedAt %}
+            <li>Evaluated {{ metadata.evaluationCreatedAt | escape }}</li>
+            {% endif %} {% if metadata.author %}
+            <li>Author {{ metadata.author | escape }}</li>
+            {% endif %}
+          </ul>
+        </div>
+
+        <div class="metric-grid" aria-label="Evaluation summary">
+          <article class="metric">
+            <p class="metric-label">Total Results</p>
+            <p class="metric-value">{{ report.totalResults }}</p>
+          </article>
+          <article class="metric pass">
+            <p class="metric-label">Pass Rate</p>
+            <p class="metric-value">{{ report.passRateDisplay | escape }}</p>
+          </article>
+          <article class="metric pass">
+            <p class="metric-label">Passed</p>
+            <p class="metric-value">{{ report.successes }}</p>
+          </article>
+          <article class="metric fail">
+            <p class="metric-label">Failed</p>
+            <p class="metric-value">{{ report.failures }}</p>
+          </article>
+          <article class="metric error">
+            <p class="metric-label">Errors</p>
+            <p class="metric-value">{{ report.errors }}</p>
+          </article>
+          <article class="metric">
+            <p class="metric-label">Prompts</p>
+            <p class="metric-value">{{ report.promptCount }}</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="report-panel" aria-labelledby="results-heading">
+        <h2 id="results-heading" class="sr-only">Evaluation results</h2>
+        <div class="toolbar">
+          <div class="toolbar-controls">
+            <div class="control">
+              <label for="report-search">Search</label>
+              <input
+                id="report-search"
+                data-report-search
+                type="search"
+                placeholder="Search rows, outputs, or variables"
+                autocomplete="off"
+              />
+            </div>
+            <div class="control">
+              <label for="status-filter">Status</label>
+              <select id="status-filter" data-status-filter>
+                <option value="all">All results</option>
+                <option value="pass">Fully passing rows</option>
+                <option value="fail">Rows with failures</option>
+                <option value="error">Rows with errors</option>
+              </select>
+            </div>
+          </div>
+          <div class="toolbar-summary" aria-live="polite">
+            <span data-visible-count>{{ report.totalRows }}</span>&nbsp;of {{ report.totalRows }}
+            rows shown
+          </div>
+        </div>
+
+        <div class="table-shell">
+          <table data-results-table>
+            <caption class="sr-only">
+              Promptfoo evaluation results table
+            </caption>
+            <thead>
+              <tr>
+                {% for header in table[0] %}
+                <th scope="col">{{ header | escape }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in table.slice(1) %}
+              <tr data-result-row>
+                {% for cell in row %} {% if cell.kind == 'output' %}
+                <td
+                  data-output-cell="true"
+                  data-status="{{ cell.status | escape }}"
+                  data-search="{{ cell.statusLabel | escape }} {{ cell.score | escape }} {{ cell.text | escape }} {{ cell.reason | escape }}"
+                >
+                  <div class="cell-content output-cell">
+                    <div class="output-meta">
+                      <span class="status-pill {{ cell.status | escape }}"
+                        >{{ cell.statusLabel | escape }}</span
+                      >
+                      <span class="score-pill">Score {{ cell.score | escape }}</span>
+                      {% for namedScore in cell.namedScores %}
+                      <span class="named-score-pill"
+                        >{{ namedScore.name | escape }} {{ namedScore.value | escape }}</span
+                      >
+                      {% endfor %}
+                    </div>
+                    <div class="output-section">
+                      <span class="output-section-label">Output</span>
+                      <div class="output-text">{{ cell.text | escape }}</div>
+                    </div>
+                    {% if cell.reason %}
+                    <div class="output-section">
+                      <span class="output-section-label">Reason</span>
+                      <p class="output-reason">{{ cell.reason | escape }}</p>
+                    </div>
+                    {% endif %}
+                    <div>
+                      <button
+                        type="button"
+                        class="detail-button"
+                        data-open-detail
+                        data-detail-target="{{ cell.detailId | escape }}"
+                      >
+                        View detail
+                      </button>
+                    </div>
+                  </div>
+                </td>
+                {% else %}
+                <td data-search="{{ cell.text | escape }}">
+                  <div class="cell-content variable-text">{{ cell.text | escape }}</div>
+                </td>
+                {% endif %} {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="empty-state" data-empty-state>
+          No rows match the current search and status filters.
+        </p>
+      </section>
+    </main>
+
+    <div class="detail-backdrop" data-detail-backdrop hidden></div>
+    <aside
+      class="detail-drawer"
+      data-detail-drawer
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="detail-drawer-title"
+      hidden
+    >
+      <header class="detail-header">
+        <div class="detail-heading">
+          <p class="detail-eyebrow">Promptfoo Result</p>
+          <h2 class="detail-title" id="detail-drawer-title" data-detail-title>Result detail</h2>
+        </div>
+        <button
+          type="button"
+          class="detail-close"
+          data-detail-close
+          aria-label="Close result detail"
+        >
+          &times;
+        </button>
+      </header>
+      <div class="detail-body" data-detail-body></div>
+    </aside>
+
+    {% for row in table.slice(1) %} {% for cell in row %} {% if cell.kind == 'output' %}
+    <template
+      id="{{ cell.detailId | escape }}"
+      data-detail-heading="{{ cell.detailTitle | escape }}"
+    >
+      <article class="detail-content" data-detail-template>
+        <div class="detail-summary">
+          <span class="status-pill {{ cell.status | escape }}"
+            >{{ cell.statusLabel | escape }}</span
+          >
+          <span class="score-pill">Score {{ cell.score | escape }}</span>
+          {% for namedScore in cell.namedScores %}
+          <span class="named-score-pill"
+            >{{ namedScore.name | escape }} {{ namedScore.value | escape }}</span
+          >
           {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </div>
+
+        <div class="detail-metrics">
+          {% if cell.provider %}
+          <div class="detail-metric">
+            <span class="detail-metric-label">Provider</span>
+            <span class="detail-metric-value">{{ cell.provider | escape }}</span>
+          </div>
+          {% endif %} {% if cell.latencyDisplay %}
+          <div class="detail-metric">
+            <span class="detail-metric-label">Latency</span>
+            <span class="detail-metric-value">{{ cell.latencyDisplay | escape }}</span>
+          </div>
+          {% endif %} {% if cell.costDisplay %}
+          <div class="detail-metric">
+            <span class="detail-metric-label">Cost</span>
+            <span class="detail-metric-value">{{ cell.costDisplay | escape }}</span>
+          </div>
+          {% endif %} {% if cell.totalTokensDisplay %}
+          <div class="detail-metric">
+            <span class="detail-metric-label">Tokens</span>
+            <span class="detail-metric-value">{{ cell.totalTokensDisplay | escape }}</span>
+          </div>
+          {% endif %}
+        </div>
+
+        {% if cell.description %}
+        <section class="detail-section">
+          <span class="detail-section-title">Test</span>
+          <p class="detail-copy">{{ cell.description | escape }}</p>
+        </section>
+        {% endif %} {% if cell.prompt %}
+        <section class="detail-section">
+          <span class="detail-section-title">Prompt</span>
+          <p class="detail-copy">{{ cell.prompt | escape }}</p>
+        </section>
+        {% endif %}
+
+        <section class="detail-section">
+          <span class="detail-section-title">Output</span>
+          <p class="detail-copy">{{ cell.text | escape }}</p>
+        </section>
+
+        {% if cell.reason %}
+        <section class="detail-section">
+          <span class="detail-section-title">Reason</span>
+          <p class="detail-copy detail-reason">{{ cell.reason | escape }}</p>
+        </section>
+        {% endif %} {% if cell.error %}
+        <section class="detail-section">
+          <span class="detail-section-title">Error</span>
+          <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>
+        </section>
+        {% endif %} {% if cell.variables.length %}
+        <section class="detail-section">
+          <span class="detail-section-title">Variables</span>
+          <div class="detail-variables">
+            {% for variable in cell.variables %}
+            <div class="detail-variable">
+              <span class="detail-variable-name">{{ variable.name | escape }}</span>
+              <p class="detail-variable-value">{{ variable.value | escape }}</p>
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+        {% endif %} {% if cell.promptTokensDisplay or cell.completionTokensDisplay %}
+        <section class="detail-section">
+          <span class="detail-section-title">Token Breakdown</span>
+          <div class="detail-metrics">
+            {% if cell.promptTokensDisplay %}
+            <div class="detail-metric">
+              <span class="detail-metric-label">Prompt</span>
+              <span class="detail-metric-value">{{ cell.promptTokensDisplay | escape }}</span>
+            </div>
+            {% endif %} {% if cell.completionTokensDisplay %}
+            <div class="detail-metric">
+              <span class="detail-metric-label">Completion</span>
+              <span class="detail-metric-value">{{ cell.completionTokensDisplay | escape }}</span>
+            </div>
+            {% endif %}
+          </div>
+        </section>
+        {% endif %}
+      </article>
+    </template>
+    {% endif %} {% endfor %} {% endfor %}
+
+    <script>
+      (() => {
+        const searchInput = document.querySelector('[data-report-search]');
+        const statusFilter = document.querySelector('[data-status-filter]');
+        const visibleCount = document.querySelector('[data-visible-count]');
+        const emptyState = document.querySelector('[data-empty-state]');
+        const rows = Array.from(document.querySelectorAll('[data-result-row]'));
+
+        const getRowStatus = (row) => {
+          const statuses = Array.from(row.querySelectorAll('td[data-output-cell="true"]')).map(
+            (cell) => cell.getAttribute('data-status') || '',
+          );
+
+          if (statuses.includes('error')) {
+            return 'error';
+          }
+          if (statuses.includes('fail')) {
+            return 'fail';
+          }
+          if (statuses.length > 0 && statuses.every((status) => status === 'pass')) {
+            return 'pass';
+          }
+          return 'all';
+        };
+
+        const applyFilters = () => {
+          const query = (searchInput?.value || '').trim().toLowerCase();
+          const status = statusFilter?.value || 'all';
+          let shown = 0;
+
+          rows.forEach((row) => {
+            const text = Array.from(row.querySelectorAll('[data-search]'))
+              .map((cell) => cell.getAttribute('data-search') || '')
+              .join('\n')
+              .toLowerCase();
+            const matchesQuery = query.length === 0 || text.includes(query);
+            const rowStatus = getRowStatus(row);
+            const matchesStatus = status === 'all' || rowStatus === status;
+            const visible = matchesQuery && matchesStatus;
+
+            row.hidden = !visible;
+            if (visible) {
+              shown += 1;
+            }
+          });
+
+          if (visibleCount) {
+            visibleCount.textContent = String(shown);
+          }
+          emptyState?.classList.toggle('visible', shown === 0);
+        };
+
+        searchInput?.addEventListener('input', applyFilters);
+        statusFilter?.addEventListener('change', applyFilters);
+        applyFilters();
+
+        const detailDrawer = document.querySelector('[data-detail-drawer]');
+        const detailBackdrop = document.querySelector('[data-detail-backdrop]');
+        const detailBody = document.querySelector('[data-detail-body]');
+        const detailTitle = document.querySelector('[data-detail-title]');
+        const detailClose = document.querySelector('[data-detail-close]');
+        let lastDetailTrigger = null;
+
+        const closeDetail = () => {
+          if (!detailDrawer || !detailBackdrop || !detailBody) {
+            return;
+          }
+
+          detailDrawer.hidden = true;
+          detailBackdrop.hidden = true;
+          detailBody.textContent = '';
+          document.body.classList.remove('detail-open');
+          lastDetailTrigger?.focus();
+          lastDetailTrigger = null;
+        };
+
+        const openDetail = (trigger) => {
+          if (!detailDrawer || !detailBackdrop || !detailBody || !detailTitle) {
+            return;
+          }
+
+          const templateId = trigger.getAttribute('data-detail-target');
+          const template = templateId ? document.getElementById(templateId) : null;
+          if (!template || template.tagName !== 'TEMPLATE') {
+            return;
+          }
+
+          detailTitle.textContent = template.getAttribute('data-detail-heading') || 'Result detail';
+          detailBody.innerHTML = template.innerHTML.trim();
+          detailDrawer.hidden = false;
+          detailBackdrop.hidden = false;
+          document.body.classList.add('detail-open');
+          lastDetailTrigger = trigger;
+          detailClose?.focus();
+        };
+
+        document.querySelectorAll('[data-open-detail]').forEach((button) => {
+          button.addEventListener('click', () => openDetail(button));
+        });
+        detailClose?.addEventListener('click', closeDetail);
+        detailBackdrop?.addEventListener('click', closeDetail);
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && detailDrawer && !detailDrawer.hidden) {
+            closeDetail();
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
