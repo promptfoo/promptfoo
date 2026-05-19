@@ -184,6 +184,7 @@ describe('Scanner machine-readable output', () => {
   it.each([
     'pull_request',
     'pull_request_target',
+    'merge_group',
   ])('does not auto-discover repository config for GitHub Actions %s scans without --config', async (eventName) => {
     mockNoFilesScanner();
     vi.stubEnv('GITHUB_ACTIONS', 'true');

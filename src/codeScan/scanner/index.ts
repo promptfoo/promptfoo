@@ -74,12 +74,13 @@ function shouldDiscoverRepositoryConfig(options: ScanOptions): boolean {
     return false;
   }
 
-  const isGitHubPullRequestRun =
+  const isPrInfluencedGitHubActionsRun =
     process.env.GITHUB_ACTIONS === 'true' &&
     (process.env.GITHUB_EVENT_NAME === 'pull_request' ||
-      process.env.GITHUB_EVENT_NAME === 'pull_request_target');
+      process.env.GITHUB_EVENT_NAME === 'pull_request_target' ||
+      process.env.GITHUB_EVENT_NAME === 'merge_group');
 
-  return !isGitHubPullRequestRun;
+  return !isPrInfluencedGitHubActionsRun;
 }
 
 /**

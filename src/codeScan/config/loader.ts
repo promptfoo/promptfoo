@@ -98,7 +98,7 @@ export function loadConfig(configPath: string): Config {
  * Returns a clone to prevent mutation of the singleton default
  */
 export function loadConfigOrDefault(configPath?: string, repoPath?: string): Config {
-  if (!configPath) {
+  if (configPath === undefined) {
     if (repoPath) {
       const repositoryRoot = findRepositoryRoot(repoPath) ?? repoPath;
       const defaultConfigPath = path.join(repositoryRoot, DEFAULT_CONFIG_FILENAME);
@@ -108,6 +108,10 @@ export function loadConfigOrDefault(configPath?: string, repoPath?: string): Con
     }
 
     return { ...DEFAULT_CONFIG }; // Return clone to prevent singleton mutation
+  }
+
+  if (!configPath) {
+    return { ...DEFAULT_CONFIG };
   }
 
   return loadConfig(configPath);

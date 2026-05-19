@@ -222,6 +222,18 @@ describe('Configuration Loader', () => {
       });
     });
 
+    it('should keep empty explicit config values on built-in defaults even when repo discovery is available', () => {
+      const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
+      fs.writeFileSync(configPath, 'minimumSeverity: critical\ndiffsOnly: true');
+
+      const config = loadConfigOrDefault('', tempDir);
+
+      expect(config).toEqual({
+        minimumSeverity: CodeScanSeverity.MEDIUM,
+        diffsOnly: false,
+      });
+    });
+
     it('should auto-discover the repository code-scan config when no explicit path is provided', () => {
       const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
       fs.writeFileSync(configPath, 'minimumSeverity: high\ndiffsOnly: true');

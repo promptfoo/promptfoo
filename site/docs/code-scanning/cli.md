@@ -108,7 +108,7 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 Create `.promptfoo-code-scan.yaml` in the repository root to have local CLI scans pick it up automatically, including when the command starts in a nested directory inside that repository. Use `--config <path>` when you want to load a different file.
 
-Runs that post to GitHub with `--github-pr` intentionally use built-in defaults unless `--config <path>` is set explicitly. GitHub Actions jobs triggered by `pull_request` or `pull_request_target` events do the same, including SARIF-only CLI jobs that do not post review comments. That keeps PR scan policy tied to a trusted caller-selected config instead of a config file introduced by the pull request being scanned.
+Runs that post to GitHub with `--github-pr` intentionally use built-in defaults unless `--config <path>` is set explicitly. GitHub Actions jobs triggered by `pull_request`, `pull_request_target`, or merge-queue `merge_group` events do the same, including SARIF-only CLI jobs that do not post review comments. That keeps PR scan policy from silently inheriting a config file introduced by the pull request being scanned; when you pass `--config`, make sure the selected file comes from a trusted workflow-controlled path.
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical); defaults to medium
