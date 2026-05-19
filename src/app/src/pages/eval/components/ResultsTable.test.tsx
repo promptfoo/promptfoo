@@ -385,8 +385,6 @@ describe('ResultsTable Metrics Display', () => {
       evalId: '123',
       inComparisonMode: false,
       setTable: vi.fn(),
-      stickyHeader: true,
-      setStickyHeader: vi.fn(),
       table: mockTableWithTwoPrompts,
       version: 4,
       renderMarkdown: true,
@@ -403,7 +401,7 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const secondPromptHeaderCell = screen.getByText('test-provider-2').closest('th');
 
-    expect(secondPromptHeaderCell).toHaveStyle({ borderLeft: 'none' });
+    expect(secondPromptHeaderCell?.style.borderLeft).toBe('none');
   });
 
   describe('Keyboard Navigation', () => {
