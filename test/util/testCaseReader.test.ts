@@ -13,6 +13,7 @@ import logger from '../../src/logger';
 import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
+import { readAzureBlobText } from '../../src/util/azureBlob';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
   loadTestsFromGlob,
@@ -107,6 +108,10 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: vi.fn(),
 }));
 
+vi.mock('../../src/util/azureBlob', () => ({
+  readAzureBlobText: vi.fn(),
+}));
+
 vi.mock('../../src/telemetry', () => {
   const mockTelemetry = {
     record: vi.fn().mockResolvedValue(undefined),
@@ -174,6 +179,7 @@ const clearAllMocks = () => {
   vi.mocked(loadApiProvider).mockReset();
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
+  vi.mocked(readAzureBlobText).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(importModule).mockReset();
 };
@@ -360,6 +366,24 @@ describe('readStandaloneTestsFile', () => {
         description: 'Row #2',
         options: {},
         vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
+  it('should read JSON test sets from hashed Azure Blob Storage URIs', async () => {
+    const blobUri =
+      'az://appliedciblobdata/data/ianw/cyber-evals/tests/cases.json.45856cafeef1d6df70c14f5b3c0cc353ecf3c22fa8653aa35ef0107b138f63fb';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ vars: { review_id: 'review-001' } }]),
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-001' },
       },
     ]);
   });
@@ -1044,6 +1068,24 @@ describe('readTests', () => {
         vars: { var1: 'value3', var2: 'value4' },
         assert: [{ type: 'javascript', value: 'value5' }],
         options: {},
+      },
+    ]);
+  });
+
+  it('readTests with a hashed Azure Blob Storage JSON test set', async () => {
+    const blobUri =
+      'az://appliedciblobdata/data/ianw/cyber-evals/tests/cases.json.45856cafeef1d6df70c14f5b3c0cc353ecf3c22fa8653aa35ef0107b138f63fb';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ vars: { review_id: 'review-001' } }]),
+    );
+
+    const result = await readTests(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-001' },
       },
     ]);
   });

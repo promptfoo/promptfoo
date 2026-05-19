@@ -1,0 +1,101 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvString } from '../../src/envars';
+import { parseAzureBlobUri, readAzureBlobText } from '../../src/util/azureBlob';
+
+const mocks = vi.hoisted(() => {
+  const downloadToBuffer = vi.fn();
+  const getBlobClient = vi.fn(() => ({ downloadToBuffer }));
+  const getContainerClient = vi.fn(() => ({ getBlobClient }));
+  const serviceClient = { getContainerClient };
+  const fromConnectionString = vi.fn(() => serviceClient);
+  const blobServiceClient = vi.fn(function BlobServiceClientMock() {
+    return serviceClient;
+  });
+  Object.assign(blobServiceClient, { fromConnectionString });
+
+  return {
+    blobServiceClient,
+    downloadToBuffer,
+    fromConnectionString,
+    getBlobClient,
+    getContainerClient,
+    serviceClient,
+    defaultAzureCredential: vi.fn(function DefaultAzureCredentialMock() {
+      return { credential: 'default' };
+    }),
+  };
+});
+
+vi.mock('@azure/storage-blob', () => ({
+  BlobServiceClient: mocks.blobServiceClient,
+}));
+
+vi.mock('@azure/identity', () => ({
+  DefaultAzureCredential: mocks.defaultAzureCredential,
+}));
+
+vi.mock('../../src/envars', async () => ({
+  ...(await vi.importActual('../../src/envars')),
+  getEnvString: vi.fn(),
+}));
+
+describe('Azure Blob test-set loading', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getEnvString).mockReturnValue('');
+    mocks.downloadToBuffer.mockResolvedValue(Buffer.from('blob text', 'utf8'));
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('parses az:// account, container, blob, and SAS query string', () => {
+    expect(
+      parseAzureBlobUri('az://appliedciblobdata/data/ianw/cyber-evals/tests.json?sp=r&sig=abc'),
+    ).toEqual({
+      accountName: 'appliedciblobdata',
+      containerName: 'data',
+      blobName: 'ianw/cyber-evals/tests.json',
+      sasToken: '?sp=r&sig=abc',
+    });
+  });
+
+  it('rejects URIs without a blob path', () => {
+    expect(() => parseAzureBlobUri('az://account/container')).toThrow('blob path is missing');
+  });
+
+  it('uses URI SAS authentication when a query string is present', async () => {
+    const result = await readAzureBlobText('az://account/container/path/tests.json?sp=r&sig=abc');
+
+    expect(result).toBe('blob text');
+    expect(mocks.blobServiceClient).toHaveBeenCalledWith(
+      'https://account.blob.core.windows.net?sp=r&sig=abc',
+    );
+    expect(mocks.fromConnectionString).not.toHaveBeenCalled();
+    expect(mocks.defaultAzureCredential).not.toHaveBeenCalled();
+    expect(mocks.getContainerClient).toHaveBeenCalledWith('container');
+    expect(mocks.getBlobClient).toHaveBeenCalledWith('path/tests.json');
+  });
+
+  it('uses AZURE_STORAGE_CONNECTION_STRING when no SAS query string is present', async () => {
+    vi.mocked(getEnvString).mockReturnValue('UseDevelopmentStorage=true');
+
+    const result = await readAzureBlobText('az://account/container/path/tests.json');
+
+    expect(result).toBe('blob text');
+    expect(getEnvString).toHaveBeenCalledWith('AZURE_STORAGE_CONNECTION_STRING');
+    expect(mocks.fromConnectionString).toHaveBeenCalledWith('UseDevelopmentStorage=true');
+    expect(mocks.defaultAzureCredential).not.toHaveBeenCalled();
+  });
+
+  it('falls back to DefaultAzureCredential when no SAS or connection string is present', async () => {
+    const result = await readAzureBlobText('az://account/container/path/tests.json');
+
+    expect(result).toBe('blob text');
+    expect(mocks.defaultAzureCredential).toHaveBeenCalledTimes(1);
+    expect(mocks.blobServiceClient).toHaveBeenCalledWith('https://account.blob.core.windows.net', {
+      credential: 'default',
+    });
+  });
+});
