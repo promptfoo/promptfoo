@@ -1430,8 +1430,8 @@ function ResultsTableHeader({
                   const isFinalRow = headerGroup.depth === 1;
                   const previousHeader = headerGroup.headers[headerIndex - 1];
                   const isPreviousPromptHeader =
-                    previousHeader?.column.id.startsWith('Prompt ') ?? false;
-                  const isPromptHeader = header.column.id.startsWith('Prompt ');
+                    previousHeader?.column.parent?.id === 'prompts';
+                  const isPromptHeader = header.column.parent?.id === 'prompts';
 
                   return (
                     <th
