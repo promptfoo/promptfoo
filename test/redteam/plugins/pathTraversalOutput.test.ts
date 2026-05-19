@@ -194,10 +194,10 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
     });
 
     it('keeps long encoded payloads intact across detection-window boundaries', () => {
-      const encodedConnector = '%2541'.repeat(200);
+      const encodedConnector = '%2541'.repeat(199);
       const payload = `${'A'.repeat(
         199_300,
-      )} C:%252f${encodedConnector}Windows%252fSystem32%252fconfig%252fSAM`;
+      )} C:%252f${encodedConnector}%252fWindows%252fSystem32%252fconfig%252fSAM`;
       const matches = detectPathTraversalOutput(payload);
       const ids = matches.map((match) => match.id);
       expect(ids).toContain('windows-direct-sensitive-path');
