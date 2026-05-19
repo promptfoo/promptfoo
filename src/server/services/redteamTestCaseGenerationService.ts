@@ -6,12 +6,15 @@ import {
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
+import { validatePrivacyPolicyConsistencyConfig } from '../../redteam/plugins/privacyPolicyConsistency';
+import { validatePrivacyRightsRequestWorkflowIntegrityConfig } from '../../redteam/plugins/privacyRightsRequestWorkflowIntegrity';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 
 import type { ConversationMessage } from '../../redteam/types';
+import type { PluginConfig } from '../../types/index';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -27,6 +30,15 @@ type PluginWithConfig = {
   config: Record<string, unknown>;
 };
 
+function getValidationMessage(validate: () => void): string | null {
+  try {
+    validate();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Invalid plugin configuration';
+  }
+}
+
 export function getPluginConfigurationError(plugin: PluginWithConfig): string | null {
   const { id, config } = plugin;
   switch (id) {
@@ -41,10 +53,11 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
       }
       break;
     case 'privacy-policy-consistency':
-      if (!config.privacyPolicy && !config.privacyPolicyContent) {
-        return 'Privacy Policy Consistency plugin requires a privacy policy file';
-      }
-      break;
+      return getValidationMessage(() => validatePrivacyPolicyConsistencyConfig(config));
+    case 'privacy:rights-request-workflow-integrity':
+      return getValidationMessage(() =>
+        validatePrivacyRightsRequestWorkflowIntegrityConfig(config as PluginConfig),
+      );
     case 'bfla': {
       const targetIdentifiers = config.targetIdentifiers as unknown;
       if (

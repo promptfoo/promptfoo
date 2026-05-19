@@ -250,6 +250,9 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       expect(screen.getByLabelText('Privacy Policy File')).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText('file:///absolute/path/to/privacy-policy.md'),
+      ).toBeInTheDocument();
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
 

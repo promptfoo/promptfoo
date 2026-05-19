@@ -33,9 +33,9 @@ redteam:
         privacyPolicy: file://privacy-policy.md
 ```
 
-The `privacyPolicy` config is required. Promptfoo loads the referenced file and uses its contents as the source of truth when grading test results. Relative `file://` paths are resolved from your Promptfoo config location.
+The `privacyPolicy` config is required. Promptfoo loads referenced files and uses the resolved text as the source of truth when grading test results. Relative `file://` paths are resolved from your Promptfoo config location.
 
-File-backed configuration is required for local CLI runs. In Promptfoo Cloud, upload the policy file in the plugin configuration.
+For local CLI runs, use either a `file://` reference or inline policy text in `privacyPolicy`. In Promptfoo Cloud, upload the policy file in the plugin configuration.
 
 Include the policy details your app or agent is expected to follow, such as:
 

@@ -214,7 +214,7 @@ export default function PluginConfigDialog({
               <Label htmlFor="privacy-policy">Privacy Policy File</Label>
               <Input
                 id="privacy-policy"
-                placeholder="file://privacy-policy.md"
+                placeholder="file:///absolute/path/to/privacy-policy.md"
                 value={(localConfig.privacyPolicy as string) || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
               />
@@ -234,7 +234,7 @@ export default function PluginConfigDialog({
               <Label htmlFor="rights-request-policy">Privacy Rights Workflow File</Label>
               <Input
                 id="rights-request-policy"
-                placeholder="file://privacy-rights-workflow.md"
+                placeholder="file:///absolute/path/to/privacy-rights-workflow.md"
                 value={(localConfig.rightsRequestPolicy as string) || ''}
                 onChange={(e) =>
                   setLocalConfig({ ...localConfig, rightsRequestPolicy: e.target.value })
@@ -245,7 +245,7 @@ export default function PluginConfigDialog({
               <Label htmlFor="privacy-rights-policy">Privacy Policy File</Label>
               <Input
                 id="privacy-rights-policy"
-                placeholder="file://privacy-policy.md"
+                placeholder="file:///absolute/path/to/privacy-policy.md"
                 value={(localConfig.privacyPolicy as string) || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
               />
