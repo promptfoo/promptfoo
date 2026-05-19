@@ -241,8 +241,9 @@ export async function writeOutput(
         ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
       ],
       ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value) => ({
+        ...row.vars.map((value, variableIndex) => ({
           kind: 'variable',
+          name: table.head.vars[variableIndex],
           text: value,
         })),
         ...row.outputs.map((output, outputIndex) => ({
@@ -250,10 +251,6 @@ export async function writeOutput(
           detailId: `result-detail-${rowIndex}-${outputIndex}`,
           detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
           description: row.description || '',
-          variables: table.head.vars.map((name, variableIndex) => ({
-            name,
-            value: row.vars[variableIndex] || '',
-          })),
           ...outputToHtmlReportCell(output),
         })),
       ]),

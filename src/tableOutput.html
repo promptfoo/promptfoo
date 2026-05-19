@@ -745,7 +745,7 @@
                 <td
                   data-output-cell="true"
                   data-status="{{ cell.status | escape }}"
-                  data-search="{{ cell.statusLabel | escape }} {{ cell.score | escape }} {{ cell.text | escape }} {{ cell.reason | escape }}"
+                  data-search="{{ cell.statusLabel | escape }} {{ cell.score | escape }} {{ cell.text | escape }} {{ cell.reason | escape }} {{ cell.error | escape }}"
                 >
                   <div class="cell-content output-cell">
                     <div class="output-meta">
@@ -782,7 +782,10 @@
                   </div>
                 </td>
                 {% else %}
-                <td data-search="{{ cell.text | escape }}">
+                <td
+                  data-search="{{ cell.text | escape }}"
+                  data-variable-name="{{ cell.name | escape }}"
+                >
                   <div class="cell-content variable-text">{{ cell.text | escape }}</div>
                 </td>
                 {% endif %} {% endfor %}
@@ -891,19 +894,9 @@
           <span class="detail-section-title">Error</span>
           <p class="detail-copy detail-reason">{{ cell.error | escape }}</p>
         </section>
-        {% endif %} {% if cell.variables.length %}
-        <section class="detail-section">
-          <span class="detail-section-title">Variables</span>
-          <div class="detail-variables">
-            {% for variable in cell.variables %}
-            <div class="detail-variable">
-              <span class="detail-variable-name">{{ variable.name | escape }}</span>
-              <p class="detail-variable-value">{{ variable.value | escape }}</p>
-            </div>
-            {% endfor %}
-          </div>
-        </section>
-        {% endif %} {% if cell.promptTokensDisplay or cell.completionTokensDisplay %}
+        {% endif %}
+        <div data-detail-variable-slot></div>
+        {% if cell.promptTokensDisplay or cell.completionTokensDisplay %}
         <section class="detail-section">
           <span class="detail-section-title">Token Breakdown</span>
           <div class="detail-metrics">
@@ -991,6 +984,62 @@
                 ),
               )
             : [];
+        const appendVariableDetails = (trigger) => {
+          if (!detailBody) {
+            return;
+          }
+
+          const slot = detailBody.querySelector('[data-detail-variable-slot]');
+          const row = trigger.closest('[data-result-row]');
+          if (!row) {
+            slot?.remove();
+            return;
+          }
+
+          const variables = Array.from(row.querySelectorAll('[data-variable-name]'))
+            .map((cell) => ({
+              name: cell.getAttribute('data-variable-name') || '',
+              value: cell.textContent?.trim() || '',
+            }))
+            .filter((variable) => variable.name || variable.value);
+          if (variables.length === 0) {
+            slot?.remove();
+            return;
+          }
+
+          const section = document.createElement('section');
+          section.className = 'detail-section';
+
+          const title = document.createElement('span');
+          title.className = 'detail-section-title';
+          title.textContent = 'Variables';
+          section.appendChild(title);
+
+          const list = document.createElement('div');
+          list.className = 'detail-variables';
+          variables.forEach((variable) => {
+            const item = document.createElement('div');
+            item.className = 'detail-variable';
+
+            const name = document.createElement('span');
+            name.className = 'detail-variable-name';
+            name.textContent = variable.name;
+
+            const value = document.createElement('p');
+            value.className = 'detail-variable-value';
+            value.textContent = variable.value;
+
+            item.append(name, value);
+            list.appendChild(item);
+          });
+
+          section.appendChild(list);
+          if (slot) {
+            slot.replaceWith(section);
+          } else {
+            detailBody.appendChild(section);
+          }
+        };
 
         const closeDetail = () => {
           if (!detailDrawer || !detailBackdrop || !detailBody) {
@@ -1018,6 +1067,7 @@
 
           detailTitle.textContent = template.getAttribute('data-detail-heading') || 'Result detail';
           detailBody.innerHTML = template.innerHTML.trim();
+          appendVariableDetails(trigger);
           detailDrawer.hidden = false;
           detailBackdrop.hidden = false;
           document.body.classList.add('detail-open');
