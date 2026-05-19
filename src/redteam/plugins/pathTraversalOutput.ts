@@ -168,7 +168,7 @@ const ENCODED_INDICATORS: string[] = [
 const DEEPLY_PERCENT_ENCODED_TRAVERSAL_INDICATOR = /%(?:25){2,3}(?:2e|2f|5c)/i;
 
 const NESTED_QUANTIFIER =
-  /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
+  /\((?:[^()\\]|\\.)*(?:[+*?]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
@@ -579,21 +579,32 @@ export function validatePathTraversalOutputPluginConfig(config: PluginConfig): v
 
   const customPatterns = config.pathTraversalOutputPatterns as unknown;
   const extraTargets = config.pathTraversalOutputTargets as unknown;
+  const examples = config.examples as unknown;
   if (customPatterns !== undefined) {
     if (!Array.isArray(customPatterns)) {
       throw new Error(
         'path-traversal-output config.pathTraversalOutputPatterns must be an array of rule objects',
       );
     }
-    if (customPatterns.length > 0 && (!config.examples || config.examples.length === 0)) {
+    if (
+      customPatterns.length > 0 &&
+      (!Array.isArray(examples) ||
+        examples.length === 0 ||
+        examples.some((example) => typeof example !== 'string' || example.length === 0))
+    ) {
       throw new Error(
-        'path-traversal-output config.pathTraversalOutputPatterns requires config.examples so generated prompts align with the custom detector rules',
+        'path-traversal-output config.pathTraversalOutputPatterns requires config.examples to be a non-empty array of strings so generated prompts align with the custom detector rules',
       );
     }
     for (const rule of customPatterns) {
-      if (!rule.id || !rule.pattern) {
+      if (
+        typeof rule?.id !== 'string' ||
+        rule.id.length === 0 ||
+        typeof rule.pattern !== 'string' ||
+        rule.pattern.length === 0
+      ) {
         throw new Error(
-          'path-traversal-output config.pathTraversalOutputPatterns entries require `id` and `pattern`',
+          'path-traversal-output config.pathTraversalOutputPatterns entries require non-empty string `id` and `pattern` values',
         );
       }
       try {
@@ -623,9 +634,14 @@ export function validatePathTraversalOutputPluginConfig(config: PluginConfig): v
         'path-traversal-output config.pathTraversalOutputTargets must be an array of non-empty strings',
       );
     }
-    if (extraTargets.length > 0 && (!config.examples || config.examples.length === 0)) {
+    if (
+      extraTargets.length > 0 &&
+      (!Array.isArray(examples) ||
+        examples.length === 0 ||
+        examples.some((example) => typeof example !== 'string' || example.length === 0))
+    ) {
       throw new Error(
-        'path-traversal-output config.pathTraversalOutputTargets requires config.examples so generated prompts align with the added detector targets',
+        'path-traversal-output config.pathTraversalOutputTargets requires config.examples to be a non-empty array of strings so generated prompts align with the added detector targets',
       );
     }
     for (const target of extraTargets) {

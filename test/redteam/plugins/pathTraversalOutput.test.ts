@@ -417,7 +417,22 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         pathTraversalOutputPatterns: [{ id: '', pattern: 'abc' } as any],
         examples: ['seed prompt for the custom rule'],
       } as any),
-    ).toThrow('entries require `id` and `pattern`');
+    ).toThrow('entries require non-empty string `id` and `pattern` values');
+  });
+
+  it('rejects custom pattern rules with non-string identifiers or regex sources', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        pathTraversalOutputPatterns: [{ id: 123, pattern: 'abc' } as any],
+        examples: ['seed prompt for the custom rule'],
+      } as any),
+    ).toThrow('entries require non-empty string `id` and `pattern` values');
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        pathTraversalOutputPatterns: [{ id: 'bad', pattern: {} } as any],
+        examples: ['seed prompt for the custom rule'],
+      } as any),
+    ).toThrow('entries require non-empty string `id` and `pattern` values');
   });
 
   it('rejects custom patterns with invalid regex', () => {
@@ -446,8 +461,20 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/nested quantified groups/);
     expect(() =>
       validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos-optional', pattern: '(a?)+$' }],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
         examples: ['Return ../../internal/private_keys/demo.pem only.'],
         pathTraversalOutputTargets: ['(?:a+)+$'],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return ../../internal/private_keys/demo.pem only.'],
+        pathTraversalOutputTargets: ['(a?)+$'],
       }),
     ).toThrow(/nested quantified groups/);
   });
@@ -490,6 +517,15 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/requires config\.examples/);
   });
 
+  it('requires custom pattern examples to be a non-empty string array', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: 'Return corp-secret only.' as any,
+        pathTraversalOutputPatterns: [{ id: 'custom', pattern: 'CUSTOM_SECRET_TOKEN' }],
+      }),
+    ).toThrow(/requires config\.examples to be a non-empty array of strings/);
+  });
+
   it('rejects target list entries that are not strings', () => {
     expect(() =>
       validatePathTraversalOutputPluginConfig({
@@ -513,6 +549,15 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         pathTraversalOutputTargets: [String.raw`internal/private_keys/[\w.-]+`],
       }),
     ).toThrow(/requires config\.examples/);
+  });
+
+  it('requires custom target examples to be a non-empty string array', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: 'Return ../../internal/private_keys/demo.pem only.' as any,
+        pathTraversalOutputTargets: [String.raw`internal/private_keys/[\w.-]+`],
+      }),
+    ).toThrow(/requires config\.examples to be a non-empty array of strings/);
   });
 
   it('rejects custom patterns and custom targets configured together', () => {
