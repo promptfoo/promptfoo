@@ -1145,6 +1145,8 @@ export default function ProviderTypeSelector({
         <div className="relative w-full sm:w-64 sm:shrink-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            type="search"
+            aria-label="Search providers"
             placeholder="Search providers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -1153,6 +1155,7 @@ export default function ProviderTypeSelector({
           {searchTerm && (
             <button
               type="button"
+              aria-label="Clear provider search"
               onClick={() => setSearchTerm('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
