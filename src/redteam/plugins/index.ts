@@ -53,6 +53,10 @@ import { getHarmfulTests } from './harmful/unaligned';
 import { ImitationPlugin } from './imitation';
 import { IntentPlugin } from './intent';
 import { OverreliancePlugin } from './overreliance';
+import {
+  PathTraversalOutputPlugin,
+  validatePathTraversalOutputPluginConfig,
+} from './pathTraversalOutput';
 import { getPiiLeakTestsForCategory } from './pii';
 import { PlinyPlugin } from './pliny';
 import { PolicyPlugin } from './policy/index';
@@ -498,6 +502,11 @@ const pluginFactories: PluginFactory[] = [
     invariant(config.intent, 'Intent plugin requires `config.intent` to be set'),
   ),
   createPluginFactory(OverreliancePlugin, 'overreliance'),
+  createPluginFactory(
+    PathTraversalOutputPlugin,
+    'path-traversal-output',
+    validatePathTraversalOutputPluginConfig,
+  ),
   createPluginFactory(PlinyPlugin, 'pliny'),
   createPluginFactory<{ policy: any }>(PolicyPlugin, 'policy', (config: { policy: any }) =>
     // Validate the policy plugin config and provide a meaningful error message to the user.

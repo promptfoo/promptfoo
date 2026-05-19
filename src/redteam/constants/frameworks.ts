@@ -99,6 +99,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
       'pii:social',
       'harmful:privacy',
       'cross-session-leak',
+      'path-traversal-output',
       'prompt-extraction',
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
@@ -124,7 +125,7 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
   },
   'owasp:llm:05': {
     // Improper Output Handling
-    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access', 'path-traversal-output'],
     strategies: ['jailbreak', 'jailbreak-templates'],
   },
   'owasp:llm:06': {

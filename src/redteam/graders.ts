@@ -99,6 +99,7 @@ import { RealEstateLendingDiscriminationPluginGrader } from './plugins/realestat
 import { RealEstateSourceOfIncomePluginGrader } from './plugins/realestate/sourceOfIncome';
 import { RealEstateSteeringPluginGrader } from './plugins/realestate/steering';
 import { RealEstateValuationBiasPluginGrader } from './plugins/realestate/valuationBias';
+import { PathTraversalOutputGrader } from './plugins/pathTraversalOutput';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
@@ -279,6 +280,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:rag-source-attribution': new RagSourceAttributionGrader(),
+  'promptfoo:redteam:path-traversal-output': new PathTraversalOutputGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
