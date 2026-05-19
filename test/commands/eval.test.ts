@@ -739,6 +739,32 @@ describe('evalCommand', () => {
     expect(checkEmailStatusAndMaybeExit).toHaveBeenCalledTimes(1);
   });
 
+  it('should let reusable callers skip the redteam email preflight', async () => {
+    const cmdObj = {};
+    const config = {
+      redteam: { plugins: ['test-plugin'] as any },
+      prompts: [],
+    } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        tests: [{ vars: { test: 'value' } }],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, config, defaultConfigPath, {}, { skipRedteamEmailPreflight: true });
+
+    expect(promptForEmailUnverified).not.toHaveBeenCalled();
+    expect(checkEmailStatusAndMaybeExit).not.toHaveBeenCalled();
+  });
+
   it('should handle share option when enabled', async () => {
     const cmdObj = { share: true };
     const config = { sharing: true } as UnifiedConfig;
@@ -1124,6 +1150,30 @@ describe('checkCloudPermissions', () => {
     expect(checkCloudPermissions).toHaveBeenCalledWith(config);
 
     // Verify that evaluate was called
+    expect(evaluate).toHaveBeenCalled();
+  });
+
+  it('should let reusable callers skip cloud permission checks when preserving legacy behavior', async () => {
+    const config = {
+      providers: ['openai:gpt-4'],
+    } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
+        tests: [],
+      },
+      basePath: path.resolve('/'),
+    });
+
+    const mockEvalRecord = new Eval(config);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval({}, config, defaultConfigPath, {}, { skipCloudPermissionCheck: true });
+
+    expect(checkCloudPermissions).not.toHaveBeenCalled();
     expect(evaluate).toHaveBeenCalled();
   });
 });

@@ -80,6 +80,9 @@ export interface EvalRunCustomization {
   afterFilterTestSuite?: TestSuiteTransform;
   evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
   allowConfigFilterRange?: boolean;
+  disablePromptSuggestions?: boolean;
+  skipCloudPermissionCheck?: boolean;
+  skipRedteamEmailPreflight?: boolean;
 }
 
 export class EvalRunError extends Error {
@@ -550,6 +553,7 @@ export async function doEval(
     }
 
     if (
+      !customization.skipRedteamEmailPreflight &&
       !neverGenerateRemote() &&
       config.redteam &&
       config.redteam.plugins &&
@@ -594,7 +598,9 @@ export async function doEval(
       });
     }
 
-    await checkCloudPermissions(config as UnifiedConfig);
+    if (!customization.skipCloudPermissionCheck) {
+      await checkCloudPermissions(config as UnifiedConfig);
+    }
 
     const options: InternalEvaluateOptions = {
       ...evaluateOptions,
@@ -640,7 +646,10 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval) {
+    if (!resumeEval && customization.disablePromptSuggestions) {
+      options.generateSuggestions = false;
+      delete options.suggestionsCount;
+    } else if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
     // load scenarios or tests from an external file

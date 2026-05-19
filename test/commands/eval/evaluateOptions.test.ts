@@ -343,6 +343,40 @@ describe('evaluateOptions behavior', () => {
       expect(options.timeoutMs).toBe(1234);
     });
 
+    it('should let reusable callers suppress prompt suggestions after config resolution', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-disable-suggestions.yaml', {
+        commandLineOptions: {
+          generateSuggestions: true,
+          suggestionsCount: 3,
+        },
+        evaluateOptions: {
+          generateSuggestions: true,
+          suggestionsCount: 5,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'suggestions' } }],
+      });
+
+      await doEval(
+        {
+          config: [tempConfig],
+          table: false,
+          write: false,
+        },
+        {},
+        undefined,
+        {},
+        {
+          disablePromptSuggestions: true,
+        },
+      );
+
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(options.generateSuggestions).toBe(false);
+      expect(options.suggestionsCount).toBeUndefined();
+    });
+
     it('should observe the test suite after later config filtering is applied', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-after-filter-suite.yaml', {
         evaluateOptions: {

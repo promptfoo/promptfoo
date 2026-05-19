@@ -456,6 +456,12 @@ export function registerRunEvaluationTool(server: McpServer) {
           eventSource: 'mcp',
           showProgressBar: false,
         };
+        const evaluateOptionOverrides: Partial<InternalEvaluateOptions> | undefined =
+          args.timeoutMs === undefined
+            ? undefined
+            : {
+                timeoutMs,
+              };
 
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
 
@@ -483,13 +489,11 @@ export function registerRunEvaluationTool(server: McpServer) {
               providers: suiteSummary.providers.total,
             });
           },
-          evaluateOptionOverrides:
-            args.timeoutMs === undefined
-              ? undefined
-              : {
-                  timeoutMs,
-                },
+          evaluateOptionOverrides,
           allowConfigFilterRange: testCaseIndices === undefined,
+          disablePromptSuggestions: hasFilters,
+          skipCloudPermissionCheck: hasFilters,
+          skipRedteamEmailPreflight: hasFilters,
         });
         const endTime = Date.now();
         if (!suiteSummary) {

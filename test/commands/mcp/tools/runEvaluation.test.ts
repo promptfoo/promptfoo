@@ -137,6 +137,9 @@ describe('runEvaluation tool', () => {
             timeoutMs: 1234,
           },
           allowConfigFilterRange: false,
+          disablePromptSuggestions: true,
+          skipCloudPermissionCheck: true,
+          skipRedteamEmailPreflight: true,
         }),
       );
     });
@@ -173,6 +176,9 @@ describe('runEvaluation tool', () => {
           evaluateOptionOverrides: {
             timeoutMs: 4321,
           },
+          disablePromptSuggestions: false,
+          skipCloudPermissionCheck: false,
+          skipRedteamEmailPreflight: false,
         }),
       );
     });
