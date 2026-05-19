@@ -248,7 +248,7 @@ describeEvaluator('evaluator execution control', () => {
     expect(secondRenderedPrompt).toContain('now=Turn 2');
   });
 
-  it('persists updated prompt metrics between serial eval steps for live result refreshes', async () => {
+  it('persists updated prompt metrics between grouped eval steps for live result refreshes', async () => {
     let releaseSecondCall!: () => void;
     let markSecondCallStarted!: () => void;
     const secondCallStarted = new Promise<void>((resolve) => {
@@ -277,7 +277,7 @@ describeEvaluator('evaluator execution control', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt')],
-      tests: [{ options: { runSerially: true } }, { options: { runSerially: true } }],
+      tests: [{}, {}],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -287,7 +287,7 @@ describeEvaluator('evaluator execution control', () => {
 
       await secondCallStarted;
 
-      // One startup write plus one serial-step refresh before the second step completes.
+      // One startup write plus one grouped-step refresh before the second step completes.
       expect(addPromptsSpy).toHaveBeenCalledTimes(2);
       expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
 
