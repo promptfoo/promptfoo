@@ -1,6 +1,5 @@
 import path from 'path';
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import cliState from '../../cliState';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
@@ -12,6 +11,7 @@ import {
   getOAuthTokenWithExpiry,
   renderAuthVars,
 } from './util';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -41,6 +41,16 @@ interface MCPRequestOptions {
   timeout?: number;
   resetTimeoutOnProgress?: boolean;
   maxTotalTimeout?: number;
+}
+
+async function loadMcpClientSdk(): Promise<typeof import('@modelcontextprotocol/sdk/client/index.js')> {
+  try {
+    return await import('@modelcontextprotocol/sdk/client/index.js');
+  } catch {
+    throw new Error(
+      'The @modelcontextprotocol/sdk package is required for MCP provider support. Install it with: npm install @modelcontextprotocol/sdk',
+    );
+  }
 }
 
 /**
@@ -128,6 +138,7 @@ export class MCPClient {
 
   private async connectToServer(server: MCPServerConfig): Promise<void> {
     const serverKey = server.name || server.url || server.path || 'default';
+    const { Client } = await loadMcpClientSdk();
     const client = new Client({
       name: 'promptfoo-MCP',
       version: '1.0.0',

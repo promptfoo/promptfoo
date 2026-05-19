@@ -14,6 +14,12 @@ started, set your OPENAI_API_KEY environment variable.
 
 Next, duplicate the Google Sheet in promptfooconfig.yaml and replace the URL.
 
+Public sheet imports work without extra packages. Private sheet reads and Google Sheets output writes use the optional authenticated Sheets dependency:
+
+```bash
+npm install @googleapis/sheets
+```
+
 Then run:
 
 ```bash

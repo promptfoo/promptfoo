@@ -1,6 +1,3 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -23,10 +20,45 @@ function setMcpTransport(transport: 'http' | 'stdio'): void {
   Object.assign(process.env, { MCP_TRANSPORT: transport });
 }
 
+function createMcpSdkDependencyError(): Error {
+  return new Error(
+    'The @modelcontextprotocol/sdk package is required for MCP server support. Install it with: npm install @modelcontextprotocol/sdk',
+  );
+}
+
+async function loadMcpServerSdk(): Promise<typeof import('@modelcontextprotocol/sdk/server/mcp.js')> {
+  try {
+    return await import('@modelcontextprotocol/sdk/server/mcp.js');
+  } catch {
+    throw createMcpSdkDependencyError();
+  }
+}
+
+async function loadMcpHttpTransport(): Promise<
+  typeof import('@modelcontextprotocol/sdk/server/streamableHttp.js')
+> {
+  try {
+    return await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+  } catch {
+    throw createMcpSdkDependencyError();
+  }
+}
+
+async function loadMcpStdioTransport(): Promise<
+  typeof import('@modelcontextprotocol/sdk/server/stdio.js')
+> {
+  try {
+    return await import('@modelcontextprotocol/sdk/server/stdio.js');
+  } catch {
+    throw createMcpSdkDependencyError();
+  }
+}
+
 /**
  * Creates an MCP server with tools for interacting with promptfoo
  */
 export async function createMcpServer() {
+  const { McpServer } = await loadMcpServerSdk();
   const server = new McpServer({
     name: 'Promptfoo MCP',
     version: '1.0.0',
@@ -88,6 +120,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   const mcpServer = await createMcpServer();
 
   // Set up HTTP transport for MCP
+  const { StreamableHTTPServerTransport } = await loadMcpHttpTransport();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
   });
@@ -183,6 +216,7 @@ export async function startStdioMcpServer(): Promise<void> {
   const server = await createMcpServer();
 
   // Set up stdio transport
+  const { StdioServerTransport } = await loadMcpStdioTransport();
   const transport = new StdioServerTransport();
 
   // Connect the server to the stdio transport

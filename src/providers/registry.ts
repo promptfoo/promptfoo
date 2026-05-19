@@ -986,8 +986,17 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
-        const { OpenAiAgentsProvider } = await import('./openai/agents');
-        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+        try {
+          const { OpenAiAgentsProvider } = await import('./openai/agents');
+          return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+        } catch (error) {
+          if (error instanceof Error && error.message.includes('@openai/agents')) {
+            throw new Error(
+              'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
+            );
+          }
+          throw error;
+        }
       }
       if (modelType === 'chatkit') {
         const { OpenAiChatKitProvider } = await import('./openai/chatkit');
