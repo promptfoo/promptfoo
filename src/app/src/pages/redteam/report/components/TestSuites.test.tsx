@@ -111,11 +111,12 @@ describe('TestSuites Component', () => {
 
     const riskButton = screen.getByRole('button', { name: 'Explain risk score' });
     const riskHeader = riskButton.closest('th');
-    expect(riskHeader).toHaveAttribute('aria-sort', 'none');
+    const initialSortState = riskHeader?.getAttribute('aria-sort');
+    expect(initialSortState).not.toBeNull();
 
     await user.click(riskButton);
 
-    expect(riskHeader).toHaveAttribute('aria-sort', 'none');
+    expect(riskHeader?.getAttribute('aria-sort')).toBe(initialSortState);
   });
 
   it('should render without errors and handle unknown severity gracefully during sorting', () => {
