@@ -13,6 +13,7 @@ vi.mock('../../src/logger', () => ({
 import {
   type BasePlugin,
   COLLECTIONS,
+  ENERGY_PLUGINS,
   FOUNDATION_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -1067,6 +1068,19 @@ describe('RedteamConfigSchema transform', () => {
       true,
     );
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should expand the energy collection into concrete energy plugins', () => {
+    const result = RedteamConfigSchema.parse({
+      numTests: 3,
+      plugins: ['energy'],
+    });
+
+    expect(result.plugins?.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining([...ENERGY_PLUGINS]),
+    );
+    expect(result.plugins).toHaveLength(ENERGY_PLUGINS.length);
+    expect(result.plugins?.every((plugin) => plugin.numTests === 3)).toBe(true);
   });
 
   it('should expand coding-agent collections correctly', () => {

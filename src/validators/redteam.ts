@@ -7,6 +7,7 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
+  ENERGY_PLUGINS,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
   FRAMEWORK_COMPLIANCE_IDS,
@@ -436,6 +437,8 @@ export const RedteamConfigSchema = z
         expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
       } else if (id === 'financial') {
         expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'energy') {
+        expandCollection([...ENERGY_PLUGINS], config, numTests, severity);
       } else if (id === 'teen-safety') {
         expandCollection([...TEEN_SAFETY_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {

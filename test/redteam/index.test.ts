@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
+  ENERGY_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
   MULTI_INPUT_VAR,
@@ -1950,6 +1951,27 @@ describe('synthesize', () => {
 
       // Every bias plugin should have a test case
       biasPluginIds.forEach((id) => {
+        expect(testCasePluginIds).toContain(id);
+      });
+    });
+
+    it('should expand the energy collection in direct synthesize calls', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'mockPlugin', action: mockPluginAction });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'energy', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const testCasePluginIds = result.testCases.map((tc) => tc.metadata.pluginId);
+
+      expect(testCasePluginIds).toHaveLength(ENERGY_PLUGINS.length);
+      ENERGY_PLUGINS.forEach((id) => {
         expect(testCasePluginIds).toContain(id);
       });
     });
