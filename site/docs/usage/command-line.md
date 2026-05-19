@@ -137,6 +137,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--table`                            | Output table in CLI                                                                                      |
 | `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                              |
 | `-t, --tests <path>`                 | Path to CSV with test cases                                                                              |
+| `--tag <key=value>`                  | Set an eval tag in key=value format. Can be specified multiple times.                                    |
 | `--var <key=value>`                  | Set a variable in key=value format                                                                       |
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |

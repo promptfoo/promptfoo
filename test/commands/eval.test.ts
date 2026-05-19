@@ -180,6 +180,13 @@ describe('evalCommand', () => {
     );
   });
 
+  it('should document the repeatable --tag option', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain('--tag <key=value>');
+    expect(helpText).toContain('Set a tag in key=value format. Can be specified multiple times.');
+  });
+
   it('should apply resolved author when --no-write is used', async () => {
     const cmdObj = { table: false, write: false };
     const config = {} as UnifiedConfig;

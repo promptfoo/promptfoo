@@ -1134,6 +1134,17 @@ export function evalCommand(
       },
       {},
     )
+    .option(
+      '--tag <key=value>',
+      'Set a tag in key=value format. Can be specified multiple times.',
+      (value, previous: Record<string, string> | undefined) => {
+        const [key, ...valueParts] = value.split('=');
+        if (!key || valueParts.length === 0) {
+          throw new Error('--tag must be specified in key=value format.');
+        }
+        return { ...(previous || {}), [key]: valueParts.join('=') };
+      },
+    )
 
     // Execution control
     .option(

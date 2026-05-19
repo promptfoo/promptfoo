@@ -719,8 +719,9 @@ export async function resolveConfigs(
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
+  const configTags = fileConfig.tags || defaultConfig.tags;
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
-    tags: fileConfig.tags || defaultConfig.tags,
+    tags: cmdObj.tag ? { ...(configTags || {}), ...cmdObj.tag } : configTags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: fileConfig.providers || defaultConfig.providers || [],

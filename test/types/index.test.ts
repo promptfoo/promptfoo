@@ -692,6 +692,23 @@ describe('CommandLineOptionsSchema', () => {
     );
   });
 
+  it('should validate runtime tags', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      tag: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    };
+    expect(CommandLineOptionsSchema.parse(options)).toMatchObject({
+      tag: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    });
+  });
+
   it('should reject invalid filterRange values', () => {
     const baseOptions = {
       output: ['output1'],

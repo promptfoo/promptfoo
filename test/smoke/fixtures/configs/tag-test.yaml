@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - CLI tag overrides'
+
+tags:
+  build: config-build
+  team: evals
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: Hello

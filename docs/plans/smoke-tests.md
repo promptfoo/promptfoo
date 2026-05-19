@@ -205,9 +205,10 @@ Flags that affect output and eval metadata.
 | #      | Test             | Command                       | Verifies                    |
 | ------ | ---------------- | ----------------------------- | --------------------------- |
 | 1.11.1 | Description      | `--description "My test run"` | Description in output       |
-| 1.11.2 | Multiple outputs | `-o out.json -o out.csv`      | Multiple output files       |
-| 1.11.3 | No write         | `--no-write`                  | Results not persisted to DB |
-| 1.11.4 | Share disabled   | `--no-share`                  | Sharing disabled            |
+| 1.11.2 | Tags             | `--tag build=123`             | CLI tags merge into config  |
+| 1.11.3 | Multiple outputs | `-o out.json -o out.csv`      | Multiple output files       |
+| 1.11.4 | No write         | `--no-write`                  | Results not persisted to DB |
+| 1.11.5 | Share disabled   | `--no-share`                  | Sharing disabled            |
 
 #### 1.12 Resume and Retry Flags
 
@@ -583,8 +584,9 @@ High-value tests for CLI filter flags and execution options.
 - [x] 1.10.1: Delay between tests (`--delay 100`)
 - [x] 1.10.5: No table output
 - [x] 1.11.1: Description flag
-- [x] 1.11.2: Multiple output files
-- [x] 1.11.3: No write flag
+- [x] 1.11.2: Tag merge (`--tag build=123`)
+- [x] 1.11.3: Multiple output files
+- [x] 1.11.4: No write flag
 
 **Priority 5 - History-Based Filters (more complex):**
 

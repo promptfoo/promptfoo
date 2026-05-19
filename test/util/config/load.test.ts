@@ -1419,6 +1419,42 @@ describe('resolveConfigs', () => {
     expect(cliState.basePath).toBe(path.dirname('config.json'));
   });
 
+  it('should merge CLI tags over config tags', async () => {
+    const cmdObj = {
+      config: ['config.json'],
+      tag: {
+        build: 'cli-build',
+        runId: 'ci-123',
+      },
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        prompts: ['prompt1'],
+        providers: ['openai:foobar'],
+        tags: {
+          build: 'config-build',
+          team: 'evals',
+        },
+      }),
+    );
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+
+    const { config, testSuite } = await resolveConfigs(cmdObj, {});
+
+    expect(config.tags).toEqual({
+      build: 'cli-build',
+      team: 'evals',
+      runId: 'ci-123',
+    });
+    expect(testSuite.tags).toEqual({
+      build: 'cli-build',
+      team: 'evals',
+      runId: 'ci-123',
+    });
+  });
+
   it('should load scenarios and tests from external files', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
