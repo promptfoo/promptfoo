@@ -225,6 +225,36 @@ describe('ChatKitBrowserPool', () => {
       expect(mockChromium.launch).toHaveBeenCalledTimes(1);
     });
 
+    it('should return pooled client secrets through the template session route', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      instance.setTemplate(
+        TEST_TEMPLATE_KEY,
+        TEST_HTML,
+        vi.fn().mockResolvedValue('pooled-secret-123'),
+      );
+      await instance.initialize();
+
+      const writeHead = vi.fn();
+      const end = vi.fn();
+
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
+        },
+        {
+          writeHead,
+          end,
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
+      expect(end).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'pooled-secret-123' }));
+    });
+
     it('should redact pooled session minting failures in browser responses', async () => {
       const instance = ChatKitBrowserPool.getInstance();
       instance.setTemplate(

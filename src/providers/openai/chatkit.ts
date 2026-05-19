@@ -157,7 +157,7 @@ function cleanAssistantResponse(text: string): string {
 /**
  * Generate the HTML page that hosts the ChatKit component
  */
-function generateChatKitHTML(sessionEndpoint: string): string {
+export function generateChatKitHTML(sessionEndpoint: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
