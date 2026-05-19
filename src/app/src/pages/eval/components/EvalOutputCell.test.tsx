@@ -847,7 +847,7 @@ describe('EvalOutputCell', () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
-    expectedUrl.searchParams.delete('rowId');
+    expectedUrl.searchParams.set('rowId', '1');
     expectedUrl.hash = '#details-row-1-prompt-1';
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -862,13 +862,13 @@ describe('EvalOutputCell', () => {
     });
   });
 
-  it('drops a legacy rowId query param when copying a cell deep-link', async () => {
+  it('refreshes the rowId page hint when copying a cell deep-link', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
     window.history.replaceState({}, '', '/eval/test-eval?rowId=99&filter=foo');
 
     const expectedUrl = new URL(window.location.href);
-    expectedUrl.searchParams.delete('rowId');
+    expectedUrl.searchParams.set('rowId', '1');
     expectedUrl.hash = '#details-row-1-prompt-1';
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
@@ -880,7 +880,7 @@ describe('EvalOutputCell', () => {
     });
     const written = clipboard.writeText.mock.calls[0]?.[0];
     expect(written).toContain('filter=foo');
-    expect(written).not.toContain('rowId');
+    expect(written).toContain('rowId=1');
   });
 
   it('shows checkmark after copying link', async () => {

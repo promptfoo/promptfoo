@@ -2114,6 +2114,7 @@ function ResultsTable({
                     output={output}
                     maxTextLength={maxTextLength}
                     rowIndex={info.row.original.testIdx}
+                    rowPositionIndex={pagination.pageIndex * pagination.pageSize + info.row.index}
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2231,7 +2232,10 @@ function ResultsTable({
     const rowId = params['rowId'];
     const rowIndexFromQuery =
       rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
-    const requestedRowIndex = detailsHashTarget?.rowIndex ?? rowIndexFromQuery;
+    // Copied detail links carry both forms:
+    // - `rowId` is the filtered-table position used to resolve the correct page.
+    // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
+    const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
 
     if (requestedRowIndex !== undefined) {
       const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));

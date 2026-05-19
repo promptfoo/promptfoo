@@ -1140,6 +1140,29 @@ describe('ResultsTable Row Navigation', () => {
     expect(window.location.hash).toBe('#details-row-51-prompt-1');
   });
 
+  it('uses rowId pagination when a details hash keeps a stable test index', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=2#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 0,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
+  });
+
   it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 

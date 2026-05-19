@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Spinner } from '@app/components/ui/spinner';
@@ -60,6 +60,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [failed, setFailed] = useState(false);
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
+  const isHydratingFiltersRef = useRef(false);
 
   // ================================
   // Handlers
@@ -155,6 +156,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     const unsubscribe = useTableStore.subscribe(
       (state) => state.filters,
       (_filters) => {
+        if (isHydratingFiltersRef.current) {
+          return;
+        }
+
         // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
         const _searchParams = new URLSearchParams(window.location.search);
 
@@ -187,22 +192,32 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Use getState() to avoid adding functions to dependencies
     const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
 
-    doResetFilters();
-
     // Read search params
     const filtersParam = _searchParams.get('filter');
+    let invalidFiltersParam = false;
 
-    if (filtersParam) {
-      let filters: ResultsFilter[] = [];
-      try {
-        filters = JSON.parse(filtersParam) as ResultsFilter[];
-      } catch {
-        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
-        return;
+    isHydratingFiltersRef.current = true;
+    try {
+      doResetFilters();
+
+      if (filtersParam) {
+        let filters: ResultsFilter[] = [];
+        try {
+          filters = JSON.parse(filtersParam) as ResultsFilter[];
+        } catch {
+          invalidFiltersParam = true;
+          showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+        }
+        filters.forEach((filter: ResultsFilter) => {
+          doAddFilter(filter);
+        });
       }
-      filters.forEach((filter: ResultsFilter) => {
-        doAddFilter(filter);
-      });
+    } finally {
+      isHydratingFiltersRef.current = false;
+    }
+
+    if (invalidFiltersParam) {
+      return;
     }
 
     if (fetchId) {

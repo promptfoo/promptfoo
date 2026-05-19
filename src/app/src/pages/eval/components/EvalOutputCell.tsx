@@ -1241,6 +1241,7 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -1270,6 +1271,7 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
   firstOutput,
@@ -1510,9 +1512,9 @@ function EvalOutputCell({
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
-    // Drop the legacy `rowId` query param if present — the hash form below carries
-    // both row and prompt indexes and is the canonical deep-link format.
-    url.searchParams.delete('rowId');
+    // Keep `rowId` as the filtered result position so pagination can reopen the
+    // right page, while the hash keeps the stable test/prompt identity for the dialog.
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
     url.hash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
     navigator.clipboard

@@ -466,6 +466,64 @@ describe('Eval', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it('preserves a details hash while rehydrating filters from the URL', async () => {
+    let subscriptionCallback: ((filters: any) => void) | null = null;
+
+    const hydratedFilters = {
+      values: {
+        filter1: {
+          id: 'filter1',
+          type: 'text' as const,
+          operator: 'contains' as const,
+          value: 'test',
+          field: 'text',
+          logicOperator: 'and' as const,
+          sortIndex: 0,
+        },
+      },
+      appliedCount: 1,
+    };
+
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn();
+    });
+    (useTableStore as any).getState = vi.fn(() => ({
+      filters: { values: {} },
+      resetFilters: vi.fn(() => {
+        subscriptionCallback?.({ values: {}, appliedCount: 0 });
+      }),
+      addFilter: vi.fn(() => {
+        subscriptionCallback?.(hydratedFilters);
+      }),
+    }));
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: hydratedFilters,
+    });
+
+    const serializedFilters = encodeURIComponent(
+      JSON.stringify(Object.values(hydratedFilters.values)),
+    );
+    const initialUrl = `/eval/test-eval?filter=${serializedFilters}#details-row-51-prompt-1`;
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('clears the details hash when applying filters', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 
