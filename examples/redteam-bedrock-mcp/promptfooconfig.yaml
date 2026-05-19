@@ -51,7 +51,8 @@ redteam:
     - id: pii
     - id: bfla
     - id: bola
+    - id: sql-injection
 
   strategies:
-    - id: jailbreak
-    - id: prompt-injection
+    - id: jailbreak:meta
+    - id: jailbreak-templates

@@ -11,9 +11,14 @@ cd redteam-bedrock-mcp
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js `^20.20.0` or `>=22.22.0`
 - AWS credentials with access to Amazon Bedrock Runtime
 - Model access enabled for `us.anthropic.claude-sonnet-4-6` in `us-east-1`
+- The Bedrock runtime SDK installed in the project that runs this example:
+
+  ```bash
+  npm install @aws-sdk/client-bedrock-runtime
+  ```
 
 Set up AWS credentials using your normal AWS credential chain. For example:
 
@@ -67,7 +72,7 @@ targets:
       toolChoice: auto
 ```
 
-Replace the `servers` entry with your own remote MCP server URL, or with a local stdio MCP server using `command` and `args`.
+Replace the `servers` entry with your own remote MCP server URL, or with a local stdio MCP server using `command` and `args`. If you change the MCP server, also update the `redteam.purpose` block and plugin mix so the generated probes match that server's real domain and attack surface.
 
 When Bedrock Converse emits an MCP tool call, promptfoo executes the matching MCP tool and returns the **raw MCP tool result** as the eval output. There is no follow-up Converse turn that feeds that result back into the model for a synthesized customer-support answer. Assertions and redteam grading therefore measure tool selection and raw tool-output handling, not a second-turn natural-language response.
 
@@ -79,8 +84,9 @@ This configuration uses MCP-specific and authorization-focused redteam plugins:
 - `pii` tests whether private customer information leaks through model responses or tool output.
 - `bfla` tests function-level authorization boundaries around tool use.
 - `bola` tests object-level authorization, such as accessing another customer's ticket.
+- `sql-injection` tests whether query-shaped MCP inputs can be manipulated into unsafe database access.
 
-The `jailbreak` and `prompt-injection` strategies mutate those probes to test whether the model can be persuaded to ignore its tool-use and data-access constraints.
+The `jailbreak:meta` and `jailbreak-templates` strategies mutate those probes to test whether the model can be persuaded to ignore its tool-use and data-access constraints.
 
 ## Notes
 
