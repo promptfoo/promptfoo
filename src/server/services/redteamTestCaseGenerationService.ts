@@ -35,7 +35,10 @@ function getValidationMessage(validate: () => void): string | null {
     validate();
     return null;
   } catch (error) {
-    return error instanceof Error ? error.message : 'Invalid plugin configuration';
+    if (!(error instanceof Error)) {
+      return 'Invalid plugin configuration';
+    }
+    return error.message.replace(/^Invariant failed:\s*/, '');
   }
 }
 
