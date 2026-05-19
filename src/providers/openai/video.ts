@@ -175,6 +175,14 @@ function formatDownloadVideoError(variant: OpenAiVideoVariant, err: unknown): st
     : `Failed to download ${variant}: ${details.status} ${details.message}`;
 }
 
+function isJsonVideoInputReference(inputReference: string) {
+  return (
+    inputReference.startsWith('http://') ||
+    inputReference.startsWith('https://') ||
+    inputReference.startsWith('data:')
+  );
+}
+
 // =============================================================================
 // OpenAiVideoProvider
 // =============================================================================
@@ -225,6 +233,39 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     });
   }
 
+  private async createJsonVideoJob(
+    body: OpenAI.VideoCreateParams,
+    headers?: Record<string, string>,
+  ): Promise<{ job: OpenAiVideoJob; error?: string }> {
+    try {
+      const response = await fetchWithProxy(`${this.getApiUrl()}/videos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.getApiKey()}`,
+          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+          ...headers,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return {
+          job: {} as OpenAiVideoJob,
+          error: formatCreateVideoError({ status: response.status, error }),
+        };
+      }
+
+      return { job: (await response.json()) as OpenAiVideoJob };
+    } catch (err: unknown) {
+      return {
+        job: {} as OpenAiVideoJob,
+        error: formatCreateVideoError(err),
+      };
+    }
+  }
+
   /**
    * Create a new video generation job
    */
@@ -261,11 +302,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
             error: `Input reference file not found: ${filePath}`,
           };
         }
-      } else if (
-        config.input_reference.startsWith('http://') ||
-        config.input_reference.startsWith('https://') ||
-        config.input_reference.startsWith('data:')
-      ) {
+      } else if (isJsonVideoInputReference(config.input_reference)) {
         body.input_reference = { image_url: config.input_reference };
       } else {
         body.input_reference = new File(
@@ -280,6 +317,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         remixVideoId: config.remix_video_id,
         model: this.modelName,
       });
+
+      if (
+        !config.remix_video_id &&
+        config.input_reference &&
+        isJsonVideoInputReference(config.input_reference)
+      ) {
+        return this.createJsonVideoJob(body, config.headers);
+      }
 
       const job = config.remix_video_id
         ? ((await client.videos.remix(config.remix_video_id, {
