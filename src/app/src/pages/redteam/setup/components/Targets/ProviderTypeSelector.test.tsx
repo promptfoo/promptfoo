@@ -86,7 +86,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
-  it('should label provider search controls clearly', async () => {
+  it('labels provider search and clear controls', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
 
@@ -94,7 +94,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={mockSetProvider} />,
     );
 
-    const searchInput = screen.getByRole('textbox', { name: 'Search providers' });
+    const searchInput = screen.getByRole('searchbox', { name: 'Search providers' });
     await user.type(searchInput, 'openai');
 
     expect(screen.getByRole('button', { name: 'Clear provider search' })).toBeInTheDocument();

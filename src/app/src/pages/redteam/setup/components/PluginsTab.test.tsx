@@ -349,6 +349,12 @@ describe('PluginsTab', () => {
     vi.clearAllMocks();
   });
 
+  test('labels the plugin search input', () => {
+    renderComponent();
+
+    expect(screen.getByRole('searchbox', { name: 'Search plugins' })).toBeInTheDocument();
+  });
+
   test('Component renders', () => {
     renderComponent();
 
@@ -383,7 +389,7 @@ describe('PluginsTab', () => {
     test('Plugin search exposes a durable accessible label', () => {
       renderComponent();
 
-      expect(screen.getByRole('textbox', { name: 'Search plugins' })).toBeInTheDocument();
+      expect(screen.getByRole('searchbox', { name: 'Search plugins' })).toBeInTheDocument();
     });
 
     describe('Category Filtering', () => {

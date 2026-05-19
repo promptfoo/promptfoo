@@ -531,6 +531,7 @@ export default function PluginsTab({
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 data-testid="plugin-search-input"
+                type="search"
                 aria-label="Search plugins"
                 placeholder="Search plugins..."
                 value={searchTerm}
