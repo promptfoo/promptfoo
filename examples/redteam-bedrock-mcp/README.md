@@ -1,6 +1,6 @@
 # redteam-bedrock-mcp (Red Team Bedrock MCP)
 
-This example demonstrates red teaming a Bedrock Converse target that has access to a Model Context Protocol (MCP) server. It tests whether a customer support assistant can be induced to misuse MCP tools, disclose sensitive tool or customer data, bypass authorization, or follow malicious tool-related instructions.
+This example demonstrates red teaming the **Bedrock Converse MCP tool boundary** for a customer-support workflow. It tests whether the model can be induced to request unsafe MCP tools, disclose sensitive tool or customer data, bypass authorization, or follow malicious tool-related instructions.
 
 You can run this example with:
 
@@ -69,6 +69,8 @@ targets:
 
 Replace the `servers` entry with your own remote MCP server URL, or with a local stdio MCP server using `command` and `args`.
 
+When Bedrock Converse emits an MCP tool call, promptfoo executes the matching MCP tool and returns the **raw MCP tool result** as the eval output. There is no follow-up Converse turn that feeds that result back into the model for a synthesized customer-support answer. Assertions and redteam grading therefore measure tool selection and raw tool-output handling, not a second-turn natural-language response.
+
 ## What This Example Tests
 
 This configuration uses MCP-specific and authorization-focused redteam plugins:
@@ -83,5 +85,7 @@ The `jailbreak` and `prompt-injection` strategies mutate those probes to test wh
 ## Notes
 
 Bedrock Converse MCP support executes MCP tool calls through the provider target. This is useful for testing the model plus MCP tool boundary directly during red teaming.
+
+If you want to red team a true assistant loop that calls a tool and then answers naturally from the tool result, wrap Bedrock Converse in an agent harness that performs that follow-up model turn.
 
 The example uses `numTests: 3` to keep the initial Bedrock run modest. Increase it when you are ready for broader coverage.
