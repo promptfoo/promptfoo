@@ -177,7 +177,9 @@ function mergeAnthropicUsage(
     return undefined;
   }
 
-  return usageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
+  const [firstUsage, ...remainingUsageEntries] = usageEntries;
+
+  return remainingUsageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
     (acc, usage) => ({
       ...usage,
       input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),
@@ -187,12 +189,7 @@ function mergeAnthropicUsage(
       cache_read_input_tokens:
         (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
     }),
-    {
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
-    },
+    firstUsage,
   );
 }
 
