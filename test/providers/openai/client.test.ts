@@ -3,6 +3,7 @@ import {
   createOpenAiClient,
   isSdkUploadCapabilityProbe,
 } from '../../../src/providers/openai/client';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('createOpenAiClient', () => {
   it('disables SDK retries by default', () => {
@@ -46,12 +47,11 @@ describe('createOpenAiClient', () => {
   });
 
   it('ignores SDK-only ambient org, project, and custom header defaults', async () => {
-    const originalOrgId = process.env.OPENAI_ORG_ID;
-    const originalProjectId = process.env.OPENAI_PROJECT_ID;
-    const originalCustomHeaders = process.env.OPENAI_CUSTOM_HEADERS;
-    process.env.OPENAI_ORG_ID = 'ambient-org';
-    process.env.OPENAI_PROJECT_ID = 'ambient-project';
-    process.env.OPENAI_CUSTOM_HEADERS = 'X-Ambient-Header: should-not-leak';
+    const restoreEnv = mockProcessEnv({
+      OPENAI_ORG_ID: 'ambient-org',
+      OPENAI_PROJECT_ID: 'ambient-project',
+      OPENAI_CUSTOM_HEADERS: 'X-Ambient-Header: should-not-leak',
+    });
 
     try {
       const fetchMock = vi.fn().mockResolvedValue(
@@ -74,21 +74,7 @@ describe('createOpenAiClient', () => {
       expect(headers.get('openai-project')).toBeNull();
       expect(headers.get('x-ambient-header')).toBeNull();
     } finally {
-      if (originalOrgId === undefined) {
-        delete process.env.OPENAI_ORG_ID;
-      } else {
-        process.env.OPENAI_ORG_ID = originalOrgId;
-      }
-      if (originalProjectId === undefined) {
-        delete process.env.OPENAI_PROJECT_ID;
-      } else {
-        process.env.OPENAI_PROJECT_ID = originalProjectId;
-      }
-      if (originalCustomHeaders === undefined) {
-        delete process.env.OPENAI_CUSTOM_HEADERS;
-      } else {
-        process.env.OPENAI_CUSTOM_HEADERS = originalCustomHeaders;
-      }
+      restoreEnv();
     }
   });
 });
