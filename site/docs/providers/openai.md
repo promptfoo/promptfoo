@@ -493,6 +493,8 @@ OpenAI exposes the current ChatGPT Instant model as `chat-latest`. As of May 5, 
 
 OpenAI's pricing docs list `chat-latest` at $5 input, $0.50 cached input, and $30 output per 1M tokens.
 
+If you set reasoning effort explicitly for `chat-latest`, use `medium`. The API rejects other reasoning-effort values for this floating alias on both Chat Completions and Responses.
+
 #### Available Models
 
 | Model       | Description                          | Pricing (Input / Cached Input / Output) |
