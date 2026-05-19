@@ -138,7 +138,6 @@ describe('runEvaluation tool', () => {
           },
           allowConfigFilterRange: false,
           disablePromptSuggestions: true,
-          skipCloudPermissionCheck: true,
           skipRedteamEmailPreflight: true,
         }),
       );
@@ -177,7 +176,6 @@ describe('runEvaluation tool', () => {
             timeoutMs: 4321,
           },
           disablePromptSuggestions: false,
-          skipCloudPermissionCheck: false,
           skipRedteamEmailPreflight: false,
         }),
       );

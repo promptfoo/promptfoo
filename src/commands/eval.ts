@@ -81,7 +81,6 @@ export interface EvalRunCustomization {
   evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
   allowConfigFilterRange?: boolean;
   disablePromptSuggestions?: boolean;
-  skipCloudPermissionCheck?: boolean;
   skipRedteamEmailPreflight?: boolean;
 }
 
@@ -598,9 +597,7 @@ export async function doEval(
       });
     }
 
-    if (!customization.skipCloudPermissionCheck) {
-      await checkCloudPermissions(config as UnifiedConfig);
-    }
+    await checkCloudPermissions(config as UnifiedConfig);
 
     const options: InternalEvaluateOptions = {
       ...evaluateOptions,

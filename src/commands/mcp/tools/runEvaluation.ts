@@ -492,7 +492,6 @@ export function registerRunEvaluationTool(server: McpServer) {
           evaluateOptionOverrides,
           allowConfigFilterRange: testCaseIndices === undefined,
           disablePromptSuggestions: hasFilters,
-          skipCloudPermissionCheck: hasFilters,
           skipRedteamEmailPreflight: hasFilters,
         });
         const endTime = Date.now();

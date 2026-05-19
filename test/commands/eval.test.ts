@@ -1153,29 +1153,6 @@ describe('checkCloudPermissions', () => {
     expect(evaluate).toHaveBeenCalled();
   });
 
-  it('should let reusable callers skip cloud permission checks when preserving legacy behavior', async () => {
-    const config = {
-      providers: ['openai:gpt-4'],
-    } as UnifiedConfig;
-
-    vi.mocked(resolveConfigs).mockResolvedValue({
-      config,
-      testSuite: {
-        prompts: [],
-        providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
-        tests: [],
-      },
-      basePath: path.resolve('/'),
-    });
-
-    const mockEvalRecord = new Eval(config);
-    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
-
-    await doEval({}, config, defaultConfigPath, {}, { skipCloudPermissionCheck: true });
-
-    expect(checkCloudPermissions).not.toHaveBeenCalled();
-    expect(evaluate).toHaveBeenCalled();
-  });
 });
 
 describe('showRedteamProviderLabelMissingWarning', () => {
