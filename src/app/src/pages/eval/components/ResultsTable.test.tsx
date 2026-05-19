@@ -385,6 +385,8 @@ describe('ResultsTable Metrics Display', () => {
       evalId: '123',
       inComparisonMode: false,
       setTable: vi.fn(),
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
       table: mockTableWithTwoPrompts,
       version: 4,
       renderMarkdown: true,
