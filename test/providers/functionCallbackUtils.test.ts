@@ -17,7 +17,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   };
 });
 vi.mock('../../src/logger', () => ({
-  default: { debug: vi.fn() },
+  default: { debug: vi.fn(), warn: vi.fn() },
 }));
 vi.mock('../../src/util/fileExtensions', async (importOriginal) => {
   return {

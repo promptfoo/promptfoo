@@ -297,6 +297,35 @@ describe('OpenAiTranscriptionProvider', () => {
         restoreEnv();
       }
     });
+
+    it('preserves custom Authorization headers when apiKeyRequired is false', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+      });
+
+      try {
+        const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_TRANSCRIPTION_API_KEY',
+            apiBaseUrl: 'https://gateway.example.com/v1',
+            headers: {
+              Authorization: 'Bearer gateway-token',
+            },
+          },
+        });
+
+        const result = await provider.callApi('/path/to/audio.mp3');
+
+        expect(result.output).toBe('This is a test transcription.');
+        expect(getTranscriptionRequest().headers.get('authorization')).toBe(
+          'Bearer gateway-token',
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('Diarization support', () => {
