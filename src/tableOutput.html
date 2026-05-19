@@ -955,7 +955,9 @@
             const rowStatuses = getRowStatuses(row);
             const matchesStatus =
               status === 'all' ||
-              (status === 'pass' && rowStatuses.size > 0 && [...rowStatuses].every((value) => value === 'pass')) ||
+              (status === 'pass' &&
+                rowStatuses.size > 0 &&
+                [...rowStatuses].every((value) => value === 'pass')) ||
               rowStatuses.has(status);
             const visible = matchesQuery && matchesStatus;
 
