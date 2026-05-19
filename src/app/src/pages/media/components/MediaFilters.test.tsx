@@ -166,6 +166,22 @@ describe('MediaFilters', () => {
       expect(await screen.findByLabelText('Search evaluations')).toHaveFocus();
     });
 
+    it('keeps listbox options out of the sequential tab order', async () => {
+      const user = userEvent.setup();
+      render(<MediaFilters {...defaultProps} evals={mockEvals} />);
+
+      await user.click(screen.getByRole('button', { name: 'Filter by evaluation' }));
+
+      expect(await screen.findByRole('option', { name: 'All Evaluations' })).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+      expect(screen.getByRole('option', { name: 'First Evaluation' })).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+    });
+
     it('opens, navigates, and selects options from the eval filter trigger with the keyboard', async () => {
       const user = userEvent.setup();
       const onEvalFilterChange = vi.fn();

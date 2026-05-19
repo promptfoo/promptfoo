@@ -176,8 +176,9 @@ describe('ReportIndex', () => {
       expect(container.firstElementChild).toHaveClass(
         'flex',
         'flex-col',
-        'overflow-hidden',
         'min-h-0',
+        'overflow-x-hidden',
+        'overflow-y-auto',
       );
       expect(contentShell).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');
       expect(card).toHaveClass('flex-1', 'min-h-0', 'flex', 'flex-col');

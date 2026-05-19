@@ -339,6 +339,7 @@ export function MediaFilters({
                 id={`${evalFilterListboxId}-option-0`}
                 type="button"
                 role="option"
+                tabIndex={-1}
                 aria-selected={!evalFilter}
                 data-highlighted={highlightedEvalIndex === 0 || undefined}
                 className={cn(
@@ -380,6 +381,7 @@ export function MediaFilters({
                       id={`${evalFilterListboxId}-option-${optionIndex}`}
                       type="button"
                       role="option"
+                      tabIndex={-1}
                       aria-selected={evalFilter === e.evalId}
                       data-highlighted={highlightedEvalIndex === optionIndex || undefined}
                       className={cn(
