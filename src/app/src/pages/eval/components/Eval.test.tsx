@@ -145,30 +145,6 @@ describe('Eval', () => {
     restoreTestTimers({ runPending: true });
   });
 
-  it('should call resetFilters when mounted with a new fetchId', async () => {
-    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-1" />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-2" />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
-  });
-
   it('should call resetFilters when navigating from one eval to another', async () => {
     vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
