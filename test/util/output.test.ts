@@ -1133,7 +1133,7 @@ describe('writeOutput', () => {
 
     const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     expect(html).toContain(
-      'data-search="ERROR 0.00 Visible output despite failure Evaluation failed provider timed out"',
+      'data-search="ERROR 0.00 provider timed out Evaluation failed provider timed out"',
     );
     expect(html).toContain('data-variable-name="input"');
     expect(html).not.toContain('<span class="detail-variable-name">');
