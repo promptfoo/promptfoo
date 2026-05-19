@@ -88,6 +88,12 @@ describe('Azure Blob test-set loading', () => {
     expect(() => parseAzureBlobUri('az://account/container')).toThrow('blob path is missing');
   });
 
+  it('redacts SAS query strings while preserving URI fragments in parse errors', () => {
+    expect(() => parseAzureBlobUri('az://account/container?sp=r&sig=secret#preview')).toThrow(
+      'Invalid Azure Blob Storage URI "az://account/container?<redacted>#preview": blob path is missing.',
+    );
+  });
+
   it('uses URI SAS authentication when a query string is present', async () => {
     const result = await readAzureBlobText('az://account/container/path/tests.json?sp=r&sig=abc');
 
