@@ -3453,6 +3453,15 @@ class Evaluator {
   }): Promise<void> {
     const providerCallQueue = new ProviderGroupedCallQueue();
     const groupedRows: GroupedRows[] = [];
+    let lastGroupedPromptFlush = 0;
+    const PROMPTS_FLUSH_INTERVAL_MS = 1000;
+    const flushGroupedPromptsIfNeeded = async () => {
+      const now = Date.now();
+      if (now - lastGroupedPromptFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+        lastGroupedPromptFlush = now;
+        await this.evalRecord.addPrompts(prompts);
+      }
+    };
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
       await this.processEvalStep(evalStep, index, { precomputedRows: rows }, processingContext);
       processedIndices.add(index);
@@ -3483,7 +3492,7 @@ class Evaluator {
             evalStep,
             groupedRows,
             idx,
-            prompts,
+            flushGroupedPromptsIfNeeded,
             processGroupedRows,
             processedIndices,
             rows,
@@ -3518,7 +3527,7 @@ class Evaluator {
     evalStep,
     groupedRows,
     idx,
-    prompts,
+    flushGroupedPromptsIfNeeded,
     processGroupedRows,
     processedIndices,
     rows,
@@ -3528,7 +3537,7 @@ class Evaluator {
     evalStep: RunEvalOptions;
     groupedRows: GroupedRows[];
     idx: number;
-    prompts: CompletedPrompt[];
+    flushGroupedPromptsIfNeeded: () => Promise<void>;
     processGroupedRows: (entry: GroupedRows) => Promise<void>;
     processedIndices: Set<number>;
     rows: EvaluateResult[];
@@ -3537,7 +3546,7 @@ class Evaluator {
   }) {
     if (!shouldDeferEvalStepGrading) {
       processedIndices.add(idx);
-      await this.evalRecord.addPrompts(prompts);
+      await flushGroupedPromptsIfNeeded();
       return processingContext.targetUnavailable;
     }
     if (rows.length === 0) {
@@ -3570,19 +3579,13 @@ class Evaluator {
     prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
   }) {
-    let lastPromptsFlush = 0;
-    const PROMPTS_FLUSH_INTERVAL_MS = 1000;
     for (const evalStep of serialRunEvalOptions) {
       checkAbort();
       logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
       await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
       processedIndices.add(idx);
-      const now = Date.now();
-      if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
-        lastPromptsFlush = now;
-        await this.evalRecord.addPrompts(prompts);
-      }
+      await this.evalRecord.addPrompts(prompts);
     }
   }
 

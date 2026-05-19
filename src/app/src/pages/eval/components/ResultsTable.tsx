@@ -1431,9 +1431,8 @@ function ResultsTableHeader({
                 <tr key={headerGroup.id} className="header">
                   {headerGroup.headers.map((header) => {
                     const isFinalRow = headerGroup.depth === 1;
-                    const isMetadataCol = isMetadataColumn(String(header.column.id));
                     const isPromptHeader =
-                      isFinalRow && !isMetadataCol && header.column.id !== 'prompts';
+                      isFinalRow && header.column.parent?.id === 'prompts';
                     const shouldHidePromptBorder =
                       isPromptHeader && promptHeaderBorderDrawn;
 
@@ -2239,7 +2238,9 @@ function ResultsTable({
         id="results-table-container"
         style={{
           zoom,
-          borderTop: stickyHeader ? 'none' : '1px solid var(--border-color)',
+          borderTopWidth: '1px',
+          borderTopStyle: 'solid',
+          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,

@@ -368,6 +368,22 @@ describe('ResultsTable Metrics Display', () => {
     expect(promptHeaderCell).not.toHaveStyle({ borderBottom: 'none' });
   });
 
+  it('keeps results container border geometry stable while the sticky header is active', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
+
+    expect(tableContainer.style.borderTopWidth).toBe('1px');
+    expect(tableContainer.style.borderTopStyle).toBe('solid');
+    expect(tableContainer.style.borderColor).toBe('transparent');
+  });
+
   it('keeps adjacent prompt header cells from drawing duplicate left borders', () => {
     const mockTableWithTwoPrompts = {
       ...mockTable,
