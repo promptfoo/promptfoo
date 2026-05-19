@@ -7,6 +7,7 @@ import {
   PLUGIN_ID,
   validatePathTraversalOutputPluginConfig,
 } from '../../../src/redteam/plugins/pathTraversalOutput';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { AtomicTestCase } from '../../../src/types/index';
 
@@ -70,6 +71,20 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       );
       const ids = matches.map((m) => m.id);
       expect(ids).toContain('php-filter-sensitive-resource');
+    });
+
+    it('flags php://filter with option-assignment form (read=...)', () => {
+      const matches = detectPathTraversalOutput(
+        'php://filter/read=convert.base64-encode/resource=../../etc/passwd',
+      );
+      const ids = matches.map((m) => m.id);
+      expect(ids).toContain('php-filter-sensitive-resource');
+    });
+
+    it('flags one-level traversal directly to a private-key filename', () => {
+      const matches = detectPathTraversalOutput('../id_rsa');
+      const ids = matches.map((m) => m.id);
+      expect(ids).toContain('posix-traversal-to-sensitive-target');
     });
 
     it('flags null-byte truncation paired with traversal', () => {
@@ -171,6 +186,10 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       {
         name: 'http URL whose path mentions a POSIX sensitive target',
         output: 'See http://example.com/share/etc/passwd for documentation.',
+      },
+      {
+        name: 'custom scheme whose name ends in `file` (URL scheme must not match `file://`)',
+        output: 'See profile:///etc/passwd in our docs.',
       },
     ];
 
@@ -385,5 +404,54 @@ describe('PathTraversalOutputPlugin / static metadata', () => {
 
   it('opts out of remote generation', () => {
     expect(PathTraversalOutputPlugin.canGenerateRemote).toBe(false);
+  });
+});
+
+describe('PathTraversalOutputPlugin / generateTests', () => {
+  const mockProvider = createMockProvider({ response: createProviderResponse({ output: '' }) });
+
+  it('throws from getTemplate (plugin uses local seed corpus)', async () => {
+    const plugin = new PathTraversalOutputPlugin(mockProvider, 'test purpose', 'prompt');
+    await expect(plugin['getTemplate']()).rejects.toThrow(/local seed corpus/);
+  });
+
+  it('returns a single assertion targeting the plugin id', () => {
+    const plugin = new PathTraversalOutputPlugin(mockProvider, 'test purpose', 'prompt');
+    const assertions = plugin['getAssertions']('any seed');
+    expect(assertions).toEqual([
+      { type: PLUGIN_ID, metric: 'PathTraversalOutput' },
+    ]);
+  });
+
+  it('generates single-input test cases from the local seed corpus', async () => {
+    const plugin = new PathTraversalOutputPlugin(mockProvider, 'test purpose', 'prompt');
+    const tests = await plugin.generateTests(3);
+    expect(tests).toHaveLength(3);
+    for (const test of tests) {
+      expect(test.vars).toBeDefined();
+      expect(typeof test.vars?.prompt).toBe('string');
+      expect(test.assert?.[0].type).toBe(PLUGIN_ID);
+      expect(test.metadata?.pluginId).toBe('path-traversal-output');
+      expect(typeof test.metadata?.pathTraversalOutputCategory).toBe('string');
+    }
+  });
+
+  it('generates multi-input test cases when config.inputs is provided', async () => {
+    const config = {
+      inputs: {
+        userQuery: { description: 'user query' },
+        sessionContext: { description: 'session context', config: { benign: true } },
+      },
+    } as any;
+    const plugin = new PathTraversalOutputPlugin(mockProvider, 'test purpose', 'prompt', config);
+    const tests = await plugin.generateTests(2);
+    expect(tests).toHaveLength(2);
+    for (const test of tests) {
+      const inputVars = test.metadata?.inputVars as Record<string, string> | undefined;
+      expect(inputVars).toBeDefined();
+      // Non-benign key receives the attack payload; benign key receives a placeholder.
+      expect(inputVars?.userQuery).not.toMatch(/^Benign /);
+      expect(inputVars?.sessionContext).toMatch(/^Benign /);
+    }
   });
 });

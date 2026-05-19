@@ -277,7 +277,10 @@ const SENSITIVE_TARGETS_POSIX: string[] = [
   String.raw`\.zsh_history`,
   String.raw`\.git-credentials`,
   String.raw`\.gnupg/pubring\.kbx`,
-  String.raw`(?:^|/)id_(?:rsa|ed25519|ecdsa)`,
+  // Lookbehind for `/` (or start of string) keeps the traversal's trailing slash from
+  // being consumed by the target. `../id_rsa` would otherwise fail because the slash
+  // was already consumed by POSIX_TRAVERSAL.
+  String.raw`(?<=^|/)id_(?:rsa|ed25519|ecdsa)`,
   String.raw`\.config/gcloud/(?:credentials\.db|application_default_credentials\.json|legacy_credentials/[\w@.-]+)`,
   String.raw`\.env(?:\.[\w.-]+)?`,
   String.raw`wp-config\.php`,
@@ -310,7 +313,10 @@ const CONNECTOR_LONG = String.raw`[\w%./-]{0,200}`;
 // Both fail the lookbehind because the byte immediately before is either a word char
 // (URL scheme letter) or a colon (URL scheme separator).
 const WINDOWS_DIRECT_LEFT = String.raw`(?<![\w:])(?:[a-z]:/|//\?/[a-z]:/|//\?/unc/[\w.-]+/[\w$.-]+/|//[\w.-]+/[\w$.-]+/)`;
-const FILE_URI_LEFT = String.raw`file:/{2,3}(?:[a-z]:/)?`;
+// Leading `(?<!\w)` rejects schemes whose name happens to end in `file`, e.g.
+// `profile://...`. The bare `file://...` form is preceded by start-of-string,
+// whitespace, or punctuation in every legitimate case.
+const FILE_URI_LEFT = String.raw`(?<!\w)file:/{2,3}(?:[a-z]:/)?`;
 
 function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRule[] {
   const posixTargets = joinSensitiveAlternatives([
@@ -361,8 +367,11 @@ function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRu
       id: 'php-filter-sensitive-resource',
       description:
         'php://filter wrapper whose resource= argument resolves to a sensitive target or traversal sequence',
+      // Pre-`resource=` connector includes `=` so option-assignment forms such as
+      // `php://filter/read=convert.base64-encode/resource=...` still match. Bounded
+      // quantifier keeps the segment ReDoS-safe.
       pattern: new RegExp(
-        `php://filter/[\\w./-]{0,80}resource=(?:${CONNECTOR_SHORT}${allTargets}|${CONNECTOR_SHORT}${POSIX_TRAVERSAL}[\\w%./-]{0,80})`,
+        `php://filter/[\\w./=-]{0,80}resource=(?:${CONNECTOR_SHORT}${allTargets}|${CONNECTOR_SHORT}${POSIX_TRAVERSAL}[\\w%./-]{0,80})`,
         'i',
       ),
     },
