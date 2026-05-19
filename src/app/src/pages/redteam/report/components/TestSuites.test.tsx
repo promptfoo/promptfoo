@@ -105,7 +105,7 @@ describe('TestSuites Component', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not sort the Risk column when opening its tooltip trigger', async () => {
+  it('sorts the Risk column when clicking its visible header label', async () => {
     const user = userEvent.setup();
     renderWithProviders(<TestSuites {...defaultProps} />);
 
@@ -116,7 +116,7 @@ describe('TestSuites Component', () => {
 
     await user.click(riskButton);
 
-    expect(riskHeader?.getAttribute('aria-sort')).toBe(initialSortState);
+    expect(riskHeader?.getAttribute('aria-sort')).not.toBe(initialSortState);
   });
 
   it('should render without errors and handle unknown severity gracefully during sorting', () => {

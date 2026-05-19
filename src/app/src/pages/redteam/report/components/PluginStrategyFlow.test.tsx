@@ -194,6 +194,8 @@ describe('PluginStrategyFlow', () => {
       ).toBeInTheDocument();
 
       const summaryTable = screen.getByRole('table');
+      expect(summaryTable.parentElement).toHaveClass('overflow-x-auto');
+      expect(summaryTable).toHaveClass('min-w-[640px]');
       expect(summaryTable).toHaveTextContent('Plugin');
       expect(summaryTable).toHaveTextContent('Strategy');
       expect(summaryTable).toHaveTextContent('testPlugin');

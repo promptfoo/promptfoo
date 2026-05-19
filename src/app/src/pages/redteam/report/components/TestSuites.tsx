@@ -333,7 +333,6 @@ const TestSuites = ({
                 type="button"
                 className="cursor-help underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Explain risk score"
-                onClick={(event) => event.stopPropagation()}
               >
                 Risk
               </button>

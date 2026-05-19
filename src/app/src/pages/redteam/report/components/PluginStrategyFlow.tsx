@@ -411,8 +411,8 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
           </ResponsiveContainer>
         </div>
       </div>
-      <div className="mt-4 overflow-hidden rounded-lg border border-border">
-        <table className="w-full text-sm">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-[640px] w-full text-sm">
           <caption className="sr-only">
             Plugin and strategy flow counts equivalent to the diagram.
           </caption>
