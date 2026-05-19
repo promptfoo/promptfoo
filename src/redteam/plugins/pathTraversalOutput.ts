@@ -22,7 +22,10 @@ const MAX_INPUT_CHARS = 200_000;
 const MAX_NORMALIZATION_PASSES = 4;
 const NULL_BYTE_LOCALITY_WINDOW = 60;
 const EVIDENCE_MAX_CHARS = 120;
-const DETECTION_WINDOW_OVERLAP_CHARS = 512;
+// Built-in matches can expand several-fold before normalization when separators
+// and connector spans are repeatedly percent encoded. Keep enough overlap that a
+// complete raw payload still survives one of the detection windows.
+const DETECTION_WINDOW_OVERLAP_CHARS = 8_192;
 
 const DEFAULT_PATH_TRAVERSAL_OUTPUT_PROMPTS: { category: string; prompt: string }[] = [
   {
@@ -262,6 +265,14 @@ export function normalize(raw: string): NormalizationResult {
   return { capped, decoded, folded, stripped };
 }
 
+function createRawViews(raw: string): NormalizationResult {
+  const capped = raw.length > MAX_INPUT_CHARS ? raw.slice(0, MAX_INPUT_CHARS) : raw;
+  const decoded = capped;
+  const folded = decoded.replace(/\\/g, '/');
+  const stripped = folded.toLowerCase().replace(/[\u0000-\u001F\u007F]/g, '');
+  return { capped, decoded, folded, stripped };
+}
+
 function isEncodedFormPresent(capped: string): boolean {
   const lower = capped.toLowerCase();
   return (
@@ -327,7 +338,8 @@ const CONNECTOR_LONG = String.raw`[\w%./-]{0,200}`;
 //   2. URL authority `://example.com/share/...` matching the regular-UNC `//...` alternative.
 // Both fail the lookbehind because the byte immediately before is either a word char
 // (URL scheme letter) or a colon (URL scheme separator).
-const WINDOWS_DIRECT_LEFT = String.raw`(?<![\w:])(?:[a-z]:/|//\?/[a-z]:/|//\?/unc/[\w.-]+/[\w$.-]+/|//[\w.-]+/[\w$.-]+/)`;
+const WINDOWS_DIRECT_PREFIX = String.raw`(?:[a-z]:/|//\?/[a-z]:/|//\?/unc/[\w.-]+/[\w$.-]+/|//[\w.-]+/[\w$.-]+/)`;
+const WINDOWS_DIRECT_LEFT = String.raw`(?<![\w:])${WINDOWS_DIRECT_PREFIX}`;
 // Leading `(?<!\w)` rejects schemes whose name happens to end in `file`, e.g.
 // `profile://...`. The bare `file://...` form is preceded by start-of-string,
 // whitespace, or punctuation in every legitimate case.
@@ -387,7 +399,7 @@ function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRu
       // `php://filter/read=convert.base64-encode/resource=...` still match. Bounded
       // quantifier keeps the segment ReDoS-safe.
       pattern: new RegExp(
-        `php://filter/[\\w./=-]{0,80}resource=(?:${CONNECTOR_SHORT}${allTargets}|${CONNECTOR_SHORT}${POSIX_TRAVERSAL}[\\w%./-]{0,80})`,
+        `php://filter/[\\w./=-]{0,80}resource=(?:${CONNECTOR_SHORT}${allTargets}|${CONNECTOR_SHORT}${POSIX_TRAVERSAL}[\\w%./-]{0,80}|${WINDOWS_DIRECT_PREFIX}${CONNECTOR_LONG}${windowsTargets})`,
         'i',
       ),
     },
@@ -431,10 +443,10 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
 }
 
 function getRules(config?: PluginConfig): PathTraversalOutputRule[] {
-  const customPatterns = config?.pathTraversalOutputPatterns as
-    | PathTraversalOutputPatternConfig[]
-    | undefined;
-  if (customPatterns && customPatterns.length > 0) {
+  const customPatterns = Array.isArray(config?.pathTraversalOutputPatterns)
+    ? (config.pathTraversalOutputPatterns as PathTraversalOutputPatternConfig[])
+    : [];
+  if (customPatterns.length > 0) {
     return compileCustomRules(customPatterns);
   }
   const extraTargets = Array.isArray(config?.pathTraversalOutputTargets)
@@ -477,9 +489,7 @@ function findRuleEvidence(
         !evidence.startsWith('//?/') &&
         normalized.decoded.slice(matchStart, matchStart + 2) !== '\\\\') ||
         (evidence.match(/^[a-z]:\//i) &&
-          normalized.decoded
-            .slice(0, matchStart)
-            .match(/(?:^|[\s"'([{<])[a-z][a-z0-9+.-]*:\/\/[^\s"'([{<]*$/i)))
+          isWindowsDriveEvidenceInsideUrlPath(normalized.decoded, matchStart)))
     ) {
       continue;
     }
@@ -488,6 +498,14 @@ function findRuleEvidence(
     }
   }
   return undefined;
+}
+
+function isWindowsDriveEvidenceInsideUrlPath(decoded: string, matchStart: number): boolean {
+  const uriPrefix = decoded
+    .slice(0, matchStart)
+    .match(/(?:^|[\s"'([{<])[a-z][a-z0-9+.-]*:\/\/[^\s"'([{<]*$/i)?.[0];
+
+  return Boolean(uriPrefix && !uriPrefix.includes('?') && !uriPrefix.includes('#'));
 }
 
 function getDetectionWindows(output: string): string[] {
@@ -521,7 +539,7 @@ function detectPathTraversalOutputWithRules(
 
   for (const window of detectionWindows) {
     const normalized = normalize(window);
-    const encoded = isEncodedFormPresent(normalized.capped);
+    const rawViews = createRawViews(window);
 
     for (const rule of rules) {
       if (matchesByRuleId.has(rule.id)) {
@@ -535,7 +553,9 @@ function detectPathTraversalOutputWithRules(
         id: rule.id,
         description: rule.description,
         evidence,
-        encoded,
+        encoded:
+          findRuleEvidence(rawViews, rule) === undefined &&
+          isEncodedFormPresent(normalized.capped),
       });
     }
   }
@@ -557,10 +577,14 @@ export function validatePathTraversalOutputPluginConfig(config: PluginConfig): v
     );
   }
 
-  const customPatterns = config.pathTraversalOutputPatterns as
-    | PathTraversalOutputPatternConfig[]
-    | undefined;
-  if (customPatterns) {
+  const customPatterns = config.pathTraversalOutputPatterns as unknown;
+  const extraTargets = config.pathTraversalOutputTargets as unknown;
+  if (customPatterns !== undefined) {
+    if (!Array.isArray(customPatterns)) {
+      throw new Error(
+        'path-traversal-output config.pathTraversalOutputPatterns must be an array of rule objects',
+      );
+    }
     if (customPatterns.length > 0 && (!config.examples || config.examples.length === 0)) {
       throw new Error(
         'path-traversal-output config.pathTraversalOutputPatterns requires config.examples so generated prompts align with the custom detector rules',
@@ -582,7 +606,17 @@ export function validatePathTraversalOutputPluginConfig(config: PluginConfig): v
     }
   }
 
-  const extraTargets = config.pathTraversalOutputTargets as unknown;
+  if (
+    Array.isArray(customPatterns) &&
+    customPatterns.length > 0 &&
+    Array.isArray(extraTargets) &&
+    extraTargets.length > 0
+  ) {
+    throw new Error(
+      'path-traversal-output config.pathTraversalOutputPatterns and config.pathTraversalOutputTargets cannot both be set',
+    );
+  }
+
   if (extraTargets !== undefined) {
     if (!Array.isArray(extraTargets)) {
       throw new Error(

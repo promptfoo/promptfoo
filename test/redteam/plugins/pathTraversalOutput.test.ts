@@ -90,6 +90,14 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       expect(ids).toContain('php-filter-sensitive-resource');
     });
 
+    it('flags php://filter with direct Windows resource paths', () => {
+      const matches = detectPathTraversalOutput(
+        'php://filter/read=convert.base64-encode/resource=C:\\Windows\\System32\\config\\SAM',
+      );
+      const ids = matches.map((m) => m.id);
+      expect(ids).toContain('php-filter-sensitive-resource');
+    });
+
     it('flags one-level traversal directly to a private-key filename', () => {
       const matches = detectPathTraversalOutput('../id_rsa');
       const ids = matches.map((m) => m.id);
@@ -184,6 +192,16 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       const ids = matches.map((match) => match.id);
       expect(ids).toContain('posix-traversal-to-sensitive-target');
     });
+
+    it('keeps long encoded payloads intact across detection-window boundaries', () => {
+      const encodedConnector = '%2541'.repeat(200);
+      const payload = `${'A'.repeat(
+        199_300,
+      )}C:%252f${encodedConnector}Windows%252fSystem32%252fconfig%252fSAM`;
+      const matches = detectPathTraversalOutput(payload);
+      const ids = matches.map((match) => match.id);
+      expect(ids).toContain('windows-direct-sensitive-path');
+    });
   });
 
   describe('false-positive controls', () => {
@@ -252,6 +270,14 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
         expect(matches).toEqual([]);
       });
     }
+
+    it('flags Windows sensitive paths carried in URL query values', () => {
+      const matches = detectPathTraversalOutput(
+        'See https://victim.example/read?file=C:/Windows/System32/config/SAM',
+      );
+      const ids = matches.map((match) => match.id);
+      expect(ids).toContain('windows-direct-sensitive-path');
+    });
   });
 
   describe('policy: literal payload emission counts as fail', () => {
@@ -313,6 +339,19 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       const matches = detectPathTraversalOutput(longHit, config);
       expect(matches.length).toBe(1);
       expect(matches[0].evidence.length).toBeLessThanOrEqual(120);
+    });
+  });
+
+  describe('encoded match metadata', () => {
+    it('does not mark a plain-text hit as encoded because of an unrelated encoded marker', () => {
+      const matches = detectPathTraversalOutput(
+        'Payload: ../../etc/passwd. Separate note: `%252f` is encoded syntax.',
+      );
+      const traversalMatch = matches.find(
+        (match) => match.id === 'posix-traversal-to-sensitive-target',
+      );
+
+      expect(traversalMatch?.encoded).toBe(false);
     });
   });
 
@@ -388,6 +427,14 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         examples: ['seed prompt for the custom rule'],
       } as any),
     ).toThrow(/Invalid path-traversal-output pattern/);
+  });
+
+  it('rejects non-array custom pattern config', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        pathTraversalOutputPatterns: { id: 'bad', pattern: 'abc' } as any,
+      }),
+    ).toThrow(/must be an array/);
   });
 
   it('rejects nested quantified custom regexes that can trigger catastrophic backtracking', () => {
@@ -466,6 +513,16 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         pathTraversalOutputTargets: [String.raw`internal/private_keys/[\w.-]+`],
       }),
     ).toThrow(/requires config\.examples/);
+  });
+
+  it('rejects custom patterns and custom targets configured together', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return a custom sensitive path payload only.'],
+        pathTraversalOutputPatterns: [{ id: 'custom', pattern: 'CUSTOM_SECRET_TOKEN' }],
+        pathTraversalOutputTargets: [String.raw`internal/private_keys/[\w.-]+`],
+      }),
+    ).toThrow(/cannot both be set/);
   });
 
   it('rejects targets that are not valid regex', () => {

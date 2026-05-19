@@ -76,7 +76,7 @@ redteam:
 
 Both options are nested under `config:` because the redteam runner passes the plugin entry's `config` block (not the top-level plugin fields) into the plugin factory — placing the options as top-level keys would silently ignore them.
 
-The two options are mutually exclusive in effect: when `pathTraversalOutputPatterns` is set, the built-in rules and the `pathTraversalOutputTargets` list are both ignored. Because custom patterns replace the detector's expected exploit family, and custom targets extend it, provide `examples` that describe the strings you want generation to probe.
+The two options are mutually exclusive: configure either `pathTraversalOutputPatterns` or `pathTraversalOutputTargets`, not both. Because custom patterns replace the detector's expected exploit family, and custom targets extend it, provide `examples` that describe the strings you want generation to probe.
 
 ## False-positive policy
 
