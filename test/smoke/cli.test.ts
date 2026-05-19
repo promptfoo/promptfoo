@@ -419,5 +419,20 @@ describe('CLI Smoke Tests', () => {
       expect(stdout).toBe('');
       expect(stderr).toContain(`Scan failed: Configuration file not found: ${missingConfigPath}`);
     });
+
+    it('1.8.3 - keeps structured output flag conflicts off stdout', async () => {
+      const { stdout, stderr, exitCode } = await runEntrypointAsync(
+        ['code-scans', 'run', repoDir, '--json', '--format', 'sarif'],
+        {
+          env: {
+            NODE_NO_WARNINGS: '1',
+          },
+        },
+      );
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('Scan failed: Cannot combine --json with --format sarif');
+    });
   });
 });

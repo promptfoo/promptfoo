@@ -209,6 +209,25 @@ describe('Scanner machine-readable output', () => {
     expect(getLogLevel()).toBe('info');
   });
 
+  it('keeps invalid structured output flag combinations off stdout', async () => {
+    mockScanner();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+    const { getLogLevel, setLogLevel } = await import('../../src/logger');
+    const setLogLevelMock = vi.mocked(setLogLevel);
+
+    await executeScan('/test/repo', { json: true, format: CodeScanOutputFormat.SARIF });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Scan failed: Cannot combine --json with --format sarif',
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(setLogLevelMock).not.toHaveBeenCalled();
+    expect(getLogLevel()).toBe('info');
+  });
+
   it('keeps structured-output suppression active until cleanup finishes', async () => {
     const { disconnect } = mockScanner({
       initialLogLevel: 'debug',

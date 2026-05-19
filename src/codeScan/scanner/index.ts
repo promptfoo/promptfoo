@@ -90,6 +90,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
   const originalLogLevel = getLogLevel();
+  const structuredOutputRequested =
+    options.json === true ||
+    options.format === CodeScanOutputFormat.JSON ||
+    options.format === CodeScanOutputFormat.SARIF;
   const absoluteRepoPath = path.resolve(repoPath);
   const cleanupRefs: CleanupRefs = {
     repoPath: absoluteRepoPath,
@@ -333,7 +337,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
-    } else if (outputFormat !== null && outputFormat !== CodeScanOutputFormat.TEXT) {
+    } else if (
+      (outputFormat !== null && outputFormat !== CodeScanOutputFormat.TEXT) ||
+      structuredOutputRequested
+    ) {
       console.error(msg);
     } else {
       logger.error(msg);
