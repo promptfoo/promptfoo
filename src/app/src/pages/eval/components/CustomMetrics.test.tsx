@@ -220,7 +220,10 @@ describe('CustomMetrics', () => {
     const tooltip = await screen.findByRole('tooltip');
     expect(tooltip).toHaveTextContent('Reusable policy');
     expect(tooltip).toHaveTextContent('Must not expose sensitive data.');
-    expect(tooltip).toHaveTextContent('Click to filter by this metric');
+    expect(tooltip).toHaveTextContent('Click to filter by this policy');
+    expect(
+      screen.getByRole('button', { name: 'Filter by policy Reusable policy' }),
+    ).toBeInTheDocument();
   });
 
   it('handles sorting of metrics with special characters and unusual names', () => {

@@ -93,8 +93,10 @@ const CustomMetrics = ({
       {displayMetrics.map(([metric, score]) => {
         let displayLabel: string = metric;
         let tooltipContent: React.ReactNode | null = null;
+        const policyMetric = isPolicyMetric(metric);
+        const filterTargetLabel = policyMetric ? 'policy' : 'metric';
         // Display a tooltip for policy metrics.
-        if (isPolicyMetric(metric)) {
+        if (policyMetric) {
           const policyId = deserializePolicyIdFromMetric(metric);
           const policy = policiesById[policyId];
           if (policy) {
@@ -132,7 +134,7 @@ const CustomMetrics = ({
                 <button
                   type="button"
                   className="metric-content"
-                  aria-label={`Filter by metric ${displayLabel}`}
+                  aria-label={`Filter by ${filterTargetLabel} ${displayLabel}`}
                   onClick={() => handleClick(metric)}
                 >
                   <span data-testid={`metric-name-${metric}`} className="metric-name">
@@ -151,7 +153,9 @@ const CustomMetrics = ({
               <TooltipContent side="top">
                 <div className="space-y-2 max-w-[400px]">
                   {tooltipContent}
-                  <p className="text-sm font-medium">Click to filter by this metric</p>
+                  <p className="text-sm font-medium">
+                    Click to filter by this {filterTargetLabel}
+                  </p>
                 </div>
               </TooltipContent>
             </Tooltip>
