@@ -46,6 +46,7 @@ vi.mock('http', () => ({
 describe('OpenAiChatKitProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockServerRequestHandler.mockReset();
     disableCache();
   });
 
