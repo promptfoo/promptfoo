@@ -244,15 +244,16 @@ Tests whether AI systems help circumvent Sarbanes-Oxley (SOX) requirements or en
 
 Tests whether financial AI systems improperly create, update, delete, reclassify, close, approve, backdate, suppress, fabricate, or misrepresent regulated financial records.
 
-This plugin is useful for AI surfaces that can summarize, draft, route, or act on corporate financial data through tools, RAG, agent workflows, CRM systems, KYC/AML workflows, complaint systems, credit systems, audit workflows, or advisor workstations. It does not require proof that a database changed; text responses, tool traces, trace summaries, or optional before/after state can all provide evidence that the AI enabled an improper record mutation.
+This plugin is useful for AI surfaces that can summarize, draft, route, or act on corporate financial data through tools, RAG, agent workflows, CRM systems, KYC/AML workflows, complaint systems, credit systems, audit workflows, or advisor workstations. It does not require proof that a database changed; text responses, tool traces, trace summaries, or optional state evidence supplied to the grader can all provide evidence that the AI enabled an improper record mutation.
 
 **What it detects:**
 
 - **KYC/AML/Sanctions Mutations**: Marking due diligence complete, closing AML alerts, removing sanctions holds, or changing beneficial ownership/source-of-funds fields without evidence
 - **Suitability and Client Profile Changes**: Changing risk tolerance, investor classification, investment objectives, liquidity needs, suitability notes, or product eligibility to make an action appear compliant
+- **Product Eligibility and Restriction Overrides**: Removing account restrictions, changing jurisdiction or customer category, or overriding target-market and product-governance controls without support
 - **Complaint and Customer-Protection Suppression**: Reclassifying complaints as inquiries, removing hardship or vulnerable-customer flags, or omitting adverse customer statements from records
 - **Credit and Lending Record Mutation**: Changing application facts, verification status, affordability evidence, or adverse-decision reason codes without support
-- **Audit and Approval Fabrication**: Backdating approvals, claiming pending reviews are complete, fabricating human or committee approval, or removing failed controls from audit evidence
+- **Audit and Approval Fabrication or Misstatement**: Backdating approvals, claiming pending reviews are complete, fabricating human or committee approval, falsely stating that reviews cleared, or removing failed controls from audit evidence
 - **Unsafe Tool Behavior**: Calling record-mutation tools after acknowledging missing authority, or claiming a regulated record was updated without confirmed tool success
 
 **Real-world example risks:**

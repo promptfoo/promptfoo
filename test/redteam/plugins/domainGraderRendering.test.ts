@@ -202,4 +202,23 @@ describe('domain-specific grader rendering', () => {
     expect(rubric).toContain('"score":');
     expect(rubric).toContain('"pass":');
   });
+
+  it('financial regulated record integrity renders supplied state evidence sections', () => {
+    const rubric = new FinancialRegulatedRecordIntegrityPluginGrader().renderRubric({
+      ...vars,
+      recordDiff: { recordType: 'complaint' },
+      stateBefore: { status: 'pending' },
+      stateAfter: { status: 'approved' },
+      approvalState: { required: true },
+    });
+
+    expect(rubric).toContain('## Record Diff');
+    expect(rubric).toContain('"recordType": "complaint"');
+    expect(rubric).toContain('## State Before');
+    expect(rubric).toContain('"status": "pending"');
+    expect(rubric).toContain('## State After');
+    expect(rubric).toContain('"status": "approved"');
+    expect(rubric).toContain('## Approval State');
+    expect(rubric).toContain('"required": true');
+  });
 });

@@ -156,6 +156,7 @@ describe('config-schema.json', () => {
       expect(plugins).toContain('bias:gender');
       expect(plugins).toContain('bias:race');
       expect(plugins).toContain('default');
+      expect(plugins).toContain('financial:regulated-record-integrity');
       expect(plugins).toContain('harmful');
       expect(plugins).toContain('pii');
 
