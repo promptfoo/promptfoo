@@ -90,7 +90,7 @@ There are various actions you can take to mitigate the effects of the above atta
 <div className={styles.promptfooCard}>
   <div className={styles.cardHeader}>
     <div className={styles.logoSection}>
-      <img src="/img/logo-panda.svg" alt="Promptfoo" className={styles.pandaLogo} />
+      <img src="/img/logo-panda.svg" alt="" className={styles.pandaLogo} />
       <span className={styles.brandName}>promptfoo</span>
     </div>
     <div className={styles.cardTagline}>
@@ -195,7 +195,7 @@ With the surge in AI application development, several frameworks have emerged to
 
 - **OWASP Top 10 for LLM Applications:** Explained in detail in a previous section.
 - **NIST AI Risk Management Framework (AI RMF):** Created by the [National Institute of Standards and Technology](https://www.nist.gov/itl/ai-risk-management-framework), this framework promotes a structured approach to AI governance. It emphasizes identifying AI assets, assessing risks, implementing controls, and ongoing evaluation.
-- **EU AI Act:** Proposed by the European Commission, the [EU AI Act](https://artificialintelligenceact.eu/) classifies AI systems by risk level. It mandates practices like transparency, safety testing, and human oversight for high-risk use cases.
+- **EU AI Act:** The [EU AI Act](https://commission.europa.eu/news-and-media/news/ai-act-enters-force-2024-08-01_en), which entered into force on August 1, 2024, classifies AI systems by risk level. It mandates practices like transparency, safety testing, and human oversight for high-risk use cases.
 - **MITRE ATLAS:** Maintained by [MITRE](https://atlas.mitre.org/), this threat knowledge base catalogs real-world adversary tactics used to attack AI systems. It supports threat modeling and helps security teams simulate how attackers might target model behavior or logic.
 
 <div className={styles.ctaBanner}>
@@ -229,7 +229,7 @@ Promptfoo not only detects issues but also recommends targeted fixes by tracing 
 
 ### Standards alignment
 
-Promptfoo categorizes its findings against security frameworks such as OWASP Top 10 for LLMs, NIST AI RMF, the EU AI Act, and MITRE ATLAS. This helps teams ensure that their AI application complies with the latest security standards and frameworks.
+Promptfoo categorizes its findings against security frameworks such as OWASP Top 10 for LLMs, NIST AI RMF, the EU AI Act, and MITRE ATLAS. This helps teams report against those frameworks and connect red-team findings to broader governance work.
 
 ## Promptfoo red-teaming example for RAG applications
 
@@ -245,21 +245,21 @@ Promptfoo provides [detailed documentation](/docs/red-team/quickstart/) on how t
 
 ![promptfoo redteam setup browser window](/img/blog/ai-application-security/redteam-setup-window.png)
 
-**Step 1: Select target type**
+### Step 1: Select target type
 
 The first step is to name your application and select the target type, which can be any LLM provider, a chatbot application accessed through an API, or a simple HTTP/HTTPS endpoint. Since our RAG application is accessed via an HTTP endpoint, we select that option.
 
-**Step 2: Set up target configuration**
+### Step 2: Set up target configuration
 
 The next step is to configure the target type, which determines the configuration settings. For HTTP endpoints, we need to set the HTTP URL, HTTP method, headers, content type, and request body. The following screenshot shows the configuration to access our RAG application.
 
 ![HTTP target configuration for the RAG application](/img/blog/ai-application-security/step2-target-configuration.png)
 
-**Step 3: Provide application details**
+### Step 3: Provide application details
 
 Here, you provide the information Promptfoo will use to create red-team attacks. You can specify the purpose of your application, key features of the application, and the industry for which the application operates, the users of the application, and any other information that can help create robust adversarial attacks. You can also specify the permissions and the resources that your application can access.
 
-**Step 4: Specify the plugins**
+### Step 4: Specify the plugins
 
 [Plugins](/docs/red-team/plugins/) provide a modular mechanism for testing different classes of risks and vulnerabilities in LLM models and LLM-powered applications. Each plugin generates adversarial inputs designed to target specific weakness categories.
 
@@ -267,7 +267,7 @@ Select the red-team plugins that best match the security risks and threat scenar
 
 ![Selecting red-team plugins including RAG plugins](/img/blog/ai-application-security/step4-plugins.png)
 
-**Step 5: Select red-teaming strategies**
+### Step 5: Select red-teaming strategies
 
 [Strategies](/docs/red-team/strategies/) are approaches that systematically identify vulnerabilities in LLM applications. While plugins focus on generating malicious inputs, strategies control how those inputs are passed to the AI application to maximize the rate of attack success.
 
@@ -282,7 +282,7 @@ Select the red-team strategies that determine how attacks are generated and exec
   </a>
 </div>
 
-**Step 6: Review and run**
+### Step 6: Review and run
 
 Finally, review your red-teaming configurations and run the application. You have two options:
 
@@ -291,9 +291,9 @@ Finally, review your red-teaming configurations and run the application. You hav
 
 ![Review and run red-team configuration](/img/blog/ai-application-security/step6-review-run.png)
 
-**Step 7: Results and monitoring**
+### Step 7: Results and monitoring
 
-The final step is to review the results. You can directly see the results in your browser if you run the tests there. For the command line, the URL containing evaluations will be provided at the end of the tests.
+The final step is to review the results. You can directly see the results in your browser if you run the tests there. For the command line, run `promptfoo redteam report` after the scan completes to open the results view.
 
 For our RAG application, we see the following results:
 
