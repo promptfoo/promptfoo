@@ -1778,8 +1778,15 @@ function ResultsTable({
     );
   }, [filters.values]);
 
+  const hasMountedResultSetResetRef = useRef(false);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
+    if (!hasMountedResultSetResetRef.current) {
+      hasMountedResultSetResetRef.current = true;
+      return;
+    }
+
     if (parseEvalOutputPromptHash(window.location.hash)) {
       setEvalDetailsHash('');
     }

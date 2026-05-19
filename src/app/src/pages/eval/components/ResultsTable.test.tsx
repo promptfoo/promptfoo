@@ -1122,6 +1122,24 @@ describe('ResultsTable Row Navigation', () => {
     });
   });
 
+  it('preserves the details hash on initial mount', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
+
   it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 
