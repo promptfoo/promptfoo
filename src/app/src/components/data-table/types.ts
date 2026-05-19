@@ -18,6 +18,8 @@ declare module '@tanstack/react-table' {
     align?: 'left' | 'right';
     /** Pin important columns to an edge while the table scrolls horizontally. */
     sticky?: 'left' | 'right';
+    /** Distinct label to use when the column appears in the visibility toggle menu. */
+    columnToggleLabel?: string;
   }
 }
 
