@@ -43,22 +43,22 @@ promptfoo code-scans run [repo-path] [options]
 
 ### Options
 
-| Option                            | Description                                                                                         | Default                                                                                         |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `repo-path`                       | Path to repository                                                                                  | Current directory (`.`)                                                                         |
-| `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var                                            |
-| `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                                                              |
-| `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                                                                          |
-| `--config <path>`                 | Path to config file                                                                                 | Built-in defaults unless an explicit config path is provided                                    |
-| `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                                                            |
-| `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                                                            |
-| `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                                                                     |
-| `--diffs-only`                    | Scan only PR diffs; skip repository tracing                                                         | false                                                                                           |
-| `--min-severity <level>`          | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                    | `medium`                                                                                        |
-| `--minimum-severity <level>`      | Alias for `--min-severity`                                                                          | `medium`                                                                                        |
-| `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                                                           |
-| `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                                                                          |
-| `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                                                            |
+| Option                            | Description                                                                                         | Default                                                      |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `repo-path`                       | Path to repository                                                                                  | Current directory (`.`)                                      |
+| `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var         |
+| `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                           |
+| `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                                       |
+| `--config <path>`                 | Path to config file                                                                                 | Built-in defaults unless an explicit config path is provided |
+| `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                         |
+| `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                         |
+| `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                                  |
+| `--diffs-only`                    | Scan only PR diffs; skip repository tracing                                                         | false                                                        |
+| `--min-severity <level>`          | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                    | `medium`                                                     |
+| `--minimum-severity <level>`      | Alias for `--min-severity`                                                                          | `medium`                                                     |
+| `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                        |
+| `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                                       |
+| `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                         |
 
 By default, `code-scans run` starts from the selected git diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Use `--diffs-only` when you want the scan constrained to the patch itself.
 
