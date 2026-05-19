@@ -933,21 +933,12 @@
         const emptyState = document.querySelector('[data-empty-state]');
         const rows = Array.from(document.querySelectorAll('[data-result-row]'));
 
-        const getRowStatus = (row) => {
+        const getRowStatuses = (row) => {
           const statuses = Array.from(row.querySelectorAll('td[data-output-cell="true"]')).map(
             (cell) => cell.getAttribute('data-status') || '',
           );
 
-          if (statuses.includes('error')) {
-            return 'error';
-          }
-          if (statuses.includes('fail')) {
-            return 'fail';
-          }
-          if (statuses.length > 0 && statuses.every((status) => status === 'pass')) {
-            return 'pass';
-          }
-          return 'all';
+          return new Set(statuses.filter(Boolean));
         };
 
         const applyFilters = () => {
@@ -961,8 +952,11 @@
               .join('\n')
               .toLowerCase();
             const matchesQuery = query.length === 0 || text.includes(query);
-            const rowStatus = getRowStatus(row);
-            const matchesStatus = status === 'all' || rowStatus === status;
+            const rowStatuses = getRowStatuses(row);
+            const matchesStatus =
+              status === 'all' ||
+              (status === 'pass' && rowStatuses.size > 0 && [...rowStatuses].every((value) => value === 'pass')) ||
+              rowStatuses.has(status);
             const visible = matchesQuery && matchesStatus;
 
             row.hidden = !visible;
@@ -987,6 +981,14 @@
         const detailTitle = document.querySelector('[data-detail-title]');
         const detailClose = document.querySelector('[data-detail-close]');
         let lastDetailTrigger = null;
+        const getDetailFocusableElements = () =>
+          detailDrawer
+            ? Array.from(
+                detailDrawer.querySelectorAll(
+                  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+                ),
+              )
+            : [];
 
         const closeDetail = () => {
           if (!detailDrawer || !detailBackdrop || !detailBody) {
@@ -1029,6 +1031,28 @@
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape' && detailDrawer && !detailDrawer.hidden) {
             closeDetail();
+            return;
+          }
+
+          if (event.key === 'Tab' && detailDrawer && !detailDrawer.hidden) {
+            const focusableElements = getDetailFocusableElements();
+            if (focusableElements.length === 0) {
+              event.preventDefault();
+              detailDrawer.focus();
+              return;
+            }
+
+            const firstElement = focusableElements[0];
+            const lastElement = focusableElements[focusableElements.length - 1];
+            const activeElement = document.activeElement;
+
+            if (event.shiftKey && activeElement === firstElement) {
+              event.preventDefault();
+              lastElement.focus();
+            } else if (!event.shiftKey && activeElement === lastElement) {
+              event.preventDefault();
+              firstElement.focus();
+            }
           }
         });
       })();

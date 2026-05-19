@@ -48,9 +48,9 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
 const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   const status = output.pass
     ? 'pass'
-    : output.failureReason === ResultFailureReason.ASSERT
-      ? 'fail'
-      : 'error';
+    : output.failureReason === ResultFailureReason.ERROR
+      ? 'error'
+      : 'fail';
   const namedScores = Object.entries(output.namedScores).map(([name, value]) => ({
     name,
     value: value?.toFixed(2),
@@ -62,7 +62,7 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
     score: output.score?.toFixed(2),
     namedScores,
     text: output.text,
-    reason: output.gradingResult?.reason || output.error || '',
+    reason: output.gradingResult?.reason || '',
     prompt: output.prompt,
     provider: output.provider || '',
     error: output.error || '',
@@ -261,10 +261,10 @@ export async function writeOutput(
     const reportOutputs = table.body.flatMap((row) => row.outputs);
     const totalResults = reportOutputs.length;
     const successes = reportOutputs.filter((output) => output.pass).length;
-    const failures = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ASSERT,
+    const errors = reportOutputs.filter(
+      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
     ).length;
-    const errors = totalResults - successes - failures;
+    const failures = totalResults - successes - errors;
     const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
     const htmlOutput = getNunjucksEngine().renderString(template, {
       config: redactedConfig,
