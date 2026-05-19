@@ -107,7 +107,7 @@ const HTML_ATTRIBUTE_ENTITY_MAP: Record<string, string> = {
   quot: '"',
 };
 const NESTED_QUANTIFIER =
-  /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
+  /\((?:[^()\\]|\\.)*(?:[+*?]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?<alternatives>(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
@@ -562,15 +562,21 @@ function compileCustomRules(patterns: XssOutputPatternConfig[]): XssOutputRule[]
 }
 
 function getRules(config?: PluginConfig): XssOutputRule[] {
-  const configuredPatterns = config?.xssOutputPatterns;
-  if (configuredPatterns && configuredPatterns.length > 0) {
+  const configuredPatterns = Array.isArray(config?.xssOutputPatterns)
+    ? (config.xssOutputPatterns as XssOutputPatternConfig[])
+    : [];
+  if (configuredPatterns.length > 0) {
     return compileCustomRules(configuredPatterns);
   }
   return DEFAULT_XSS_OUTPUT_RULES;
 }
 
 function hasCustomPatterns(config?: PluginConfig): boolean {
-  return Boolean(config?.xssOutputPatterns && config.xssOutputPatterns.length > 0);
+  return Boolean(
+    config?.xssOutputPatterns &&
+      Array.isArray(config.xssOutputPatterns) &&
+      config.xssOutputPatterns.length > 0,
+  );
 }
 
 function validateConfiguredRegexSafety(source: string, label: string): void {
@@ -656,20 +662,37 @@ export function validateXssOutputPluginConfig(config: PluginConfig): void {
     throw new Error('xss-output requires at least one non-benign input when config.inputs is set');
   }
 
-  const configuredPatterns = config.xssOutputPatterns;
-  if (!configuredPatterns) {
+  const configuredPatterns = config.xssOutputPatterns as unknown;
+  const examples = config.examples as unknown;
+  if (configuredPatterns === undefined) {
     return;
   }
 
-  if (configuredPatterns.length > 0 && (!config.examples || config.examples.length === 0)) {
+  if (!Array.isArray(configuredPatterns)) {
+    throw new Error('xss-output config.xssOutputPatterns must be an array of rule objects');
+  }
+
+  if (
+    configuredPatterns.length > 0 &&
+    (!Array.isArray(examples) ||
+      examples.length === 0 ||
+      examples.some((example) => typeof example !== 'string' || example.length === 0))
+  ) {
     throw new Error(
-      'xss-output config.xssOutputPatterns requires config.examples so generated prompts align with the custom detector rules',
+      'xss-output config.xssOutputPatterns requires config.examples to be a non-empty array of strings so generated prompts align with the custom detector rules',
     );
   }
 
   for (const rule of configuredPatterns) {
-    if (!rule.id || !rule.pattern) {
-      throw new Error('xss-output config.xssOutputPatterns entries require `id` and `pattern`');
+    if (
+      typeof rule?.id !== 'string' ||
+      rule.id.length === 0 ||
+      typeof rule.pattern !== 'string' ||
+      rule.pattern.length === 0
+    ) {
+      throw new Error(
+        'xss-output config.xssOutputPatterns entries require non-empty string `id` and `pattern` values',
+      );
     }
     try {
       validateConfiguredRegexSafety(rule.pattern, `pattern "${rule.id}"`);

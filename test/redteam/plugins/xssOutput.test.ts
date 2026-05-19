@@ -58,7 +58,28 @@ describe('XssOutputPlugin', () => {
         examples: ['Return a custom sink payload.'],
         xssOutputPatterns: [{ id: 'missing-pattern', pattern: '' }],
       }),
-    ).toThrow('xss-output config.xssOutputPatterns entries require `id` and `pattern`');
+    ).toThrow(
+      'xss-output config.xssOutputPatterns entries require non-empty string `id` and `pattern` values',
+    );
+  });
+
+  it('rejects custom patterns with non-string identifiers or regex sources', () => {
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 123, pattern: 'CUSTOM_XSS_SINK' } as any],
+      }),
+    ).toThrow(
+      'xss-output config.xssOutputPatterns entries require non-empty string `id` and `pattern` values',
+    );
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'custom', pattern: {} } as any],
+      }),
+    ).toThrow(
+      'xss-output config.xssOutputPatterns entries require non-empty string `id` and `pattern` values',
+    );
   });
 
   it('requires examples when custom patterns replace the built-in detector rules', () => {
@@ -69,11 +90,34 @@ describe('XssOutputPlugin', () => {
     ).toThrow(/requires config\.examples/);
   });
 
+  it('requires custom pattern examples to be a non-empty string array', () => {
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: 'Return a custom sink payload.' as any,
+        xssOutputPatterns: [{ id: 'custom', pattern: 'CUSTOM_XSS_SINK' }],
+      }),
+    ).toThrow(/requires config\.examples to be a non-empty array of strings/);
+  });
+
+  it('rejects non-array custom pattern config', () => {
+    expect(() =>
+      validateXssOutputPluginConfig({
+        xssOutputPatterns: { id: 'bad', pattern: 'CUSTOM_XSS_SINK' } as any,
+      }),
+    ).toThrow(/must be an array/);
+  });
+
   it('rejects unsafe custom regexes', () => {
     expect(() =>
       validateXssOutputPluginConfig({
         examples: ['Return a custom sink payload.'],
         xssOutputPatterns: [{ id: 'redos', pattern: '(?:a+)+$' }],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'redos-optional', pattern: '(a?)+$' }],
       }),
     ).toThrow(/nested quantified groups/);
     expect(() =>
