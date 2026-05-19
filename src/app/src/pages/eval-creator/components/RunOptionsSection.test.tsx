@@ -146,7 +146,7 @@ describe('RunOptionsSection', () => {
       render(<RunOptionsSection onChange={mockOnChange} />);
 
       const input = screen.getByLabelText('Delay between API calls (ms)');
-      await user.paste(input, '-50');
+      await user.type(input, '-50');
 
       expect(mockOnChange).toHaveBeenLastCalledWith({
         description: undefined,
