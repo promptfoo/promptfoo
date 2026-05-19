@@ -107,7 +107,7 @@ const HTML_ATTRIBUTE_ENTITY_MAP: Record<string, string> = {
   quot: '"',
 };
 const NESTED_QUANTIFIER =
-  /\((?:[^()\\]|\\.)*(?:[+*?]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
+  /\((?:[^()\\]|\\.)*(?:[+*]|\?(?![:=!<])|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
 const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?<alternatives>(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
