@@ -1423,8 +1423,7 @@ function ResultsTableHeader({
             zoom,
           }}
         >
-          <ResultsTableColumnGroup reactTable={reactTable} />
-          <thead>
+          <thead ref={theadRef}>
             {reactTable.getHeaderGroups().map((headerGroup) => {
               let promptHeaderBorderDrawn = false;
 
