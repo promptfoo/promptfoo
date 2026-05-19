@@ -6,6 +6,7 @@ describe('Google Sheets optional dependency', () => {
   afterEach(() => {
     vi.doUnmock('@googleapis/sheets');
     vi.doUnmock('../src/util/fetch/index');
+    vi.doUnmock('../src/util/packageImportErrors');
     vi.resetModules();
   });
 
@@ -13,6 +14,9 @@ describe('Google Sheets optional dependency', () => {
     vi.doMock('@googleapis/sheets', () => {
       throw new Error('Cannot find package @googleapis/sheets');
     });
+    vi.doMock('../src/util/packageImportErrors', () => ({
+      isMissingPackageImportError: () => true,
+    }));
 
     const { fetchCsvFromGoogleSheetAuthenticated } = await import('../src/googleSheets');
     const fetchPromise = fetchCsvFromGoogleSheetAuthenticated(SHEET_URL);

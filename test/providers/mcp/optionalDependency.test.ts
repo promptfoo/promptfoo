@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 describe('MCP client optional dependency', () => {
   afterEach(() => {
     vi.doUnmock('@modelcontextprotocol/sdk/client/index.js');
+    vi.doUnmock('../../../src/util/packageImportErrors');
     vi.resetModules();
   });
 
@@ -10,6 +11,9 @@ describe('MCP client optional dependency', () => {
     vi.doMock('@modelcontextprotocol/sdk/client/index.js', () => {
       throw new Error('Cannot find package @modelcontextprotocol/sdk');
     });
+    vi.doMock('../../../src/util/packageImportErrors', () => ({
+      isMissingPackageImportError: () => true,
+    }));
 
     const { MCPClient } = await import('../../../src/providers/mcp/client');
     const client = new MCPClient({
