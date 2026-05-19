@@ -192,9 +192,10 @@ const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
 const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i;
 const IFRAME_SRCDOC_PATTERN =
   /<\s*iframe\b[^>]*[\s/]+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
-const DATA_HTML_URL_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n"']+`;
+const DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n"']+`;
+const DATA_HTML_URL_BARE_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`;
 const DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${DATA_HTML_URL_VALUE_PATTERN}|'[^']*?\b${DATA_HTML_URL_VALUE_PATTERN}|[^\s>]*?\b${DATA_HTML_URL_VALUE_PATTERN})|\b${DATA_HTML_URL_VALUE_PATTERN})`,
+  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|'[^']*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|[^\s>]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN})|\b${DATA_HTML_URL_BARE_VALUE_PATTERN})`,
   'i',
 );
 const EVENT_HANDLER_ATTRIBUTE_PATTERN =
