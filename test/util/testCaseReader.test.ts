@@ -1193,31 +1193,29 @@ describe('readTests', () => {
     ]);
   });
 
-  it('readTests with Azure YAML vars files follows the local YAML normalization path', async () => {
+  it('readTests with Azure YAML keeps blob content as remote test data', async () => {
     const blobUri = 'az://account/container/tests.yaml';
     vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
-      - description: Azure YAML vars case
+      - description: Azure YAML remote data case
         vars: vars1.yaml
+        provider: file://providers/local.js
         assert:
           - type: equals
             value: ready
     `);
-    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
-    vi.mocked(fs.readFileSync).mockReturnValueOnce(
-      yaml.dump({
-        review_id: 'review-008',
-      }),
-    );
 
     const result = await readTests(blobUri);
 
     expect(result).toEqual([
       {
         assert: [{ type: 'equals', value: 'ready' }],
-        description: 'Azure YAML vars case',
-        vars: { review_id: 'review-008' },
+        description: 'Azure YAML remote data case',
+        provider: 'file://providers/local.js',
+        vars: 'vars1.yaml',
       },
     ]);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
   it('readTests with multiple __expected in CSV', async () => {

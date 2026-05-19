@@ -736,6 +736,10 @@ Authentication uses the first available option:
 
 When using `AZURE_STORAGE_CONNECTION_STRING`, the storage account comes from the connection string. Keep the `az://` account segment aligned with that account so the URI remains self-describing; Promptfoo rejects clearly mismatched `AccountName` values. Query strings are interpreted as SAS tokens and must include `sig`.
 
+SAS query strings and `DefaultAzureCredential` use the standard public Azure Blob endpoint for the named account. For Azure Government, Azure operated by 21Vianet, or custom blob endpoints, use `AZURE_STORAGE_CONNECTION_STRING` with the appropriate `EndpointSuffix` or explicit `BlobEndpoint`.
+
+Blob-hosted YAML, JSON, and JSONL files are treated as remote test-case data. Promptfoo does not expand local file references or provider references found inside those blob contents.
+
 ### HuggingFace Datasets
 
 See [HuggingFace Datasets](/docs/configuration/huggingface-datasets) for instructions on importing test cases from existing datasets.
