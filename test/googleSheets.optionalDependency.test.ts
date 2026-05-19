@@ -87,4 +87,48 @@ describe('Google Sheets optional dependency', () => {
     await expect(fetchCsvFromGoogleSheet(SHEET_URL)).resolves.toEqual([{ header: 'value' }]);
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   });
+
+  it('falls back to authenticated access when CSV export returns a login page', async () => {
+    const fetchWithProxy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('probe failed'))
+      .mockResolvedValueOnce({
+        status: 200,
+        headers: {
+          get: () => 'text/html; charset=utf-8',
+        },
+        text: async () => '<!doctype html><html><body>Sign in</body></html>',
+      });
+
+    vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
+    vi.doMock('@googleapis/sheets', () => ({
+      auth: {
+        GoogleAuth: class {},
+      },
+      sheets: () => ({
+        spreadsheets: {
+          get: vi.fn().mockResolvedValue({
+            data: {
+              sheets: [{ properties: { title: 'Sheet1' } }],
+            },
+          }),
+          values: {
+            get: vi.fn().mockResolvedValue({
+              data: {
+                values: [
+                  ['header'],
+                  ['value'],
+                ],
+              },
+            }),
+          },
+        },
+      }),
+    }));
+
+    const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
+
+    await expect(fetchCsvFromGoogleSheet(SHEET_URL)).resolves.toEqual([{ header: 'value' }]);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+  });
 });

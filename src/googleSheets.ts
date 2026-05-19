@@ -31,6 +31,19 @@ export async function checkGoogleSheetAccess(url: string) {
   }
 }
 
+function isHtmlExportResponse(
+  response: { headers?: { get(name: string): string | null } },
+  body: string,
+): boolean {
+  const contentType = response.headers?.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('text/html')) {
+    return true;
+  }
+
+  const prefix = body.trimStart().slice(0, 32).toLowerCase();
+  return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
+}
+
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
 
@@ -42,6 +55,9 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
   }
   const csvData = await response.text();
+  if (isHtmlExportResponse(response, csvData)) {
+    throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
+  }
   return parseCsv(csvData, { columns: true });
 }
 
