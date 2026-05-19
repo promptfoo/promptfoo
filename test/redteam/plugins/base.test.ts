@@ -70,6 +70,7 @@ describe('RedteamPluginBase', () => {
 
   afterEach(() => {
     cliState.config = {};
+    mockLoadTools.mockReset();
     vi.clearAllMocks();
   });
 
