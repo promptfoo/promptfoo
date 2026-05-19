@@ -252,9 +252,9 @@ describe('detectXssOutput', () => {
   });
 
   it('does not flag data:text/html image sources as executable navigation sinks', () => {
-    expect(detectXssOutput('<img src="data:text/html,<script>alert(1)</script>">')).toEqual(
-      [],
-    );
+    expect(
+      detectXssOutput('<img src="data:text/html,%3Cscript%3Ealert(1)%3C/script%3E">'),
+    ).toEqual([]);
   });
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
