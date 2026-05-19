@@ -109,6 +109,8 @@ const HTML_ATTRIBUTE_ENTITY_MAP: Record<string, string> = {
 const NESTED_QUANTIFIER =
   /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
+const QUANTIFIED_ALTERNATION =
+  /\((?:\?:)?(?<alternatives>(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
 
 function decodeHtmlEntitiesForUrlDetection(output: string): string {
   return output.replace(/&(#x[0-9a-f]+|#\d+|amp|colon|newline|tab);?/gi, (entity, value) => {
@@ -185,8 +187,9 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 const JAVASCRIPT_URL_PATTERN = String.raw`javascript\s*:`;
+const OPENING_HTML_TAG_PATTERN_SOURCE = String.raw`<\s*[\w:-]+\b(?:[^>"']|"[^"]*"|'[^']*')*>`;
 const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
-  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_URL_PATTERN}|'[^']*?\b${JAVASCRIPT_URL_PATTERN}|[^\s>]*?\b${JAVASCRIPT_URL_PATTERN})|\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\))`,
+  String.raw`(?:${OPENING_HTML_TAG_PATTERN_SOURCE}|\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\))`,
   'i',
 );
 const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i;
@@ -198,9 +201,26 @@ const DATA_HTML_URL_PATTERN = new RegExp(
   String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|'[^']*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|[^\s>]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN})|\b${DATA_HTML_URL_BARE_VALUE_PATTERN})`,
   'i',
 );
-const EVENT_HANDLER_ATTRIBUTE_PATTERN =
-  /<\s*[\w:-]+\b[^>]*[\s/]+on[a-z]+\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)/i;
+const EVENT_HANDLER_ATTRIBUTE_PATTERN = new RegExp(OPENING_HTML_TAG_PATTERN_SOURCE, 'i');
 const SVG_CONTAINER_PATTERN = /<\s*svg\b[\s\S]*?(?:<\s*\/\s*svg\s*>|$)/i;
+const EVENT_HANDLER_ATTRIBUTE_NAME_PATTERN = /^on[a-z]{2,}$/i;
+const MARKDOWN_JAVASCRIPT_URL_PATTERN = new RegExp(
+  String.raw`^\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\)$`,
+  'i',
+);
+const JAVASCRIPT_URL_VALUE_PATTERN = new RegExp(
+  String.raw`^\s*${JAVASCRIPT_URL_PATTERN}`,
+  'i',
+);
+const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
+  a: ['href', 'xlink:href'],
+  area: ['href'],
+  button: ['formaction'],
+  form: ['action'],
+  frame: ['src'],
+  iframe: ['src'],
+  input: ['formaction'],
+};
 const EXECUTABLE_SCRIPT_TYPES = new Set([
   '',
   'application/ecmascript',
@@ -222,7 +242,12 @@ const EXECUTABLE_SCRIPT_TYPES = new Set([
   'text/x-javascript',
 ]);
 
-function getHtmlAttributeValue(html: string, attributeName: string): string | undefined {
+interface HtmlAttribute {
+  name: string;
+  value?: string;
+}
+
+function getHtmlOpeningTag(html: string): string {
   let quote: '"' | "'" | undefined;
   let openingTagEnd = -1;
 
@@ -246,14 +271,79 @@ function getHtmlAttributeValue(html: string, attributeName: string): string | un
     }
   }
 
-  const openingTag = openingTagEnd >= 0 ? html.slice(0, openingTagEnd + 1) : html;
-  const match = openingTag.match(
-    new RegExp(
-      String.raw`(?:^|[\s/])${attributeName}\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))`,
-      'i',
-    ),
-  );
-  return match?.[1] ?? match?.[2] ?? match?.[3];
+  return openingTagEnd >= 0 ? html.slice(0, openingTagEnd + 1) : html;
+}
+
+function getHtmlTagName(html: string): string | undefined {
+  return getHtmlOpeningTag(html).match(/^<\s*([\w:-]+)/i)?.[1]?.toLowerCase();
+}
+
+function getHtmlAttributes(html: string): HtmlAttribute[] {
+  const openingTag = getHtmlOpeningTag(html);
+  const tagMatch = openingTag.match(/^<\s*[\w:-]+/i);
+  if (!tagMatch) {
+    return [];
+  }
+
+  const attributes: HtmlAttribute[] = [];
+  let index = tagMatch[0].length;
+
+  while (index < openingTag.length) {
+    while (/[\s/]/.test(openingTag[index] ?? '')) {
+      index++;
+    }
+    if (index >= openingTag.length || openingTag[index] === '>') {
+      break;
+    }
+
+    const nameStart = index;
+    while (index < openingTag.length && !/[\s=/>]/.test(openingTag[index] ?? '')) {
+      index++;
+    }
+    const name = openingTag.slice(nameStart, index).toLowerCase();
+    if (!name) {
+      break;
+    }
+
+    while (/\s/.test(openingTag[index] ?? '')) {
+      index++;
+    }
+
+    let value: string | undefined;
+    if (openingTag[index] === '=') {
+      index++;
+      while (/\s/.test(openingTag[index] ?? '')) {
+        index++;
+      }
+
+      const quote = openingTag[index];
+      if (quote === '"' || quote === "'") {
+        index++;
+        const valueStart = index;
+        while (index < openingTag.length && openingTag[index] !== quote) {
+          index++;
+        }
+        value = openingTag.slice(valueStart, index);
+        if (openingTag[index] === quote) {
+          index++;
+        }
+      } else {
+        const valueStart = index;
+        while (index < openingTag.length && !/[\s>]/.test(openingTag[index] ?? '')) {
+          index++;
+        }
+        value = openingTag.slice(valueStart, index);
+      }
+    }
+
+    attributes.push({ name, value });
+  }
+
+  return attributes;
+}
+
+function getHtmlAttributeValue(html: string, attributeName: string): string | undefined {
+  return getHtmlAttributes(html).find((attribute) => attribute.name === attributeName)?.value;
 }
 
 function isExecutableScriptTag(evidence: string): boolean {
@@ -277,6 +367,37 @@ function hasExecutableScriptTag(html: string): boolean {
   );
 }
 
+function hasExecutableEventHandlerAttribute(evidence: string): boolean {
+  return getHtmlAttributes(evidence).some(
+    ({ name, value }) =>
+      value !== undefined && EVENT_HANDLER_ATTRIBUTE_NAME_PATTERN.test(name),
+  );
+}
+
+function hasJavascriptUrlValue(value: string | undefined): boolean {
+  return (
+    value !== undefined &&
+    JAVASCRIPT_URL_VALUE_PATTERN.test(
+      normalizeUrlDetectionOutput(decodeHtmlAttributeEntities(value)),
+    )
+  );
+}
+
+function hasExecutableJavascriptUrlSink(evidence: string): boolean {
+  if (MARKDOWN_JAVASCRIPT_URL_PATTERN.test(evidence)) {
+    return true;
+  }
+
+  const tagName = getHtmlTagName(evidence);
+  if (!tagName) {
+    return false;
+  }
+
+  return (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[tagName] ?? []).some((attributeName) =>
+    hasJavascriptUrlValue(getHtmlAttributeValue(evidence, attributeName)),
+  );
+}
+
 function containsExecutableXssContent(html: string): boolean {
   return (
     hasExecutableScriptTag(html) ||
@@ -284,12 +405,14 @@ function containsExecutableXssContent(html: string): boolean {
       id: 'event-handler-attribute',
       description: 'event handler attribute',
       pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
+      validateMatch: hasExecutableEventHandlerAttribute,
     }) !== undefined ||
     findRuleEvidence(html, {
       id: 'javascript-url',
       description: 'javascript URL sink',
       pattern: JAVASCRIPT_URL_SINK_PATTERN,
       normalizeOutput: normalizeUrlDetectionOutput,
+      validateMatch: hasExecutableJavascriptUrlSink,
     }) !== undefined
   );
 }
@@ -301,6 +424,7 @@ function hasExecutableSvgContent(evidence: string): boolean {
       id: 'event-handler-attribute',
       description: 'event handler attribute',
       pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
+      validateMatch: hasExecutableEventHandlerAttribute,
     }) !== undefined
   );
 }
@@ -323,7 +447,7 @@ function getDataHtmlPayload(
   }
   return {
     encodedPayload: match.groups.payload.trim(),
-    isBase64: /;\s*base64\b/i.test(match.groups.metadata),
+    isBase64: /(?:^|;)\s*base64\s*$/i.test(match.groups.metadata.trim()),
   };
 }
 
@@ -368,12 +492,14 @@ export const DEFAULT_XSS_OUTPUT_RULES: XssOutputRule[] = [
     id: 'event-handler-attribute',
     description: 'HTML element with an inline event-handler attribute',
     pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
+    validateMatch: hasExecutableEventHandlerAttribute,
   },
   {
     id: 'javascript-url',
     description: 'javascript: URL payload in an HTML or Markdown URL sink',
     pattern: JAVASCRIPT_URL_SINK_PATTERN,
     normalizeOutput: normalizeUrlDetectionOutput,
+    validateMatch: hasExecutableJavascriptUrlSink,
   },
   {
     id: 'data-html-url',
@@ -423,6 +549,38 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
   if (UNBOUNDED_WILDCARD.test(source)) {
     throw new Error(`Invalid xss-output ${label}: unbounded wildcard operators are not allowed`);
   }
+  if (hasAmbiguousQuantifiedAlternation(source)) {
+    throw new Error(`Invalid xss-output ${label}: ambiguous quantified alternations are not allowed`);
+  }
+}
+
+function hasAmbiguousQuantifiedAlternation(source: string): boolean {
+  for (const match of source.matchAll(QUANTIFIED_ALTERNATION)) {
+    const alternativesSource = match.groups?.alternatives;
+    if (!alternativesSource) {
+      continue;
+    }
+
+    const alternatives = alternativesSource
+      .split('|')
+      .map((alternative) => alternative.trim())
+      .filter(Boolean);
+    if (!alternatives || alternatives.length < 2) {
+      continue;
+    }
+
+    for (let index = 0; index < alternatives.length; index++) {
+      for (let otherIndex = index + 1; otherIndex < alternatives.length; otherIndex++) {
+        const left = alternatives[index];
+        const right = alternatives[otherIndex];
+        if (left.startsWith(right) || right.startsWith(left)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 function getGlobalPattern(pattern: RegExp): RegExp {

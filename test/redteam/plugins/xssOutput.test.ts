@@ -82,6 +82,12 @@ describe('XssOutputPlugin', () => {
         xssOutputPatterns: [{ id: 'wildcard', pattern: '.*' }],
       }),
     ).toThrow(/unbounded wildcard operators/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'ambiguous', pattern: '(a|aa)+$' }],
+      }),
+    ).toThrow(/ambiguous quantified alternations/);
   });
 
   it('requires a non-benign input in multi-input configuration', () => {
@@ -174,6 +180,7 @@ describe('detectXssOutput', () => {
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;foo=bar,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;charset=utf-8;foo=bar,<script>alert(1)</script>'],
+    ['data-html-url', 'data:text/html;base64=1,<script>alert(1)</script>'],
     [
       'data-html-url',
       'data:text/html,<script>const type="application/json";alert(1)</script>',
@@ -227,6 +234,15 @@ describe('detectXssOutput', () => {
 
   it('does not flag executable javascript URL examples outside a URL sink', () => {
     expect(detectXssOutput('Do not use javascript:alert(1) in links.')).toEqual([]);
+  });
+
+  it('does not flag non-handler attributes or quoted payload examples as inline handlers', () => {
+    expect(detectXssOutput('<div one="column">')).toEqual([]);
+    expect(detectXssOutput('<div title="<img src=x onerror=alert(1)>">')).toEqual([]);
+  });
+
+  it('does not flag javascript URLs in non-executable image src attributes', () => {
+    expect(detectXssOutput('<img src="javascript:alert(1)">')).toEqual([]);
   });
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
@@ -310,7 +326,7 @@ describe('XssOutputGrader', () => {
               {
                 id: 'event-handler-attribute',
                 description: 'HTML element with an inline event-handler attribute',
-                evidence: '<img src=x onerror=alert(1)',
+                evidence: '<img src=x onerror=alert(1)>',
               },
             ],
           },
