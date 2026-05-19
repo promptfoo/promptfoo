@@ -702,13 +702,13 @@ These properties can be set under the provider `config` key:
 | Name                  | Description                                                                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
+| isReasoningModel      | Set to `true` for custom chat/completion reasoning deployments (o1, o3, o3-mini, o4-mini). Azure Responses can infer this from reasoning config. |
 | max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
 | reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. For custom chat/completion deployments, set `isReasoningModel: true`                      |
 | reasoning             | Responses API reasoning object, including `effort` and optional `summary` for visible reasoning summaries                                       |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
-| top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
+| top_p                 | Controls nucleus sampling (0-1). Not supported for reasoning Responses requests                                                                 |
 | frequency_penalty     | Penalizes repeated tokens (-2 to 2)                                                                                                             |
 | presence_penalty      | Penalizes new tokens based on presence (-2 to 2)                                                                                                |
 | omitDefaults          | Omits hardcoded defaults unless values are explicitly set via config or environment variables. Supported by `azure:chat` and `azure:responses`. |
@@ -724,7 +724,7 @@ These properties can be set under the provider `config` key:
 Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-mini`. These models operate differently from standard models with specific requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
-2. They don't support `temperature` (it's ignored)
+2. They don't support `temperature` or `top_p` (they're ignored where unsupported)
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high') on chat and completion endpoints
 4. The Responses API uses a `reasoning` object for `effort` and optional reasoning `summary`
 
