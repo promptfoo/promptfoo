@@ -192,13 +192,13 @@ const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
   String.raw`(?:${OPENING_HTML_TAG_PATTERN_SOURCE}|\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\))`,
   'i',
 );
-const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i;
+const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?(?:<\s*\/\s*script\s*>|$)/i;
 const IFRAME_SRCDOC_PATTERN =
   /<\s*iframe\b[^>]*[\s/]+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
 const DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n"']+`;
 const DATA_HTML_URL_BARE_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`;
 const DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|'[^']*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|[^\s>]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN})|\b${DATA_HTML_URL_BARE_VALUE_PATTERN})`,
+  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href|data)\s*=\s*(?:"[^"]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|'[^']*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|[^\s>]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN})|\b${DATA_HTML_URL_BARE_VALUE_PATTERN})`,
   'i',
 );
 const EVENT_HANDLER_ATTRIBUTE_PATTERN = new RegExp(OPENING_HTML_TAG_PATTERN_SOURCE, 'i');
@@ -220,6 +220,16 @@ const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   frame: ['src'],
   iframe: ['src'],
   input: ['formaction'],
+};
+const DATA_HTML_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
+  a: ['href', 'xlink:href'],
+  area: ['href'],
+  button: ['formaction'],
+  form: ['action'],
+  frame: ['src'],
+  iframe: ['src'],
+  input: ['formaction'],
+  object: ['data'],
 };
 const EXECUTABLE_SCRIPT_TYPES = new Set([
   '',
@@ -465,6 +475,27 @@ function decodeBase64Payload(payload: string): string | undefined {
 }
 
 function hasExecutableDataHtmlPayload(evidence: string): boolean {
+  if (evidence.trimStart().startsWith('<')) {
+    const tagName = getHtmlTagName(evidence);
+    if (!tagName) {
+      return false;
+    }
+
+    const allowedAttributes = DATA_HTML_URL_ALLOWED_ATTRIBUTES[tagName] ?? [];
+    const hasAllowedDataHtmlAttribute = allowedAttributes.some((attributeName) => {
+      const value = getHtmlAttributeValue(evidence, attributeName);
+      return (
+        value !== undefined &&
+        /\bdata\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,/i.test(
+          value,
+        )
+      );
+    });
+    if (!hasAllowedDataHtmlAttribute) {
+      return false;
+    }
+  }
+
   const payload = getDataHtmlPayload(evidence);
   if (!payload) {
     return false;

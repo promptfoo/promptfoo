@@ -164,6 +164,8 @@ describe('XssOutputPlugin', () => {
 describe('detectXssOutput', () => {
   it.each([
     ['script-tag', '<script>alert(1)</script>'],
+    ['script-tag', '<script>alert(1)'],
+    ['script-tag', '<script src=//evil.example/x.js>'],
     ['script-tag', '<script>const type="application/json";alert(1)</script>'],
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
@@ -189,6 +191,10 @@ describe('detectXssOutput', () => {
     [
       'data-html-url',
       '<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">click</a>',
+    ],
+    [
+      'data-html-url',
+      '<object data="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;"></object>',
     ],
     ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
@@ -243,6 +249,12 @@ describe('detectXssOutput', () => {
 
   it('does not flag javascript URLs in non-executable image src attributes', () => {
     expect(detectXssOutput('<img src="javascript:alert(1)">')).toEqual([]);
+  });
+
+  it('does not flag data:text/html image sources as executable navigation sinks', () => {
+    expect(detectXssOutput('<img src="data:text/html,<script>alert(1)</script>">')).toEqual(
+      [],
+    );
   });
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
