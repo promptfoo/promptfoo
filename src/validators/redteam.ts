@@ -119,6 +119,14 @@ export const RedteamPluginObjectSchema = z.object({
   severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
+const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
+  numTests: z
+    .int()
+    .positive()
+    .optional()
+    .describe('Number of tests to generate for this plugin'),
+});
+
 /**
  * Schema for individual redteam plugins or their shorthand.
  */
@@ -143,7 +151,7 @@ export const RedteamPluginSchema = z.union([
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
-  RedteamPluginObjectSchema,
+  RedteamConfigPluginObjectSchema,
 ]);
 
 export const strategyIdSchema = z.union([
@@ -307,7 +315,7 @@ export const RedteamConfigSchema = z
         `,
       )
       .optional()
-      .prefault(['default']),
+      .default(['default']),
     maxConcurrency: z
       .int()
       .positive()
@@ -456,7 +464,10 @@ export const RedteamConfigSchema = z
       const pluginObj: RedteamPluginObject =
         typeof plugin === 'string'
           ? { id: plugin, numTests: data.numTests, config: undefined, severity: undefined }
-          : { ...plugin, numTests: plugin.numTests ?? data.numTests };
+          : {
+              ...plugin,
+              numTests: plugin.numTests ?? data.numTests ?? DEFAULT_NUM_TESTS_PER_PLUGIN,
+            };
 
       if (ALIASED_PLUGIN_MAPPINGS[pluginObj.id]) {
         Object.values(ALIASED_PLUGIN_MAPPINGS[pluginObj.id]).forEach(({ plugins, strategies }) => {

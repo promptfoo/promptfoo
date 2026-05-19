@@ -23,6 +23,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../types/index';
 
 /**
@@ -492,6 +493,12 @@ interface OpenCodeAssistantMessage {
 interface OpenCodePromptPart {
   type: string;
   text?: string;
+  tool?: string;
+  state?: {
+    status?: string;
+    input?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 interface OpenCodePromptResponse {
@@ -1370,6 +1377,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const tokens = assistantMessage?.tokens;
+    const skillCalls = this.deriveSkillCalls(parts);
 
     return {
       output,
@@ -1377,7 +1385,35 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
+      ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
     };
+  }
+
+  private deriveSkillCalls(parts: OpenCodePromptPart[]): SkillCallEntry[] {
+    return parts.flatMap((part) => {
+      if (part.type !== 'tool' || part.tool !== 'skill') {
+        return [];
+      }
+
+      const skillName =
+        typeof part.state?.input?.name === 'string' ? part.state.input.name.trim() : '';
+      if (!skillName) {
+        return [];
+      }
+
+      const skillDir =
+        typeof part.state?.metadata?.dir === 'string' ? part.state.metadata.dir.trim() : '';
+
+      return [
+        {
+          name: skillName,
+          input: part.state?.input,
+          ...(skillDir ? { path: path.join(skillDir, 'SKILL.md') } : {}),
+          source: 'tool',
+          ...(part.state?.status === 'error' ? { is_error: true } : {}),
+        },
+      ];
+    });
   }
 
   private handleCallError(error: unknown, callOptions?: CallApiOptionsParams): ProviderResponse {
