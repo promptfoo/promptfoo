@@ -1,8 +1,24 @@
 import React, { useCallback, useState } from 'react';
 
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { useResultsViewSettingsStore } from '../../store';
 import CompactSlider from './CompactSlider';
 import CompactToggle from './CompactToggle';
+
+interface SettingsPanelProps {
+  resultsTableZoom: number;
+  onResultsTableZoomChange: (zoom: number) => void;
+}
+
+const RESULTS_TABLE_ZOOM_OPTIONS = [
+  { value: '0.5', label: '50%' },
+  { value: '0.75', label: '75%' },
+  { value: '0.9', label: '90%' },
+  { value: '1', label: '100%' },
+  { value: '1.25', label: '125%' },
+  { value: '1.5', label: '150%' },
+  { value: '2', label: '200%' },
+] as const;
 
 const SectionHeader = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -12,7 +28,7 @@ const SectionHeader = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const SettingsPanel = () => {
+const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsPanelProps) => {
   const {
     stickyHeader,
     setStickyHeader,
@@ -22,6 +38,8 @@ const SettingsPanel = () => {
     setShowPassFail,
     showPassReasons,
     setShowPassReasons,
+    showMetricPills,
+    setShowMetricPills,
     showInferenceDetails,
     setShowInferenceDetails,
     maxTextLength,
@@ -68,6 +86,13 @@ const SettingsPanel = () => {
     [setWordBreak],
   );
 
+  const handleResultsTableZoomChange = useCallback(
+    (value: string) => {
+      onResultsTableZoomChange(Number(value));
+    },
+    [onResultsTableZoomChange],
+  );
+
   return (
     <div className="grid grid-cols-1 gap-5 p-5 pt-3 sm:grid-cols-[1fr_1px_1fr]">
       {/* Left Column - Visibility */}
@@ -93,6 +118,14 @@ const SettingsPanel = () => {
           checked={showPassReasons}
           onChange={setShowPassReasons}
           tooltipText="Show reasons for passing assertions (e.g., from llm-rubric)"
+          disabled={!showPassFail}
+        />
+
+        <CompactToggle
+          label="Metrics pills"
+          checked={showMetricPills}
+          onChange={setShowMetricPills}
+          tooltipText="Show custom metric pills in each results table cell"
           disabled={!showPassFail}
         />
 
@@ -140,6 +173,22 @@ const SettingsPanel = () => {
         />
 
         <div className="mt-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-[0.8125rem] leading-normal">Zoom</span>
+            <Select value={String(resultsTableZoom)} onValueChange={handleResultsTableZoomChange}>
+              <SelectTrigger aria-label="Results zoom" className="h-8 w-[110px] text-xs">
+                {Math.round(resultsTableZoom * 100)}%
+              </SelectTrigger>
+              <SelectContent>
+                {RESULTS_TABLE_ZOOM_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <CompactSlider
             label="Max text length"
             value={localMaxTextLength}

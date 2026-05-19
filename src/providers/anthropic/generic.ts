@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
@@ -71,7 +71,11 @@ export function hashAnthropicCacheValue(value: unknown): string {
   const canonical = canonicalize(value);
   const serialized =
     typeof canonical === 'string' ? canonical : (JSON.stringify(canonical) ?? String(canonical));
-  return createHmac('sha256', ANTHROPIC_CACHE_HASH_CONTEXT).update(serialized).digest('hex');
+  return createHash('sha256')
+    .update(ANTHROPIC_CACHE_HASH_CONTEXT)
+    .update('\0')
+    .update(serialized)
+    .digest('hex');
 }
 
 export function getAnthropicAuthCacheNamespace(apiKey: string): string {

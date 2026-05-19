@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.11](https://github.com/promptfoo/promptfoo/compare/0.121.10...0.121.11) (2026-05-08)
+
+### Features
+
+- **quiverai:** add Arrow 1.1 models, vectorize endpoint, and GPT Image-2 pipeline ([#9139](https://github.com/promptfoo/promptfoo/issues/9139)) ([ce2c62d](https://github.com/promptfoo/promptfoo/commit/ce2c62d4f9cfd92bd8e48f45db2314271946c467))
+
+### Bug Fixes
+
+- **redteam:** handle MCP target prompt materialization ([#9149](https://github.com/promptfoo/promptfoo/issues/9149)) ([a050023](https://github.com/promptfoo/promptfoo/commit/a0500234494818a07ce1367e8c9c167531e8fb9b))
+- **redteam:** keep fresh target type state in sync ([#9145](https://github.com/promptfoo/promptfoo/issues/9145)) ([770130f](https://github.com/promptfoo/promptfoo/commit/770130fd8fce16e1071c418cc5f9c8b8a84244db))
+- **redteam:** show target type selector immediately ([#9141](https://github.com/promptfoo/promptfoo/issues/9141)) ([c143fa6](https://github.com/promptfoo/promptfoo/commit/c143fa625ea92bc01148174a84f60a1cb7d6d540))
+
 ## [0.121.10](https://github.com/promptfoo/promptfoo/compare/0.121.9...0.121.10) (2026-05-07)
 
 ### Features

@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "tsc": "tsc",
-    "build": "concurrently -g \"tsc -b\" \"vite build\"",
+    "build": "tsc -b && vite build",
     "build:watch": "tsc -b --watch",
     "lint": "cd ../.. && npx @biomejs/biome lint src/app",
     "lint:ci": "cd ../.. && npx @biomejs/biome ci src/app",

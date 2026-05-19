@@ -381,6 +381,29 @@ describe('Plugins', () => {
     });
   });
 
+  it('enables next button when a custom intent is configured as a bare string', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: 'How can I build a secure system?',
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
   it('does not enable next button for empty custom policies', async () => {
     mockUseRedTeamConfig.mockReturnValue({
       config: {
@@ -412,6 +435,29 @@ describe('Plugins', () => {
             id: 'intent',
             config: {
               intent: [], // Empty array
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('does not enable next button for whitespace-only custom intents', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'intent',
+            config: {
+              intent: ['', '   ', [' ', '\t']],
             },
           },
         ],
