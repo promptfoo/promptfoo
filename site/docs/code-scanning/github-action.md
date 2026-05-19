@@ -56,7 +56,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 By default, the Action starts from the PR diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Set `diffs-only: true` when you want the generated action-input config constrained to the patch itself.
 
-For scan settings beyond these inputs, supply `config-path`. Once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults, which keeps workflow-owned policy explicit.
+For scan settings beyond these inputs, supply `config-path`. Once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults, which keeps workflow-owned policy explicit. In `pull_request` workflows, point `config-path` only at trusted workflow-controlled content, not a policy file the PR itself can edit.
 
 The action resolves severity to `medium` only when neither alias is provided, leaving the metadata inputs undeclared so either alias can supply the threshold without being shadowed by a baked-in YAML default.
 
@@ -149,7 +149,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ### Configuration File
 
-Create a `.promptfoo-code-scan.yaml` in your repository root, then pass it explicitly through `config-path` when you want the Action to use that file. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
+Create a `.promptfoo-code-scan.yaml` in your repository root, then pass it explicitly through `config-path` when you want the Action to use that trusted file. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
 
 ```yaml
 # Minimum severity level to report

@@ -49,7 +49,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var                                            |
 | `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                                                              |
 | `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                                                                          |
-| `--config <path>`                 | Path to config file                                                                                 | Repo-root `.promptfoo-code-scan.yaml` for local scans; built-in defaults for `--github-pr` runs |
+| `--config <path>`                 | Path to config file                                                                                 | Built-in defaults unless an explicit config path is provided                                    |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                                                            |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                                                            |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                                                                     |
@@ -106,9 +106,9 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create `.promptfoo-code-scan.yaml` in the repository root to have local CLI scans pick it up automatically, including when the command starts in a nested directory inside that repository. Use `--config <path>` when you want to load a different file.
+Create `.promptfoo-code-scan.yaml` in the repository root when you want a reusable scanner policy, then pass it explicitly with `--config .promptfoo-code-scan.yaml`. Local CLI scans do not auto-discover that file.
 
-Runs that post to GitHub with `--github-pr` intentionally use built-in defaults unless `--config <path>` is set explicitly. GitHub Actions jobs triggered by `pull_request`, `pull_request_target`, or merge-queue `merge_group` events do the same, including SARIF-only CLI jobs that do not post review comments. That keeps PR scan policy from silently inheriting a config file introduced by the pull request being scanned; when you pass `--config`, make sure the selected file comes from a trusted workflow-controlled path.
+Runs without `--config` use built-in defaults. That includes local scans, runs that post to GitHub with `--github-pr`, and GitHub Actions jobs triggered by `pull_request`, `pull_request_target`, or merge-queue `merge_group` events, including SARIF-only CLI jobs that do not post review comments. Keeping config explicit prevents PR scan policy from silently inheriting a file introduced by the pull request being scanned; when you pass `--config`, make sure the selected file comes from a trusted workflow-controlled path.
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical); defaults to medium
