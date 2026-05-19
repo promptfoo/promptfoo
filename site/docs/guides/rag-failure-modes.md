@@ -136,9 +136,8 @@ The model invents a document name, link, or citation span.
 
 **Best signals**
 
-- `contains`
-- `regex`
-- `javascript` assertion for source validation
+- `javascript` assertion that validates cited sources against an allowlist or another authoritative source map
+- `contains` or `regex` only as weak format checks when you already know the exact citation token you expect to appear
 
 **Starter test**
 
