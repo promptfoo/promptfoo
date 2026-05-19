@@ -181,21 +181,17 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-const JAVASCRIPT_EXECUTABLE_PATTERN = String.raw`javascript\s*:\s*(?!(?:urls?|uris?|schemes?|protocols?)\b)(?:[^"'\s<>)]*\s*)?(?:alert|confirm|document|eval|fetch|function|import|location|prompt|setinterval|settimeout|void|window|\()`;
+const JAVASCRIPT_URL_PATTERN = String.raw`javascript\s*:`;
 const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
-  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|'[^']*?\b${JAVASCRIPT_EXECUTABLE_PATTERN}|[^\s>]*?\b${JAVASCRIPT_EXECUTABLE_PATTERN})|\]\(\s*${JAVASCRIPT_EXECUTABLE_PATTERN}[^)]*\))`,
+  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href)\s*=\s*(?:"[^"]*?\b${JAVASCRIPT_URL_PATTERN}|'[^']*?\b${JAVASCRIPT_URL_PATTERN}|[^\s>]*?\b${JAVASCRIPT_URL_PATTERN})|\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\))`,
   'i',
 );
 const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?<\s*\/\s*script\s*>/i;
 const IFRAME_SRCDOC_PATTERN = /<\s*iframe\b[^>]*\bsrcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
 const DATA_HTML_URL_PATTERN =
-  /\bdata\s*:\s*text\/html(?:\s*;\s*charset=[^,;\s]+)?(?:\s*;\s*base64)?\s*,[^\s"']+/i;
+  /\bdata\s*:\s*text\/html(?:\s*;\s*charset=[^,;\s]+)?(?:\s*;\s*base64)?\s*,[^\r\n"']+/i;
 const EVENT_HANDLER_ATTRIBUTE_PATTERN =
   /<\s*[\w:-]+\b[^>]*[\s/]+on[a-z]+\s*=\s*(?:"[^"]+"|'[^']+'|[^\s>]+)/i;
-const EXECUTABLE_XSS_CONTENT_PATTERN = new RegExp(
-  String.raw`(?:${EVENT_HANDLER_ATTRIBUTE_PATTERN.source}|${JAVASCRIPT_EXECUTABLE_PATTERN})`,
-  'i',
-);
 const EXECUTABLE_SCRIPT_TYPES = new Set([
   '',
   'application/ecmascript',
@@ -246,7 +242,20 @@ function hasExecutableScriptTag(html: string): boolean {
 }
 
 function containsExecutableXssContent(html: string): boolean {
-  return hasExecutableScriptTag(html) || EXECUTABLE_XSS_CONTENT_PATTERN.test(html);
+  return (
+    hasExecutableScriptTag(html) ||
+    findRuleEvidence(html, {
+      id: 'event-handler-attribute',
+      description: 'event handler attribute',
+      pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
+    }) !== undefined ||
+    findRuleEvidence(html, {
+      id: 'javascript-url',
+      description: 'javascript URL sink',
+      pattern: JAVASCRIPT_URL_SINK_PATTERN,
+      normalizeOutput: normalizeUrlDetectionOutput,
+    }) !== undefined
+  );
 }
 
 function getSrcdocValue(evidence: string): string | undefined {
