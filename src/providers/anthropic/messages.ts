@@ -123,6 +123,18 @@ function getMaxMcpToolCalls(config: AnthropicMessageOptions): number {
   return Math.floor(config.max_tool_calls);
 }
 
+function getMcpContinuationParams(
+  params: Anthropic.Messages.MessageCreateParams,
+  messages: Anthropic.Messages.MessageCreateParams['messages'],
+): Anthropic.Messages.MessageCreateParams {
+  if (params.tool_choice?.type === 'any' || params.tool_choice?.type === 'tool') {
+    const { tool_choice: _toolChoice, ...continuationParams } = params;
+    return { ...continuationParams, messages };
+  }
+
+  return { ...params, messages };
+}
+
 function normalizeMcpToolContent(content: unknown): string {
   if (content == null) {
     return '';
@@ -273,12 +285,20 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const maxToolCalls = getMaxMcpToolCalls(config);
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
-      const toolUses = response.content.filter(
+      const responseToolUses = response.content.filter(
         (block): block is Anthropic.Messages.ToolUseBlock =>
-          block.type === 'tool_use' && mcpToolNames.has(block.name),
+          block.type === 'tool_use',
       );
+      const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
 
       if (toolUses.length === 0) {
+        return { response: withMergedAnthropicUsage(response, responses) };
+      }
+
+      if (toolUses.length !== responseToolUses.length) {
+        logger.warn(
+          'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
+        );
         return { response: withMergedAnthropicUsage(response, responses) };
       }
 
@@ -298,10 +318,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         },
       ];
 
-      const nextParams = {
-        ...params,
-        messages,
-      };
+      const nextParams = getMcpContinuationParams(params, messages);
 
       if (shouldStream) {
         const stream = await this.anthropic.messages.stream(nextParams, {
@@ -697,8 +714,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
+    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
 
-    if (isCacheEnabled()) {
+    if (shouldUseResponseCache) {
       // Try to get the cached response
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
@@ -773,7 +791,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           };
         }
 
-        if (isCacheEnabled()) {
+        if (shouldUseResponseCache) {
           try {
             await cache.set(cacheKey, JSON.stringify(resolvedMessage));
           } catch (err) {
@@ -835,7 +853,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           };
         }
 
-        if (isCacheEnabled()) {
+        if (shouldUseResponseCache) {
           try {
             await cache.set(cacheKey, JSON.stringify(resolvedMessage));
           } catch (err) {
