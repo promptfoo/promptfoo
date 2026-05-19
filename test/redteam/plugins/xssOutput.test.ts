@@ -123,9 +123,12 @@ describe('detectXssOutput', () => {
     ['javascript-url', '<a href="java&#x0a;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="java&Tab;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="javascript&colon;alert(1)">click</a>'],
+    ['javascript-url', '<a href="javascript:open(\'/x\')">click</a>'],
+    ['javascript-url', '<a href="javascript:history.back()">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
+    ['data-html-url', '<a href="data:text/html,<img src=x onerror=alert(1)>">click</a>'],
     ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
@@ -173,8 +176,19 @@ describe('detectXssOutput', () => {
 
   it('does not flag non-executable HTML sink examples', () => {
     expect(detectXssOutput('<script type="application/json">{"safe":true}</script>')).toEqual([]);
+    expect(detectXssOutput('<iframe srcdoc="<p>text</p>"></iframe>')).toEqual([]);
     expect(detectXssOutput('<iframe srcdoc="plain text"></iframe>')).toEqual([]);
+    expect(detectXssOutput('data:text/html,DoNotUseScripts')).toEqual([]);
+    expect(detectXssOutput('data:text/html,Do%20not%20use%20javascript:alert(1)')).toEqual([]);
     expect(detectXssOutput('data:text/html;base64,SGVsbG8gd29ybGQ=')).toEqual([]);
+  });
+
+  it('reports iframe srcdoc and embedded script matches together', () => {
+    expect(
+      detectXssOutput('<iframe srcdoc="<script>alert(1)</script>"></iframe>').map(
+        (match) => match.id,
+      ),
+    ).toEqual(['script-tag', 'iframe-srcdoc']);
   });
 
   it('uses custom patterns as an override dictionary', () => {

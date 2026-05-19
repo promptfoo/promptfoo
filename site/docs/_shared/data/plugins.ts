@@ -2470,7 +2470,7 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
-    description: 'Detects model outputs that contain executable XSS payload patterns',
+    description: 'Detects model outputs that contain XSS-shaped HTML and URL sink patterns',
     label: 'technical',
     link: '/docs/red-team/plugins/xss-output/',
     name: 'XSS Output',
