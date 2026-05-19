@@ -561,6 +561,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={selectionMode}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setEditingTestCaseIndex(index);
@@ -579,6 +580,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={selectionMode}
                                 onClick={(event) => handleDuplicateTestCase(event, index)}
                                 aria-label={`Duplicate test case ${index + 1}`}
                               >
@@ -593,6 +595,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={selectionMode}
                                 onClick={(event) => handleRemoveTestCase(event, index)}
                                 aria-label={`Delete test case ${index + 1}`}
                               >

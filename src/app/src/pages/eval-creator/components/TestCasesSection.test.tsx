@@ -744,6 +744,34 @@ describe('TestCasesSection', () => {
       expect(screen.getByRole('button', { name: 'Deselect test case 1' })).toBeInTheDocument();
     });
 
+    it('disables per-row edit, duplicate, and delete actions while selecting test cases', async () => {
+      const user = userEvent.setup();
+      (useStore as any).mockReturnValue({
+        config: {
+          tests: [
+            {
+              description: 'First test',
+              vars: { input: 'first' },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Select' }));
+
+      expect(screen.getByRole('button', { name: 'Edit test case 1' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Duplicate test case 1' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Delete test case 1' })).toBeDisabled();
+      expect(screen.queryByTestId('test-case-dialog')).not.toBeInTheDocument();
+    });
+
     it('deletes selected test cases after confirmation', async () => {
       const user = userEvent.setup();
       const testCases = [
