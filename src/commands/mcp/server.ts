@@ -1,6 +1,7 @@
 import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { registerResources } from './resources';
 import { registerCompareProvidersTool } from './tools/compareProviders';
 import { registerGenerateDatasetTool } from './tools/generateDataset';
@@ -29,8 +30,11 @@ function createMcpSdkDependencyError(): Error {
 async function loadMcpServerSdk(): Promise<typeof import('@modelcontextprotocol/sdk/server/mcp.js')> {
   try {
     return await import('@modelcontextprotocol/sdk/server/mcp.js');
-  } catch {
-    throw createMcpSdkDependencyError();
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw createMcpSdkDependencyError();
+    }
+    throw error;
   }
 }
 
@@ -39,8 +43,11 @@ async function loadMcpHttpTransport(): Promise<
 > {
   try {
     return await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
-  } catch {
-    throw createMcpSdkDependencyError();
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw createMcpSdkDependencyError();
+    }
+    throw error;
   }
 }
 
@@ -49,8 +56,11 @@ async function loadMcpStdioTransport(): Promise<
 > {
   try {
     return await import('@modelcontextprotocol/sdk/server/stdio.js');
-  } catch {
-    throw createMcpSdkDependencyError();
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw createMcpSdkDependencyError();
+    }
+    throw error;
   }
 }
 

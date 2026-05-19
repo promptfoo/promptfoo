@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -990,7 +991,7 @@ export const providerMap: ProviderFactory[] = [
           const { OpenAiAgentsProvider } = await import('./openai/agents');
           return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
         } catch (error) {
-          if (error instanceof Error && error.message.includes('@openai/agents')) {
+          if (isMissingPackageImportError(error, '@openai/agents')) {
             throw new Error(
               'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
             );

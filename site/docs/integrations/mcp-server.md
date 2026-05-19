@@ -18,12 +18,15 @@ Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
 
 :::
 
-For slim installs created with omitted optional dependencies, add the MCP SDK in the same
-environment where promptfoo is already installed:
+For slim installs created with omitted optional dependencies, use a local install that includes
+both promptfoo and the MCP SDK:
 
 ```bash
-npm install @modelcontextprotocol/sdk
+npm install promptfoo @modelcontextprotocol/sdk
 ```
+
+When using that local slim-install setup, run the MCP commands below as `npx promptfoo ...`
+instead of `npx promptfoo@latest ...` so both packages resolve from the same project.
 
 ## Quick Start
 

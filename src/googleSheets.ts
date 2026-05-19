@@ -1,4 +1,5 @@
 import logger from './logger';
+import { isMissingPackageImportError } from './util/packageImportErrors';
 import { fetchWithProxy } from './util/fetch/index';
 
 import type { CsvRow } from './types/index';
@@ -6,10 +7,13 @@ import type { CsvRow } from './types/index';
 async function loadGoogleSheetsApi(): Promise<typeof import('@googleapis/sheets')> {
   try {
     return await import('@googleapis/sheets');
-  } catch {
-    throw new Error(
-      'The @googleapis/sheets package is required for authenticated Google Sheets access. Install it with: npm install @googleapis/sheets',
-    );
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@googleapis/sheets')) {
+      throw new Error(
+        'The @googleapis/sheets package is required for authenticated Google Sheets access. Install it with: npm install @googleapis/sheets',
+      );
+    }
+    throw error;
   }
 }
 
@@ -98,9 +102,13 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
 }
 
 export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
-  const { public: isPublic } = await checkGoogleSheetAccess(url);
+  const access = await checkGoogleSheetAccess(url);
+  const { public: isPublic } = access;
   logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
   if (isPublic) {
+    return fetchCsvFromGoogleSheetUnauthenticated(url);
+  }
+  if (!('status' in access)) {
     return fetchCsvFromGoogleSheetUnauthenticated(url);
   }
   return fetchCsvFromGoogleSheetAuthenticated(url);

@@ -4,6 +4,7 @@ import cliState from '../../cliState';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
+import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -46,10 +47,13 @@ interface MCPRequestOptions {
 async function loadMcpClientSdk(): Promise<typeof import('@modelcontextprotocol/sdk/client/index.js')> {
   try {
     return await import('@modelcontextprotocol/sdk/client/index.js');
-  } catch {
-    throw new Error(
-      'The @modelcontextprotocol/sdk package is required for MCP provider support. Install it with: npm install @modelcontextprotocol/sdk',
-    );
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw new Error(
+        'The @modelcontextprotocol/sdk package is required for MCP provider support. Install it with: npm install @modelcontextprotocol/sdk',
+      );
+    }
+    throw error;
   }
 }
 
