@@ -33,9 +33,13 @@ describe('MCP server optional dependency', () => {
     }));
 
     const loggerModule = await import('../../../src/logger');
-    const originalTransports = loggerModule.default.transports;
+    const originalTransports = [...loggerModule.default.transports];
     const consoleTransport = { constructor: { name: 'Console' }, silent: false };
-    loggerModule.default.transports = [consoleTransport as any];
+    loggerModule.default.transports.splice(
+      0,
+      loggerModule.default.transports.length,
+      consoleTransport as any,
+    );
 
     try {
       const { startStdioMcpServer } = await import('../../../src/commands/mcp/server');
@@ -45,7 +49,11 @@ describe('MCP server optional dependency', () => {
       );
       expect(consoleTransport.silent).toBe(false);
     } finally {
-      loggerModule.default.transports = originalTransports;
+      loggerModule.default.transports.splice(
+        0,
+        loggerModule.default.transports.length,
+        ...originalTransports,
+      );
     }
   });
 });
