@@ -2760,7 +2760,7 @@
                     "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
-                "required": ["id", "numTests"],
+                "required": ["id"],
                 "additionalProperties": false
               }
             ]
@@ -2768,6 +2768,7 @@
           "description": "Plugins to use for redteam generation"
         },
         "strategies": {
+          "default": ["default"],
           "type": "array",
           "items": {
             "anyOf": [
