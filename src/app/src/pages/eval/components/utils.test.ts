@@ -332,6 +332,15 @@ describe('getDefaultHiddenVarNames', () => {
     expect(hidden).toEqual(['context', 'metadata']);
   });
 
+  it('hides every variable when the allowlist is explicitly empty', () => {
+    const varNames = ['query', 'context', 'metadata'];
+    const hidden = getDefaultHiddenVarNames(varNames, {
+      defaultVisibleVars: [],
+    });
+
+    expect(hidden).toEqual(varNames);
+  });
+
   it('uses defaultHiddenVars when no allowlist is configured', () => {
     const varNames = ['query', 'context', 'metadata'];
     const hidden = getDefaultHiddenVarNames(varNames, {

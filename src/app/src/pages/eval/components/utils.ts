@@ -29,7 +29,7 @@ export function getDefaultHiddenVarNames(
   resultsTableConfig: Partial<UnifiedConfig>['resultsTable'] | undefined,
 ): string[] {
   const defaultVisibleVars = resultsTableConfig?.defaultVisibleVars;
-  if (defaultVisibleVars && defaultVisibleVars.length > 0) {
+  if (defaultVisibleVars) {
     const visibleSet = new Set(defaultVisibleVars);
     return varNames.filter((name) => !visibleSet.has(name));
   }
