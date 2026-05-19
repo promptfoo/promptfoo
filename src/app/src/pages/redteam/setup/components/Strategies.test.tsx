@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
@@ -24,6 +25,9 @@ const renderWithProviders = (ui: React.ReactElement) => {
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(),
+}));
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
@@ -53,6 +57,12 @@ describe('Strategies', () => {
         numTests: 5,
       },
       updateConfig: mockUpdateConfig,
+    });
+
+    (useApiHealth as any).mockReturnValue({
+      data: { status: 'connected', message: null },
+      isLoading: false,
+      refetch: vi.fn(),
     });
 
     (useTelemetry as any).mockReturnValue({
@@ -138,6 +148,20 @@ describe('Strategies', () => {
 
       // Check for the collapsible trigger
       expect(screen.getByText('Show Advanced Strategies')).toBeInTheDocument();
+    });
+
+    it('exposes disabled hero strategy state to assistive tech', () => {
+      (useApiHealth as any).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        isLoading: false,
+        refetch: vi.fn(),
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const metaAgentCard = screen.getByRole('button', { name: 'Meta Agent' });
+      expect(metaAgentCard).toBeDisabled();
+      expect(metaAgentCard).toHaveAttribute('aria-disabled', 'true');
     });
   });
 
@@ -322,10 +346,51 @@ describe('Strategies', () => {
       const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Click a hero strategy card to toggle selection
-      const metaAgentCard = screen.getByText('Meta Agent').closest('[class*="cursor-pointer"]');
-      expect(metaAgentCard).toBeInTheDocument();
-      await user.click(metaAgentCard!);
+      await user.click(screen.getByRole('button', { name: 'Meta Agent' }));
+      expect(mockUpdateConfig).toHaveBeenCalled();
+    });
+
+    it('labels hero strategy cards with the visible strategy names', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Meta Agent' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+      expect(screen.getByRole('button', { name: 'Hydra Multi-Turn' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+
+    it('labels hero strategy settings buttons with the strategy names', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'jailbreak:meta' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Configure Meta Agent' })).toBeInTheDocument();
+    });
+
+    it('toggles hero strategy cards from the keyboard', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const hydraCard = screen.getByRole('button', { name: 'Hydra Multi-Turn' });
+      hydraCard.focus();
+      await user.keyboard('{Enter}');
+
       expect(mockUpdateConfig).toHaveBeenCalled();
     });
   });
