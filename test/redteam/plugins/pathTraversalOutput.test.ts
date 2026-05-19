@@ -179,7 +179,7 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
     });
 
     it('still fires when the payload appears only in a middle 200KB window', () => {
-      const payload = `${'A'.repeat(210_000)}../../../../etc/passwd${'B'.repeat(210_000)}`;
+      const payload = `${'A'.repeat(210_000)}../../../../etc/passwd ${'B'.repeat(210_000)}`;
       const matches = detectPathTraversalOutput(payload);
       const ids = matches.map((match) => match.id);
       expect(ids).toContain('posix-traversal-to-sensitive-target');
@@ -399,6 +399,7 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/nested quantified groups/);
     expect(() =>
       validatePathTraversalOutputPluginConfig({
+        examples: ['Return ../../internal/private_keys/demo.pem only.'],
         pathTraversalOutputTargets: ['(?:a+)+$'],
       }),
     ).toThrow(/nested quantified groups/);
@@ -413,6 +414,7 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/quantified alternation groups/);
     expect(() =>
       validatePathTraversalOutputPluginConfig({
+        examples: ['Return ../../internal/private_keys/demo.pem only.'],
         pathTraversalOutputTargets: ['(?:a|aa)+$'],
       }),
     ).toThrow(/quantified alternation groups/);
@@ -427,6 +429,7 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/unbounded wildcard operators/);
     expect(() =>
       validatePathTraversalOutputPluginConfig({
+        examples: ['Return ../../internal/private_keys/demo.pem only.'],
         pathTraversalOutputTargets: ['.*'],
       }),
     ).toThrow(/unbounded wildcard operators/);
