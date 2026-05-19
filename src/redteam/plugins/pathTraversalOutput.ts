@@ -161,6 +161,7 @@ const ENCODED_INDICATORS: string[] = [
   '%2526bsol%253b',
   '%2526dot%253b',
 ];
+const DEEPLY_PERCENT_ENCODED_TRAVERSAL_INDICATOR = /%(?:25){2,3}(?:2e|2f|5c)/i;
 
 const NESTED_QUANTIFIER =
   /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
@@ -262,7 +263,10 @@ export function normalize(raw: string): NormalizationResult {
 
 function isEncodedFormPresent(capped: string): boolean {
   const lower = capped.toLowerCase();
-  return ENCODED_INDICATORS.some((indicator) => lower.includes(indicator));
+  return (
+    ENCODED_INDICATORS.some((indicator) => lower.includes(indicator)) ||
+    DEEPLY_PERCENT_ENCODED_TRAVERSAL_INDICATOR.test(lower)
+  );
 }
 
 // Sensitive-target alternatives. The right-boundary anchor is appended once per
