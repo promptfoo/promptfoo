@@ -794,7 +794,7 @@ describe('evalCommand', () => {
   it('should handle redteam config', async () => {
     const cmdObj = {};
     const config = {
-      redteam: { plugins: ['test-plugin'] as any },
+      redteam: { plugins: ['default'] as any },
       prompts: [],
     } as UnifiedConfig;
 
