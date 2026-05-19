@@ -15,20 +15,35 @@ export type AzureBlobUriParts = {
   sasToken: string;
 };
 
+function sanitizeAzureBlobUriForError(uri: string): string {
+  const queryStart = uri.indexOf('?');
+  if (queryStart < 0) {
+    return uri;
+  }
+
+  const fragmentStart = uri.indexOf('#', queryStart);
+  return fragmentStart >= 0
+    ? `${uri.slice(0, queryStart)}?<redacted>${uri.slice(fragmentStart)}`
+    : `${uri.slice(0, queryStart)}?<redacted>`;
+}
+
 function createAzureBlobUriError(uri: string, detail: string): Error {
+  const sanitizedUri = sanitizeAzureBlobUriForError(uri);
   return new Error(
-    `Invalid Azure Blob Storage URI "${uri}": ${detail}. Expected az://<account>/<container>/<blob>.`,
+    `Invalid Azure Blob Storage URI "${sanitizedUri}": ${detail}. Expected az://<account>/<container>/<blob>.`,
   );
 }
 
 function formatAzureBlobReadError(uri: string, error: unknown): Error {
   const detail = error instanceof Error ? error.message : String(error);
-  return new Error(`Failed to read Azure Blob Storage URI "${uri}": ${detail}`);
+  return new Error(
+    `Failed to read Azure Blob Storage URI "${sanitizeAzureBlobUriForError(uri)}": ${detail}`,
+  );
 }
 
-function decodeAzureBlobPathSegment(segment: string, uri: string): string {
+function decodeAzureBlobPathComponent(component: string, uri: string): string {
   try {
-    return decodeURIComponent(segment);
+    return decodeURIComponent(component);
   } catch {
     throw createAzureBlobUriError(uri, 'path contains invalid percent-encoding');
   }
@@ -51,24 +66,27 @@ export function parseAzureBlobUri(uri: string): AzureBlobUriParts {
     throw createAzureBlobUriError(uri, 'storage account is missing');
   }
 
-  const pathSegments = parsed.pathname
-    .replace(/^\/+/, '')
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => decodeAzureBlobPathSegment(segment, uri));
+  const pathWithoutLeadingSlash = parsed.pathname.startsWith('/')
+    ? parsed.pathname.slice(1)
+    : parsed.pathname;
+  const containerSeparatorIndex = pathWithoutLeadingSlash.indexOf('/');
+  if (containerSeparatorIndex < 0) {
+    throw createAzureBlobUriError(uri, 'blob path is missing');
+  }
 
-  const [containerName, ...blobPathSegments] = pathSegments;
-  if (!containerName) {
+  const rawContainerName = pathWithoutLeadingSlash.slice(0, containerSeparatorIndex);
+  const rawBlobName = pathWithoutLeadingSlash.slice(containerSeparatorIndex + 1);
+  if (!rawContainerName) {
     throw createAzureBlobUriError(uri, 'container name is missing');
   }
-  if (blobPathSegments.length === 0) {
+  if (!rawBlobName) {
     throw createAzureBlobUriError(uri, 'blob path is missing');
   }
 
   return {
     accountName,
-    containerName,
-    blobName: blobPathSegments.join('/'),
+    containerName: decodeAzureBlobPathComponent(rawContainerName, uri),
+    blobName: decodeAzureBlobPathComponent(rawBlobName, uri),
     sasToken: parsed.search,
   };
 }

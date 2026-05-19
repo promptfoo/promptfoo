@@ -17,7 +17,7 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
-import { readAzureBlobText } from './azureBlob';
+import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -128,7 +128,7 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
   const fileExtension = getAzureBlobTestFileExtension(varsPath);
   if (!fileExtension) {
     throw new Error(
-      `Unsupported Azure Blob Storage test file type for URI: ${varsPath}. Supported formats: CSV, JSON, JSONL, YAML, and YML.`,
+      'Unsupported Azure Blob Storage test file type. Supported formats: CSV, JSON, JSONL, YAML, and YML.',
     );
   }
 
@@ -155,13 +155,12 @@ async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestC
   telemetry.record('feature_used', {
     feature: 'yaml tests file - azure blob',
   });
-  const rawContent = yaml.load(fileContent);
-  const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
-  return csvRowsToTestCases(rows);
+  return parseYamlTestCases(fileContent);
 }
 
 function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExtension | undefined {
-  const pathWithoutBlobHash = varsPath.replace(SHA256_BLOB_SUFFIX, '');
+  const { blobName } = parseAzureBlobUri(varsPath);
+  const pathWithoutBlobHash = blobName.replace(SHA256_BLOB_SUFFIX, '');
   const extension = parsePath(pathWithoutBlobHash).ext.slice(1).toLowerCase();
   if (
     extension === 'csv' ||
@@ -370,6 +369,16 @@ function parseJsonlTestCases(fileContent: string): TestCase[] {
     });
 }
 
+function parseYamlTestCases(fileContent: string): TestCase[] {
+  const rawContent = yaml.load(fileContent);
+  const loadedContent = maybeLoadConfigFromExternalFile(rawContent) as TestCase[] | TestCase;
+  const testCases = Array.isArray(loadedContent) ? loadedContent : [loadedContent];
+  return testCases.map((item, idx) => ({
+    ...item,
+    description: item.description || `Row #${idx + 1}`,
+  }));
+}
+
 async function loadTestWithVars(
   testCase: TestCaseWithVarsFile,
   testBasePath: string,
@@ -546,6 +555,9 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   if (typeof tests === 'string') {
+    if (tests.startsWith('az://')) {
+      return readStandaloneTestsFile(tests, basePath);
+    }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       return loadTestsFromGlob(tests, basePath);

@@ -41,9 +41,23 @@ vi.mock('../../src/envars', async () => ({
 
 describe('Azure Blob test-set loading', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(getEnvString).mockReturnValue('');
-    mocks.downloadToBuffer.mockResolvedValue(Buffer.from('blob text', 'utf8'));
+    vi.mocked(getEnvString).mockReset().mockReturnValue('');
+    mocks.downloadToBuffer.mockReset().mockResolvedValue(Buffer.from('blob text', 'utf8'));
+    mocks.getBlobClient.mockReset().mockReturnValue({
+      downloadToBuffer: mocks.downloadToBuffer,
+    });
+    mocks.getContainerClient.mockReset().mockReturnValue({
+      getBlobClient: mocks.getBlobClient,
+    });
+    mocks.fromConnectionString.mockReset().mockReturnValue(mocks.serviceClient);
+    mocks.blobServiceClient.mockReset().mockImplementation(function BlobServiceClientMock() {
+      return mocks.serviceClient;
+    });
+    mocks.defaultAzureCredential
+      .mockReset()
+      .mockImplementation(function DefaultAzureCredentialMock() {
+        return { credential: 'default' };
+      });
   });
 
   afterEach(() => {
@@ -58,6 +72,15 @@ describe('Azure Blob test-set loading', () => {
       containerName: 'data',
       blobName: 'ianw/cyber-evals/tests.json',
       sasToken: '?sp=r&sig=abc',
+    });
+  });
+
+  it('preserves leading and repeated slashes in Azure blob names', () => {
+    expect(parseAzureBlobUri('az://account/container//folder//tests.json')).toEqual({
+      accountName: 'account',
+      containerName: 'container',
+      blobName: '/folder//tests.json',
+      sasToken: '',
     });
   });
 
@@ -97,5 +120,15 @@ describe('Azure Blob test-set loading', () => {
     expect(mocks.blobServiceClient).toHaveBeenCalledWith('https://account.blob.core.windows.net', {
       credential: 'default',
     });
+  });
+
+  it('redacts SAS query strings from read errors', async () => {
+    mocks.downloadToBuffer.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(
+      readAzureBlobText('az://account/container/path/tests.json?sp=r&sig=secret'),
+    ).rejects.toThrow(
+      'Failed to read Azure Blob Storage URI "az://account/container/path/tests.json?<redacted>": boom',
+    );
   });
 });

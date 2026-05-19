@@ -388,6 +388,23 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read JSON test sets from SAS-authenticated Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.json?sp=r&sig=abc';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ vars: { review_id: 'review-002' } }]),
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-002' },
+      },
+    ]);
+  });
+
   it('should prefer SharePoint URL handling over local JSON parsing when URL ends with .json', async () => {
     const sharepointUrls = [
       'https://example.sharepoint.com/sites/team/tests.json',
@@ -1086,6 +1103,29 @@ describe('readTests', () => {
       {
         description: 'Row #1',
         vars: { review_id: 'review-001' },
+      },
+    ]);
+  });
+
+  it('readTests with a scalar Azure Blob Storage YAML test set', async () => {
+    const blobUri = 'az://account/container/tests.yaml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure YAML case
+        vars:
+          review_id: review-003
+        assert:
+          - type: equals
+            value: ready
+    `);
+
+    const result = await readTests(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'ready' }],
+        description: 'Azure YAML case',
+        vars: { review_id: 'review-003' },
       },
     ]);
   });
