@@ -18,6 +18,12 @@ describe('isMissingPackageImportError', () => {
     expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(true);
   });
 
+  it('ignores import failures for unrelated packages', () => {
+    const error = new Error('Cannot find package @promptfoo/unrelated');
+
+    expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(false);
+  });
+
   it('preserves import-time runtime errors from present packages', () => {
     const error = new Error('@googleapis/sheets failed during initialization');
 
