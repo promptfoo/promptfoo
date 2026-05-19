@@ -1175,7 +1175,6 @@ Supported per-request settings:
 | `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
 | `modelName`             | Optional per-request model override                                                 |
 | `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
-| `reasoning`             | Responses API reasoning object, including `effort` and `summary`                    |
 | `verbosity`             | Passed through to the Responses text config                                         |
 | `metadata`              | Request metadata                                                                    |
 | `passthrough`           | Additional raw Responses API fields                                                 |

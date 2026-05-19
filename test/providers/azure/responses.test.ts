@@ -389,6 +389,30 @@ describe('AzureResponsesProvider', () => {
       });
     });
 
+    it('should preserve reasoning_effort when passthrough also contributes reasoning fields', async () => {
+      const provider = new AzureResponsesProvider('o3-mini', {
+        config: {
+          reasoning_effort: 'high',
+          reasoning: {
+            summary: 'auto',
+          },
+          passthrough: {
+            reasoning: {
+              encrypted_content: 'opaque',
+            },
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'high',
+        encrypted_content: 'opaque',
+        summary: 'auto',
+      });
+    });
+
     it('should include verbosity for reasoning models when configured', async () => {
       const provider = new AzureResponsesProvider('gpt-5', {
         config: { verbosity: 'high' },

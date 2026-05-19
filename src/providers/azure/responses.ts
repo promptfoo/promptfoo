@@ -207,8 +207,12 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(config.passthrough || {}),
     };
 
-    if (renderedReasoning && isReasoningModel) {
-      body.reasoning = { ...body.reasoning, ...renderedReasoning };
+    if (isReasoningModel && (body.reasoning || renderedReasoning || reasoningEffort)) {
+      body.reasoning = {
+        ...(reasoningEffort ? { effort: reasoningEffort } : {}),
+        ...(body.reasoning || {}),
+        ...(renderedReasoning || {}),
+      };
     }
 
     logger.debug('Azure Responses API request body', { body });
