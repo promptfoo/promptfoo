@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RunOptionsSection } from './RunOptionsSection';
 
@@ -9,6 +10,16 @@ vi.mock('./RunTestSuiteButton', () => ({
 
 describe('RunOptionsSection', () => {
   const mockOnChange = vi.fn();
+
+  function ControlledRunOptionsSection() {
+    const [options, setOptions] = useState<{
+      description?: string;
+      delay?: number;
+      maxConcurrency?: number;
+    }>({});
+
+    return <RunOptionsSection {...options} onChange={setOptions} />;
+  }
 
   beforeEach(() => {
     mockOnChange.mockClear();
@@ -284,6 +295,14 @@ describe('RunOptionsSection', () => {
       ).toBeInTheDocument();
     });
 
+    it('defaults to the incomplete message when isReadyToRun is omitted', () => {
+      render(<RunOptionsSection onChange={mockOnChange} />);
+
+      expect(
+        screen.getByText('Add providers, prompts, and test cases to run this evaluation.'),
+      ).toBeInTheDocument();
+    });
+
     it('shows ready message when isReadyToRun is true', () => {
       render(<RunOptionsSection onChange={mockOnChange} isReadyToRun={true} />);
 
@@ -296,6 +315,43 @@ describe('RunOptionsSection', () => {
       render(<RunOptionsSection onChange={mockOnChange} />);
 
       expect(screen.getByTestId('run-test-suite-button')).toBeInTheDocument();
+    });
+  });
+
+  describe('Controlled interaction flow', () => {
+    it('disables max concurrency after delay is entered and re-enables it when cleared', async () => {
+      const user = userEvent.setup();
+      render(<ControlledRunOptionsSection />);
+
+      const delayInput = screen.getByLabelText('Delay between API calls (ms)');
+      const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
+
+      await user.type(delayInput, '5');
+
+      expect(maxConcurrencyInput).toBeDisabled();
+      expect(screen.getByText('To set max concurrency, delay must be 0')).toBeInTheDocument();
+
+      await user.clear(delayInput);
+
+      expect(maxConcurrencyInput).not.toBeDisabled();
+      expect(
+        screen.getByText('Maximum number of concurrent requests to make'),
+      ).toBeInTheDocument();
+    });
+
+    it('disables delay after max concurrency is raised above one', async () => {
+      const user = userEvent.setup();
+      render(<ControlledRunOptionsSection />);
+
+      const delayInput = screen.getByLabelText('Delay between API calls (ms)');
+      const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
+
+      await user.type(maxConcurrencyInput, '8');
+
+      expect(delayInput).toBeDisabled();
+      expect(
+        screen.getByText('To set a delay, max concurrent requests must be 1'),
+      ).toBeInTheDocument();
     });
   });
 

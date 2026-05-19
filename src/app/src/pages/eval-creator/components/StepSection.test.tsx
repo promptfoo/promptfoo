@@ -84,6 +84,17 @@ describe('StepSection', () => {
       expect(screen.queryByText('Configured')).not.toBeInTheDocument();
     });
 
+    it('does not show configured status for incomplete steps with a zero count', () => {
+      render(
+        <StepSection {...defaultProps} isComplete={false} count={0}>
+          <div>Content</div>
+        </StepSection>,
+      );
+
+      expect(screen.queryByText('0 configured')).not.toBeInTheDocument();
+      expect(screen.queryByText('Configured')).not.toBeInTheDocument();
+    });
+
     it('shows "Configured" when isComplete is true and count is undefined', () => {
       render(
         <StepSection {...defaultProps} isComplete={true}>
