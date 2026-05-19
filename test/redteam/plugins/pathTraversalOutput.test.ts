@@ -113,6 +113,10 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
     const encodedCases: { name: string; payload: string }[] = [
       { name: 'single percent', payload: '..%2fetc%2fpasswd' },
       { name: 'double percent', payload: '..%252f..%252fetc%252fpasswd' },
+      {
+        name: 'four-pass stacked percent',
+        payload: '%2525252e%2525252e%2525252fetc%2525252fpasswd',
+      },
       { name: 'overlong UTF-8', payload: '..%c0%afetc%c0%afpasswd' },
       {
         name: 'double-encoded overlong UTF-8',
@@ -165,6 +169,13 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       const payload = `${filler}../../etc/passwd ${filler}`;
       const matches = detectPathTraversalOutput(payload);
       expect(matches.length).toBeGreaterThan(0);
+    });
+
+    it('still fires when the payload appears only in the trailing 200KB window', () => {
+      const payload = `${'A'.repeat(200_001)}../../../../etc/passwd`;
+      const matches = detectPathTraversalOutput(payload);
+      const ids = matches.map((match) => match.id);
+      expect(ids).toContain('posix-traversal-to-sensitive-target');
     });
   });
 
@@ -371,6 +382,20 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
         pathTraversalOutputTargets: ['(?:a+)+$'],
       }),
     ).toThrow(/nested quantified groups/);
+  });
+
+  it('rejects quantified alternation groups that can trigger catastrophic backtracking', () => {
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        examples: ['Return custom traversal only.'],
+        pathTraversalOutputPatterns: [{ id: 'redos', pattern: '(?:a|aa)+$' }],
+      }),
+    ).toThrow(/quantified alternation groups/);
+    expect(() =>
+      validatePathTraversalOutputPluginConfig({
+        pathTraversalOutputTargets: ['(?:a|aa)+$'],
+      }),
+    ).toThrow(/quantified alternation groups/);
   });
 
   it('rejects unbounded wildcard custom regexes that collapse detector selectivity', () => {

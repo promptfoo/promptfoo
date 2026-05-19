@@ -796,6 +796,21 @@ describe('redteamConfigSchema', () => {
       );
     });
 
+    it('should include path-traversal-output in OWASP LLM05 aliases', () => {
+      for (const alias of ['owasp:llm', 'owasp:llm:05']) {
+        const result = RedteamConfigSchema.safeParse({
+          plugins: [alias],
+          numTests: 3,
+        });
+        expect(result.success).toBe(true);
+        expect(result.data?.plugins).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ id: 'path-traversal-output', numTests: 3 }),
+          ]),
+        );
+      }
+    });
+
     it('should expand collections within aliased plugin names', () => {
       const input = {
         plugins: ['nist:ai:measure:2.1'],

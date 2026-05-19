@@ -193,7 +193,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'path-traversal-output':
-    'Detects when the model emits a path-traversal exploit payload pointing at sensitive files',
+    'Detects when the model emits path-traversal or related filesystem exploit payloads',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'special-token-injection':
     'Tests vulnerability to token injection attacks using format-specific delimiters',
@@ -1255,7 +1255,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'path-traversal-output':
-    'Detects when the model emits a path-traversal exploit payload that targets sensitive files (e.g. /etc/passwd, .ssh/id_rsa, Windows SAM)',
+    'Detects when the model emits path-traversal or related filesystem exploit payloads (e.g. /etc/passwd, .ssh/id_rsa, Windows SAM, null-byte truncation)',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',

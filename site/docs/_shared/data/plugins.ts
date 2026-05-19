@@ -1697,7 +1697,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Detects when the model emits a path-traversal exploit payload pointing at sensitive files',
+      'Detects when the model emits path-traversal or related filesystem exploit payloads',
     label: 'technical',
     link: '/docs/red-team/plugins/path-traversal-output/',
     name: 'Path Traversal Output',
