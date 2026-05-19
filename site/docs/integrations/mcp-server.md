@@ -18,7 +18,8 @@ Expose promptfoo's eval tools to AI agents via Model Context Protocol (MCP).
 
 :::
 
-For slim installs created with omitted optional dependencies, add the MCP SDK before starting the server:
+For slim installs created with omitted optional dependencies, add the MCP SDK in the same
+environment where promptfoo is already installed:
 
 ```bash
 npm install @modelcontextprotocol/sdk
@@ -211,10 +212,12 @@ npx promptfoo@latest validate
 npx promptfoo@latest mcp --transport stdio
 ```
 
-If the error says `@modelcontextprotocol/sdk` is required, install that optional runtime package in the same environment that runs promptfoo:
+If the error says `@modelcontextprotocol/sdk` is required, install that optional runtime package
+alongside the promptfoo installation that runs the server. For example, add both packages to the
+same project before using a local `npx promptfoo ...` command:
 
 ```bash
-npm install @modelcontextprotocol/sdk
+npm install promptfoo @modelcontextprotocol/sdk
 ```
 
 **Port conflicts (HTTP mode):**
