@@ -7,7 +7,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
@@ -81,9 +81,8 @@ const CustomMetrics = ({
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
   const [showAllMetrics, setShowAllMetrics] = useState(false);
 
-  const metrics = useMemo(
-    () => Object.entries(lookup).sort(([metricA], [metricB]) => metricA.localeCompare(metricB)),
-    [lookup],
+  const metrics = Object.entries(lookup).sort(([metricA], [metricB]) =>
+    metricA.localeCompare(metricB),
   );
   const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
 

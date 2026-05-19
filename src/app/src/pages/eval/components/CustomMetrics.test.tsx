@@ -198,18 +198,29 @@ describe('CustomMetrics', () => {
     ]);
   });
 
-  it('truncates after sorting the full metric list', () => {
+  it('sorts the full metric list before truncating visible metrics', async () => {
+    const user = userEvent.setup();
     const lookup = {
-      zeta: 1,
-      alpha: 2,
-      beta: 3,
+      zebra: 3,
+      alpha: 1,
+      beta: 2,
     };
 
     renderWithProviders(<CustomMetrics lookup={lookup} truncationCount={2} />);
 
-    expect(screen.getByTestId('metric-name-alpha')).toBeInTheDocument();
-    expect(screen.getByTestId('metric-name-beta')).toBeInTheDocument();
-    expect(screen.queryByTestId('metric-name-zeta')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent)).toEqual([
+      'alpha',
+      'beta',
+    ]);
+    expect(screen.queryByTestId('metric-name-zebra')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('toggle-show-more'));
+
+    expect(screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent)).toEqual([
+      'alpha',
+      'beta',
+      'zebra',
+    ]);
   });
 
   it('handles missing metrics in counts/totals objects', () => {
