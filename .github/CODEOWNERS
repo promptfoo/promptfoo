@@ -127,3 +127,4 @@
 # These patterns match files anywhere in the repo and must come last
 
 AGENTS.md  @alandelong-oai @mldangelo-oai                 # AI agent instructions
+CLAUDE.md  @alandelong-oai @mldangelo-oai                 # Claude Code instructions

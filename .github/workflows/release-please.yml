@@ -287,6 +287,7 @@ jobs:
             --exclude='.git' \
             --exclude='.github' \
             --exclude='AGENTS.md' \
+            --exclude='CLAUDE.md' \
             --exclude='LICENSE*' \
             "$export_dir"/ "$mirror_dir"/
 

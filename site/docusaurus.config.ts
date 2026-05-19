@@ -68,6 +68,7 @@ const config: Config = {
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
           exclude: [
+            '**/CLAUDE.md', // Exclude Claude Code context files
             '**/AGENTS.md', // Exclude AI agent instruction files
           ],
         },
