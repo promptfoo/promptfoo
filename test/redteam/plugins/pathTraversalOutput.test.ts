@@ -197,7 +197,7 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       const encodedConnector = '%2541'.repeat(200);
       const payload = `${'A'.repeat(
         199_300,
-      )}C:%252f${encodedConnector}Windows%252fSystem32%252fconfig%252fSAM`;
+      )} C:%252f${encodedConnector}Windows%252fSystem32%252fconfig%252fSAM`;
       const matches = detectPathTraversalOutput(payload);
       const ids = matches.map((match) => match.id);
       expect(ids).toContain('windows-direct-sensitive-path');
