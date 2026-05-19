@@ -46,4 +46,45 @@ describe('Google Sheets optional dependency', () => {
     await expect(fetchCsvFromGoogleSheet(SHEET_URL)).resolves.toEqual([{ header: 'value' }]);
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   });
+
+  it('falls back to authenticated sheet access when the probe and CSV export both fail', async () => {
+    const fetchWithProxy = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('probe failed'))
+      .mockResolvedValueOnce({
+        status: 403,
+        text: async () => 'forbidden',
+      });
+
+    vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
+    vi.doMock('@googleapis/sheets', () => ({
+      auth: {
+        GoogleAuth: class {},
+      },
+      sheets: () => ({
+        spreadsheets: {
+          get: vi.fn().mockResolvedValue({
+            data: {
+              sheets: [{ properties: { title: 'Sheet1' } }],
+            },
+          }),
+          values: {
+            get: vi.fn().mockResolvedValue({
+              data: {
+                values: [
+                  ['header'],
+                  ['value'],
+                ],
+              },
+            }),
+          },
+        },
+      }),
+    }));
+
+    const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
+
+    await expect(fetchCsvFromGoogleSheet(SHEET_URL)).resolves.toEqual([{ header: 'value' }]);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+  });
 });

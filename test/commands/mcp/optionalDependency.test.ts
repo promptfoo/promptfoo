@@ -23,4 +23,29 @@ describe('MCP server optional dependency', () => {
     );
     await expect(createServerPromise).rejects.toThrow('npm install @modelcontextprotocol/sdk');
   });
+
+  it('surfaces stdio dependency errors before console logging is muted', async () => {
+    vi.doMock('@modelcontextprotocol/sdk/server/mcp.js', () => {
+      throw new Error('Cannot find package @modelcontextprotocol/sdk');
+    });
+    vi.doMock('../../../src/util/packageImportErrors', () => ({
+      isMissingPackageImportError: () => true,
+    }));
+
+    const loggerModule = await import('../../../src/logger');
+    const originalTransports = loggerModule.default.transports;
+    const consoleTransport = { constructor: { name: 'Console' }, silent: false };
+    loggerModule.default.transports = [consoleTransport as any];
+
+    try {
+      const { startStdioMcpServer } = await import('../../../src/commands/mcp/server');
+
+      await expect(startStdioMcpServer()).rejects.toThrow(
+        'The @modelcontextprotocol/sdk package is required for MCP server support.',
+      );
+      expect(consoleTransport.silent).toBe(false);
+    } finally {
+      loggerModule.default.transports = originalTransports;
+    }
+  });
 });

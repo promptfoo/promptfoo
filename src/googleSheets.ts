@@ -109,7 +109,11 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
     return fetchCsvFromGoogleSheetUnauthenticated(url);
   }
   if (!('status' in access)) {
-    return fetchCsvFromGoogleSheetUnauthenticated(url);
+    try {
+      return await fetchCsvFromGoogleSheetUnauthenticated(url);
+    } catch {
+      return fetchCsvFromGoogleSheetAuthenticated(url);
+    }
   }
   return fetchCsvFromGoogleSheetAuthenticated(url);
 }

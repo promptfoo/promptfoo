@@ -215,6 +215,11 @@ export async function startStdioMcpServer(): Promise<void> {
   // Set transport type for telemetry
   setMcpTransport('stdio');
 
+  // Resolve optional SDK imports before muting console output so startup
+  // dependency failures remain visible to CLI users.
+  await loadMcpServerSdk();
+  const { StdioServerTransport } = await loadMcpStdioTransport();
+
   // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
   logger.transports.forEach((transport) => {
     // Winston Console transport constructor name check
@@ -226,7 +231,6 @@ export async function startStdioMcpServer(): Promise<void> {
   const server = await createMcpServer();
 
   // Set up stdio transport
-  const { StdioServerTransport } = await loadMcpStdioTransport();
   const transport = new StdioServerTransport();
 
   // Connect the server to the stdio transport
