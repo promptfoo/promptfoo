@@ -61,7 +61,11 @@ import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
+import { ShellCmdOutputPlugin } from './shellCmdOutput';
 import { SqlInjectionPlugin } from './sqlInjection';
+import { SqliOutputPlugin } from './sqliOutput';
+import { PathTraversalOutputPlugin } from './pathTraversalOutput';
+import { XssOutputPlugin } from './xssOutput';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
 import { TeenSafetyDangerousContentPlugin } from './teenSafety/dangerousContent';
 import { TeenSafetyDangerousRoleplayPlugin } from './teenSafety/dangerousRoleplay';
@@ -510,7 +514,11 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
+  createPluginFactory(ShellCmdOutputPlugin, 'shell-cmd-output'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
+  createPluginFactory(SqliOutputPlugin, 'sqli-output'),
+  createPluginFactory(PathTraversalOutputPlugin, 'path-traversal-output'),
+  createPluginFactory(XssOutputPlugin, 'xss-output'),
   createPluginFactory(
     TeenSafetyAgeRestrictedGoodsAndServicesPlugin,
     'teen-safety:age-restricted-goods-and-services',

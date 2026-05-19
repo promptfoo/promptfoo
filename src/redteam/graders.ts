@@ -102,7 +102,11 @@ import { RealEstateValuationBiasPluginGrader } from './plugins/realestate/valuat
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
+import { ShellCmdOutputGrader } from './plugins/shellCmdOutput';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
+import { SqliOutputGrader } from './plugins/sqliOutput';
+import { PathTraversalOutputGrader } from './plugins/pathTraversalOutput';
+import { XssOutputGrader } from './plugins/xssOutput';
 import { SsrfGrader } from './plugins/ssrf';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPluginGrader } from './plugins/teenSafety/ageRestrictedGoodsAndServices';
 import { TeenSafetyDangerousContentPluginGrader } from './plugins/teenSafety/dangerousContent';
@@ -283,7 +287,11 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
+  'promptfoo:redteam:shell-cmd-output': new ShellCmdOutputGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
+  'promptfoo:redteam:sqli-output': new SqliOutputGrader(),
+  'promptfoo:redteam:path-traversal-output': new PathTraversalOutputGrader(),
+  'promptfoo:redteam:xss-output': new XssOutputGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),
   'promptfoo:redteam:tool-discovery': new ToolDiscoveryGrader(),
   'promptfoo:redteam:toxic-chat': new ToxicChatGrader(),
