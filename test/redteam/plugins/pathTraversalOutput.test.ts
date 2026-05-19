@@ -345,15 +345,17 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     expect(() =>
       validatePathTraversalOutputPluginConfig({
         pathTraversalOutputPatterns: [{ id: '', pattern: 'abc' } as any],
-      }),
-    ).toThrow(/`id` and `pattern`/);
+        examples: ['seed prompt for the custom rule'],
+      } as any),
+    ).toThrow('entries require `id` and `pattern`');
   });
 
   it('rejects custom patterns with invalid regex', () => {
     expect(() =>
       validatePathTraversalOutputPluginConfig({
         pathTraversalOutputPatterns: [{ id: 'bad', pattern: '(unclosed' }],
-      }),
+        examples: ['seed prompt for the custom rule'],
+      } as any),
     ).toThrow(/Invalid path-traversal-output pattern/);
   });
 
