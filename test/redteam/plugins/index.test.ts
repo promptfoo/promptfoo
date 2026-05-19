@@ -790,6 +790,38 @@ describe('Plugins', () => {
       );
     });
 
+    it('should reject malformed top-level remote assertion payloads before synthesis continues', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: {
+              type: 'promptfoo:redteam:future-remote-plugin',
+            } as any,
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toThrow(
+        'Remote test generation for ssrf returned an invalid test case assertion payload: expected top-level `assert` to be an array.',
+      );
+    });
+
     it('should reject rag-poisoning assertions without a non-empty intended result', async () => {
       vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;

@@ -393,6 +393,14 @@ function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): vo
   const unsupportedAssertionTypes = new Set<string>();
 
   for (const testCase of testCases) {
+    if (testCase.assert !== undefined && !Array.isArray(testCase.assert)) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        'expected top-level `assert` to be an array',
+      );
+    }
+
     collectUnsupportedRemoteRedteamAssertionTypes(
       key,
       testCase.assert,
