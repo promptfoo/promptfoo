@@ -712,6 +712,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private initialized: boolean = false;
+  private readonly pooledClientSecretFactory = () => this.createChatKitClientSecret();
 
   // Static userId for consistent template keys across concurrent evaluations
   private static defaultUserId: string | null = null;
@@ -1199,7 +1200,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     // Register the HTML template for this workflow
     const sessionEndpoint = `/template/${encodeURIComponent(templateKey)}/session`;
     const html = generateChatKitHTML(sessionEndpoint);
-    pool.setTemplate(templateKey, html, () => this.createChatKitClientSecret());
+    pool.setTemplate(templateKey, html, this.pooledClientSecretFactory);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
     const startTime = Date.now();

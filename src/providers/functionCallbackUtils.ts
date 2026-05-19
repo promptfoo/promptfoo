@@ -203,6 +203,7 @@ export class FunctionCallbackHandler {
         return JSON.stringify(result);
       } catch (error) {
         logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+        throw error;
       }
     }
     return String(result);

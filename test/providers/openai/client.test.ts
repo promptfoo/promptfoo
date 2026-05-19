@@ -44,6 +44,53 @@ describe('createOpenAiClient', () => {
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
     expect(new Headers(requestInit.headers).get('authorization')).toBe('Bearer gateway-token');
   });
+
+  it('ignores SDK-only ambient org, project, and custom header defaults', async () => {
+    const originalOrgId = process.env.OPENAI_ORG_ID;
+    const originalProjectId = process.env.OPENAI_PROJECT_ID;
+    const originalCustomHeaders = process.env.OPENAI_CUSTOM_HEADERS;
+    process.env.OPENAI_ORG_ID = 'ambient-org';
+    process.env.OPENAI_PROJECT_ID = 'ambient-project';
+    process.env.OPENAI_CUSTOM_HEADERS = 'X-Ambient-Header: should-not-leak';
+
+    try {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ object: 'list', data: [] }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      const client = createOpenAiClient({
+        apiKey: 'test-key',
+        baseURL: 'https://api.openai.com/v1',
+        fetch: fetchMock as typeof globalThis.fetch,
+      });
+
+      await client.models.list();
+
+      const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
+      const headers = new Headers(requestInit.headers);
+      expect(headers.get('authorization')).toBe('Bearer test-key');
+      expect(headers.get('openai-organization')).toBeNull();
+      expect(headers.get('openai-project')).toBeNull();
+      expect(headers.get('x-ambient-header')).toBeNull();
+    } finally {
+      if (originalOrgId === undefined) {
+        delete process.env.OPENAI_ORG_ID;
+      } else {
+        process.env.OPENAI_ORG_ID = originalOrgId;
+      }
+      if (originalProjectId === undefined) {
+        delete process.env.OPENAI_PROJECT_ID;
+      } else {
+        process.env.OPENAI_PROJECT_ID = originalProjectId;
+      }
+      if (originalCustomHeaders === undefined) {
+        delete process.env.OPENAI_CUSTOM_HEADERS;
+      } else {
+        process.env.OPENAI_CUSTOM_HEADERS = originalCustomHeaders;
+      }
+    }
+  });
 });
 
 describe('isSdkUploadCapabilityProbe', () => {

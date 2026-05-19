@@ -291,14 +291,25 @@ const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 // key because shared fetch callers can legitimately negotiate different
 // response formats for the same URL/body. `x-promptfoo-version` is also kept in
 // the key so promptfoo upgrades remain a deliberate invalidation boundary.
-const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding', 'user-agent']);
+const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding']);
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
 // `Headers.entries()` yields lowercased names per the Fetch spec, so we don't
 // need to normalize the input here.
-function isIgnoredCacheKeyHeader(name: string): boolean {
-  return CACHE_KEY_IGNORED_HEADERS.has(name) || name.startsWith('x-stainless-');
+function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
+  if (CACHE_KEY_IGNORED_HEADERS.has(name) || name.startsWith('x-stainless-')) {
+    return true;
+  }
+
+  // The OpenAI SDK annotates its own requests with `x-stainless-*` telemetry
+  // headers plus an SDK-specific user agent. Ignore that SDK-managed UA so
+  // cache entries remain portable across runtime/SDK upgrades, while
+  // preserving caller-authored User-Agent differences for generic fetch users.
+  return (
+    name === 'user-agent' &&
+    Array.from(headers.keys()).some((headerName) => headerName.startsWith('x-stainless-'))
+  );
 }
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
@@ -312,7 +323,7 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   }
 
   return Array.from(headers.entries())
-    .filter(([name]) => !isIgnoredCacheKeyHeader(name))
+    .filter(([name]) => !isIgnoredCacheKeyHeader(name, headers))
     .sort(([nameA, valueA], [nameB, valueB]) => {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;

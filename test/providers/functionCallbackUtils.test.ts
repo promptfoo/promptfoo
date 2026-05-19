@@ -139,6 +139,26 @@ describe('FunctionCallbackHandler', () => {
       });
     });
 
+    it('should return the original call when callback results cannot be stringified', async () => {
+      const circularResult: Record<string, unknown> = {};
+      circularResult.self = circularResult;
+      const mockCallback = vi.fn().mockResolvedValue(circularResult);
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: mockCallback,
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: JSON.stringify(call),
+        isError: true,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Error stringifying result from function 'testFunction'"),
+      );
+    });
+
     it('should return original call on callback error', async () => {
       const mockCallback = vi.fn().mockRejectedValue(new Error('Callback failed'));
       const callbacks: FunctionCallbackConfig = {

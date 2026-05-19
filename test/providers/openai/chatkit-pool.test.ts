@@ -173,7 +173,7 @@ describe('ChatKitBrowserPool', () => {
       });
     });
 
-    it('should not invalidate pooled pages when only the session factory changes', async () => {
+    it('should invalidate pooled pages when the session factory changes', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
       const firstSessionFactory = vi.fn().mockResolvedValue('secret-1');
       const secondSessionFactory = vi.fn().mockResolvedValue('secret-2');
@@ -186,7 +186,7 @@ describe('ChatKitBrowserPool', () => {
 
       instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, secondSessionFactory);
 
-      expect(pooledPage.ready).toBe(true);
+      expect(pooledPage.ready).toBe(false);
       expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toEqual({
         html: TEST_HTML,
         createClientSecret: secondSessionFactory,

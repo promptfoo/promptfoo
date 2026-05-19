@@ -89,17 +89,26 @@ export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOpti
   };
   const timeout = options.timeout ?? getRequestTimeoutMs();
   const apiKey = getSdkApiKey(options.apiKey, options.allowMissingApiKey);
+  const ambientCustomHeaderNames = getAmbientOpenAiCustomHeaderNames(options.headers);
 
   const client = new OpenAI({
     apiKey,
-    organization: options.organization,
+    adminAPIKey: null,
+    organization: options.organization ?? null,
+    project: null,
+    webhookSecret: null,
     baseURL: options.baseURL,
     defaultHeaders: options.headers,
     maxRetries: 0,
     timeout,
     fetch: async (url, init = {}) => {
       const requestUrl = getRequestUrlString(url);
-      const requestInit = stripSyntheticAuthorization(init, options.apiKey);
+      const requestInit = sanitizeSdkRequestInit(
+        init,
+        options.apiKey,
+        options.organization,
+        ambientCustomHeaderNames,
+      );
       if (isSdkUploadCapabilityProbe(requestUrl)) {
         return globalThis.fetch(url, requestInit);
       }
@@ -163,21 +172,31 @@ export async function callJsonCachedOpenAi<T>(
 export function createOpenAiClient(options: OpenAiClientOptions) {
   const apiKey = getSdkApiKey(options.apiKey, options.allowMissingApiKey);
   const requestFetch = options.fetch ?? globalThis.fetch;
-  const shouldWrapFetch = Boolean(options.fetch || (!options.apiKey && options.allowMissingApiKey));
+  const ambientCustomHeaderNames = getAmbientOpenAiCustomHeaderNames(options.headers);
+  const shouldWrapFetch = Boolean(
+    options.fetch ||
+      (!options.apiKey && options.allowMissingApiKey) ||
+      ambientCustomHeaderNames.size > 0,
+  );
 
   return new OpenAI({
     apiKey,
-    organization: options.organization,
+    adminAPIKey: null,
+    organization: options.organization ?? null,
+    project: null,
+    webhookSecret: null,
     baseURL: options.baseURL,
     defaultHeaders: options.headers,
     maxRetries: Math.max(0, options.maxRetries ?? 0),
     timeout: options.timeout ?? getRequestTimeoutMs(),
     fetch: shouldWrapFetch
       ? async (url, init = {}) => {
-          const requestInit =
-            !options.apiKey && options.allowMissingApiKey
-              ? stripSyntheticAuthorization(init, options.apiKey)
-              : init;
+          const requestInit = sanitizeSdkRequestInit(
+            init,
+            options.apiKey,
+            options.organization,
+            ambientCustomHeaderNames,
+          );
           const requestUrl = getRequestUrlString(url);
           if (isSdkUploadCapabilityProbe(requestUrl)) {
             return globalThis.fetch(url, requestInit);
@@ -214,6 +233,59 @@ function stripSyntheticAuthorization(init: RequestInit, apiKey: string | undefin
     ...init,
     headers,
   };
+}
+
+function sanitizeSdkRequestInit(
+  init: RequestInit,
+  apiKey: string | undefined,
+  organization: string | undefined,
+  ambientCustomHeaderNames: Set<string>,
+): RequestInit {
+  const requestInit = stripSyntheticAuthorization(init, apiKey);
+  if (ambientCustomHeaderNames.size === 0) {
+    return requestInit;
+  }
+
+  const headers = new Headers(requestInit.headers);
+  for (const headerName of ambientCustomHeaderNames) {
+    headers.delete(headerName);
+    if (headerName === 'authorization' && apiKey) {
+      headers.set('authorization', `Bearer ${apiKey}`);
+    }
+    if (headerName === 'openai-organization' && organization) {
+      headers.set('openai-organization', organization);
+    }
+  }
+
+  return {
+    ...requestInit,
+    headers,
+  };
+}
+
+function getAmbientOpenAiCustomHeaderNames(headers?: Record<string, string>): Set<string> {
+  const configuredHeaderNames = new Set(
+    Object.keys(headers ?? {}).map((headerName) => headerName.toLowerCase()),
+  );
+  const ambientCustomHeaders = process.env.OPENAI_CUSTOM_HEADERS;
+  if (!ambientCustomHeaders) {
+    return new Set();
+  }
+
+  const ambientHeaderNames = new Set<string>();
+  for (const line of ambientCustomHeaders.split('\n')) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex < 0) {
+      continue;
+    }
+
+    const headerName = line.slice(0, colonIndex).trim().toLowerCase();
+    if (headerName && !configuredHeaderNames.has(headerName)) {
+      ambientHeaderNames.add(headerName);
+    }
+  }
+
+  return ambientHeaderNames;
 }
 
 // Exported for tests. The OpenAI SDK probes upload capability with a `data:`
