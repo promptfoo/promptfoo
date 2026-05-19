@@ -576,6 +576,7 @@ export const RedteamConfigSchema = z
       strategies,
       ...(frameworks ? { frameworks } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
+      ...(data.maxConcurrency ? { maxConcurrency: data.maxConcurrency } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),
