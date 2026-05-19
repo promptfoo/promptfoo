@@ -4,7 +4,7 @@ This example shows how to map common retrieval-augmented generation (RAG) failur
 
 Promptfoo already supports RAG evaluation through assertions such as `context-recall`, `context-relevance`, deterministic string checks, and model-graded rubrics. This example is not a new RAG framework or a new assertion type. It is a starter checklist for deciding which eval to write when a RAG system fails.
 
-The runnable config uses deterministic `answer` fixtures so each assertion evaluates answer behavior directly instead of passing just because the retrieved context text appears in the echoed prompt.
+The runnable config uses deterministic `answer` fixtures so each assertion evaluates answer behavior directly instead of passing just because the retrieved context text appears in the echoed prompt. The accompanying `query` and `context` vars document the RAG scenario being illustrated; they are not passed through the runnable `echo` prompt.
 
 ## Failure modes covered
 
@@ -48,7 +48,7 @@ Expected result:
 0 errors
 ```
 
-The two failures are intentional. They demonstrate Promptfoo catching bad RAG cases where the retrieved context is missing or irrelevant. In a real project, these failing cases should trigger retrieval or chunking fixes before deployment.
+The two failures are intentional. In this deterministic fixture set, they show Promptfoo rejecting answers that do not contain the evidence a grounded response would need when retrieval is missing or irrelevant. In a real project, pair these answer checks with retrieval-aware assertions such as `context-recall` or `context-relevance`, then fix retrieval or chunking before deployment.
 
 ## How to adapt this example
 

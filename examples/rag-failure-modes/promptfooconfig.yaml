@@ -96,6 +96,8 @@ tests:
         value: 'pto-policy.md#carryover'
       - type: contains
         value: 'employee-handbook.md#pto'
+      - type: contains
+        value: 'conflict'
 
   - description: Model should not refuse when sufficient context exists
     vars:
