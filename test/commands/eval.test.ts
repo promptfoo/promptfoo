@@ -187,12 +187,10 @@ describe('evalCommand', () => {
     expect(helpText).toContain('Set a tag in key=value format. Can be specified multiple times.');
   });
 
-  it('should parse repeated --tag values, preserve embedded equals, and keep empty values', async () => {
+  it('should parse repeated --tag values, preserve embedded equals, and keep empty values', () => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
 
-    await cmd.parseAsync([
-      'node',
-      'test',
+    cmd.parseOptions([
       '--tag',
       'build=first',
       '--tag',
@@ -210,10 +208,10 @@ describe('evalCommand', () => {
     });
   });
 
-  it.each(['invalid', '=value'])('should reject malformed --tag value %s', async (tagValue) => {
+  it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
     const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
 
-    await expect(cmd.parseAsync(['node', 'test', '--tag', tagValue])).rejects.toThrow(
+    expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
       '--tag must be specified in key=value format.',
     );
   });
