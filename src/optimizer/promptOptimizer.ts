@@ -12,6 +12,7 @@ import {
 } from '../types/index';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
 import { isPromptAllowed } from '../util/promptMatching';
+import { sanitizeObject } from '../util/sanitizer';
 
 import type EvalResult from '../models/evalResult';
 import type { UnifiedConfig } from '../types/index';
@@ -92,6 +93,18 @@ function stringifyValue(value: unknown): string | undefined {
   return serialized ? truncateText(serialized) : undefined;
 }
 
+function sanitizeExampleValue(value: unknown, context: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return stringifyValue(
+    sanitizeObject(value, {
+      context,
+      maxDepth: 4,
+    }),
+  );
+}
+
 function scoreOf(prompt: CompletedPrompt): number {
   const score = prompt.metrics?.score;
   return typeof score === 'number' && Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY;
@@ -106,11 +119,14 @@ function createOptimizationExamples(results: EvaluateResult[]) {
   return results.map((result) => ({
     score: result.score,
     success: result.success,
-    vars: result.vars,
-    output: stringifyValue(result.response?.output),
-    error: result.error || undefined,
-    gradingReason: result.gradingResult?.reason,
-    namedScores: result.namedScores,
+    vars: sanitizeExampleValue(result.vars, 'prompt optimizer vars'),
+    output: sanitizeExampleValue(result.response?.output, 'prompt optimizer output'),
+    error: sanitizeExampleValue(result.error, 'prompt optimizer error'),
+    gradingReason: sanitizeExampleValue(
+      result.gradingResult?.reason,
+      'prompt optimizer grading reason',
+    ),
+    namedScores: sanitizeExampleValue(result.namedScores, 'prompt optimizer named scores'),
   }));
 }
 
@@ -160,13 +176,14 @@ function normalizeCandidates(
 ): PromptOptimizationCandidate[] {
   const deduped = new Set<string>();
   const candidates: PromptOptimizationCandidate[] = [];
+  const normalizedOriginalPrompt = originalPrompt.trim();
 
   for (const candidate of parsed.candidates || []) {
     if (typeof candidate.prompt !== 'string') {
       continue;
     }
     const prompt = candidate.prompt.trim();
-    if (!prompt || prompt === originalPrompt || deduped.has(prompt)) {
+    if (!prompt || prompt === normalizedOriginalPrompt || deduped.has(prompt)) {
       continue;
     }
     deduped.add(prompt);
@@ -288,6 +305,14 @@ function createValidationPartition(
   searchTestCount: number;
   validationTestCount: number;
 } {
+  if (validationSplit !== undefined && validationSplit > VALIDATION_SPLIT_MIN) {
+    if (testSuite.scenarios?.length) {
+      throw new Error(
+        'validationSplit is not supported for scenario-based prompt optimization; expand scenarios into explicit tests first.',
+      );
+    }
+  }
+
   const tests = Array.isArray(testSuite.tests) ? testSuite.tests : [];
   if (
     validationSplit === undefined ||
@@ -296,7 +321,7 @@ function createValidationPartition(
   ) {
     return {
       searchTestSuite: testSuite,
-      searchTestCount: tests.length,
+      searchTestCount: countConfiguredOptimizationTests(testSuite),
       validationTestCount: 0,
     };
   }
@@ -389,8 +414,33 @@ function createSelectedOptimizationTestSuite(
   };
 }
 
+function extendPromptFilter(
+  allowedPrompts: string[] | undefined,
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): string[] | undefined {
+  if (!Array.isArray(allowedPrompts) || !isPromptAllowed(routingPrompt, allowedPrompts)) {
+    return allowedPrompts;
+  }
+
+  return Array.from(
+    new Set(
+      [
+        ...allowedPrompts,
+        routingPrompt.label,
+        routingPrompt.id,
+        seedPrompt.label,
+        seedPrompt.id,
+        ...candidateLabels,
+      ].filter(Boolean) as string[],
+    ),
+  );
+}
+
 function buildCandidateProviderPromptMap(
   testSuite: TestSuite,
+  routingPrompt: Prompt,
   seedPrompt: Prompt,
   candidateLabels: string[],
 ): TestSuite['providerPromptMap'] {
@@ -398,23 +448,56 @@ function buildCandidateProviderPromptMap(
     return testSuite.providerPromptMap;
   }
 
-  const seedLabel = seedPrompt.label;
-  if (!seedLabel) {
-    return testSuite.providerPromptMap;
-  }
-
   return Object.fromEntries(
     Object.entries(testSuite.providerPromptMap).map(([providerId, labels]) => {
-      if (!isPromptAllowed(seedPrompt, labels)) {
-        return [providerId, labels];
-      }
-      return [providerId, Array.from(new Set([...labels, seedLabel, ...candidateLabels]))];
+      return [
+        providerId,
+        extendPromptFilter(labels, routingPrompt, seedPrompt, candidateLabels) ?? labels,
+      ];
     }),
   );
 }
 
+function buildCandidateTests(
+  tests: TestSuite['tests'],
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): TestSuite['tests'] {
+  if (!tests) {
+    return tests;
+  }
+
+  return tests.map((test) => ({
+    ...test,
+    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+  }));
+}
+
+function buildCandidateDefaultTest(
+  defaultTest: TestSuite['defaultTest'],
+  routingPrompt: Prompt,
+  seedPrompt: Prompt,
+  candidateLabels: string[],
+): TestSuite['defaultTest'] {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return defaultTest;
+  }
+
+  return {
+    ...defaultTest,
+    prompts: extendPromptFilter(
+      defaultTest.prompts,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
+  };
+}
+
 function createCandidateTestSuite(
   testSuite: TestSuite,
+  routingPrompt: Prompt,
   seedPrompt: Prompt,
   candidates: PromptOptimizationCandidate[],
 ): TestSuite {
@@ -430,8 +513,89 @@ function createCandidateTestSuite(
   return {
     ...testSuite,
     prompts: [seedPrompt, ...candidatePrompts],
-    providerPromptMap: buildCandidateProviderPromptMap(testSuite, seedPrompt, candidateLabels),
+    providerPromptMap: buildCandidateProviderPromptMap(
+      testSuite,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
+    tests: buildCandidateTests(testSuite.tests, routingPrompt, seedPrompt, candidateLabels),
+    defaultTest: buildCandidateDefaultTest(
+      testSuite.defaultTest,
+      routingPrompt,
+      seedPrompt,
+      candidateLabels,
+    ),
   };
+}
+
+function cloneTestCaseForOptimization<T extends Record<string, unknown>>(testCase: T): T {
+  const cloned = { ...testCase } as T;
+
+  if (Array.isArray(testCase.assert)) {
+    cloned.assert = testCase.assert.map((assertion) =>
+      assertion && typeof assertion === 'object' ? { ...assertion } : assertion,
+    ) as T['assert'];
+  }
+  if (testCase.options && typeof testCase.options === 'object') {
+    cloned.options = { ...(testCase.options as Record<string, unknown>) } as T['options'];
+  }
+  if (testCase.metadata && typeof testCase.metadata === 'object') {
+    cloned.metadata = { ...(testCase.metadata as Record<string, unknown>) } as T['metadata'];
+  }
+  if (testCase.vars && typeof testCase.vars === 'object') {
+    cloned.vars = { ...(testCase.vars as Record<string, unknown>) } as T['vars'];
+  }
+  if (Array.isArray(testCase.prompts)) {
+    cloned.prompts = [...testCase.prompts] as T['prompts'];
+  }
+  if (Array.isArray(testCase.providers)) {
+    cloned.providers = [...testCase.providers] as T['providers'];
+  }
+
+  return cloned;
+}
+
+function cloneScenarioForOptimization(
+  scenario: NonNullable<TestSuite['scenarios']>[number],
+): NonNullable<TestSuite['scenarios']>[number] {
+  return {
+    ...scenario,
+    config: scenario.config.map((testCase) =>
+      cloneTestCaseForOptimization(testCase as Record<string, unknown>),
+    ) as typeof scenario.config,
+    tests: scenario.tests.map((testCase) =>
+      cloneTestCaseForOptimization(testCase as Record<string, unknown>),
+    ) as typeof scenario.tests,
+  };
+}
+
+function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {
+  const defaultTest =
+    testSuite.defaultTest && typeof testSuite.defaultTest === 'object'
+      ? (cloneTestCaseForOptimization(
+          testSuite.defaultTest as Record<string, unknown>,
+        ) as TestSuite['defaultTest'])
+      : testSuite.defaultTest;
+
+  return {
+    ...testSuite,
+    defaultTest,
+    tests: testSuite.tests?.map((testCase) =>
+      cloneTestCaseForOptimization(testCase as Record<string, unknown>),
+    ) as TestSuite['tests'],
+    scenarios: testSuite.scenarios?.map(cloneScenarioForOptimization),
+  };
+}
+
+function countConfiguredOptimizationTests(testSuite: TestSuite): number {
+  const explicitTests = testSuite.tests?.length || 0;
+  const scenarioTests = (testSuite.scenarios || []).reduce((count, scenario) => {
+    const scenarioConfigCount = scenario.config.length;
+    const scenarioTestCount = scenario.tests?.length ?? 1;
+    return count + scenarioConfigCount * scenarioTestCount;
+  }, 0);
+  return explicitTests + scenarioTests;
 }
 
 function createEvaluationOptions(): InternalEvaluateOptions {
@@ -452,6 +616,9 @@ export async function optimizePromptTestSuite(
   if (testSuite.prompts.length === 0) {
     throw new Error('Prompt optimization requires at least one configured prompt.');
   }
+  if (countConfiguredOptimizationTests(testSuite) === 0) {
+    throw new Error('Prompt optimization requires at least one configured test or scenario.');
+  }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(testSuite, options);
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
@@ -459,13 +626,13 @@ export async function optimizePromptTestSuite(
 
   logger.info('Running baseline evaluation for prompt optimization...');
   const baselineEval = await evaluate(
-    searchTestSuite,
+    cloneOptimizationTestSuite(searchTestSuite),
     new Eval(config, { persisted: false }),
     createEvaluationOptions(),
   );
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
-        validationTestSuite,
+        cloneOptimizationTestSuite(validationTestSuite),
         new Eval(config, { persisted: false }),
         createEvaluationOptions(),
       )
@@ -523,17 +690,25 @@ export async function optimizePromptTestSuite(
     );
     const candidateSearchSuite = createCandidateTestSuite(
       searchTestSuite,
+      baselineSourcePrompt,
       currentPromptSource,
       candidates,
     );
     const candidateEval = await evaluate(
-      candidateSearchSuite,
+      cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(config, { persisted: false }),
       createEvaluationOptions(),
     );
     const candidateValidationEval = validationTestSuite
       ? await evaluate(
-          createCandidateTestSuite(validationTestSuite, currentPromptSource, candidates),
+          cloneOptimizationTestSuite(
+            createCandidateTestSuite(
+              validationTestSuite,
+              baselineSourcePrompt,
+              currentPromptSource,
+              candidates,
+            ),
+          ),
           new Eval(config, { persisted: false }),
           createEvaluationOptions(),
         )

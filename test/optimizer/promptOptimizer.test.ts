@@ -51,7 +51,7 @@ describe('prompt optimizer', () => {
     } as any);
 
     const candidates = await generateOptimizedPromptCandidates({
-      prompt: 'Original prompt',
+      prompt: '  Original prompt  ',
       failures: [],
       successes: [],
     });
@@ -60,6 +60,54 @@ describe('prompt optimizer', () => {
       { hypothesis: 'first', prompt: 'Improved prompt' },
       { hypothesis: 'second', prompt: 'Another improved prompt' },
     ]);
+  });
+
+  it('sanitizes and bounds optimizer evidence before sending it to the suggestions provider', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Safer prompt'),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const failure = {
+      ...evalResult(0, false, 'x'.repeat(1800)),
+      vars: {
+        apiKey: 'sk-proj-this-should-never-leak-12345678901234567890',
+        largeContext: 'z'.repeat(1800),
+      },
+      response: {
+        output: 'o'.repeat(1800),
+      },
+      namedScores: {
+        token: 'Bearer this-is-also-sensitive-12345678901234567890',
+      },
+    } as EvaluateResult;
+
+    await generateOptimizedPromptCandidates({
+      prompt: 'Original prompt',
+      failures: [failure],
+      successes: [],
+    });
+
+    const outerPayload = JSON.parse(String(vi.mocked(provider.callApi).mock.calls[0][0]));
+    const content = JSON.parse(outerPayload[1].content);
+    const evidence = content.failures[0];
+
+    expect(evidence.vars).toContain('[REDACTED]');
+    expect(evidence.vars).not.toContain('sk-proj-this-should-never-leak');
+    expect(evidence.namedScores).toContain('[REDACTED]');
+    expect(evidence.output).toMatch(/\[truncated]$/);
+    expect(evidence.gradingReason).toMatch(/\[truncated]$/);
+    expect(evidence.vars.length).toBeLessThanOrEqual(1214);
+    expect(evidence.output.length).toBeLessThanOrEqual(1214);
+    expect(evidence.gradingReason.length).toBeLessThanOrEqual(1214);
   });
 
   it('evaluates candidates from the selected prompt and provider', async () => {
@@ -299,6 +347,200 @@ describe('prompt optimizer', () => {
     expect(vi.mocked(evaluate).mock.calls[1][0].providerPromptMap).toEqual({
       'target-provider': ['seed-id', 'Seed', 'Seed [optimized 1]'],
     });
+  });
+
+  it('keeps exact-label provider prompt routing intact after adopting a candidate', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      providerPromptMap: {
+        'target-provider': ['Seed'],
+      },
+      tests: [{}],
+    };
+
+    await optimizePromptTestSuite({}, testSuite);
+
+    expect(vi.mocked(evaluate).mock.calls[2][0].providerPromptMap).toEqual({
+      'target-provider': ['Seed', 'Seed [optimized 1]', 'Seed [optimized 1] [optimized 1]'],
+    });
+  });
+
+  it('extends prompt filters for explicit and default tests when candidates are added', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      defaultTest: { prompts: ['Seed'] },
+      tests: [{ prompts: ['Seed'] }],
+    };
+
+    await optimizePromptTestSuite({}, testSuite);
+
+    const candidateSuite = vi.mocked(evaluate).mock.calls[1][0];
+    expect(candidateSuite.tests?.[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(
+      candidateSuite.defaultTest && typeof candidateSuite.defaultTest === 'object'
+        ? candidateSuite.defaultTest.prompts
+        : undefined,
+    ).toEqual(['Seed', 'Seed [optimized 1]']);
+  });
+
+  it('rejects validation splits for scenario-based optimization instead of pretending they are held out', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [{}],
+        },
+      ],
+    };
+
+    await expect(
+      optimizePromptTestSuite({}, testSuite, {
+        validationSplit: 0.2,
+      }),
+    ).rejects.toThrow(
+      'validationSplit is not supported for scenario-based prompt optimization; expand scenarios into explicit tests first.',
+    );
+  });
+
+  it('clones mutable test suites before each evaluate call so default assertions do not stack', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+    const seenAssertCounts: number[] = [];
+    let evaluateCallCount = 0;
+    vi.mocked(evaluate).mockImplementation(async (suite) => {
+      seenAssertCounts.push(suite.tests?.[0].assert?.length || 0);
+      if (
+        suite.tests?.[0] &&
+        suite.defaultTest &&
+        typeof suite.defaultTest === 'object'
+      ) {
+        suite.tests[0].assert = [
+          ...(suite.defaultTest.assert || []),
+          ...(suite.tests[0].assert || []),
+        ];
+      }
+      evaluateCallCount += 1;
+      return evaluateCallCount === 1 ? baselineEval : candidateEval;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      defaultTest: {
+        assert: [{ type: 'contains', value: 'default' }],
+      },
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'local' }],
+        },
+      ],
+    };
+
+    await optimizePromptTestSuite({}, testSuite);
+
+    expect(seenAssertCounts).toEqual([1, 1, 1, 1]);
+  });
+
+  it('rejects prompt optimization when no tests or scenarios are configured', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
   });
 
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {

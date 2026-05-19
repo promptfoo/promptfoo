@@ -28,6 +28,7 @@ vi.mock('../../src/util', () => ({
 
 vi.mock('../../src/logger', () => ({
   default: {
+    debug: vi.fn(),
     info: vi.fn(),
     error: vi.fn(),
   },
@@ -81,6 +82,53 @@ describe('optimize command', () => {
       'command_used',
       expect.objectContaining({ name: 'optimize - started' }),
     );
+  });
+
+  it('loads config-defined env files when the CLI does not override them', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [{}],
+      },
+      basePath: '',
+      commandLineOptions: {
+        envPath: '.env.optimize',
+      },
+    } as any);
+
+    await doOptimize({
+      defaultConfig: {},
+      defaultConfigPath: 'promptfooconfig.yaml',
+    });
+
+    expect(setupEnv).toHaveBeenNthCalledWith(1, undefined);
+    expect(setupEnv).toHaveBeenNthCalledWith(2, '.env.optimize');
+  });
+
+  it('keeps explicit CLI env files ahead of config-defined env files', async () => {
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: {},
+      testSuite: {
+        providers: [],
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [{}],
+      },
+      basePath: '',
+      commandLineOptions: {
+        envPath: '.env.config',
+      },
+    } as any);
+
+    await doOptimize({
+      defaultConfig: {},
+      defaultConfigPath: 'promptfooconfig.yaml',
+      envPath: '.env.cli',
+    });
+
+    expect(setupEnv).toHaveBeenCalledTimes(1);
+    expect(setupEnv).toHaveBeenCalledWith('.env.cli');
   });
 
   it('passes validation split through to the optimizer', async () => {
