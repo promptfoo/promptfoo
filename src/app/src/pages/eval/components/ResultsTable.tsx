@@ -1423,41 +1423,51 @@ function ResultsTableHeader({
             zoom,
           }}
         >
-          <thead ref={theadRef}>
-            {reactTable.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header, headerIndex) => {
-                  const isFinalRow = headerGroup.depth === 1;
-                  const previousHeader = headerGroup.headers[headerIndex - 1];
-                  const isPreviousPromptHeader =
-                    previousHeader?.column.parent?.id === 'prompts';
-                  const isPromptHeader = header.column.parent?.id === 'prompts';
+          <ResultsTableColumnGroup reactTable={reactTable} />
+          <thead>
+            {reactTable.getHeaderGroups().map((headerGroup) => {
+              let promptHeaderBorderDrawn = false;
 
-                  return (
-                    <th
-                      key={header.id}
-                      tabIndex={0}
-                      colSpan={header.colSpan}
-                      style={{
-                        width: header.getSize(),
-                        borderLeft: isPromptHeader && isPreviousPromptHeader ? 'none' : undefined,
-                        borderBottom: isFinalRow ? '2px solid var(--border-color)' : 'none',
-                        height: isFinalRow ? 'fit-content' : 'auto',
-                      }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                      />
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
+              return (
+                <tr key={headerGroup.id} className="header">
+                  {headerGroup.headers.map((header) => {
+                    const isFinalRow = headerGroup.depth === 1;
+                    const isMetadataCol = isMetadataColumn(String(header.column.id));
+                    const isPromptHeader =
+                      isFinalRow && !isMetadataCol && header.column.id !== 'prompts';
+                    const shouldHidePromptBorder =
+                      isPromptHeader && promptHeaderBorderDrawn;
+
+                    if (isPromptHeader && !promptHeaderBorderDrawn) {
+                      promptHeaderBorderDrawn = true;
+                    }
+
+                    return (
+                      <th
+                        key={header.id}
+                        tabIndex={0}
+                        colSpan={header.colSpan}
+                        style={{
+                          width: header.getSize(),
+                          borderLeft: shouldHidePromptBorder ? 'none' : undefined,
+                          borderBottom: isFinalRow ? '2px solid var(--border-color)' : 'none',
+                          height: isFinalRow ? 'fit-content' : 'auto',
+                        }}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                        />
+                      </th>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </thead>
         </table>
       </div>
