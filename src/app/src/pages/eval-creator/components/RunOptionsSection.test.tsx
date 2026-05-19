@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -152,11 +152,13 @@ describe('RunOptionsSection', () => {
       });
     });
 
-    it('handles negative input by setting delay to 0', () => {
+    it('handles negative input by setting delay to 0', async () => {
+      const user = userEvent.setup();
       render(<RunOptionsSection onChange={mockOnChange} />);
 
       const input = screen.getByLabelText('Delay between API calls (ms)');
-      fireEvent.change(input, { target: { value: '-50' } });
+      input.focus();
+      await user.paste('-50');
 
       expect(mockOnChange).toHaveBeenCalledWith({
         description: undefined,
