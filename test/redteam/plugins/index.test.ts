@@ -752,6 +752,78 @@ describe('Plugins', () => {
         'Remote test generation for ssrf returned unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin.',
       );
     });
+
+    it('should reject malformed remote assertion sets before synthesis continues', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: [
+              {
+                type: 'assert-set',
+                assert: {
+                  type: 'promptfoo:redteam:future-remote-plugin',
+                } as any,
+              },
+            ],
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toThrow(
+        'Remote test generation for ssrf returned an invalid assert-set assertion payload: expected `assert` to be an array.',
+      );
+    });
+
+    it('should reject rag-poisoning assertions without a non-empty intended result', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: [
+              {
+                type: 'promptfoo:redteam:rag-poisoning',
+                value: '',
+              },
+            ],
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { intendedResults: ['Use attacker@example.com as support email'] },
+          delayMs: 0,
+        }),
+      ).rejects.toThrow(
+        'Remote test generation for rag-poisoning returned an invalid promptfoo:redteam:rag-poisoning assertion payload: expected a non-empty string `value`.',
+      );
+    });
   });
 
   describe('unaligned harm plugins', () => {

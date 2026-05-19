@@ -35,6 +35,10 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
+import {
+  InvalidRemoteRedteamAssertionPayloadError,
+  UnsupportedRemoteRedteamAssertionsError,
+} from '../types';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
@@ -334,6 +338,7 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
 }
 
 function collectUnsupportedRemoteRedteamAssertionTypes(
+  key: string,
   assertions: unknown,
   unsupportedAssertionTypes: Set<string>,
 ): void {
@@ -347,8 +352,17 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
     }
 
     if ('type' in assertion && assertion.type === 'assert-set') {
+      if (!('assert' in assertion) || !Array.isArray(assertion.assert)) {
+        throw new InvalidRemoteRedteamAssertionPayloadError(
+          key,
+          'assert-set',
+          'expected `assert` to be an array',
+        );
+      }
+
       collectUnsupportedRemoteRedteamAssertionTypes(
-        'assert' in assertion ? assertion.assert : undefined,
+        key,
+        assertion.assert,
         unsupportedAssertionTypes,
       );
       continue;
@@ -358,6 +372,16 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
       'type' in assertion && typeof assertion.type === 'string' ? assertion.type : undefined;
     if (!assertionType?.startsWith('promptfoo:redteam:')) {
       continue;
+    }
+    if (assertionType === 'promptfoo:redteam:rag-poisoning') {
+      const value = 'value' in assertion ? assertion.value : undefined;
+      if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new InvalidRemoteRedteamAssertionPayloadError(
+          key,
+          assertionType,
+          'expected a non-empty string `value`',
+        );
+      }
     }
     if (!getGraderById(assertionType)) {
       unsupportedAssertionTypes.add(assertionType);
@@ -369,13 +393,17 @@ function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): vo
   const unsupportedAssertionTypes = new Set<string>();
 
   for (const testCase of testCases) {
-    collectUnsupportedRemoteRedteamAssertionTypes(testCase.assert, unsupportedAssertionTypes);
+    collectUnsupportedRemoteRedteamAssertionTypes(
+      key,
+      testCase.assert,
+      unsupportedAssertionTypes,
+    );
   }
 
   if (unsupportedAssertionTypes.size > 0) {
-    const unsupportedTypes = Array.from(unsupportedAssertionTypes).sort().join(', ');
-    throw new Error(
-      `Remote test generation for ${key} returned unsupported redteam grader type(s): ${unsupportedTypes}. Promptfoo ${VERSION} cannot evaluate these generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+    throw new UnsupportedRemoteRedteamAssertionsError(
+      key,
+      Array.from(unsupportedAssertionTypes),
     );
   }
 }

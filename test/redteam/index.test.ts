@@ -22,6 +22,7 @@ import {
 import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
+import { UnsupportedRemoteRedteamAssertionsError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
@@ -244,6 +245,28 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should stop synthesis when remote generation returns unsupported redteam graders', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockRejectedValue(
+          new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+            'promptfoo:redteam:future-remote-plugin',
+          ]),
+        );
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'ssrf' });
+
+      await expect(
+        synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'ssrf', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        }),
+      ).rejects.toThrow(UnsupportedRemoteRedteamAssertionsError);
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {

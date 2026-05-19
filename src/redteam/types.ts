@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VERSION } from '../constants';
 import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
@@ -476,6 +477,42 @@ export class PartialGenerationError extends Error {
     super(message);
     this.name = 'PartialGenerationError';
     this.failedPlugins = failedPlugins;
+  }
+}
+
+/**
+ * Raised when remote generation returns redteam assertions that this client
+ * cannot grade. Continuing would create tests that cannot be evaluated
+ * correctly, so callers must treat this as a hard compatibility failure.
+ */
+export class RemoteRedteamAssertionContractError extends Error {}
+
+export class UnsupportedRemoteRedteamAssertionsError extends RemoteRedteamAssertionContractError {
+  public readonly pluginId: string;
+  public readonly assertionTypes: string[];
+
+  constructor(pluginId: string, assertionTypes: string[]) {
+    const sortedAssertionTypes = [...assertionTypes].sort();
+    super(
+      `Remote test generation for ${pluginId} returned unsupported redteam grader type(s): ${sortedAssertionTypes.join(', ')}. Promptfoo ${VERSION} cannot evaluate these generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+    );
+    this.name = 'UnsupportedRemoteRedteamAssertionsError';
+    this.pluginId = pluginId;
+    this.assertionTypes = sortedAssertionTypes;
+  }
+}
+
+export class InvalidRemoteRedteamAssertionPayloadError extends RemoteRedteamAssertionContractError {
+  public readonly pluginId: string;
+  public readonly assertionType: string;
+
+  constructor(pluginId: string, assertionType: string, detail: string) {
+    super(
+      `Remote test generation for ${pluginId} returned an invalid ${assertionType} assertion payload: ${detail}. Promptfoo ${VERSION} cannot safely evaluate these generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+    );
+    this.name = 'InvalidRemoteRedteamAssertionPayloadError';
+    this.pluginId = pluginId;
+    this.assertionType = assertionType;
   }
 }
 

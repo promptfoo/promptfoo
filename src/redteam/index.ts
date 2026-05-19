@@ -65,6 +65,7 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from './types';
+import { RemoteRedteamAssertionContractError } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 
@@ -1422,6 +1423,10 @@ export async function synthesize({
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
+          if (result.reason instanceof RemoteRedteamAssertionContractError) {
+            throw result.reason;
+          }
+
           const lang = languages[index];
           // Handle rejected promise
           logger.warn(
