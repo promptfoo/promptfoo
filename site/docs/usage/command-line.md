@@ -473,8 +473,11 @@ Promptfoo eval records. Promptfoo keeps each OpenAI source item under `vars.item
 preserves raw source item data, grader values, available pass/fail states, and grader
 samples in imported result metadata. When the export includes OpenAI `sample` data,
 Promptfoo also preserves it and surfaces available model output, errors, and token usage on
-the imported result. If an export includes multiple OpenAI runs, Promptfoo imports them as
-comparable prompt columns in one eval.
+the imported result. Grader rows with scores but no pass/fail states stay score-only:
+Promptfoo preserves the grader scores without turning the missing pass state into a failed
+assertion. If an export includes multiple OpenAI runs, Promptfoo imports them as prompt
+columns in one eval and aligns them on both the OpenAI data-source index and source item
+content. Rows with the same run-local index but different source items stay separate.
 
 For source fidelity, imported results keep the raw dashboard output-item row with its
 dashboard field names at `metadata.openai.outputItem`. The stored Promptfoo config records
