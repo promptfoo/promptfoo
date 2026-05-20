@@ -49,7 +49,7 @@ The `promptfoo` command line utility includes these command groups:
   - `validate config`
   - `validate target`
 - `feedback <message>` - Send feedback to the Promptfoo developers.
-- `import <filepath>` - Import an eval file from JSON format.
+- `import <filepath>` - Import a Promptfoo eval JSON export or OpenAI Evals dashboard JSONL export.
 - `export` - Export eval records or logs.
   - `export eval <evalId>`
   - `export logs`
@@ -438,14 +438,15 @@ Unlike `--filter-errors-only` which creates a new eval, `promptfoo retry` update
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format.
+Import a Promptfoo eval file from JSON format, or import an OpenAI Evals dashboard
+`eval_items_*.jsonl` export.
 
 | Option     | Description                                                                          |
 | ---------- | ------------------------------------------------------------------------------------ |
 | `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval) |
 | `--force`  | Replace an existing eval with the same ID                                            |
 
-When importing an eval, the following data is preserved from the export:
+When importing a Promptfoo eval export, the following data is preserved:
 
 - **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
 - **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
@@ -465,6 +466,30 @@ promptfoo import --new-id my-eval.json
 
 # Replace an existing eval with updated data
 promptfoo import --force my-eval.json
+```
+
+OpenAI Evals dashboard exports such as `eval_items_*.jsonl` are imported as historical
+Promptfoo eval records. Promptfoo keeps each OpenAI source item under `vars.item` and
+preserves raw source item data, grader values, available pass/fail states, and grader
+samples in imported result metadata. When the export includes OpenAI `sample` data,
+Promptfoo also preserves it and surfaces available model output, errors, and token usage on
+the imported result. If an export includes multiple OpenAI runs, Promptfoo imports them as
+comparable prompt columns in one eval.
+
+For source fidelity, imported results keep the raw dashboard output-item row with its
+dashboard field names at `metadata.openai.outputItem`. The stored Promptfoo config records
+the dashboard import format and imported run IDs in `metadata.openaiEvalsImport`.
+
+The dashboard JSONL contains output-item rows, not the OpenAI eval definition, data-source
+config, run config, or testing-criteria definitions. It only keeps grader results keyed by
+grader name. The import is for historical results; it does not infer Promptfoo assertions
+or reconstruct a runnable Promptfoo config from the OpenAI eval.
+
+This import path supports the dashboard JSONL export, not the OpenAI API output-items list
+response.
+
+```sh
+promptfoo import eval_items_OutputDataItemStatusParam.ALL.jsonl
 ```
 
 ## `promptfoo export`
