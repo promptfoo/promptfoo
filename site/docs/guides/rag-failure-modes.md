@@ -69,9 +69,15 @@ The retriever returns documents, but they are noisy or unrelated to the user que
 **Starter test**
 
 ```yaml
-assert:
-  - type: context-relevance
-    threshold: 0.5
+tests:
+  - vars:
+      query: What is our parental leave policy?
+      context: |
+        handbook.md: Expense reimbursement requires manager approval above $500.
+        security.md: Passwords must be rotated every 90 days.
+    assert:
+      - type: context-relevance
+        threshold: 0.5
 ```
 
 **Debug hint**
@@ -93,11 +99,16 @@ The right passage is present, but the answer uses prior knowledge, guesses, or a
 **Starter test**
 
 ```yaml
-assert:
-  - type: factuality
-    value: employees can expense up to $500 without manager approval
-  - type: context-faithfulness
-    threshold: 0.9
+tests:
+  - vars:
+      query: What is the max purchase that does not require approval?
+      context: |
+        Employees can expense up to $500 without manager approval.
+    assert:
+      - type: factuality
+        value: employees can expense up to $500 without manager approval
+      - type: context-faithfulness
+        threshold: 0.9
 ```
 
 **Debug hint**
@@ -119,9 +130,15 @@ The response sounds plausible but adds unsupported details.
 **Starter test**
 
 ```yaml
-assert:
-  - type: context-faithfulness
-    threshold: 0.95
+tests:
+  - vars:
+      query: What benefits are covered during parental leave?
+      context: |
+        Eligible employees can take up to 16 weeks of parental leave.
+        The policy does not describe any meal or travel stipend.
+    assert:
+      - type: context-faithfulness
+        threshold: 0.95
 ```
 
 **Debug hint**
@@ -218,18 +235,22 @@ The retriever found enough information, but the model says it cannot answer.
 
 **Best signals**
 
-- `not-contains`
+- `not-is-refusal`
 - `answer-relevance`
 - `factuality`
 
 **Starter test**
 
 ```yaml
-assert:
-  - type: not-contains
-    value: I don't have enough information
-  - type: answer-relevance
-    threshold: 0.8
+tests:
+  - vars:
+      query: How many weeks is maternity leave?
+      context: |
+        Eligible employees can take up to 16 weeks of maternity leave.
+    assert:
+      - type: not-is-refusal
+      - type: answer-relevance
+        threshold: 0.8
 ```
 
 **Debug hint**
