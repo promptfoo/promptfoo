@@ -203,6 +203,73 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
     });
 }
 
+function createClaudeResultMetrics(finalMsg: SDKResultMessage): {
+  cost: number;
+  sessionId: string;
+  tokenUsage: ProviderResponse['tokenUsage'];
+} {
+  return {
+    cost: finalMsg.total_cost_usd ?? 0,
+    sessionId: finalMsg.session_id,
+    tokenUsage: {
+      prompt: finalMsg.usage?.input_tokens,
+      completion: finalMsg.usage?.output_tokens,
+      total:
+        finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
+          ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
+          : undefined,
+    },
+  };
+}
+
+function createClaudeResultMetadata(
+  finalMsg: SDKResultMessage,
+  toolCalls: ToolCallEntry[],
+): NonNullable<ProviderResponse['metadata']> {
+  return {
+    skillCalls: deriveSkillCalls(toolCalls),
+    toolCalls,
+    numTurns: finalMsg.num_turns,
+    durationMs: finalMsg.duration_ms,
+    durationApiMs: finalMsg.duration_api_ms,
+    modelUsage: finalMsg.modelUsage,
+    permissionDenials: finalMsg.permission_denials,
+    ...(finalMsg.terminal_reason === undefined ? {} : { terminalReason: finalMsg.terminal_reason }),
+  };
+}
+
+function createClaudeResultResponse(
+  finalMsg: SDKResultMessage,
+  metrics: ReturnType<typeof createClaudeResultMetrics>,
+  toolCalls: ToolCallEntry[],
+): ProviderResponse {
+  const raw = JSON.stringify(finalMsg);
+  const metadata = createClaudeResultMetadata(finalMsg, toolCalls);
+  const response = {
+    ...metrics,
+    raw,
+    metadata,
+  };
+
+  if (finalMsg.subtype !== 'success') {
+    return {
+      ...response,
+      error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+    };
+  }
+
+  return {
+    ...response,
+    output: finalMsg.structured_output === undefined ? finalMsg.result : finalMsg.structured_output,
+    metadata: {
+      ...metadata,
+      ...(finalMsg.structured_output === undefined
+        ? {}
+        : { structuredOutput: finalMsg.structured_output }),
+    },
+  };
+}
+
 /**
  * Claude Agent SDK Provider
  *
@@ -1456,16 +1523,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 
-          const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: finalMsg.usage?.input_tokens,
-            completion: finalMsg.usage?.output_tokens,
-            total:
-              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
-                : undefined,
-          };
-          const cost = finalMsg.total_cost_usd ?? 0;
-          const sessionId = finalMsg.session_id;
+          const metrics = createClaudeResultMetrics(finalMsg);
 
           try {
             // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -1495,10 +1553,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 message: 'stream closed without terminal_reason after multiple result messages',
               });
             }
-            const raw = JSON.stringify(finalMsg);
-
-            const toolCallsArray = Array.from(toolCallsMap.values());
-            const skillCalls = deriveSkillCalls(toolCallsArray);
 
             // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
             // Mark the provider span ERROR directly — without poisoning the
@@ -1517,68 +1571,23 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               });
             }
 
-            if (finalMsg.subtype === 'success') {
-              logger.debug(`Claude Agent SDK response: ${raw}`);
-              // When structured output is enabled and available, use it as the output
-              // Otherwise fall back to the text result
-              const output =
-                finalMsg.structured_output === undefined
-                  ? finalMsg.result
-                  : finalMsg.structured_output;
-              const response: ProviderResponse = {
-                output,
-                tokenUsage,
-                cost,
-                raw,
-                sessionId,
-                metadata: {
-                  skillCalls,
-                  toolCalls: toolCallsArray,
-                  numTurns: finalMsg.num_turns,
-                  durationMs: finalMsg.duration_ms,
-                  durationApiMs: finalMsg.duration_api_ms,
-                  modelUsage: finalMsg.modelUsage,
-                  permissionDenials: finalMsg.permission_denials,
-                  ...(finalMsg.terminal_reason === undefined
-                    ? {}
-                    : { terminalReason: finalMsg.terminal_reason }),
-                  ...(finalMsg.structured_output === undefined
-                    ? {}
-                    : { structuredOutput: finalMsg.structured_output }),
-                },
-              };
+            const response = createClaudeResultResponse(
+              finalMsg,
+              metrics,
+              Array.from(toolCallsMap.values()),
+            );
 
-              // Cache the response using shared utilities
+            if (finalMsg.subtype === 'success') {
+              logger.debug(`Claude Agent SDK response: ${response.raw}`);
               await cacheResponse(cacheResult, response, 'Claude Agent SDK');
-              return response;
             }
 
-            return {
-              error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-              metadata: {
-                skillCalls,
-                toolCalls: toolCallsArray,
-                numTurns: finalMsg.num_turns,
-                durationMs: finalMsg.duration_ms,
-                durationApiMs: finalMsg.duration_api_ms,
-                modelUsage: finalMsg.modelUsage,
-                permissionDenials: finalMsg.permission_denials,
-                ...(finalMsg.terminal_reason === undefined
-                  ? {}
-                  : { terminalReason: finalMsg.terminal_reason }),
-              },
-            };
+            return response;
           } catch (postStreamError) {
             logger.error(`Error processing Claude Agent SDK result: ${postStreamError}`);
             return {
               error: `Error processing Claude Agent SDK result: ${postStreamError}`,
-              tokenUsage,
-              cost,
-              sessionId,
+              ...metrics,
             };
           }
         },

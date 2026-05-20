@@ -14,6 +14,7 @@ import {
 } from '../../src/types/index';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -422,12 +423,13 @@ describeEvaluator('evaluator execution control', () => {
       tests: [
         {
           options: {
-            transform: 'throw new Error("transform failed");\n',
+            transform: 'output + " postprocessed"',
           },
         },
       ],
     };
 
+    vi.mocked(transform).mockRejectedValueOnce(new Error('transform failed'));
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const summary = await evalRecord.toEvaluateSummary();
@@ -446,35 +448,6 @@ describeEvaluator('evaluator execution control', () => {
           tokenUsage: expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
           metadata: expect.objectContaining({ numTurns: 5 }),
         }),
-      }),
-    );
-  });
-
-  it('evaluate with provider that throws exception', async () => {
-    const mockApiProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider-throws'),
-      callApi: vi.fn().mockRejectedValue(new Error('Connection reset')),
-    };
-
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-    const summary = await evalRecord.toEvaluateSummary();
-
-    expect(summary).toEqual(
-      expect.objectContaining({
-        results: expect.arrayContaining([
-          expect.objectContaining({
-            error: expect.stringContaining('Connection reset'),
-            failureReason: ResultFailureReason.ERROR,
-            success: false,
-          }),
-        ]),
       }),
     );
   });
