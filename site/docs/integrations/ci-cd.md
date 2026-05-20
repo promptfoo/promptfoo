@@ -407,20 +407,18 @@ Example processing script:
 
 ```javascript title="process-results.js"
 const fs = require('fs');
-const results = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+const evalOutput = JSON.parse(fs.readFileSync('results.json', 'utf8'));
+const { stats, results: evalResults } = evalOutput.results;
 
 // Calculate metrics
-const passRate =
-  (results.results.stats.successes /
-    (results.results.stats.successes + results.results.stats.failures)) *
-  100;
+const passRate = (stats.successes / (stats.successes + stats.failures)) * 100;
 
 console.log(`Pass rate: ${passRate.toFixed(2)}%`);
-console.log(`Shareable URL: ${results.shareableUrl}`);
+console.log(`Shareable URL: ${evalOutput.shareableUrl}`);
 
 // Check for specific failures
-const criticalFailures = results.results.results.filter(
-  (o) => o.error?.includes('security') || o.error?.includes('injection'),
+const criticalFailures = evalResults.filter(
+  (result) => result.error?.includes('security') || result.error?.includes('injection'),
 );
 
 if (criticalFailures.length > 0) {
