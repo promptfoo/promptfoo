@@ -493,6 +493,28 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    'yaml',
+    'txt',
+  ])('sanitizes runtime options before writing %s output for in-memory evals', async (extension) => {
+    const eval_ = new Eval(
+      {},
+      {
+        runtimeOptions: {
+          cache: false,
+          abortSignal: new AbortController().signal,
+          progressCallback: vi.fn(),
+        },
+      },
+    );
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
+    expect(parsed.runtimeOptions).toEqual({ cache: false });
+  });
+
   it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';
     const eval_ = new Eval({

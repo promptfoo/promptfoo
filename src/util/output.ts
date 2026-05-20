@@ -12,6 +12,7 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { sanitizeRuntimeOptions } from '../models/eval';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -197,7 +198,9 @@ export async function createOutputData(
     shareableUrl,
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
-    ...(evalRecord.runtimeOptions && { runtimeOptions: evalRecord.runtimeOptions }),
+    ...(evalRecord.runtimeOptions && {
+      runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
+    }),
     ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
   };
 

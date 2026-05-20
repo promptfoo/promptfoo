@@ -73,10 +73,10 @@ interface MetadataKeyResult {
 }
 
 /**
- * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted or exported.
  * Removes non-serializable fields like AbortSignal, functions, and symbols.
  */
-function sanitizeRuntimeOptions(
+export function sanitizeRuntimeOptions(
   options?: Partial<import('../types').EvaluateOptions>,
 ): Partial<import('../types').EvaluateOptions> | undefined {
   if (!options) {
