@@ -12,7 +12,6 @@ import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import { sanitizeRuntimeOptions } from '../models/eval';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
@@ -24,7 +23,7 @@ import {
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeObject } from './sanitizer';
+import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';

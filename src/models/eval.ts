@@ -41,6 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -70,36 +71,6 @@ interface TestIndexRow {
 /** Result from queries selecting distinct metadata or variable keys */
 interface MetadataKeyResult {
   key: string;
-}
-
-/**
- * Sanitizes runtime options to ensure only JSON-serializable data is persisted or exported.
- * Removes non-serializable fields like AbortSignal, functions, and symbols.
- */
-export function sanitizeRuntimeOptions(
-  options?: Partial<import('../types').EvaluateOptions>,
-): Partial<import('../types').EvaluateOptions> | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const sanitized = { ...options };
-
-  // Remove known non-serializable fields
-  delete sanitized.abortSignal;
-
-  // Remove any function or symbol values
-  for (const key in sanitized) {
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-    const value = (sanitized as any)[key];
-    if (typeof value === 'function' || typeof value === 'symbol') {
-      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-      delete (sanitized as any)[key];
-    }
-  }
-
-  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
