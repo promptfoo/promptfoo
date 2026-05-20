@@ -3,6 +3,8 @@ import path from 'path';
 
 import { Command } from 'commander';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
 import logger from '../../src/logger';
@@ -10,7 +12,8 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
-import { mockProcessEnv } from '../util/utils';
+import { sha256 } from '../../src/util/createHash';
+import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -41,6 +44,8 @@ describe('importCommand', () => {
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
+    db.run('DELETE FROM blob_references');
+    db.run('DELETE FROM blob_assets');
     db.run('DELETE FROM spans');
     db.run('DELETE FROM traces');
     db.run('DELETE FROM eval_results');
@@ -230,6 +235,79 @@ describe('importCommand', () => {
           statusCode: 1,
         }),
       ]);
+    });
+
+    it('should import embedded blob assets before recording result references', async () => {
+      const blobDir = createTempDir('promptfoo-import-blobs-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from('portable image from eval export');
+        const hash = sha256(data);
+        sampleData.results.results[0].response = { output: `promptfoo://blob/${hash}` };
+        sampleData.blobAssets = [
+          {
+            hash,
+            mimeType: 'image/png',
+            sizeBytes: data.length,
+            data: data.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-blob-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        const imported = await getBlobByHash(hash);
+        expect(imported.data).toEqual(data);
+
+        const references = (await getDb().all(
+          `SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = '${hash}'`,
+        )) as Array<{ blob_hash: string; eval_id: string }>;
+        expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it('should reject embedded blob assets whose bytes do not match the exported hash', async () => {
+      const blobDir = createTempDir('promptfoo-import-corrupt-blobs-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from('wrong bytes');
+        sampleData.blobAssets = [
+          {
+            hash: 'f'.repeat(64),
+            mimeType: 'image/png',
+            sizeBytes: data.length,
+            data: data.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-corrupt-blob-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('Embedded blob hash mismatch'),
+        );
+        expect(process.exitCode).toBe(1);
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
     });
 
     it('should preserve author from metadata', async () => {

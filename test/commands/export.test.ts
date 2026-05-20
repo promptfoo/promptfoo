@@ -144,7 +144,9 @@ describe('exportCommand', () => {
     await program.parseAsync(['node', 'test', 'export', 'eval', 'latest', '--output', 'test.json']);
 
     expect(Eval.latest).toHaveBeenCalledWith();
-    expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
+    expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null, {
+      includeMedia: false,
+    });
     expect(process.exitCode).toBe(0);
   });
 
@@ -164,8 +166,31 @@ describe('exportCommand', () => {
     ]);
 
     expect(Eval.findById).toHaveBeenCalledWith('test-id');
-    expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
+    expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null, {
+      includeMedia: false,
+    });
     expect(process.exitCode).toBe(0);
+  });
+
+  it('should pass embedded media opt-in to file exports', async () => {
+    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+
+    exportCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'export',
+      'eval',
+      'test-id',
+      '--include-media',
+      '--output',
+      'test.json',
+    ]);
+
+    expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null, {
+      includeMedia: true,
+    });
   });
 
   it('should log JSON data when no output specified', async () => {

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as blobs from '../../src/blobs';
 import { writeOutput } from '../../src/util/index';
 import { createTempDir, removeTempDir } from './utils';
 
@@ -97,6 +98,42 @@ describe('JSON export with improved error handling', () => {
 
       expect(parsed).toHaveProperty('vars', ['topic', 'tone']);
       expect(parsed).toHaveProperty('runtimeOptions', { cache: false, maxConcurrency: 2 });
+    });
+
+    it('should embed referenced blob bytes only when media export is enabled', async () => {
+      const hash = 'a'.repeat(64);
+      const data = Buffer.from('portable image');
+      mockEval.toEvaluateSummary.mockResolvedValue({
+        version: 3,
+        timestamp: '2025-01-01T00:00:00.000Z',
+        prompts: mockEval.prompts,
+        results: [{ response: { output: `promptfoo://blob/${hash}` } }],
+        stats: { successes: 1, failures: 0 },
+      });
+      vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+        data,
+        metadata: {
+          mimeType: 'image/png',
+          sizeBytes: data.length,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          provider: 'filesystem',
+          key: hash,
+        },
+      });
+
+      await writeOutput(tempFilePath, mockEval, null);
+      expect(JSON.parse(fs.readFileSync(tempFilePath, 'utf8'))).not.toHaveProperty('blobAssets');
+
+      await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+      const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+      expect(parsed.blobAssets).toEqual([
+        {
+          hash,
+          mimeType: 'image/png',
+          sizeBytes: data.length,
+          data: data.toString('base64'),
+        },
+      ]);
     });
 
     it('should handle null shareableUrl', async () => {

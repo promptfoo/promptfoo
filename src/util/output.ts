@@ -5,13 +5,14 @@ import * as path from 'path';
 import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
 import yaml from 'js-yaml';
+import { BLOB_MAX_SIZE, getBlobByHash } from '../blobs';
 import { VERSION } from '../constants';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { getTraceStore } from '../tracing/store';
-import { type CsvRow, type OutputFile, ResultFailureReason } from '../types';
+import { type CsvRow, type ExportedBlobAsset, type OutputFile, ResultFailureReason } from '../types';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
@@ -20,6 +21,12 @@ import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type { EvaluateTableOutput } from '../types';
+
+export interface OutputOptions {
+  includeMedia?: boolean;
+}
+
+const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/gi;
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -79,6 +86,7 @@ export function createOutputMetadata(evalRecord: Eval) {
 export async function createOutputData(
   evalRecord: Eval,
   shareableUrl: string | null,
+  options: OutputOptions = {},
 ): Promise<OutputFile> {
   const summary = await evalRecord.toEvaluateSummary();
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
@@ -90,7 +98,7 @@ export async function createOutputData(
     logger.debug(`Failed to fetch traces for output ${evalRecord.id}: ${error}`);
   }
 
-  return {
+  const output: OutputFile = {
     evalId: evalRecord.id,
     results: summary,
     config: redactedConfig,
@@ -100,6 +108,75 @@ export async function createOutputData(
     ...(evalRecord.runtimeOptions && { runtimeOptions: evalRecord.runtimeOptions }),
     ...(traces && traces.length > 0 && { traces }),
   };
+
+  if (options.includeMedia) {
+    const blobAssets = await exportBlobAssets(summary);
+    if (blobAssets.length > 0) {
+      output.blobAssets = blobAssets;
+    }
+  }
+
+  return output;
+}
+
+function collectBlobHashes(
+  value: unknown,
+  hashes = new Set<string>(),
+  seen = new WeakSet<object>(),
+): Set<string> {
+  if (typeof value === 'string') {
+    for (const match of value.matchAll(BLOB_URI_REGEX)) {
+      hashes.add(match[1].toLowerCase());
+    }
+    return hashes;
+  }
+
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      collectBlobHashes(child, hashes, seen);
+    }
+    return hashes;
+  }
+
+  if (value && typeof value === 'object') {
+    if (seen.has(value)) {
+      return hashes;
+    }
+    seen.add(value);
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      collectBlobHashes(child, hashes, seen);
+    }
+  }
+
+  return hashes;
+}
+
+async function exportBlobAssets(results: OutputFile['results']): Promise<ExportedBlobAsset[]> {
+  const assets: ExportedBlobAsset[] = [];
+  for (const hash of collectBlobHashes(results)) {
+    try {
+      const blob = await getBlobByHash(hash);
+      if (blob.data.length > BLOB_MAX_SIZE) {
+        logger.warn('[Output] Skipping oversized blob in eval export', {
+          hash,
+          sizeBytes: blob.data.length,
+        });
+        continue;
+      }
+      assets.push({
+        hash,
+        mimeType: blob.metadata.mimeType,
+        sizeBytes: blob.data.length,
+        data: blob.data.toString('base64'),
+      });
+    } catch (error) {
+      logger.warn('[Output] Skipping missing blob in eval export', {
+        error,
+        hash,
+      });
+    }
+  }
+  return assets;
 }
 
 /**
@@ -110,9 +187,10 @@ async function writeJsonOutputSafely(
   outputPath: string,
   evalRecord: Eval,
   shareableUrl: string | null,
+  options: OutputOptions,
 ): Promise<void> {
   try {
-    const outputData = await createOutputData(evalRecord, shareableUrl);
+    const outputData = await createOutputData(evalRecord, shareableUrl, options);
 
     // Use standard JSON.stringify with proper formatting
     const jsonString = JSON.stringify(outputData, null, 2);
@@ -141,6 +219,7 @@ export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
   shareableUrl: string | null,
+  options: OutputOptions = {},
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const table = await evalRecord.getTable();
@@ -187,11 +266,11 @@ export async function writeOutput(
       await fileHandle.close();
     }
   } else if (outputExtension === 'json') {
-    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
+    await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl, options);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     await fsPromises.writeFile(
       outputPath,
-      yaml.dump(await createOutputData(evalRecord, shareableUrl)),
+      yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();

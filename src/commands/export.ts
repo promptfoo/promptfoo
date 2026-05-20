@@ -123,6 +123,7 @@ export function exportCommand(program: Command) {
     .command('eval <evalId>')
     .description('Export an eval record to a JSON file')
     .option('-o, --output [outputPath]', 'Output path for the exported file')
+    .option('--include-media', 'Embed referenced blob media bytes for portable imports')
     .action(async (evalId, cmdObj) => {
       try {
         let result;
@@ -139,11 +140,19 @@ export function exportCommand(program: Command) {
         }
 
         if (cmdObj.output) {
-          await writeOutput(cmdObj.output, result, null);
+          await writeOutput(cmdObj.output, result, null, {
+            includeMedia: Boolean(cmdObj.includeMedia),
+          });
 
           logger.info(`Eval with ID ${evalId} has been successfully exported to ${cmdObj.output}.`);
         } else {
-          const jsonData = JSON.stringify(await createOutputData(result, null), null, 2);
+          const jsonData = JSON.stringify(
+            await createOutputData(result, null, {
+              includeMedia: Boolean(cmdObj.includeMedia),
+            }),
+            null,
+            2,
+          );
           logger.info(jsonData);
         }
 

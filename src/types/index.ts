@@ -1384,6 +1384,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1394,6 +1401,7 @@ export interface OutputFile {
   vars?: string[];
   runtimeOptions?: Partial<EvaluateOptions>;
   traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state

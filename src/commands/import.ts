@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
+import { BLOB_MAX_SIZE, storeBlob } from '../blobs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
@@ -8,8 +9,9 @@ import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
+import { sha256 } from '../util/createHash';
 import type { Command } from 'commander';
-import type { TraceData } from '../types';
+import type { ExportedBlobAsset, TraceData } from '../types';
 
 /**
  * Extract the eval ID from export data, checking both v3 (evalId) and legacy (id) formats.
@@ -70,7 +72,7 @@ function deriveVarsFromResults(results: any[]): string[] {
  */
 function extractVars(evalData: any): string[] {
   if (Array.isArray(evalData.vars)) {
-    return evalData.vars.filter((value): value is string => typeof value === 'string');
+    return evalData.vars.filter((value: unknown): value is string => typeof value === 'string');
   }
   return deriveVarsFromResults(evalData.results?.results || []);
 }
@@ -86,6 +88,60 @@ function extractDurations(evalData: any) {
     generationDurationMs: extractDuration(stats?.generationDurationMs),
     evaluationDurationMs: extractDuration(stats?.evaluationDurationMs),
   };
+}
+
+const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
+const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
+
+function isImportableBlobAsset(asset: unknown): asset is ExportedBlobAsset {
+  const candidate = asset as Partial<ExportedBlobAsset>;
+  return (
+    asset !== null &&
+    typeof asset === 'object' &&
+    typeof candidate.hash === 'string' &&
+    BLOB_HASH_REGEX.test(candidate.hash) &&
+    typeof candidate.mimeType === 'string' &&
+    candidate.mimeType.length > 0 &&
+    typeof candidate.sizeBytes === 'number' &&
+    Number.isInteger(candidate.sizeBytes) &&
+    candidate.sizeBytes >= 0 &&
+    typeof candidate.data === 'string'
+  );
+}
+
+function decodeBlobAsset(asset: ExportedBlobAsset): Buffer {
+  if (asset.sizeBytes > BLOB_MAX_SIZE || asset.data.length > MAX_EXPORTED_BLOB_BASE64_LENGTH) {
+    throw new Error(`Embedded blob ${asset.hash} exceeds the ${BLOB_MAX_SIZE} byte import limit`);
+  }
+
+  const data = Buffer.from(asset.data, 'base64');
+  if (data.length !== asset.sizeBytes) {
+    throw new Error(`Embedded blob ${asset.hash} size does not match its exported metadata`);
+  }
+  return data;
+}
+
+async function importBlobAssets(blobAssets: unknown): Promise<void> {
+  if (!Array.isArray(blobAssets)) {
+    return;
+  }
+
+  for (const asset of blobAssets) {
+    if (!isImportableBlobAsset(asset)) {
+      logger.debug('Skipping malformed embedded blob during import');
+      continue;
+    }
+
+    const data = decodeBlobAsset(asset);
+    if (sha256(data) !== asset.hash.toLowerCase()) {
+      throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
+    }
+
+    const { ref } = await storeBlob(data, asset.mimeType);
+    if (ref.hash !== asset.hash.toLowerCase()) {
+      throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
+    }
+  }
 }
 
 function isImportableTrace(trace: unknown): trace is TraceData {
@@ -173,6 +229,7 @@ export function importCommand(program: Command) {
 
           const vars = extractVars(evalData);
           const durations = extractDurations(evalData);
+          await importBlobAssets(evalData.blobAssets);
 
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
             id: cmdObj.newId ? undefined : importId,
