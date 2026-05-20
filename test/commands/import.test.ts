@@ -100,6 +100,31 @@ describe('importCommand', () => {
       );
       expect(process.exitCode).toBe(1);
     });
+
+    it('should reject result payloads that are neither current nor legacy exports', async () => {
+      const filePath = path.join(__dirname, `temp-unsupported-results-${Date.now()}.json`);
+      const evalId = 'eval-unsupported-results';
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({
+          id: evalId,
+          config: { description: 'unsupported results shape' },
+          results: {
+            results: [{ success: true, response: { output: 'not enough legacy shape' } }],
+          },
+        }),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Unsupported eval export results format'),
+      );
+      expect(await Eval.findById(evalId)).toBeUndefined();
+      expect(process.exitCode).toBe(1);
+    });
   });
 
   describe('with real sample file', () => {
@@ -207,6 +232,9 @@ describe('importCommand', () => {
               endTime: 20,
               attributes: { operation: 'search' },
               statusCode: 1,
+            },
+            {
+              spanId: 'span-malformed',
             },
           ],
         },
@@ -342,6 +370,40 @@ describe('importCommand', () => {
       } finally {
         restoreEnv();
       }
+    });
+
+    it('should import legacy table-backed eval exports', async () => {
+      const evalId = 'eval-legacy-table-backed';
+      const filePath = path.join(__dirname, `temp-legacy-v2-${Date.now()}.json`);
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({
+          id: evalId,
+          createdAt: '2024-01-02T03:04:05.000Z',
+          author: 'legacy-author',
+          config: { description: 'legacy import' },
+          results: {
+            version: 2,
+            timestamp: '2024-01-02T03:04:05.000Z',
+            results: [{ success: true, vars: { topic: 'legacy' } }],
+            table: { head: { prompts: [], vars: ['topic'] }, body: [] },
+            stats: { successes: 1, failures: 0 },
+          },
+        }),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const importedEval = await Eval.findById(evalId);
+      expect(importedEval).toBeDefined();
+      expect(importedEval!.author).toBe('legacy-author');
+      expect(await importedEval!.toEvaluateSummary()).toMatchObject({
+        version: 2,
+        results: [{ success: true, vars: { topic: 'legacy' } }],
+        table: { head: { vars: ['topic'] } },
+      });
     });
   });
 
@@ -482,6 +544,45 @@ describe('importCommand', () => {
       const replacedEval = await Eval.findById(sampleData.evalId);
       expect(replacedEval).toBeDefined();
       expect(replacedEval!.config.description).toBe(sampleData.config.description);
+    });
+
+    it('should keep the existing eval when a --force replacement fails preflight', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      const replacementData = structuredClone(sampleData);
+      const badData = Buffer.from('wrong replacement bytes');
+      replacementData.blobAssets = [
+        {
+          hash: 'f'.repeat(64),
+          mimeType: 'image/png',
+          sizeBytes: badData.length,
+          data: badData.toString('base64'),
+        },
+      ];
+
+      const filePath = path.join(__dirname, `temp-force-corrupt-blob-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(replacementData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(process.exitCode).toBeUndefined();
+
+      vi.clearAllMocks();
+      process.exitCode = undefined;
+
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Embedded blob hash mismatch'),
+      );
+      expect(process.exitCode).toBe(1);
+
+      const preservedEval = await Eval.findById(sampleData.evalId);
+      expect(preservedEval).toBeDefined();
+      expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
     });
 
     it('should import normally with --force flag when eval does not exist', async () => {

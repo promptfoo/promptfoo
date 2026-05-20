@@ -11,7 +11,14 @@ import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import type { Command } from 'commander';
-import type { ExportedBlobAsset, TraceData } from '../types';
+
+import type {
+  EvaluateSummaryV2,
+  EvaluateSummaryV3,
+  ExportedBlobAsset,
+  TraceData,
+  TraceSpan,
+} from '../types';
 
 /**
  * Extract the eval ID from export data, checking both v3 (evalId) and legacy (id) formats.
@@ -93,6 +100,29 @@ function extractDurations(evalData: any) {
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
 
+function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
+  const candidate = results as Partial<EvaluateSummaryV3>;
+  return (
+    results !== null &&
+    typeof results === 'object' &&
+    candidate.version === 3 &&
+    Array.isArray(candidate.prompts) &&
+    Array.isArray(candidate.results)
+  );
+}
+
+function isImportableLegacyResults(results: unknown): results is EvaluateSummaryV2 {
+  const candidate = results as Partial<EvaluateSummaryV2>;
+  return (
+    results !== null &&
+    typeof results === 'object' &&
+    candidate.version !== 3 &&
+    Array.isArray(candidate.results) &&
+    candidate.table !== null &&
+    typeof candidate.table === 'object'
+  );
+}
+
 function isImportableBlobAsset(asset: unknown): asset is ExportedBlobAsset {
   const candidate = asset as Partial<ExportedBlobAsset>;
   return (
@@ -121,22 +151,36 @@ function decodeBlobAsset(asset: ExportedBlobAsset): Buffer {
   return data;
 }
 
-async function importBlobAssets(blobAssets: unknown): Promise<void> {
+function validateBlobAssetData(asset: ExportedBlobAsset): Buffer {
+  const data = decodeBlobAsset(asset);
+  if (sha256(data) !== asset.hash.toLowerCase()) {
+    throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
+  }
+  return data;
+}
+
+function prepareBlobAssets(blobAssets: unknown): ExportedBlobAsset[] {
   if (!Array.isArray(blobAssets)) {
-    return;
+    return [];
   }
 
+  const preparedAssets: ExportedBlobAsset[] = [];
   for (const asset of blobAssets) {
     if (!isImportableBlobAsset(asset)) {
       logger.debug('Skipping malformed embedded blob during import');
       continue;
     }
 
-    const data = decodeBlobAsset(asset);
-    if (sha256(data) !== asset.hash.toLowerCase()) {
-      throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
-    }
+    validateBlobAssetData(asset);
+    preparedAssets.push(asset);
+  }
 
+  return preparedAssets;
+}
+
+async function importBlobAssets(blobAssets: ExportedBlobAsset[]): Promise<void> {
+  for (const asset of blobAssets) {
+    const data = validateBlobAssetData(asset);
     const { ref } = await storeBlob(data, asset.mimeType);
     if (ref.hash !== asset.hash.toLowerCase()) {
       throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
@@ -155,27 +199,53 @@ function isImportableTrace(trace: unknown): trace is TraceData {
   );
 }
 
-async function importTraces(
-  traces: unknown,
-  evalId: string,
-  generateNewTraceIds: boolean,
-): Promise<void> {
+function isImportableTraceSpan(span: unknown): span is TraceSpan {
+  const candidate = span as Partial<TraceSpan>;
+  return (
+    span !== null &&
+    typeof span === 'object' &&
+    typeof candidate.spanId === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.startTime === 'number' &&
+    Number.isFinite(candidate.startTime)
+  );
+}
+
+function prepareTraces(traces: unknown): TraceData[] {
   if (!Array.isArray(traces)) {
-    return;
+    return [];
   }
 
-  const traceStore = getTraceStore();
+  const preparedTraces: TraceData[] = [];
   for (const trace of traces) {
     if (!isImportableTrace(trace)) {
       logger.debug('Skipping malformed trace during import');
       continue;
     }
 
+    const spans = trace.spans.filter((span): span is TraceSpan => {
+      const importable = isImportableTraceSpan(span);
+      if (!importable) {
+        logger.debug('Skipping malformed trace span during import');
+      }
+      return importable;
+    });
+    preparedTraces.push({ ...trace, spans });
+  }
+
+  return preparedTraces;
+}
+
+async function importTraces(
+  traces: TraceData[],
+  evalId: string,
+  generateNewTraceIds: boolean,
+): Promise<void> {
+  const traceStore = getTraceStore();
+  for (const trace of traces) {
     // Trace IDs are globally unique in the local trace store. Duplicate eval
     // imports need fresh IDs so spans never attach to the original eval.
-    const traceId = generateNewTraceIds
-      ? crypto.randomUUID().replaceAll('-', '')
-      : trace.traceId;
+    const traceId = generateNewTraceIds ? crypto.randomUUID().replaceAll('-', '') : trace.traceId;
 
     await traceStore.createTrace({
       traceId,
@@ -206,14 +276,14 @@ export function importCommand(program: Command) {
         const importId = extractEvalId(evalData);
         const importCreatedAt = extractCreatedAt(evalData);
         const importAuthor = extractAuthor(evalData);
+        let existingEval: Eval | undefined;
 
         // Check for collision if not forcing new ID
         if (importId && !cmdObj.newId) {
           const existing = await Eval.findById(importId);
           if (existing) {
             if (cmdObj.force) {
-              logger.info(`Replacing existing eval ${importId}`);
-              await existing.delete();
+              existingEval = existing;
             } else {
               logger.error(
                 `Eval ${importId} already exists. Use --new-id to import with a new ID, or --force to replace it.`,
@@ -224,12 +294,26 @@ export function importCommand(program: Command) {
           }
         }
 
-        if (evalData.results.version === 3) {
+        const importV3 = isImportableV3Results(evalData.results);
+        const importLegacy = isImportableLegacyResults(evalData.results);
+        if (!importV3 && !importLegacy) {
+          throw new Error('Unsupported eval export results format');
+        }
+
+        const blobAssets = importV3 ? prepareBlobAssets(evalData.blobAssets) : [];
+        const traces = importV3 ? prepareTraces(evalData.traces) : [];
+
+        if (existingEval) {
+          logger.info(`Replacing existing eval ${importId}`);
+          await existingEval.delete();
+        }
+
+        if (importV3) {
           logger.debug('Importing v3 eval');
 
           const vars = extractVars(evalData);
           const durations = extractDurations(evalData);
-          await importBlobAssets(evalData.blobAssets);
+          await importBlobAssets(blobAssets);
 
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
             id: cmdObj.newId ? undefined : importId,
@@ -241,7 +325,7 @@ export function importCommand(program: Command) {
             ...durations,
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
-          await importTraces(evalData.traces, evalRecord.id, Boolean(cmdObj.newId));
+          await importTraces(traces, evalRecord.id, Boolean(cmdObj.newId));
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
