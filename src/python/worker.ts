@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { StringDecoder } from 'string_decoder';
 
 import { PythonShell } from 'python-shell';
 import { getWrapperDir } from '../esm';
@@ -15,6 +16,9 @@ export class PythonWorker {
   private busy: boolean = false;
   private shuttingDown: boolean = false;
   private crashCount: number = 0;
+  private stderrBuffer: string = '';
+  private stderrDecoder = new StringDecoder('utf8');
+  private stderrTracebackLevel: 'error' | null = null;
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
     resolve: (result: unknown) => void;
@@ -84,6 +88,7 @@ export class PythonWorker {
       });
 
       this.process!.on('close', () => {
+        this.flushStderr();
         if (!this.shuttingDown) {
           this.handleCrash();
         }
@@ -96,26 +101,81 @@ export class PythonWorker {
   }
 
   private handleStderr(data: Buffer | string): void {
-    const lines = data
-      .toString()
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const text = typeof data === 'string' ? data : this.stderrDecoder.write(data);
+    this.stderrBuffer += text;
+
+    const lines = this.stderrBuffer.split('\n');
+    this.stderrBuffer = lines.pop() ?? '';
 
     for (const line of lines) {
-      const message = `Python worker stderr: ${line}`;
-      if (/\b(ERROR|CRITICAL|FATAL)\b|^ERROR[: ]|Traceback \(most recent call last\)/i.test(line)) {
-        logger.error(message);
-      } else if (/\b(WARN|WARNING)\b/i.test(line)) {
-        logger.warn(message);
-      } else if (/\bINFO\b/i.test(line)) {
-        logger.info(message);
-      } else if (/\bDEBUG\b/i.test(line)) {
-        logger.debug(message);
-      } else {
-        logger.warn(message);
+      this.logStderrLine(line.replace(/\r$/, ''));
+    }
+  }
+
+  private flushStderr(): void {
+    const remaining = this.stderrBuffer + this.stderrDecoder.end();
+    this.stderrBuffer = '';
+    this.stderrTracebackLevel = null;
+
+    if (remaining) {
+      for (const line of remaining.split(/\r?\n/)) {
+        this.logStderrLine(line);
       }
     }
+  }
+
+  private logStderrLine(line: string): void {
+    if (!line.trim()) {
+      return;
+    }
+
+    const trimmedStart = line.trimStart();
+    const prefixMatch = /^(DEBUG|INFO|WARN|WARNING|ERROR|CRITICAL|FATAL)\b[: ]?/i.exec(
+      trimmedStart,
+    );
+
+    if (prefixMatch) {
+      const level = this.normalizeStderrLevel(prefixMatch[1]);
+      this.stderrTracebackLevel = level === 'error' ? 'error' : null;
+      this.writeStderrLog(level, line);
+      return;
+    }
+
+    if (/^Traceback \(most recent call last\):/i.test(trimmedStart)) {
+      this.stderrTracebackLevel = 'error';
+      this.writeStderrLog('error', line);
+      return;
+    }
+
+    if (this.stderrTracebackLevel) {
+      this.writeStderrLog(this.stderrTracebackLevel, line);
+      return;
+    }
+
+    this.writeStderrLog('warn', line);
+  }
+
+  private normalizeStderrLevel(level: string): 'debug' | 'info' | 'warn' | 'error' {
+    switch (level.toUpperCase()) {
+      case 'DEBUG':
+        return 'debug';
+      case 'INFO':
+        return 'info';
+      case 'WARN':
+      case 'WARNING':
+        return 'warn';
+      case 'ERROR':
+      case 'CRITICAL':
+      case 'FATAL':
+        return 'error';
+      default:
+        return 'warn';
+    }
+  }
+
+  private writeStderrLog(level: 'debug' | 'info' | 'warn' | 'error', line: string): void {
+    const message = `Python worker stderr: ${line}`;
+    logger[level](message);
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {

@@ -26,6 +26,84 @@ const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 // Works fine on local Windows and all other platforms
 const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe.skip : describe;
 
+type TestablePythonWorker = {
+  flushStderr(): void;
+  handleStderr(data: Buffer | string): void;
+};
+
+function createTestableWorker() {
+  return new PythonWorker('/tmp/provider.py', 'call_api') as unknown as TestablePythonWorker;
+}
+
+describe('PythonWorker stderr parsing', () => {
+  it('honors explicit INFO and DEBUG prefixes before scanning message text', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr('INFO:loaded error budget config\nDEBUG:error retry state\n');
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'Python worker stderr: INFO:loaded error budget config',
+    );
+    expect(logger.debug).toHaveBeenCalledWith('Python worker stderr: DEBUG:error retry state');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps traceback continuation lines at error level and preserves indentation', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr(
+      [
+        'ERROR: Failed to load module: boom',
+        'Traceback (most recent call last):',
+        '  File "/tmp/provider.py", line 1, in <module>',
+        '    raise ValueError("boom")',
+        'ValueError: boom',
+        '',
+      ].join('\n'),
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Python worker stderr: ERROR: Failed to load module: boom',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      'Python worker stderr: Traceback (most recent call last):',
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      'Python worker stderr:   File "/tmp/provider.py", line 1, in <module>',
+    );
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr:     raise ValueError("boom")');
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr: ValueError: boom');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('buffers split stderr chunks before classifying complete lines', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr('IN');
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.info).not.toHaveBeenCalled();
+
+    worker.handleStderr('FO:loaded error budget config\n');
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'Python worker stderr: INFO:loaded error budget config',
+    );
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('flushes an unterminated buffered stderr line', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr('WARNING:partial stderr line');
+    expect(logger.warn).not.toHaveBeenCalled();
+
+    worker.flushStderr();
+
+    expect(logger.warn).toHaveBeenCalledWith('Python worker stderr: WARNING:partial stderr line');
+  });
+});
+
 describeOrSkip('PythonWorker', () => {
   let sharedWorker: PythonWorker;
   let multiApiWorker: PythonWorker;
