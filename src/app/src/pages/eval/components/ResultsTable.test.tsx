@@ -3,6 +3,7 @@ import { act } from 'react';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -2274,6 +2275,50 @@ describe('ResultsTable Pagination', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const paginationElement = screen.getByText(/results per page/i);
     expect(paginationElement).toBeInTheDocument();
+  });
+
+  it('should never offer a page size that exceeds the server cap', async () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      // Large enough to enable every option in the selector.
+      filteredResultsCount: EVAL_TABLE_MAX_PAGE_SIZE + 1,
+      totalResultsCount: EVAL_TABLE_MAX_PAGE_SIZE + 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const trigger = screen.getByLabelText(/results per page/i);
+    await act(async () => {
+      await userEvent.click(trigger);
+    });
+
+    const options = await screen.findAllByRole('option');
+    const offered = options.map((node) =>
+      Number(node.getAttribute('data-value') ?? node.textContent ?? '0'),
+    );
+
+    expect(offered.length).toBeGreaterThan(0);
+    for (const size of offered) {
+      expect(size).toBeLessThanOrEqual(EVAL_TABLE_MAX_PAGE_SIZE);
+    }
   });
 
   it('should keep the pagination footer pinned for short tables', () => {

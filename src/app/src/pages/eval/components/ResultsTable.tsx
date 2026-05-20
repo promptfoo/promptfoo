@@ -29,6 +29,7 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -65,6 +66,13 @@ import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorag
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { getNamedMetricTotals } from './utils';
+
+// Options shown in the "Results per page" selector. Filtered against
+// EVAL_TABLE_MAX_PAGE_SIZE so the dropdown never offers a value the server
+// would reject for non-export requests.
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
+  (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
+);
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -2470,19 +2478,20 @@ function ResultsTable({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
-                  50
-                </SelectItem>
-                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
-                  100
-                </SelectItem>
-                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
-                  500
-                </SelectItem>
-                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
-                  1000
-                </SelectItem>
+                {PAGE_SIZE_OPTIONS.map((size, idx) => {
+                  // Disable an option until the previous tier is exceeded, so the
+                  // dropdown only offers sizes that meaningfully change the view.
+                  const previousSize = idx === 0 ? 0 : PAGE_SIZE_OPTIONS[idx - 1];
+                  return (
+                    <SelectItem
+                      key={size}
+                      value={String(size)}
+                      disabled={filteredResultsCount <= previousSize}
+                    >
+                      {size}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           </div>

@@ -82,7 +82,14 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 // GET /api/evals/:id/table
 
-export const EVAL_TABLE_MAX_PAGE_SIZE = 500;
+/**
+ * Upper bound on `limit` for non-export page requests. Matches the largest
+ * page-size option offered by the web UI's results-per-page selector so the
+ * UI cannot accidentally request a size the server would reject. Exports
+ * (`format=csv` / `format=json`) bypass this cap because the route always
+ * fetches the full table for those.
+ */
+export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z
