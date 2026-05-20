@@ -486,12 +486,7 @@ function buildCandidateDefaultTest(
 
   return {
     ...defaultTest,
-    prompts: extendPromptFilter(
-      defaultTest.prompts,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
+    prompts: extendPromptFilter(defaultTest.prompts, routingPrompt, seedPrompt, candidateLabels),
   };
 }
 

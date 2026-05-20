@@ -77,13 +77,13 @@ describe('prompt optimizer', () => {
     } as any);
 
     const failure = {
-      ...evalResult(0, false, 'x'.repeat(1800)),
+      ...evalResult(0, false, 'grading reason '.repeat(140)),
       vars: {
         apiKey: 'sk-proj-this-should-never-leak-12345678901234567890',
         largeContext: 'z'.repeat(1800),
       },
       response: {
-        output: 'o'.repeat(1800),
+        output: 'optimizer output '.repeat(140),
       },
       namedScores: {
         token: 'Bearer this-is-also-sensitive-12345678901234567890',
@@ -500,11 +500,7 @@ describe('prompt optimizer', () => {
     let evaluateCallCount = 0;
     vi.mocked(evaluate).mockImplementation(async (suite) => {
       seenAssertCounts.push(suite.tests?.[0].assert?.length || 0);
-      if (
-        suite.tests?.[0] &&
-        suite.defaultTest &&
-        typeof suite.defaultTest === 'object'
-      ) {
+      if (suite.tests?.[0] && suite.defaultTest && typeof suite.defaultTest === 'object') {
         suite.tests[0].assert = [
           ...(suite.defaultTest.assert || []),
           ...(suite.tests[0].assert || []),
