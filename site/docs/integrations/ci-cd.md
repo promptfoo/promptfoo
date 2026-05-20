@@ -372,24 +372,37 @@ The output JSON follows this schema:
 
 ```typescript
 interface OutputFile {
-  evalId?: string;
+  evalId: string | null;
   results: {
+    version: 3;
+    timestamp: string;
     stats: {
       successes: number;
       failures: number;
       errors: number;
     };
-    outputs: Array<{
-      pass: boolean;
+    prompts: Array<unknown>;
+    results: Array<{
+      success: boolean;
       score: number;
       error?: string;
       // ... other fields
     }>;
   };
-  config: UnifiedConfig;
+  config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 ```
+
+`promptfoo eval -o results.json` and `promptfoo export eval <evalId>` use the
+same eval output envelope. Older table-backed outputs use the legacy
+`results.version: 2` summary shape. Portable exports created with
+`promptfoo export eval <evalId> --include-media` may add embedded `blobAssets`.
 
 Example processing script:
 
@@ -407,7 +420,7 @@ console.log(`Pass rate: ${passRate.toFixed(2)}%`);
 console.log(`Shareable URL: ${results.shareableUrl}`);
 
 // Check for specific failures
-const criticalFailures = results.results.outputs.filter(
+const criticalFailures = results.results.results.filter(
   (o) => o.error?.includes('security') || o.error?.includes('injection'),
 );
 
