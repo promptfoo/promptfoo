@@ -127,7 +127,9 @@ function createOpenAIItemVars(item: Record<string, unknown>): Vars {
 function createOpenAIEvalsPrompt(runId: string, rows: OpenAIEvalsJsonlRow[]): CompletedPrompt {
   const hasStringInput = rows.every((row) => typeof row.item['input'] === 'string');
   const raw = hasStringInput ? '{{item.input}}' : 'Imported OpenAI eval item';
-  const label = hasStringInput ? 'OpenAI eval item input' : 'Imported OpenAI eval item';
+  const label = hasStringInput
+    ? `OpenAI eval item input (${runId})`
+    : `Imported OpenAI eval item (${runId})`;
 
   return {
     raw,
@@ -284,9 +286,7 @@ function createOpenAIResult(
   const error = getOpenAISampleError(row.sample);
   const success = error === undefined && gradingResult.pass;
   const promptRaw =
-    typeof row.item['input'] === 'string'
-      ? row.item['input']
-      : (JSON.stringify(row.item, null, 2) ?? '{}');
+    typeof row.item['input'] === 'string' ? row.item['input'] : JSON.stringify(row.item, null, 2)!;
   const prompt = {
     raw: promptRaw,
     label: importedPrompt.label,
@@ -333,6 +333,7 @@ function createOpenAIResult(
         grades: row.grades,
         passes: row.passes ?? {},
         graderSamples: row.grader_samples ?? {},
+        // Preserve the full dashboard row so future export fields survive import.
         outputItem: row,
       },
     },
@@ -358,6 +359,10 @@ function canonicalizeOpenAIItem(value: unknown): unknown {
 function getOpenAIItemAlignmentKey(row: OpenAIEvalsJsonlRow): string {
   const itemHash = sha256(JSON.stringify(canonicalizeOpenAIItem(row.item)));
   return `${row.data_source_idx}:${itemHash}`;
+}
+
+function sanitizeOpenAIEvalsIdPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['metrics'] {
@@ -446,7 +451,7 @@ function convertOpenAIEvalsJsonl(rows: OpenAIEvalsJsonlRow[]) {
   const timestamp = new Date().toISOString();
   const evalId =
     runIds.length === 1
-      ? `openai-evals-${runIds[0]}`
+      ? `openai-evals-${sanitizeOpenAIEvalsIdPart(runIds[0])}`
       : `openai-evals-runs-${sha256([...runIds].sort().join('\n')).slice(0, 24)}`;
   const runDescription = runIds.length === 1 ? `run ${runIds[0]}` : `runs ${runIds.join(', ')}`;
 

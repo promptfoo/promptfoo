@@ -5,6 +5,7 @@ import { Command } from 'commander';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
+import { evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -284,6 +285,7 @@ describe('importCommand', () => {
       const importedEvals = await Eval.getMany(10);
       expect(importedEvals).toHaveLength(1);
       expect(importedEvals[0].prompts).toHaveLength(2);
+      expect(new Set(importedEvals[0].prompts.map((prompt) => prompt.label)).size).toBe(2);
       expect(importedEvals[0].prompts.map((prompt) => prompt.provider)).toEqual([
         'openai-evals:evalrun_error_fixture',
         'openai-evals:evalrun_pass_fixture',
@@ -302,6 +304,14 @@ describe('importCommand', () => {
       const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
       expect(results).toHaveLength(2);
       expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
+      expect(new Set(results.map((result) => result.promptId)).size).toBe(2);
+      expect(
+        getDb()
+          .select()
+          .from(evalsToPromptsTable)
+          .all()
+          .filter((promptLink) => promptLink.evalId === importedEvals[0].id),
+      ).toHaveLength(2);
 
       const errorResult = results.find(
         (result) => result.metadata?.openai?.runId === 'evalrun_error_fixture',
