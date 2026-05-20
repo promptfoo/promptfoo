@@ -52,7 +52,7 @@
     "openapi:check": "tsx scripts/generateOpenApi.ts --check",
     "dev:app": "npm run dev --prefix src/app",
     "storybook": "npm run storybook --prefix src/app",
-    "dev:server": "tsx --watch src/server/index.ts",
+    "dev:server": "tsx watch src/server/index.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome check --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome check && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
@@ -154,10 +154,10 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.106.2",
-    "dompurify": "3.4.2",
+    "dompurify": "3.4.3",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.2"
+      "dompurify": "3.4.3"
     }
   },
   "devDependencies": {
