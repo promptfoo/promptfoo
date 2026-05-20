@@ -408,6 +408,45 @@ describe('writeOutput', () => {
     }
   });
 
+  it('omits stripped prompt and response bodies from trace span attributes', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+    });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-bodies',
+        evaluationId: 'eval-strip-bodies',
+        testCaseId: 'case-strip-bodies',
+        spans: [
+          {
+            spanId: 'span-strip-bodies',
+            name: 'provider',
+            startTime: 1,
+            attributes: {
+              'promptfoo.request.body': 'trace-prompt-secret',
+              'promptfoo.response.body': 'trace-response-secret',
+              operation: 'provider-call',
+            },
+          },
+        ],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
+      expect(written).not.toContain('trace-prompt-secret');
+      expect(written).not.toContain('trace-response-secret');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
   it('preserves deep non-secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({

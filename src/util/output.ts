@@ -13,6 +13,7 @@ import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
+import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type CsvRow,
   type ExportedBlobAsset,
@@ -67,29 +68,88 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
   const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+  const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
   const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
 
-  if (!shouldStripMetadata && !shouldStripTestVars) {
+  if (
+    !shouldStripMetadata &&
+    !shouldStripPromptText &&
+    !shouldStripResponseOutput &&
+    !shouldStripTestVars
+  ) {
     return traces;
   }
 
   return traces.map((trace) => {
+    let projectedTrace = trace;
     if (shouldStripMetadata) {
-      const { metadata: _metadata, ...projectedTrace } = trace;
+      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
+      projectedTrace = traceWithoutMetadata;
+    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
+      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
+      const { vars: _vars, ...metadata } = traceMetadata;
+      projectedTrace = {
+        ...traceWithoutMetadata,
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      };
+    }
+
+    if (!shouldStripPromptText && !shouldStripResponseOutput) {
       return projectedTrace;
     }
 
-    if (!trace.metadata || !('vars' in trace.metadata)) {
-      return trace;
-    }
-
-    const { metadata: traceMetadata, ...projectedTrace } = trace;
-    const { vars: _vars, ...metadata } = traceMetadata;
     return {
       ...projectedTrace,
-      ...(Object.keys(metadata).length > 0 && { metadata }),
+      spans: projectedTrace.spans.map((span) => {
+        if (!span.attributes) {
+          return span;
+        }
+
+        const projectedAttributes = { ...span.attributes };
+        if (shouldStripPromptText) {
+          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+        }
+        if (shouldStripResponseOutput) {
+          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
+        }
+
+        const { attributes: _attributes, ...projectedSpan } = span;
+        return {
+          ...projectedSpan,
+          ...(Object.keys(projectedAttributes).length > 0 && {
+            attributes: projectedAttributes,
+          }),
+        };
+      }),
     };
   });
+}
+
+function resultsForMediaExportScan(results: OutputFile['results']): unknown {
+  if (!getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false)) {
+    return results;
+  }
+
+  return {
+    ...results,
+    results: results.results.map((result) => {
+      const response = (result as { response?: { metadata?: Record<string, unknown> } }).response;
+      if (!response?.metadata || !('blobUris' in response.metadata)) {
+        return result;
+      }
+
+      const { metadata: responseMetadata, ...projectedResponse } = response;
+      const { blobUris: _blobUris, ...metadata } = responseMetadata;
+      return {
+        ...result,
+        response: {
+          ...projectedResponse,
+          ...(Object.keys(metadata).length > 0 && { metadata }),
+        },
+      };
+    }),
+  };
 }
 
 export function createOutputMetadata(evalRecord: Eval) {
@@ -157,7 +217,7 @@ async function exportBlobAssets(
 ): Promise<ExportedBlobAsset[]> {
   const { getBlobByHash } = await import('../blobs');
   const assets: ExportedBlobAsset[] = [];
-  for (const hash of collectBlobHashes({ results, traces })) {
+  for (const hash of collectBlobHashes({ results: resultsForMediaExportScan(results), traces })) {
     try {
       const blob = await getBlobByHash(hash);
       if (blob.data.length > BLOB_MAX_SIZE) {

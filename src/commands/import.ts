@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
-import { BLOB_MAX_SIZE, storeBlob } from '../blobs';
+import { BLOB_MAX_SIZE, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
@@ -198,6 +198,20 @@ async function importBlobAssets(blobAssets: PreparedBlobAsset[]): Promise<void> 
   }
 }
 
+async function recordImportedBlobReferences(
+  blobAssets: PreparedBlobAsset[],
+  evalId: string,
+): Promise<void> {
+  await Promise.all(
+    blobAssets.map(({ asset }) =>
+      recordBlobReference(asset.hash.toLowerCase(), {
+        evalId,
+        location: 'import',
+      }),
+    ),
+  );
+}
+
 async function replaceExistingEval(
   existingEval: Eval | undefined,
   importId?: string,
@@ -329,12 +343,13 @@ export function importCommand(program: Command) {
         }
 
         const traces = importV3 ? prepareTraces(evalData.traces) : [];
-        const referencedBlobHashes = importV3
-          ? collectBlobHashes({ results: evalData.results, traces })
-          : new Set<string>();
-        const blobAssets = importV3
-          ? prepareBlobAssets(evalData.blobAssets, referencedBlobHashes)
-          : [];
+        const blobAssets =
+          importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
+            ? prepareBlobAssets(
+                evalData.blobAssets,
+                collectBlobHashes({ results: evalData.results, traces }),
+              )
+            : [];
 
         if (importV3) {
           logger.debug('Importing v3 eval');
@@ -355,6 +370,7 @@ export function importCommand(program: Command) {
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
           await importTraces(traces, evalRecord.id, Boolean(cmdObj.newId));
+          await recordImportedBlobReferences(blobAssets, evalRecord.id);
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');

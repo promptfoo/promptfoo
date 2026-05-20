@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as blobs from '../../src/blobs';
 import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
-import { createTempDir, removeTempDir } from './utils';
+import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
 // Mock dependencies
 vi.mock('../../src/database', () => ({
@@ -175,6 +175,40 @@ describe('JSON export with improved error handling', () => {
         ]);
       } finally {
         traceSpy.mockRestore();
+      }
+    });
+
+    it('should not embed response blob bytes when response output stripping is enabled', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+      const hash = 'c'.repeat(64);
+      const getBlobSpy = vi.spyOn(blobs, 'getBlobByHash');
+      mockEval.toEvaluateSummary.mockResolvedValue({
+        version: 3,
+        timestamp: '2025-01-01T00:00:00.000Z',
+        prompts: mockEval.prompts,
+        results: [
+          {
+            response: {
+              output: '[output stripped]',
+              metadata: { blobUris: [`promptfoo://blob/${hash}`] },
+            },
+          },
+        ],
+        stats: { successes: 1, failures: 0 },
+      });
+
+      try {
+        await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+
+        const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+        expect(parsed.results.results[0].response.metadata.blobUris).toEqual([
+          `promptfoo://blob/${hash}`,
+        ]);
+        expect(parsed).not.toHaveProperty('blobAssets');
+        expect(getBlobSpy).not.toHaveBeenCalled();
+      } finally {
+        getBlobSpy.mockRestore();
+        restoreEnv();
       }
     });
 

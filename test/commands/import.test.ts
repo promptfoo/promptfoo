@@ -4,6 +4,7 @@ import path from 'path';
 import { Command } from 'commander';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
@@ -340,9 +341,33 @@ describe('importCommand', () => {
 
         const imported = await getBlobByHash(hash);
         expect(imported.data).toEqual(data);
+
+        const references = (await getDb().all(
+          `SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = '${hash}'`,
+        )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
+        expect(references).toContainEqual({
+          blob_hash: hash,
+          eval_id: sampleData.evalId,
+          location: 'import',
+        });
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
+      }
+    });
+
+    it('should skip blob reference scans for imports without embedded assets', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const collectBlobHashesSpy = vi.spyOn(blobRefs, 'collectBlobHashes');
+
+      try {
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+        expect(process.exitCode).toBeUndefined();
+        expect(collectBlobHashesSpy).not.toHaveBeenCalled();
+      } finally {
+        collectBlobHashesSpy.mockRestore();
       }
     });
 
