@@ -90,9 +90,32 @@ export class PythonWorker {
       });
 
       this.process!.stderr?.on('data', (data) => {
-        logger.error(`Python worker stderr: ${data.toString()}`);
+        this.handleStderr(data);
       });
     });
+  }
+
+  private handleStderr(data: Buffer | string): void {
+    const lines = data
+      .toString()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const message = `Python worker stderr: ${line}`;
+      if (/\b(ERROR|CRITICAL|FATAL)\b|^ERROR[: ]|Traceback \(most recent call last\)/i.test(line)) {
+        logger.error(message);
+      } else if (/\b(WARN|WARNING)\b/i.test(line)) {
+        logger.warn(message);
+      } else if (/\bINFO\b/i.test(line)) {
+        logger.info(message);
+      } else if (/\bDEBUG\b/i.test(line)) {
+        logger.debug(message);
+      } else {
+        logger.warn(message);
+      }
+    }
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {

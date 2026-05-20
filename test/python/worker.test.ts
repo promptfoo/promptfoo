@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { PythonWorker } from '../../src/python/worker';
 
 vi.mock('../../src/logger', () => ({
@@ -32,6 +33,7 @@ describeOrSkip('PythonWorker', () => {
   let nonexistentFunctionWorker: PythonWorker;
   let wrongNameWorker: PythonWorker;
   let embeddingsOnlyWorker: PythonWorker;
+  let loggingWorker: PythonWorker;
   const fixturesDir = path.join(__dirname, 'fixtures');
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
   const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
@@ -39,6 +41,7 @@ describeOrSkip('PythonWorker', () => {
   const nonexistentPath = path.join(__dirname, 'fixtures', 'test_nonexistent_function.py');
   const wrongNamePath = path.join(__dirname, 'fixtures', 'test_wrong_function_name.py');
   const embeddingsOnlyPath = path.join(__dirname, 'fixtures', 'test_embeddings_only.py');
+  const loggingPath = path.join(__dirname, 'fixtures', 'logging_provider.py');
 
   beforeAll(async () => {
     // Create test fixture
@@ -78,12 +81,27 @@ def call_api(prompt, options, context):
 `,
     );
 
+    fs.writeFileSync(
+      loggingPath,
+      `
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
+
+def call_api(prompt, options, context):
+    logging.info("provider startup details")
+    logging.warning("provider warning")
+    return {"output": f"Logged: {prompt}"}
+`,
+    );
+
     sharedWorker = new PythonWorker(testScriptPath, 'call_api');
     multiApiWorker = new PythonWorker(multiApiPath, 'call_api');
     errorWorker = new PythonWorker(errorPath, 'call_api');
     nonexistentFunctionWorker = new PythonWorker(nonexistentPath, 'call_api');
     wrongNameWorker = new PythonWorker(wrongNamePath, 'call_api');
     embeddingsOnlyWorker = new PythonWorker(embeddingsOnlyPath, 'call_api');
+    loggingWorker = new PythonWorker(loggingPath, 'call_api');
 
     await Promise.all([
       sharedWorker.initialize(),
@@ -92,6 +110,7 @@ def call_api(prompt, options, context):
       nonexistentFunctionWorker.initialize(),
       wrongNameWorker.initialize(),
       embeddingsOnlyWorker.initialize(),
+      loggingWorker.initialize(),
     ]);
   });
 
@@ -104,12 +123,13 @@ def call_api(prompt, options, context):
         nonexistentFunctionWorker,
         wrongNameWorker,
         embeddingsOnlyWorker,
+        loggingWorker,
       ]
         .filter((worker): worker is PythonWorker => Boolean(worker))
         .map((worker) => worker.shutdown()),
     );
 
-    for (const fixturePath of [testScriptPath, multiApiPath, errorPath]) {
+    for (const fixturePath of [testScriptPath, multiApiPath, errorPath, loggingPath]) {
       if (fs.existsSync(fixturePath)) {
         fs.unlinkSync(fixturePath);
       }
@@ -169,6 +189,25 @@ def call_api(prompt, options, context):
 
       expect((classResult as Record<string, unknown>).type).toBe('classification');
       expect((classResult as Record<string, unknown>).output).toBe('positive');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should not surface routine Python stderr logging as worker errors',
+    async () => {
+      const result = (await loggingWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+
+      expect(result.output).toBe('Logged: hello');
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Python worker stderr: WARNING:provider warning'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('Python worker stderr: INFO:provider startup details'),
+      );
     },
     TEST_TIMEOUT,
   );
