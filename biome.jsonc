@@ -17,7 +17,6 @@
       "**/*.grit",
       "**/*.mjs",
       "**/*.cjs",
-      "!!.codex",
       "!!drizzle",
       "!!src/app/src/polyfills",
       "!!**/node_modules",
