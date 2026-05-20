@@ -785,6 +785,39 @@ describe('MCPClient', () => {
       });
     });
 
+    it('should surface MCP tool error results', async () => {
+      // Reset mocks for this test
+      const errorContent = [{ type: 'text', text: 'Invalid arguments' }];
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValueOnce({
+        content: errorContent,
+        isError: true,
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result).toEqual({
+        content: JSON.stringify(errorContent),
+        error: JSON.stringify(errorContent),
+        raw: {
+          content: errorContent,
+          isError: true,
+        },
+      });
+    });
+
     it('should throw error for unknown tool', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
