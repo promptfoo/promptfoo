@@ -299,6 +299,27 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
   expect(options?.env?.npm_config_before).toBeUndefined();
 }
 
+function mockInheritedActionAuthEnv() {
+  mockProcessEnv({
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'inherited-id-token-request-token',
+    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.example/request',
+    GH_TOKEN: 'inherited-gh-token',
+    GITHUB_OIDC_TOKEN: 'stale-oidc-token',
+    GITHUB_TOKEN: 'inherited-github-token',
+    'INPUT_GITHUB-TOKEN': 'input-github-token',
+    INPUT_GITHUB_TOKEN: 'input-github-token-compat',
+  });
+}
+
+function expectNoActionAuthEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
+  expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBeUndefined();
+  expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_URL).toBeUndefined();
+  expect(options?.env?.GH_TOKEN).toBeUndefined();
+  expect(options?.env?.GITHUB_TOKEN).toBeUndefined();
+  expect(options?.env?.['INPUT_GITHUB-TOKEN']).toBeUndefined();
+  expect(options?.env?.INPUT_GITHUB_TOKEN).toBeUndefined();
+}
+
 function setPullRequestRepos(headRepoFullName: string, baseRepoFullName = 'test-owner/test-repo') {
   if (!('pull_request' in mocks.github.context.payload)) {
     throw new Error('Expected a pull_request payload');
@@ -372,6 +393,43 @@ describe('code-scan-action main', () => {
       const { options } = await importActionAndGetNpmInstallCall();
 
       expectSanitizedExecEnv(options);
+    });
+
+    it('should pass only the freshly minted OIDC token to the promptfoo scan command', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockInheritedActionAuthEnv();
+
+      const { options } = await importActionAndGetPromptfooCall();
+
+      expectSanitizedExecEnv(options);
+      expectNoActionAuthEnv(options);
+      expect(options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
+      expect(process.env.GITHUB_OIDC_TOKEN).toBe('stale-oidc-token');
+    });
+
+    it('should keep action auth env out of npm install', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockInheritedActionAuthEnv();
+
+      const { options } = await importActionAndGetNpmInstallCall();
+
+      expectSanitizedExecEnv(options);
+      expectNoActionAuthEnv(options);
+      expect(options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+    });
+
+    it('should not reuse a stale OIDC token when OIDC minting fails', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockInheritedActionAuthEnv();
+      mocks.core.getIDToken.mockRejectedValue(new Error('OIDC is unavailable'));
+
+      const { options } = await importActionAndGetPromptfooCall();
+
+      expectNoActionAuthEnv(options);
+      expect(options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expect(mocks.core.info).toHaveBeenCalledWith(
+        'OIDC token not available: Failed to get GitHub OIDC token: OIDC is unavailable',
+      );
     });
   });
 
