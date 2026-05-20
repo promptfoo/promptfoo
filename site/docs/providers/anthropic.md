@@ -154,6 +154,8 @@ The Anthropic provider supports several options to customize the behavior of the
 - `stop_sequences`: An array of strings that stop generation when encountered.
 - `metadata`: Request metadata (e.g., `user_id`) passed to the API.
 - `extra_body`: Additional parameters to pass directly to the Anthropic API request body.
+- `mcp`: Connect to one or more [Model Context Protocol](#model-context-protocol-mcp) servers. Tools exposed by the server become callable by Claude.
+- `max_tool_calls`: Maximum number of MCP tool executions promptfoo will perform per request before aborting the loop. Defaults to `8` and is only relevant when `mcp.enabled` is `true`.
 
 Example configuration with options and prompts:
 
@@ -860,7 +862,7 @@ We provide several example implementations demonstrating Claude's capabilities:
 #### Core Features
 
 - [Tool Use Example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-tool-use) - Shows how to use Claude's tool calling capabilities
-- [MCP Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp) - Run Claude against a local Model Context Protocol server
+- [MCP Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/mcp) - Connect Claude to a Model Context Protocol server and let it execute the discovered tools
 - [Structured Outputs Example](https://github.com/promptfoo/promptfoo/tree/main/examples/anthropic/structured-outputs) - Demonstrates JSON outputs and strict tool use for guaranteed schema compliance
 - [Vision Example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-vision) - Demonstrates using Claude's vision capabilities
 
