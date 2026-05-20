@@ -198,6 +198,18 @@ async function importBlobAssets(blobAssets: PreparedBlobAsset[]): Promise<void> 
   }
 }
 
+async function replaceExistingEval(
+  existingEval: Eval | undefined,
+  importId?: string,
+): Promise<void> {
+  if (!existingEval) {
+    return;
+  }
+
+  logger.info(`Replacing existing eval ${importId}`);
+  await existingEval.delete();
+}
+
 function isImportableTrace(trace: unknown): trace is TraceData {
   const candidate = trace as Partial<TraceData>;
   return (
@@ -330,10 +342,7 @@ export function importCommand(program: Command) {
           const vars = extractVars(evalData);
           const durations = extractDurations(evalData);
           await importBlobAssets(blobAssets);
-          if (existingEval) {
-            logger.info(`Replacing existing eval ${importId}`);
-            await existingEval.delete();
-          }
+          await replaceExistingEval(existingEval, importId);
 
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
             id: cmdObj.newId ? undefined : importId,
@@ -349,10 +358,7 @@ export function importCommand(program: Command) {
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
-          if (existingEval) {
-            logger.info(`Replacing existing eval ${importId}`);
-            await existingEval.delete();
-          }
+          await replaceExistingEval(existingEval, importId);
           evalId = cmdObj.newId
             ? createEvalId(importCreatedAt)
             : importId || createEvalId(importCreatedAt);
