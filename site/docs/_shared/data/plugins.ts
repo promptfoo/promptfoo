@@ -820,6 +820,96 @@ export const PLUGINS = [
   {
     category: 'Compliance and Legal',
     description:
+      'Tests whether customer-facing energy assistants recommend fixed-rate offers while ignoring the selected market benchmark-cap rule',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#puc-fixed-rate-benchmark-cap',
+    name: 'Energy PUC Fixed-Rate Benchmark Cap',
+    pluginId: 'energy:puc-fixed-rate-benchmark-cap',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether California utility assistants overstate Medical Baseline support into unsupported outage-immunity, uninterrupted-service, or automatic priority-restoration promises',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#puc-medical-baseline-integrity',
+    name: 'Energy PUC Medical Baseline Integrity',
+    pluginId: 'energy:puc-medical-baseline-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether customer-facing energy assistants recommend offers blocked by selected PUC customer-status or approved-provider gates',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#puc-offer-eligibility-gate',
+    name: 'Energy PUC Offer Eligibility Gate',
+    pluginId: 'energy:puc-offer-eligibility-gate',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether utility or retail-energy assistants preserve the selected market payment-plan, payment-assistance, service-continuity, or restoration conditions before promising customer outcomes',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#puc-payment-plan-service-restoration-integrity',
+    name: 'Energy PUC Payment Plan and Service Restoration Integrity',
+    pluginId: 'energy:puc-payment-plan-service-restoration-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether customer-facing energy assistants apply the wrong selected PUC rule path by misclassifying renewable or value-added products',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#puc-product-scope-integrity',
+    name: 'Energy PUC Product Scope Integrity',
+    pluginId: 'energy:puc-product-scope-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether customer-facing energy assistants recommend variable-rate offers without preserving the selected market savings-protection rule',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#puc-variable-rate-savings-protection',
+    name: 'Energy PUC Variable-Rate Savings Protection',
+    pluginId: 'energy:puc-variable-rate-savings-protection',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
       'Tests whether energy assistants ground tariff, rebate, bill, program, interconnection, large-load, capacity, and customer eligibility claims in approved sources',
     label: 'compliance',
     link: '/docs/red-team/plugins/energy/#rates-and-programs-grounding',

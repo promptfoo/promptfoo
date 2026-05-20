@@ -27,6 +27,12 @@ import { EnergyMarketSensitiveDisclosurePluginGrader } from './plugins/energy/ma
 import { EnergyNuclearSafetyBoundaryPluginGrader } from './plugins/energy/nuclearSafetyBoundary';
 import { EnergyOperationsWorkflowIntegrityPluginGrader } from './plugins/energy/operationsWorkflowIntegrity';
 import { EnergyProtectedCustomerProcessPluginGrader } from './plugins/energy/protectedCustomerProcess';
+import { EnergyPucFixedRateBenchmarkCapPluginGrader } from './plugins/energy/pucFixedRateBenchmarkCap';
+import { EnergyPucMedicalBaselineIntegrityPluginGrader } from './plugins/energy/pucMedicalBaselineIntegrity';
+import { EnergyPucOfferEligibilityGatePluginGrader } from './plugins/energy/pucOfferEligibilityGate';
+import { EnergyPucPaymentPlanServiceRestorationIntegrityPluginGrader } from './plugins/energy/pucPaymentPlanServiceRestorationIntegrity';
+import { EnergyPucProductScopeIntegrityPluginGrader } from './plugins/energy/pucProductScopeIntegrity';
+import { EnergyPucVariableRateSavingsProtectionPluginGrader } from './plugins/energy/pucVariableRateSavingsProtection';
 import { EnergyRatesProgramsGroundingPluginGrader } from './plugins/energy/ratesProgramsGrounding';
 import { EnergySensitiveInfrastructureDisclosurePluginGrader } from './plugins/energy/sensitiveInfrastructureDisclosure';
 import { EnergyUsageLoadPrivacyPluginGrader } from './plugins/energy/usageLoadPrivacy';
@@ -169,6 +175,18 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
     new EnergyRatesProgramsGroundingPluginGrader(),
   'promptfoo:redteam:energy:protected-customer-process':
     new EnergyProtectedCustomerProcessPluginGrader(),
+  'promptfoo:redteam:energy:puc-fixed-rate-benchmark-cap':
+    new EnergyPucFixedRateBenchmarkCapPluginGrader(),
+  'promptfoo:redteam:energy:puc-medical-baseline-integrity':
+    new EnergyPucMedicalBaselineIntegrityPluginGrader(),
+  'promptfoo:redteam:energy:puc-offer-eligibility-gate':
+    new EnergyPucOfferEligibilityGatePluginGrader(),
+  'promptfoo:redteam:energy:puc-payment-plan-service-restoration-integrity':
+    new EnergyPucPaymentPlanServiceRestorationIntegrityPluginGrader(),
+  'promptfoo:redteam:energy:puc-product-scope-integrity':
+    new EnergyPucProductScopeIntegrityPluginGrader(),
+  'promptfoo:redteam:energy:puc-variable-rate-savings-protection':
+    new EnergyPucVariableRateSavingsProtectionPluginGrader(),
   'promptfoo:redteam:energy:usage-load-privacy': new EnergyUsageLoadPrivacyPluginGrader(),
   'promptfoo:redteam:energy:hazard-outage-misinformation':
     new EnergyHazardOutageMisinformationPluginGrader(),

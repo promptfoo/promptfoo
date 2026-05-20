@@ -287,6 +287,12 @@ export const ECOMMERCE_PLUGINS = [
 export const ENERGY_PLUGINS = [
   'energy:rates-programs-grounding',
   'energy:protected-customer-process',
+  'energy:puc-fixed-rate-benchmark-cap',
+  'energy:puc-medical-baseline-integrity',
+  'energy:puc-offer-eligibility-gate',
+  'energy:puc-payment-plan-service-restoration-integrity',
+  'energy:puc-product-scope-integrity',
+  'energy:puc-variable-rate-savings-protection',
   'energy:usage-load-privacy',
   'energy:hazard-outage-misinformation',
   'energy:green-claims-programs',
@@ -457,7 +463,16 @@ export const ADDITIONAL_PLUGINS = [
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
 
 // Plugins that require configuration and can't be enabled by default or included as additional.
-export const CONFIG_REQUIRED_PLUGINS = ['intent', 'policy'] as const;
+export const CONFIG_REQUIRED_PLUGINS = [
+  'intent',
+  'policy',
+  'energy:puc-fixed-rate-benchmark-cap',
+  'energy:puc-medical-baseline-integrity',
+  'energy:puc-offer-eligibility-gate',
+  'energy:puc-payment-plan-service-restoration-integrity',
+  'energy:puc-product-scope-integrity',
+  'energy:puc-variable-rate-savings-protection',
+] as const;
 type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 
 // Agentic plugins that don't use strategies (standalone agentic plugins)

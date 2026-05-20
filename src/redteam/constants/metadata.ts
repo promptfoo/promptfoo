@@ -119,6 +119,18 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests whether energy assistants protect actionable substation, feeder, pipeline, generation, control center, cyber, physical security, and critical-infrastructure details',
   'energy:operations-workflow-integrity':
     'Tests whether AI-mediated energy operations workflows preserve approvals, tickets, safety holds, audit trails, and tool-use boundaries',
+  'energy:puc-fixed-rate-benchmark-cap':
+    'Tests whether customer-facing energy assistants recommend fixed-rate offers without preserving the selected market benchmark-cap rule',
+  'energy:puc-medical-baseline-integrity':
+    'Tests whether customer-facing California utility assistants overstate Medical Baseline support into unsupported outage-immunity, uninterrupted-service, or priority-restoration promises',
+  'energy:puc-offer-eligibility-gate':
+    'Tests whether customer-facing energy assistants recommend offers that are blocked by selected PUC customer-status or provider-approval gates',
+  'energy:puc-payment-plan-service-restoration-integrity':
+    'Tests whether customer-facing utility or retail-energy assistants preserve the selected market payment-plan, payment-assistance, service-continuity, or restoration conditions before promising outcomes',
+  'energy:puc-product-scope-integrity':
+    'Tests whether customer-facing energy assistants apply the wrong PUC rule path by misclassifying renewable or value-added products',
+  'energy:puc-variable-rate-savings-protection':
+    'Tests whether customer-facing energy assistants recommend variable-rate offers without preserving the selected market savings-protection rule',
   'energy:nuclear-safety-boundary':
     'Tests whether nuclear energy assistants preserve procedure, work-control, safety, security, emergency, regulatory, and reporting boundaries',
   'energy:controlled-research-boundary':
@@ -237,8 +249,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
-  energy:
-    'Energy AI safety testing across rates, load privacy, outage safety, market disclosure, operations, infrastructure, nuclear, and research boundaries',
   telecom:
     'Telecommunications AI safety testing across CPNI protection, account security, and regulatory compliance vulnerabilities',
   'telecom:cpni-disclosure':
@@ -409,6 +419,13 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'energy:market-sensitive-disclosure': 'Market-Sensitive Disclosure',
   'energy:sensitive-infrastructure-disclosure': 'Sensitive Infrastructure Disclosure',
   'energy:operations-workflow-integrity': 'Operations Workflow Integrity',
+  'energy:puc-fixed-rate-benchmark-cap': 'PUC Fixed-Rate Benchmark Cap',
+  'energy:puc-medical-baseline-integrity': 'PUC Medical Baseline Integrity',
+  'energy:puc-offer-eligibility-gate': 'PUC Offer Eligibility Gate',
+  'energy:puc-payment-plan-service-restoration-integrity':
+    'PUC Payment Plan and Service Restoration Integrity',
+  'energy:puc-product-scope-integrity': 'PUC Product Scope Integrity',
+  'energy:puc-variable-rate-savings-protection': 'PUC Variable-Rate Savings Protection',
   'energy:nuclear-safety-boundary': 'Nuclear Safety Boundary',
   'energy:controlled-research-boundary': 'Controlled Research Boundary',
   telecom: 'Telecommunications Safety Suite',
@@ -642,6 +659,12 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'energy:market-sensitive-disclosure': Severity.Critical,
   'energy:sensitive-infrastructure-disclosure': Severity.Critical,
   'energy:operations-workflow-integrity': Severity.Critical,
+  'energy:puc-fixed-rate-benchmark-cap': Severity.Critical,
+  'energy:puc-medical-baseline-integrity': Severity.Critical,
+  'energy:puc-offer-eligibility-gate': Severity.Critical,
+  'energy:puc-payment-plan-service-restoration-integrity': Severity.Critical,
+  'energy:puc-product-scope-integrity': Severity.Critical,
+  'energy:puc-variable-rate-savings-protection': Severity.Critical,
   'energy:nuclear-safety-boundary': Severity.Critical,
   'energy:controlled-research-boundary': Severity.Critical,
   telecom: Severity.Critical,
@@ -822,6 +845,12 @@ export const riskCategories: Record<string, Plugin[]> = {
     'energy:market-sensitive-disclosure',
     'energy:sensitive-infrastructure-disclosure',
     'energy:operations-workflow-integrity',
+    'energy:puc-fixed-rate-benchmark-cap',
+    'energy:puc-medical-baseline-integrity',
+    'energy:puc-offer-eligibility-gate',
+    'energy:puc-payment-plan-service-restoration-integrity',
+    'energy:puc-product-scope-integrity',
+    'energy:puc-variable-rate-savings-protection',
     'energy:nuclear-safety-boundary',
     'energy:controlled-research-boundary',
     'financial:calculation-error',
@@ -952,6 +981,13 @@ export const categoryAliases: Record<Plugin, string> = {
   'energy:market-sensitive-disclosure': 'EnergyMarketSensitiveDisclosure',
   'energy:sensitive-infrastructure-disclosure': 'EnergySensitiveInfrastructureDisclosure',
   'energy:operations-workflow-integrity': 'EnergyOperationsWorkflowIntegrity',
+  'energy:puc-fixed-rate-benchmark-cap': 'EnergyPucFixedRateBenchmarkCap',
+  'energy:puc-medical-baseline-integrity': 'EnergyPucMedicalBaselineIntegrity',
+  'energy:puc-offer-eligibility-gate': 'EnergyPucOfferEligibilityGate',
+  'energy:puc-payment-plan-service-restoration-integrity':
+    'EnergyPucPaymentPlanServiceRestorationIntegrity',
+  'energy:puc-product-scope-integrity': 'EnergyPucProductScopeIntegrity',
+  'energy:puc-variable-rate-savings-protection': 'EnergyPucVariableRateSavingsProtection',
   'energy:nuclear-safety-boundary': 'EnergyNuclearSafetyBoundary',
   'energy:controlled-research-boundary': 'EnergyControlledResearchBoundary',
   'financial:calculation-error': 'FinancialCalculationError',
@@ -1257,6 +1293,18 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests whether energy assistants reveal actionable substation, feeder, pipeline, generation, control center, cyber, physical security, or critical-infrastructure details',
   'energy:operations-workflow-integrity':
     'Tests whether energy assistants bypass approvals, tickets, safety holds, change controls, audit trails, tool-use boundaries, or large-load commitment workflows',
+  'energy:puc-fixed-rate-benchmark-cap':
+    'Tests whether public-facing energy assistants recommend, compare, or market fixed-rate offers while ignoring the selected market benchmark-cap rule that determines whether that recommendation is permissible',
+  'energy:puc-medical-baseline-integrity':
+    'Tests whether public-facing California utility assistants inflate Medical Baseline support into unsupported outage immunity, guaranteed uninterrupted service, or automatic priority-restoration promises',
+  'energy:puc-offer-eligibility-gate':
+    'Tests whether public-facing energy assistants recommend or greenlight customer offers that the selected PUC rule pack blocks because of customer-status, assistance-program, territory, or provider-approval gating conditions',
+  'energy:puc-payment-plan-service-restoration-integrity':
+    'Tests whether public-facing utility or retail-energy assistants preserve the selected market payment-plan, payment-assistance, service-continuity, or restoration conditions before promising customer outcomes',
+  'energy:puc-product-scope-integrity':
+    'Tests whether public-facing energy assistants use the wrong selected PUC rule path by misclassifying renewable products, value-added services, or other regulated product categories before recommending them',
+  'energy:puc-variable-rate-savings-protection':
+    'Tests whether public-facing energy assistants recommend, compare, or market variable-rate offers while dropping the selected market savings-protection rule that must remain part of the recommendation logic',
   'energy:nuclear-safety-boundary':
     'Tests whether nuclear energy assistants bypass procedure, work-control, safety, security, emergency, regulatory, reporting, or corrective-action boundaries',
   'energy:controlled-research-boundary':
