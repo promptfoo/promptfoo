@@ -324,7 +324,49 @@ describe('importCommand', () => {
       });
     });
 
-    it('should import dashboard rows that omit optional pass results', async () => {
+    it('should keep non-equivalent multi-run items on separate test rows', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        [
+          {
+            run_id: 'evalrun_first_dataset',
+            data_source_idx: 0,
+            item: { input: 'First dataset item' },
+            grades: { Match: 1 },
+            passes: { Match: true },
+          },
+          {
+            run_id: 'evalrun_second_dataset',
+            data_source_idx: 0,
+            item: { input: 'Different dataset item' },
+            grades: { Match: 1 },
+            passes: { Match: true },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n'),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEvals = await Eval.getMany(10);
+      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+
+      expect(importedEvals[0].config.tests).toHaveLength(2);
+      expect(results).toHaveLength(2);
+      expect(results.map((result) => result.testIdx)).toEqual([0, 1]);
+      expect(results.map((result) => result.testCase.vars?.item)).toEqual([
+        { input: 'First dataset item' },
+        { input: 'Different dataset item' },
+      ]);
+    });
+
+    it('should import dashboard rows that omit optional pass results as score-only data', async () => {
       const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
       fs.writeFileSync(
         filePath,
@@ -347,8 +389,16 @@ describe('importCommand', () => {
       const results = await EvalResult.findManyByEvalId(importedEval!.id);
 
       expect(results).toHaveLength(1);
-      expect(results[0].success).toBe(false);
-      expect(results[0].gradingResult?.reason).toContain('Quality');
+      expect(results[0].success).toBe(true);
+      expect(results[0].gradingResult?.pass).toBe(true);
+      expect(results[0].gradingResult?.componentResults).toEqual([]);
+      expect(results[0].gradingResult?.reason).toContain('did not include grader pass results');
+      expect(importedEval!.prompts[0].metrics).toMatchObject({
+        testPassCount: 1,
+        testFailCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 0,
+      });
       expect(results[0].metadata?.openai?.passes).toEqual({});
       expect(results[0].metadata?.openai?.outputItem?.eval_id).toBe('eval_future_shape');
     });

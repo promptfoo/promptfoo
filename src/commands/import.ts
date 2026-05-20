@@ -215,17 +215,16 @@ function createOpenAIResponse(
 function createOpenAIComponentResult(
   graderName: string,
   grade: number | undefined,
-  pass: boolean | undefined,
+  pass: boolean,
   graderSample: unknown,
 ): GradingResult {
-  const graderPassed = pass === true;
   return {
-    pass: graderPassed,
-    score: graderPassed ? 1 : 0,
+    pass,
+    score: pass ? 1 : 0,
     reason:
       grade === undefined
-        ? `OpenAI grader "${graderName}" ${graderPassed ? 'passed' : 'failed'}.`
-        : `OpenAI grader "${graderName}" ${graderPassed ? 'passed' : 'failed'} with grade ${grade}.`,
+        ? `OpenAI grader "${graderName}" ${pass ? 'passed' : 'failed'}.`
+        : `OpenAI grader "${graderName}" ${pass ? 'passed' : 'failed'} with grade ${grade}.`,
     namedScores: grade === undefined ? undefined : { [graderName]: grade },
     metadata: {
       openaiGraderName: graderName,
@@ -238,7 +237,7 @@ function createOpenAIComponentResult(
 
 function createOpenAIGradingResult(row: OpenAIEvalsJsonlRow): GradingResult {
   const passes = row.passes ?? {};
-  const graderNames = Array.from(new Set([...Object.keys(row.grades), ...Object.keys(passes)]));
+  const graderNames = Object.keys(passes);
   const componentResults = graderNames.map((graderName) =>
     createOpenAIComponentResult(
       graderName,
@@ -249,7 +248,7 @@ function createOpenAIGradingResult(row: OpenAIEvalsJsonlRow): GradingResult {
   );
   const passedCount = componentResults.filter((result) => result.pass).length;
   const totalCount = componentResults.length;
-  const pass = totalCount > 0 && passedCount === totalCount;
+  const pass = totalCount === 0 || passedCount === totalCount;
   const failedNames = componentResults
     .filter((result) => !result.pass)
     .map((result) => result.metadata?.openaiGraderName)
@@ -257,10 +256,10 @@ function createOpenAIGradingResult(row: OpenAIEvalsJsonlRow): GradingResult {
 
   return {
     pass,
-    score: totalCount === 0 ? 0 : passedCount / totalCount,
+    score: totalCount === 0 ? 1 : passedCount / totalCount,
     reason:
       totalCount === 0
-        ? 'Imported OpenAI eval item did not include grader pass results.'
+        ? 'Imported OpenAI eval item did not include grader pass results; grader scores are preserved as named scores.'
         : pass
           ? 'All imported OpenAI eval graders passed.'
           : `Imported OpenAI eval graders failed: ${failedNames.join(', ')}.`,
@@ -283,6 +282,7 @@ function createOpenAIResult(
   const gradingResult = createOpenAIGradingResult(row);
   const response = createOpenAIResponse(row.sample);
   const error = getOpenAISampleError(row.sample);
+  const success = error === undefined && gradingResult.pass;
   const promptRaw =
     typeof row.item['input'] === 'string'
       ? row.item['input']
@@ -315,12 +315,12 @@ function createOpenAIResult(
     ...(response === undefined ? {} : { response }),
     failureReason:
       error === undefined
-        ? gradingResult.pass
+        ? success
           ? ResultFailureReason.NONE
           : ResultFailureReason.ASSERT
         : ResultFailureReason.ERROR,
-    success: gradingResult.pass,
-    score: gradingResult.score,
+    success,
+    score: error === undefined ? gradingResult.score : 0,
     latencyMs: 0,
     gradingResult,
     namedScores: row.grades,
@@ -337,6 +337,27 @@ function createOpenAIResult(
       },
     },
   };
+}
+
+function canonicalizeOpenAIItem(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeOpenAIItem);
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalizeOpenAIItem(value[key])]),
+  );
+}
+
+function getOpenAIItemAlignmentKey(row: OpenAIEvalsJsonlRow): string {
+  const itemHash = sha256(JSON.stringify(canonicalizeOpenAIItem(row.item)));
+  return `${row.data_source_idx}:${itemHash}`;
 }
 
 function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['metrics'] {
@@ -392,21 +413,19 @@ function convertOpenAIEvalsJsonl(rows: OpenAIEvalsJsonlRow[]) {
       rows.filter((row) => row.run_id === runId),
     ),
   );
-  const firstRowByDataSourceIdx = new Map<number, OpenAIEvalsJsonlRow>();
+  const firstRowByAlignmentKey = new Map<string, OpenAIEvalsJsonlRow>();
   for (const row of rows) {
-    if (!firstRowByDataSourceIdx.has(row.data_source_idx)) {
-      firstRowByDataSourceIdx.set(row.data_source_idx, row);
+    const alignmentKey = getOpenAIItemAlignmentKey(row);
+    if (!firstRowByAlignmentKey.has(alignmentKey)) {
+      firstRowByAlignmentKey.set(alignmentKey, row);
     }
   }
-  const testIdxByDataSourceIdx = new Map(
-    Array.from(firstRowByDataSourceIdx.keys()).map((dataSourceIdx, index) => [
-      dataSourceIdx,
-      index,
-    ]),
+  const testIdxByAlignmentKey = new Map(
+    Array.from(firstRowByAlignmentKey.keys()).map((alignmentKey, index) => [alignmentKey, index]),
   );
   const results = rows.map((row) => {
     const promptIdx = promptIdxByRunId.get(row.run_id);
-    const testIdx = testIdxByDataSourceIdx.get(row.data_source_idx);
+    const testIdx = testIdxByAlignmentKey.get(getOpenAIItemAlignmentKey(row));
     if (promptIdx === undefined || testIdx === undefined) {
       throw new Error('Failed to align imported OpenAI eval item.');
     }
@@ -416,7 +435,7 @@ function convertOpenAIEvalsJsonl(rows: OpenAIEvalsJsonlRow[]) {
     ...importedPrompt,
     metrics: createOpenAIPromptMetrics(results.filter((result) => result.promptIdx === promptIdx)),
   }));
-  const tests = Array.from(firstRowByDataSourceIdx.values()).map<AtomicTestCase>((row) => ({
+  const tests = Array.from(firstRowByAlignmentKey.values()).map<AtomicTestCase>((row) => ({
     description: `Imported OpenAI eval item ${row.data_source_idx}`,
     vars: createOpenAIItemVars(row.item),
     metadata: {
