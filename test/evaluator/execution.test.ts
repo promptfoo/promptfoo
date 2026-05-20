@@ -405,6 +405,51 @@ describeEvaluator('evaluator execution control', () => {
     );
   });
 
+  it('preserves response metrics when post-provider processing throws', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider-transform-error-metrics'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        cost: 0.05,
+        tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 0, numRequests: 1 },
+        metadata: { numTurns: 5 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          options: {
+            transform: 'throw new Error("transform failed");\n',
+          },
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.tokenUsage).toEqual(
+      expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
+    );
+    expect(summary.results[0]).toEqual(
+      expect.objectContaining({
+        error: expect.stringContaining('transform failed'),
+        cost: 0.05,
+        metadata: expect.objectContaining({ numTurns: 5 }),
+        response: expect.objectContaining({
+          output: 'Test output',
+          cost: 0.05,
+          tokenUsage: expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
+          metadata: expect.objectContaining({ numTurns: 5 }),
+        }),
+      }),
+    );
+  });
+
   it('evaluate with provider that throws exception', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-throws'),

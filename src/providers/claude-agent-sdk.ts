@@ -1456,6 +1456,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 
+          const tokenUsage: ProviderResponse['tokenUsage'] = {
+            prompt: finalMsg.usage?.input_tokens,
+            completion: finalMsg.usage?.output_tokens,
+            total:
+              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
+                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
+                : undefined,
+          };
+          const cost = finalMsg.total_cost_usd ?? 0;
+          const sessionId = finalMsg.session_id;
+
           try {
             // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
             // definitive answer, so only warn when origin was unavailable for
@@ -1485,16 +1496,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               });
             }
             const raw = JSON.stringify(finalMsg);
-            const tokenUsage: ProviderResponse['tokenUsage'] = {
-              prompt: finalMsg.usage?.input_tokens,
-              completion: finalMsg.usage?.output_tokens,
-              total:
-                finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-                  ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
-                  : undefined,
-            };
-            const cost = finalMsg.total_cost_usd ?? 0;
-            const sessionId = finalMsg.session_id;
 
             const toolCallsArray = Array.from(toolCallsMap.values());
             const skillCalls = deriveSkillCalls(toolCallsArray);
@@ -1573,20 +1574,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             };
           } catch (postStreamError) {
             logger.error(`Error processing Claude Agent SDK result: ${postStreamError}`);
-            const partialTokenUsage: ProviderResponse['tokenUsage'] = finalMsg.usage
-              ? {
-                  prompt: finalMsg.usage.input_tokens,
-                  completion: finalMsg.usage.output_tokens,
-                  total:
-                    finalMsg.usage.input_tokens && finalMsg.usage.output_tokens
-                      ? finalMsg.usage.input_tokens + finalMsg.usage.output_tokens
-                      : undefined,
-                }
-              : undefined;
             return {
               error: `Error processing Claude Agent SDK result: ${postStreamError}`,
-              tokenUsage: partialTokenUsage,
-              cost: finalMsg.total_cost_usd ?? 0,
+              tokenUsage,
+              cost,
+              sessionId,
             };
           }
         },

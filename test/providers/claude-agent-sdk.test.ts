@@ -473,6 +473,38 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.error).toBeUndefined();
       });
 
+      it('should preserve stream metrics when response processing fails', async () => {
+        const structuredData: Record<string, unknown> = {};
+        structuredData.self = structuredData;
+        const errorSpy = vi.spyOn(logger, 'error').mockImplementation(function () {});
+
+        try {
+          mockQuery.mockReturnValue(
+            createMockStructuredResponse(
+              'Circular result',
+              structuredData,
+              { input_tokens: 10, output_tokens: 20 },
+              0.002,
+            ),
+          );
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toContain('Error processing Claude Agent SDK result');
+          expect(result.cost).toBe(0.002);
+          expect(result.sessionId).toBe('test-session-123');
+          expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
+          expect(errorSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Error processing Claude Agent SDK result'),
+          );
+        } finally {
+          errorSpy.mockRestore();
+        }
+      });
+
       it('should fall back to text result when no structured output', async () => {
         mockQuery.mockReturnValue(
           createMockResponse('Plain text response', { input_tokens: 10, output_tokens: 20 }),

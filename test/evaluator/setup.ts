@@ -17,6 +17,12 @@ const exactTransformHandlers = new Map<string, (input: any) => any>([
   ['output + "-test"', (input) => input + '-test'],
   ['`Transform: ${output}`', (input) => `Transform: ${input}`],
   ['`Postprocess: ${output}`', (input) => `Postprocess: ${input}`],
+  [
+    'throw new Error("transform failed");\n',
+    () => {
+      throw new Error('transform failed');
+    },
+  ],
 ]);
 
 function parseJsonValueTransform(input: any) {

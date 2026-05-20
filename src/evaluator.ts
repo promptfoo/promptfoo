@@ -1390,6 +1390,12 @@ async function runEvalInternal({
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
     trackProviderUsage(provider, response);
+
+    // Preserve provider accounting even if response transforms or grading throw below.
+    if (response.tokenUsage) {
+      accumulateResponseTokenUsage(ret.tokenUsage, response);
+    }
+
     await applyRunEvalResponseOutcome({
       abortSignal,
       deferGrading,
@@ -1409,11 +1415,6 @@ async function runEvalInternal({
       traceContext,
       vars: state.vars,
     });
-
-    // Update token usage stats
-    if (response.tokenUsage) {
-      accumulateResponseTokenUsage(ret.tokenUsage, response);
-    }
 
     if (test.options?.storeOutputAs && ret.response?.output && registers) {
       // Save the output in a register for later use
@@ -1449,7 +1450,10 @@ async function runEvalInternal({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
-        metadata,
+        metadata: {
+          ...ret?.metadata,
+          ...metadata,
+        },
         cost: ret?.cost,
         tokenUsage: ret?.tokenUsage,
         response: ret?.response,
