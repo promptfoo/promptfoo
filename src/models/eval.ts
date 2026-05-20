@@ -462,6 +462,9 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
       completedPrompts?: CompletedPrompt[];
+      durationMs?: number;
+      generationDurationMs?: number;
+      evaluationDurationMs?: number;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -474,6 +477,16 @@ export default class Eval {
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
+    const durationResults = {
+      ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
+      ...(opts?.generationDurationMs !== undefined && {
+        generationDurationMs: opts.generationDurationMs,
+      }),
+      ...(opts?.evaluationDurationMs !== undefined && {
+        evaluationDurationMs: opts.evaluationDurationMs,
+      }),
+    };
+
     db.transaction(() => {
       db.insert(evalsTable)
         .values({
@@ -482,7 +495,7 @@ export default class Eval {
           author,
           description: config.description,
           config,
-          results: {},
+          results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
@@ -571,6 +584,9 @@ export default class Eval {
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+      durationMs: opts?.durationMs,
+      generationDurationMs: opts?.generationDurationMs,
+      evaluationDurationMs: opts?.evaluationDurationMs,
     });
   }
 

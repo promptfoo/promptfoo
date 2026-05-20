@@ -62,6 +62,29 @@ function deriveVarsFromResults(results: any[]): string[] {
   return Array.from(varSet);
 }
 
+/**
+ * Prefer explicit vars from parity-aware exports; older exports derive vars from results.
+ */
+function extractVars(evalData: any): string[] {
+  if (Array.isArray(evalData.vars)) {
+    return evalData.vars.filter((value): value is string => typeof value === 'string');
+  }
+  return deriveVarsFromResults(evalData.results?.results || []);
+}
+
+function extractDuration(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function extractDurations(evalData: any) {
+  const stats = evalData.results?.stats;
+  return {
+    durationMs: extractDuration(stats?.durationMs),
+    generationDurationMs: extractDuration(stats?.generationDurationMs),
+    evaluationDurationMs: extractDuration(stats?.evaluationDurationMs),
+  };
+}
+
 export function importCommand(program: Command) {
   program
     .command('import <file>')
@@ -100,8 +123,8 @@ export function importCommand(program: Command) {
         if (evalData.results.version === 3) {
           logger.debug('Importing v3 eval');
 
-          // Derive vars from results for round-trip fidelity
-          const vars = deriveVarsFromResults(evalData.results.results || []);
+          const vars = extractVars(evalData);
+          const durations = extractDurations(evalData);
 
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
             id: cmdObj.newId ? undefined : importId,
@@ -109,6 +132,8 @@ export function importCommand(program: Command) {
             author: importAuthor,
             completedPrompts: evalData.results.prompts,
             vars,
+            runtimeOptions: evalData.runtimeOptions,
+            ...durations,
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
           evalId = evalRecord.id;

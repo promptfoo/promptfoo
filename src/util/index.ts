@@ -21,7 +21,7 @@ export {
   readOutput,
 } from './file';
 // Output operations
-export { createOutputMetadata, writeMultipleOutputs, writeOutput } from './output';
+export { createOutputData, createOutputMetadata, writeMultipleOutputs, writeOutput } from './output';
 // Provider utilities
 export { providerToIdentifier } from './provider';
 // Template rendering

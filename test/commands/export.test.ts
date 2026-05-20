@@ -21,6 +21,21 @@ vi.mock('../../src/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     writeOutput: vi.fn(),
+    createOutputData: vi.fn().mockImplementation(async (evalRecord, shareableUrl) => ({
+      evalId: evalRecord.id,
+      results: await evalRecord.toEvaluateSummary(),
+      config: evalRecord.config,
+      shareableUrl,
+      metadata: {
+        promptfooVersion: '1.0.0',
+        nodeVersion: 'v20.0.0',
+        platform: 'linux',
+        arch: 'x64',
+        exportedAt: '2025-07-01T00:00:00.000Z',
+        evaluationCreatedAt: '2025-07-01T00:00:00.000Z',
+        author: 'test-author',
+      },
+    })),
 
     createOutputMetadata: vi.fn().mockReturnValue({
       promptfooVersion: '1.0.0',

@@ -75,6 +75,24 @@ export function createOutputMetadata(evalRecord: Eval) {
   };
 }
 
+export async function createOutputData(
+  evalRecord: Eval,
+  shareableUrl: string | null,
+): Promise<OutputFile> {
+  const summary = await evalRecord.toEvaluateSummary();
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+
+  return {
+    evalId: evalRecord.id,
+    results: summary,
+    config: redactedConfig,
+    shareableUrl,
+    metadata: createOutputMetadata(evalRecord),
+    ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
+    ...(evalRecord.runtimeOptions && { runtimeOptions: evalRecord.runtimeOptions }),
+  };
+}
+
 /**
  * JSON writer with improved error handling for large datasets.
  * Provides helpful error messages when memory limits are exceeded.
@@ -84,18 +102,8 @@ async function writeJsonOutputSafely(
   evalRecord: Eval,
   shareableUrl: string | null,
 ): Promise<void> {
-  const metadata = createOutputMetadata(evalRecord);
-
   try {
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-    const outputData: OutputFile = {
-      evalId: evalRecord.id,
-      results: summary,
-      config: redactedConfig,
-      shareableUrl,
-      metadata,
-    };
+    const outputData = await createOutputData(evalRecord, shareableUrl);
 
     // Use standard JSON.stringify with proper formatting
     const jsonString = JSON.stringify(outputData, null, 2);
@@ -153,8 +161,6 @@ export async function writeOutput(
   const outputDir = path.dirname(outputPath);
   await fsPromises.mkdir(outputDir, { recursive: true });
 
-  const metadata = createOutputMetadata(evalRecord);
-
   if (outputExtension === 'junit.xml') {
     await writeJunitXmlOutput(outputPath, evalRecord);
   } else if (outputExtension === 'csv') {
@@ -174,17 +180,9 @@ export async function writeOutput(
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
-    const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     await fsPromises.writeFile(
       outputPath,
-      yaml.dump({
-        evalId: evalRecord.id,
-        results: summary,
-        config: redactedConfig,
-        shareableUrl,
-        metadata,
-      } as OutputFile),
+      yaml.dump(await createOutputData(evalRecord, shareableUrl)),
     );
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();

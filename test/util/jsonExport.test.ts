@@ -86,6 +86,19 @@ describe('JSON export with improved error handling', () => {
       expect(parsed).toHaveProperty('metadata');
     });
 
+    it('should export persisted vars and runtime options for round-trip imports', async () => {
+      mockEval.vars = ['topic', 'tone'];
+      mockEval.runtimeOptions = { cache: false, maxConcurrency: 2 };
+
+      await writeOutput(tempFilePath, mockEval, null);
+
+      const content = fs.readFileSync(tempFilePath, 'utf8');
+      const parsed = JSON.parse(content);
+
+      expect(parsed).toHaveProperty('vars', ['topic', 'tone']);
+      expect(parsed).toHaveProperty('runtimeOptions', { cache: false, maxConcurrency: 2 });
+    });
+
     it('should handle null shareableUrl', async () => {
       await writeOutput(tempFilePath, mockEval, null);
 

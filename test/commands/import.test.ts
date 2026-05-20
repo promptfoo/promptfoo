@@ -157,6 +157,31 @@ describe('importCommand', () => {
       expect(importedEval!.vars).toContain('riddle');
     });
 
+    it('should preserve exported vars, runtime options, and durations', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.vars = ['riddle', 'unused_export_var'];
+      sampleData.runtimeOptions = { cache: false, maxConcurrency: 2, repeat: 3 };
+      sampleData.results.stats.durationMs = 4321;
+      sampleData.results.stats.generationDurationMs = 123;
+      sampleData.results.stats.evaluationDurationMs = 4198;
+
+      const filePath = path.join(__dirname, `temp-parity-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval).toBeDefined();
+      expect(importedEval!.vars).toEqual(sampleData.vars);
+      expect(importedEval!.runtimeOptions).toEqual(sampleData.runtimeOptions);
+      expect(importedEval!.durationMs).toBe(4321);
+      expect(importedEval!.generationDurationMs).toBe(123);
+      expect(importedEval!.evaluationDurationMs).toBe(4198);
+    });
+
     it('should preserve author from metadata', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));

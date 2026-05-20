@@ -1391,6 +1391,8 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
 }
 
 // Live eval job state
