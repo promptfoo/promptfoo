@@ -154,10 +154,10 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.106.2",
-    "dompurify": "3.4.2",
+    "dompurify": "3.4.3",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.2"
+      "dompurify": "3.4.3"
     }
   },
   "devDependencies": {
