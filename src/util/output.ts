@@ -6,6 +6,7 @@ import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
 import yaml from 'js-yaml';
 import { BLOB_MAX_SIZE, getBlobByHash } from '../blobs';
+import { collectBlobHashes } from '../blobs/blobRefs';
 import { VERSION } from '../constants';
 import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
@@ -31,8 +32,6 @@ import type { EvaluateTableOutput } from '../types';
 export interface OutputOptions {
   includeMedia?: boolean;
 }
-
-const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/gi;
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
@@ -149,38 +148,6 @@ export async function createOutputData(
   }
 
   return output;
-}
-
-function collectBlobHashes(
-  value: unknown,
-  hashes = new Set<string>(),
-  seen = new WeakSet<object>(),
-): Set<string> {
-  if (typeof value === 'string') {
-    for (const match of value.matchAll(BLOB_URI_REGEX)) {
-      hashes.add(match[1].toLowerCase());
-    }
-    return hashes;
-  }
-
-  if (Array.isArray(value)) {
-    for (const child of value) {
-      collectBlobHashes(child, hashes, seen);
-    }
-    return hashes;
-  }
-
-  if (value && typeof value === 'object') {
-    if (seen.has(value)) {
-      return hashes;
-    }
-    seen.add(value);
-    for (const child of Object.values(value as Record<string, unknown>)) {
-      collectBlobHashes(child, hashes, seen);
-    }
-  }
-
-  return hashes;
 }
 
 async function exportBlobAssets(results: OutputFile['results']): Promise<ExportedBlobAsset[]> {

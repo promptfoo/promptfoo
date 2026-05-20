@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest'
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { writeOutput } from '../../src/util/index';
 import { getLogDirectory, getLogFiles } from '../../src/util/logs';
+import { writeOutput } from '../../src/util/output';
 
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -17,7 +17,7 @@ vi.mock('../../src/telemetry', () => ({
   },
 }));
 
-vi.mock('../../src/util', async (importOriginal) => {
+vi.mock('../../src/util/output', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     writeOutput: vi.fn(),
@@ -36,16 +36,6 @@ vi.mock('../../src/util', async (importOriginal) => {
         author: 'test-author',
       },
     })),
-
-    createOutputMetadata: vi.fn().mockReturnValue({
-      promptfooVersion: '1.0.0',
-      nodeVersion: 'v20.0.0',
-      platform: 'linux',
-      arch: 'x64',
-      exportedAt: '2025-07-01T00:00:00.000Z',
-      evaluationCreatedAt: '2025-07-01T00:00:00.000Z',
-      author: 'test-author',
-    }),
   };
 });
 

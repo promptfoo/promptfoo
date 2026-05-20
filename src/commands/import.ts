@@ -159,28 +159,31 @@ function validateBlobAssetData(asset: ExportedBlobAsset): Buffer {
   return data;
 }
 
-function prepareBlobAssets(blobAssets: unknown): ExportedBlobAsset[] {
+interface PreparedBlobAsset {
+  asset: ExportedBlobAsset;
+  data: Buffer;
+}
+
+function prepareBlobAssets(blobAssets: unknown): PreparedBlobAsset[] {
   if (!Array.isArray(blobAssets)) {
     return [];
   }
 
-  const preparedAssets: ExportedBlobAsset[] = [];
+  const preparedAssets: PreparedBlobAsset[] = [];
   for (const asset of blobAssets) {
     if (!isImportableBlobAsset(asset)) {
       logger.debug('Skipping malformed embedded blob during import');
       continue;
     }
 
-    validateBlobAssetData(asset);
-    preparedAssets.push(asset);
+    preparedAssets.push({ asset, data: validateBlobAssetData(asset) });
   }
 
   return preparedAssets;
 }
 
-async function importBlobAssets(blobAssets: ExportedBlobAsset[]): Promise<void> {
-  for (const asset of blobAssets) {
-    const data = validateBlobAssetData(asset);
+async function importBlobAssets(blobAssets: PreparedBlobAsset[]): Promise<void> {
+  for (const { asset, data } of blobAssets) {
     const { ref } = await storeBlob(data, asset.mimeType);
     if (ref.hash !== asset.hash.toLowerCase()) {
       throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
@@ -242,10 +245,16 @@ async function importTraces(
   generateNewTraceIds: boolean,
 ): Promise<void> {
   const traceStore = getTraceStore();
+  const usedTraceIds = new Set<string>();
   for (const trace of traces) {
     // Trace IDs are globally unique in the local trace store. Duplicate eval
-    // imports need fresh IDs so spans never attach to the original eval.
-    const traceId = generateNewTraceIds ? crypto.randomUUID().replaceAll('-', '') : trace.traceId;
+    // imports and conflicting imports need fresh IDs so spans never attach to
+    // another eval's trace.
+    let traceId = trace.traceId;
+    if (generateNewTraceIds || usedTraceIds.has(traceId) || (await traceStore.getTrace(traceId))) {
+      traceId = crypto.randomUUID().replaceAll('-', '');
+    }
+    usedTraceIds.add(traceId);
 
     await traceStore.createTrace({
       traceId,

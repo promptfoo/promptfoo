@@ -6,8 +6,8 @@ import zlib from 'zlib';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { createOutputData, writeOutput } from '../util/index';
 import { getLogDirectory, getLogFiles } from '../util/logs';
+import { createOutputData, writeOutput } from '../util/output';
 import type { Command } from 'commander';
 
 /**

@@ -506,6 +506,52 @@ describe('importCommand', () => {
       ]);
     });
 
+    it('should remap imported trace IDs that already belong to another eval', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-cross-eval-collision',
+          evaluationId: sampleData.evalId,
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-original', name: 'original span', startTime: 10 }],
+        },
+      ];
+
+      const filePath = path.join(__dirname, `temp-trace-collision-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const collidingData = structuredClone(sampleData);
+      collidingData.evalId = 'eval-trace-collision-import';
+      collidingData.traces[0].evaluationId = collidingData.evalId;
+      collidingData.traces[0].spans = [
+        { spanId: 'span-imported', name: 'imported span', startTime: 20 },
+      ];
+      fs.writeFileSync(filePath, JSON.stringify(collidingData));
+
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', filePath]);
+
+      const traceStore = new TraceStore();
+      const originalTraces = await traceStore.getTracesByEvaluation(sampleData.evalId);
+      const importedTraces = await traceStore.getTracesByEvaluation(collidingData.evalId);
+
+      expect(originalTraces).toHaveLength(1);
+      expect(originalTraces[0].spans).toEqual([
+        expect.objectContaining({ spanId: 'span-original' }),
+      ]);
+      expect(importedTraces).toHaveLength(1);
+      expect(importedTraces[0].traceId).not.toBe(originalTraces[0].traceId);
+      expect(importedTraces[0].spans).toEqual([
+        expect.objectContaining({ spanId: 'span-imported' }),
+      ]);
+    });
+
     it('should replace existing eval with --force flag', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
