@@ -7,12 +7,18 @@ import { XMLBuilder } from 'fast-xml-parser';
 import yaml from 'js-yaml';
 import { BLOB_MAX_SIZE, getBlobByHash } from '../blobs';
 import { VERSION } from '../constants';
+import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { getTraceStore } from '../tracing/store';
-import { type CsvRow, type ExportedBlobAsset, type OutputFile, ResultFailureReason } from '../types';
+import {
+  type CsvRow,
+  type ExportedBlobAsset,
+  type OutputFile,
+  ResultFailureReason,
+} from '../types';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
@@ -61,6 +67,32 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   }) as OutputFile['config'];
 }
 
+function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
+  const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
+  const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
+
+  if (!shouldStripMetadata && !shouldStripTestVars) {
+    return traces;
+  }
+
+  return traces.map((trace) => {
+    if (shouldStripMetadata) {
+      const { metadata: _metadata, ...projectedTrace } = trace;
+      return projectedTrace;
+    }
+
+    if (!trace.metadata || !('vars' in trace.metadata)) {
+      return trace;
+    }
+
+    const { vars: _vars, ...metadata } = trace.metadata;
+    return {
+      ...trace,
+      ...(Object.keys(metadata).length > 0 && { metadata }),
+    };
+  });
+}
+
 export function createOutputMetadata(evalRecord: Eval) {
   let evaluationCreatedAt: string | undefined;
   if (evalRecord.createdAt) {
@@ -106,7 +138,7 @@ export async function createOutputData(
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
     ...(evalRecord.runtimeOptions && { runtimeOptions: evalRecord.runtimeOptions }),
-    ...(traces && traces.length > 0 && { traces }),
+    ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
   };
 
   if (options.includeMedia) {

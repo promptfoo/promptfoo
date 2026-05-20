@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
+import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
 import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
@@ -307,6 +308,73 @@ describe('writeOutput', () => {
       expect(result.testCase.vars).toBeUndefined();
       expect(written).not.toContain('testcase-secret');
     } finally {
+      restoreEnv();
+    }
+  });
+
+  it('omits trace vars from JSON output when test variable stripping is enabled', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-vars',
+        evaluationId: 'eval-strip-vars',
+        testCaseId: 'case-strip-vars',
+        metadata: {
+          testIdx: 0,
+          promptIdx: 0,
+          source: 'trace export',
+          vars: {
+            customerEmail: 'trace-var-secret@example.com',
+          },
+        },
+        spans: [],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0].metadata).toEqual({
+        testIdx: 0,
+        promptIdx: 0,
+        source: 'trace export',
+      });
+      expect(written).not.toContain('trace-var-secret@example.com');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
+  it('omits trace metadata from JSON output when metadata stripping is enabled', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-metadata',
+        evaluationId: 'eval-strip-metadata',
+        testCaseId: 'case-strip-metadata',
+        metadata: {
+          note: 'trace-metadata-secret',
+          vars: {
+            customerEmail: 'trace-var-secret@example.com',
+          },
+        },
+        spans: [],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0]).not.toHaveProperty('metadata');
+      expect(written).not.toContain('trace-metadata-secret');
+      expect(written).not.toContain('trace-var-secret@example.com');
+    } finally {
+      traceSpy.mockRestore();
       restoreEnv();
     }
   });

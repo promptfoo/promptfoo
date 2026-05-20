@@ -16,7 +16,7 @@ interface BlobContext {
 
 type BlobKind = 'audio' | 'image';
 
-const BLOB_URI_REGEX = /^promptfoo:\/\/blob\/([a-f0-9]{64})$/i;
+const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{64})/gi;
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 
 function isDataUrl(value: string): boolean {
@@ -616,30 +616,28 @@ export function isBlobStorageEnabled(): boolean {
   return !getEnvBool('PROMPTFOO_INLINE_MEDIA', false);
 }
 
-function parseBlobHashFromValue(value: unknown): string | null {
+function parseBlobHashesFromValue(value: unknown): string[] {
   if (!value) {
-    return null;
+    return [];
   }
 
   if (typeof value === 'string') {
-    const match = value.match(BLOB_URI_REGEX);
-    return match ? match[1] : null;
+    return [
+      ...new Set(Array.from(value.matchAll(BLOB_URI_REGEX), (match) => match[1].toLowerCase())),
+    ];
   }
 
   if (typeof value === 'object') {
     const candidate = value as { uri?: string; hash?: string };
     if (candidate.hash && BLOB_HASH_REGEX.test(candidate.hash)) {
-      return candidate.hash;
+      return [candidate.hash.toLowerCase()];
     }
     if (candidate.uri && typeof candidate.uri === 'string') {
-      const match = candidate.uri.match(BLOB_URI_REGEX);
-      if (match) {
-        return match[1];
-      }
+      return parseBlobHashesFromValue(candidate.uri);
     }
   }
 
-  return null;
+  return [];
 }
 
 async function recordExistingBlobReferences(
@@ -647,9 +645,9 @@ async function recordExistingBlobReferences(
   context: BlobContext,
   location: string,
 ): Promise<void> {
-  const hash = parseBlobHashFromValue(value);
-  if (hash) {
-    await recordBlobReference(hash, { ...context, location });
+  const hashes = parseBlobHashesFromValue(value);
+  if (hashes.length > 0) {
+    await Promise.all(hashes.map((hash) => recordBlobReference(hash, { ...context, location })));
     return;
   }
 
