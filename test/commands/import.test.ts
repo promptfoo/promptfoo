@@ -294,11 +294,56 @@ describe('importCommand', () => {
 
         const imported = await getBlobByHash(hash);
         expect(imported.data).toEqual(data);
+        expect(imported.metadata.mimeType).toBe('image/png');
 
         const references = (await getDb().all(
           `SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = '${hash}'`,
         )) as Array<{ blob_hash: string; eval_id: string }>;
         expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it('should downgrade active embedded blob MIME types during import', async () => {
+      const blobDir = createTempDir('promptfoo-import-active-mime-blobs-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const htmlData = Buffer.from('<script>alert(document.domain)</script>');
+        const htmlHash = sha256(htmlData);
+        const svgData = Buffer.from('<svg onload="alert(document.domain)" />');
+        const svgHash = sha256(svgData);
+        sampleData.results.results[0].response = {
+          output: `promptfoo://blob/${htmlHash} promptfoo://blob/${svgHash}`,
+        };
+        sampleData.blobAssets = [
+          {
+            hash: htmlHash,
+            mimeType: 'text/html',
+            sizeBytes: htmlData.length,
+            data: htmlData.toString('base64'),
+          },
+          {
+            hash: svgHash,
+            mimeType: 'image/svg+xml',
+            sizeBytes: svgData.length,
+            data: svgData.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-active-mime-blob-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect((await getBlobByHash(htmlHash)).metadata.mimeType).toBe('application/octet-stream');
+        expect((await getBlobByHash(svgHash)).metadata.mimeType).toBe('application/octet-stream');
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);

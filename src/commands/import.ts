@@ -99,6 +99,19 @@ function extractDurations(evalData: any) {
 }
 
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
+// Portable exports are untrusted input; imported blobs must not become active same-origin content.
+const IMPORTED_BLOB_MIME_TYPE_FALLBACK = 'application/octet-stream';
+const SAFE_IMPORTED_BLOB_MIME_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/ogg',
+  'video/webm',
+]);
+const SAFE_IMPORTED_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
 
 function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
   const candidate = results as Partial<EvaluateSummaryV3>;
@@ -137,6 +150,18 @@ function isImportableBlobAsset(asset: unknown): asset is ExportedBlobAsset {
     candidate.sizeBytes >= 0 &&
     typeof candidate.data === 'string'
   );
+}
+
+function sanitizeImportedBlobMimeType(mimeType: string): string {
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  if (
+    SAFE_IMPORTED_BLOB_MIME_TYPES.has(normalizedMimeType) ||
+    SAFE_IMPORTED_AUDIO_MIME_TYPE_REGEX.test(normalizedMimeType)
+  ) {
+    return normalizedMimeType;
+  }
+
+  return IMPORTED_BLOB_MIME_TYPE_FALLBACK;
 }
 
 function decodeBlobAsset(asset: ExportedBlobAsset): Buffer {
@@ -191,7 +216,7 @@ function prepareBlobAssets(
 
 async function importBlobAssets(blobAssets: PreparedBlobAsset[]): Promise<void> {
   for (const { asset, data } of blobAssets) {
-    const { ref } = await storeBlob(data, asset.mimeType);
+    const { ref } = await storeBlob(data, sanitizeImportedBlobMimeType(asset.mimeType));
     if (ref.hash !== asset.hash.toLowerCase()) {
       throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
     }
