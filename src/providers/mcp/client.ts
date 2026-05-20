@@ -458,7 +458,7 @@ export class MCPClient {
 
             return {
               content,
-              ...(result.isError ? { error: content || 'MCP tool returned an error result' } : {}),
+              ...(result.isError ? { isError: true } : {}),
               raw: result,
             };
           } catch (error) {

@@ -468,8 +468,8 @@ describe('FunctionCallbackHandler', () => {
         { name: 'failing_tool', description: 'A tool that fails' },
       ]);
       mockMCPClient.callTool.mockResolvedValue({
-        content: '',
-        error: 'Tool execution failed: Invalid arguments',
+        content: 'Tool execution failed: Invalid arguments',
+        isError: true,
       });
 
       const call = { name: 'failing_tool', arguments: '{"invalid": true}' };

@@ -122,5 +122,6 @@ export interface MCPTool {
 export interface MCPToolResult {
   content: string;
   error?: string;
+  isError?: boolean;
   raw?: unknown;
 }

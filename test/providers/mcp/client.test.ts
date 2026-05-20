@@ -810,7 +810,7 @@ describe('MCPClient', () => {
 
       expect(result).toEqual({
         content: JSON.stringify(errorContent),
-        error: JSON.stringify(errorContent),
+        isError: true,
         raw: {
           content: errorContent,
           isError: true,

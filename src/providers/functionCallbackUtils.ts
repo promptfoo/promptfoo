@@ -246,9 +246,11 @@ export class FunctionCallbackHandler {
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
-      if (result?.error) {
+      if (result?.error || result?.isError) {
         return {
-          output: `MCP Tool Error (${toolName}): ${result.error}`,
+          output: `MCP Tool Error (${toolName}): ${
+            result.error || result.content || 'Tool returned an error result'
+          }`,
           isError: true,
         };
       }

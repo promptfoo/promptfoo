@@ -55,6 +55,29 @@ describe('MCPProvider', () => {
     });
   });
 
+  it('should preserve MCP tool error results as direct provider output', async () => {
+    const rawResult = {
+      content: [{ type: 'text', text: 'Path traversal not allowed' }],
+      isError: true,
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'Path traversal not allowed',
+      isError: true,
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({ config: { enabled: true } });
+
+    await expect(provider.callTool('read_file', { path: '../../../etc/passwd' })).resolves.toEqual({
+      output: 'Path traversal not allowed',
+      raw: rawResult,
+      metadata: {
+        toolName: 'read_file',
+        toolArgs: { path: '../../../etc/passwd' },
+      },
+    });
+  });
+
   it('should transform raw MCP results and merge provider metadata', async () => {
     const rawResult = {
       content: [{ type: 'text', text: 'raw response' }],

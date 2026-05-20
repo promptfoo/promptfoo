@@ -1430,8 +1430,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   ): Promise<{ output: string; error?: string }> {
     try {
       const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
-      if (mcpResult?.error) {
-        const msg = formatMcpToolError(name, String(mcpResult.error));
+      if (mcpResult?.error || mcpResult?.isError) {
+        const msg = formatMcpToolError(
+          name,
+          mcpResult.error || mcpResult.content || 'Tool returned an error result',
+        );
         return { output: msg, error: msg };
       }
       return { output: formatMcpToolResult(name, mcpResult?.content) };

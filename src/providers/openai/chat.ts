@@ -685,8 +685,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
-                if (mcpResult?.error) {
-                  results.push(`MCP Tool Error (${functionName}): ${mcpResult.error}`);
+                if (mcpResult?.error || mcpResult?.isError) {
+                  results.push(
+                    `MCP Tool Error (${functionName}): ${
+                      mcpResult.error || mcpResult.content || 'Tool returned an error result'
+                    }`,
+                  );
                 } else {
                   // Normalize MCP content to a readable string
                   const normalizeContent = (content: any): string => {

@@ -1616,7 +1616,8 @@ describe('AnthropicMessagesProvider', () => {
       });
 
       mcpMocks.callTool.mockResolvedValueOnce({
-        error: 'lookup failed',
+        content: 'lookup failed',
+        isError: true,
       });
 
       const createSpy = vi
