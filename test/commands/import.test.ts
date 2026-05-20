@@ -10,6 +10,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { ResultFailureReason } from '../../src/types/index';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -91,7 +92,7 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', filePath]);
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/Failed to import eval.*SyntaxError/),
+        expect.stringMatching(/Failed to import eval.*(?:Unexpected token|JSON)/i),
       );
       expect(process.exitCode).toBe(1);
     });
@@ -244,7 +245,7 @@ describe('importCommand', () => {
       });
 
       expect(results[1].success).toBe(false);
-      expect(results[1].failureReason).toBe(1);
+      expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
       expect(results[1].gradingResult?.reason).toContain('Relevance');
       expect(results[1].testCase.vars?.item).toMatchObject({
         input: 'Can I use multiple promo codes?',
@@ -316,7 +317,7 @@ describe('importCommand', () => {
       const errorResult = results.find(
         (result) => result.metadata?.openai?.runId === 'evalrun_error_fixture',
       );
-      expect(errorResult?.failureReason).toBe(2);
+      expect(errorResult?.failureReason).toBe(ResultFailureReason.ERROR);
       expect(errorResult?.error).toBe('Response input item missing role');
       expect(errorResult?.metadata?.openai?.sample?.error?.type).toBe('invalid_request_error');
 
@@ -411,6 +412,103 @@ describe('importCommand', () => {
       });
       expect(results[0].metadata?.openai?.passes).toEqual({});
       expect(results[0].metadata?.openai?.outputItem?.eval_id).toBe('eval_future_shape');
+    });
+
+    it('should align rows whose items have identical content but different key orderings', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        [
+          {
+            run_id: 'evalrun_canonical_a',
+            data_source_idx: 0,
+            item: { a: 1, b: 2, nested: { x: 10, y: 20 } },
+            grades: { Quality: 1 },
+            passes: { Quality: true },
+          },
+          {
+            run_id: 'evalrun_canonical_b',
+            data_source_idx: 0,
+            item: { nested: { y: 20, x: 10 }, b: 2, a: 1 },
+            grades: { Quality: 1 },
+            passes: { Quality: true },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n'),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEvals = await Eval.getMany(10);
+      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+
+      expect(importedEvals[0].config.tests).toHaveLength(1);
+      expect(results).toHaveLength(2);
+      expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
+      expect(new Set(results.map((result) => result.promptIdx)).size).toBe(2);
+    });
+
+    it('should surface JSON error when a JSONL file mixes valid and invalid lines', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        [
+          JSON.stringify({
+            run_id: 'evalrun_valid',
+            data_source_idx: 0,
+            item: { input: 'hi' },
+            grades: { X: 1 },
+            passes: { X: true },
+          }),
+          'this is not json at all',
+          JSON.stringify({
+            run_id: 'evalrun_valid',
+            data_source_idx: 1,
+            item: { input: 'there' },
+            grades: { X: 1 },
+            passes: { X: true },
+          }),
+        ].join('\n'),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to import eval'));
+      const importedEvals = await Eval.getMany(10);
+      expect(importedEvals).toHaveLength(0);
+    });
+
+    it('should sanitize unsafe characters in the OpenAI run id used as eval id', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({
+          run_id: 'evalrun/with spaces & slashes',
+          data_source_idx: 0,
+          item: { input: 'sanitize me' },
+          grades: { Match: 1 },
+          passes: { Match: true },
+        }),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      const importedEval = await Eval.findById('openai-evals-evalrun_with_spaces___slashes');
+      expect(importedEval).toBeDefined();
+      expect(importedEval!.config.metadata?.openaiEvalsImport).toMatchObject({
+        runIds: ['evalrun/with spaces & slashes'],
+      });
     });
   });
 
