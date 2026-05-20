@@ -2,8 +2,13 @@ import dedent from 'dedent';
 import { isBasicRefusal, isEmptyResponse } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult } from '../../types/index';
-import type { Assertion } from '../../types/index';
+import type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+} from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:xss-output';
 
@@ -120,7 +125,7 @@ export class XssOutputGrader extends RedteamGraderBase {
   async getResult(
     prompt: string,
     llmOutput: string,
-    test: AtomicTestCase,
+    _test: AtomicTestCase,
     _provider: ApiProvider | undefined,
     _renderedValue: AssertionValue | undefined,
   ): Promise<{ grade: GradingResult; rubric: string }> {
