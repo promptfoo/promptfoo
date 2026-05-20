@@ -76,6 +76,39 @@ describe('PythonWorker stderr parsing', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it('clears traceback state after a blank traceback separator', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr(
+      [
+        'Traceback (most recent call last):',
+        '  File "/tmp/provider.py", line 1, in <module>',
+        'ValueError: boom',
+        '',
+        'plain stderr after handled error',
+        '',
+      ].join('\n'),
+    );
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Python worker stderr: Traceback (most recent call last):',
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Python worker stderr: plain stderr after handled error',
+    );
+  });
+
+  it('does not treat a one-line ERROR log as traceback continuation state', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr('ERROR:provider reported a recoverable issue\nplain stderr later\n');
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Python worker stderr: ERROR:provider reported a recoverable issue',
+    );
+    expect(logger.warn).toHaveBeenCalledWith('Python worker stderr: plain stderr later');
+  });
+
   it('buffers split stderr chunks before classifying complete lines', () => {
     const worker = createTestableWorker();
 
@@ -101,6 +134,24 @@ describe('PythonWorker stderr parsing', () => {
     worker.flushStderr();
 
     expect(logger.warn).toHaveBeenCalledWith('Python worker stderr: WARNING:partial stderr line');
+  });
+
+  it('flushes carriage-return-delimited stderr updates', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr('INFO:step 1\rINFO:step 2\r');
+
+    expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:step 1');
+    expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:step 2');
+  });
+
+  it('bounds an unterminated stderr buffer', () => {
+    const worker = createTestableWorker();
+    const longLine = 'x'.repeat(16_384);
+
+    worker.handleStderr(longLine);
+
+    expect(logger.warn).toHaveBeenCalledWith(`Python worker stderr: ${longLine}`);
   });
 });
 

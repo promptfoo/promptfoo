@@ -10,6 +10,8 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
 import { validatePythonPath } from './pythonUtils';
 
+const MAX_STDERR_BUFFER_LENGTH = 16_384;
+
 export class PythonWorker {
   private process: PythonShell | null = null;
   private ready: boolean = false;
@@ -102,13 +104,18 @@ export class PythonWorker {
 
   private handleStderr(data: Buffer | string): void {
     const text = typeof data === 'string' ? data : this.stderrDecoder.write(data);
-    this.stderrBuffer += text;
+    this.stderrBuffer += text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
     const lines = this.stderrBuffer.split('\n');
     this.stderrBuffer = lines.pop() ?? '';
 
     for (const line of lines) {
-      this.logStderrLine(line.replace(/\r$/, ''));
+      this.logStderrLine(line);
+    }
+
+    if (this.stderrBuffer.length >= MAX_STDERR_BUFFER_LENGTH) {
+      this.logStderrLine(this.stderrBuffer);
+      this.stderrBuffer = '';
     }
   }
 
@@ -126,6 +133,7 @@ export class PythonWorker {
 
   private logStderrLine(line: string): void {
     if (!line.trim()) {
+      this.stderrTracebackLevel = null;
       return;
     }
 
@@ -136,7 +144,7 @@ export class PythonWorker {
 
     if (prefixMatch) {
       const level = this.normalizeStderrLevel(prefixMatch[1]);
-      this.stderrTracebackLevel = level === 'error' ? 'error' : null;
+      this.stderrTracebackLevel = null;
       this.writeStderrLog(level, line);
       return;
     }
