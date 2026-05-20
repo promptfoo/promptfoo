@@ -2291,7 +2291,6 @@ describe('ResultsTable Pagination', () => {
       },
       version: 4,
       fetchEvalData: vi.fn(),
-      // Large enough to enable every option in the selector.
       filteredResultsCount: EVAL_TABLE_MAX_PAGE_SIZE + 1,
       totalResultsCount: EVAL_TABLE_MAX_PAGE_SIZE + 1,
       filters: {
@@ -2311,13 +2310,9 @@ describe('ResultsTable Pagination', () => {
     });
 
     const options = await screen.findAllByRole('option');
-    const offered = options.map((node) =>
-      Number(node.getAttribute('data-value') ?? node.textContent ?? '0'),
-    );
-
-    expect(offered.length).toBeGreaterThan(0);
-    for (const size of offered) {
-      expect(size).toBeLessThanOrEqual(EVAL_TABLE_MAX_PAGE_SIZE);
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      expect(Number(option.textContent)).toBeLessThanOrEqual(EVAL_TABLE_MAX_PAGE_SIZE);
     }
   });
 

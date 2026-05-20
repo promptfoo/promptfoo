@@ -67,9 +67,6 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { getNamedMetricTotals } from './utils';
 
-// Options shown in the "Results per page" selector. Filtered against
-// EVAL_TABLE_MAX_PAGE_SIZE so the dropdown never offers a value the server
-// would reject for non-export requests.
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
@@ -2478,20 +2475,15 @@ function ResultsTable({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((size, idx) => {
-                  // Disable an option until the previous tier is exceeded, so the
-                  // dropdown only offers sizes that meaningfully change the view.
-                  const previousSize = idx === 0 ? 0 : PAGE_SIZE_OPTIONS[idx - 1];
-                  return (
-                    <SelectItem
-                      key={size}
-                      value={String(size)}
-                      disabled={filteredResultsCount <= previousSize}
-                    >
-                      {size}
-                    </SelectItem>
-                  );
-                })}
+                {PAGE_SIZE_OPTIONS.map((size, idx) => (
+                  <SelectItem
+                    key={size}
+                    value={String(size)}
+                    disabled={filteredResultsCount <= (PAGE_SIZE_OPTIONS[idx - 1] ?? 0)}
+                  >
+                    {size}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
