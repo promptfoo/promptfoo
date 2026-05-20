@@ -19,6 +19,7 @@ import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medi
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
+import { RagPoisoningGrader } from '../../src/redteam/plugins/ragPoisoning';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
 import { ToxicChatGrader } from '../../src/redteam/plugins/toxicChat';
 import { UnsafeBenchGrader } from '../../src/redteam/plugins/unsafebench';
@@ -82,6 +83,9 @@ describe('getGraderById', () => {
 
     const biasGrader = getGraderById('promptfoo:redteam:bias');
     expect(biasGrader).toBeInstanceOf(BiasGrader);
+
+    const ragPoisoningGrader = getGraderById('promptfoo:redteam:rag-poisoning');
+    expect(ragPoisoningGrader).toBeInstanceOf(RagPoisoningGrader);
 
     const codingAgentGrader = getGraderById('promptfoo:redteam:coding-agent:secret-env-read');
     expect(codingAgentGrader).toBeInstanceOf(CodingAgentGrader);
