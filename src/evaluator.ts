@@ -1321,6 +1321,7 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let ret: EvaluateResult | undefined;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1373,7 +1374,7 @@ async function runEvalInternal({
 
     await applyProviderDelayIfNeeded(provider, response);
 
-    const ret = createEvaluateResult({
+    ret = createEvaluateResult({
       fileMetadata: state.fileMetadata,
       latencyMs,
       prompt,
@@ -1449,6 +1450,9 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        cost: ret?.cost,
+        tokenUsage: ret?.tokenUsage,
+        response: ret?.response,
       },
     ];
   }

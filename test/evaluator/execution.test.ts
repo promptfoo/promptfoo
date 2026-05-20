@@ -361,6 +361,79 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProviderWithError.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('preserves cost, tokenUsage, and metadata when provider returns error response', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider-error-metrics'),
+      callApi: vi.fn().mockResolvedValue({
+        error: 'error_max_turns',
+        cost: 0.05,
+        tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 0, numRequests: 1 },
+        metadata: { numTurns: 5, toolCalls: ['search', 'read'] },
+        raw: '{"subtype":"error_max_turns"}',
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            error: 'error_max_turns',
+            cost: 0.05,
+            metadata: expect.objectContaining({
+              numTurns: 5,
+              toolCalls: ['search', 'read'],
+            }),
+            response: expect.objectContaining({
+              error: 'error_max_turns',
+              cost: 0.05,
+              tokenUsage: expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
+              raw: '{"subtype":"error_max_turns"}',
+            }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('evaluate with provider that throws exception', async () => {
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider-throws'),
+      callApi: vi.fn().mockRejectedValue(new Error('Connection reset')),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary).toEqual(
+      expect.objectContaining({
+        results: expect.arrayContaining([
+          expect.objectContaining({
+            error: expect.stringContaining('Connection reset'),
+            failureReason: ResultFailureReason.ERROR,
+            success: false,
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('should handle evaluation timeout without tearing down the shared provider', async () => {
     vi.useFakeTimers();
 
