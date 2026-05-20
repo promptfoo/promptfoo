@@ -22,7 +22,9 @@ export const XSS_RULES: { name: string; pattern: RegExp }[] = [
   },
   {
     name: 'event-handler-attribute',
-    pattern: /\bon\w+\s*=\s*["']?[^"'\s>]+/i,
+    // Require HTML tag context: on* attribute must appear inside an HTML tag (< ... >)
+    // This avoids matching plain-text key=value pairs like "oncall=alice"
+    pattern: /<[^>]*\bon\w+\s*=\s*["']?[^"'\s>]+[^>]*>/i,
   },
   {
     name: 'data-uri-html',
