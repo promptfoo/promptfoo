@@ -1744,6 +1744,9 @@ describe('AnthropicMessagesProvider', () => {
         completion: 9,
         total: 27,
       });
+      // Cost should still be tracked even when the loop cap aborts the eval —
+      // tokens were spent across both rounds.
+      expect(result.cost).toBeGreaterThan(0);
     });
 
     it('blocks parallel MCP tool execution when it would exceed max_tool_calls', async () => {
@@ -1783,6 +1786,7 @@ describe('AnthropicMessagesProvider', () => {
 
       expect(result.error).toContain('Anthropic MCP tool execution exceeded max_tool_calls=1');
       expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(result.cost).toBeGreaterThan(0);
     });
 
     it('continues MCP tool execution through the streaming path', async () => {
@@ -1904,6 +1908,7 @@ describe('AnthropicMessagesProvider', () => {
         completion: 9,
         total: 27,
       });
+      expect(result.cost).toBeGreaterThan(0);
     });
   });
 

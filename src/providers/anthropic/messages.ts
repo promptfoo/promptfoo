@@ -213,6 +213,21 @@ function withMergedAnthropicUsage(
   return usage ? { ...response, usage } : response;
 }
 
+function getAnthropicCostFromMessage(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  message: Anthropic.Messages.Message,
+): number | undefined {
+  return calculateAnthropicCost(
+    modelName,
+    config,
+    message.usage?.input_tokens,
+    message.usage?.output_tokens,
+    message.usage?.cache_read_input_tokens ?? undefined,
+    message.usage?.cache_creation_input_tokens ?? undefined,
+  );
+}
+
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
@@ -753,14 +768,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             ...(cachedRefusalDetails && {
               guardrails: { flagged: true, reason: cachedRefusalDetails },
             }),
-            cost: calculateAnthropicCost(
-              this.modelName,
-              config,
-              parsedCachedResponse.usage?.input_tokens,
-              parsedCachedResponse.usage?.output_tokens,
-              parsedCachedResponse.usage?.cache_read_input_tokens ?? undefined,
-              parsedCachedResponse.usage?.cache_creation_input_tokens ?? undefined,
-            ),
+            cost: getAnthropicCostFromMessage(this.modelName, config, parsedCachedResponse),
             cached: true,
           };
         } catch {
@@ -773,135 +781,78 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    const requestOptions =
+      Object.keys(headers).length > 0 ? ({ headers } as { headers: Record<string, string> }) : {};
+
     try {
+      let initialMessage: Anthropic.Messages.Message;
       if (shouldStream) {
-        // Handle streaming request
-        const stream = await this.anthropic.messages.stream(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        });
-
-        // Wait for the stream to complete and get the final message
-        const finalMessage = await stream.finalMessage();
+        const stream = await this.anthropic.messages.stream(params, requestOptions);
+        initialMessage = await stream.finalMessage();
         logger.debug(`Anthropic Messages API streaming complete`, {
-          finalMessage: getMessagesResponseMetadata(finalMessage),
+          finalMessage: getMessagesResponseMetadata(initialMessage),
         });
-
-        const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
-          config,
-          headers,
-          initialResponse: finalMessage,
-          params,
-          shouldStream,
-        });
-        if (error) {
-          return {
-            error,
-            tokenUsage: getTokenUsage(resolvedMessage, false),
-          };
-        }
-
-        if (shouldUseResponseCache) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(resolvedMessage));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-
-        const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
-        let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        const refusalDetails = getRefusalDetails(resolvedMessage);
-        if (refusalDetails) {
-          logger.warn(refusalDetails);
-        }
-
-        return {
-          output,
-          tokenUsage: getTokenUsage(resolvedMessage, false),
-          ...(finishReason && { finishReason }),
-          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            resolvedMessage.usage?.input_tokens,
-            resolvedMessage.usage?.output_tokens,
-            resolvedMessage.usage?.cache_read_input_tokens ?? undefined,
-            resolvedMessage.usage?.cache_creation_input_tokens ?? undefined,
-          ),
-        };
       } else {
-        // Handle non-streaming request
-        const response = (await this.anthropic.messages.create(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        })) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, {
-          response: getMessagesResponseMetadata(response),
-        });
-
-        const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
-          config,
-          headers,
-          initialResponse: response,
+        initialMessage = (await this.anthropic.messages.create(
           params,
-          shouldStream,
+          requestOptions,
+        )) as Anthropic.Messages.Message;
+        logger.debug(`Anthropic Messages API response`, {
+          response: getMessagesResponseMetadata(initialMessage),
         });
-        if (error) {
-          return {
-            error,
-            tokenUsage: getTokenUsage(resolvedMessage, false),
-          };
-        }
+      }
 
-        if (shouldUseResponseCache) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(resolvedMessage));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
+      const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
+        config,
+        headers,
+        initialResponse: initialMessage,
+        params,
+        shouldStream,
+      });
 
-        const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
-        let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        const refusalDetails = getRefusalDetails(resolvedMessage);
-        if (refusalDetails) {
-          logger.warn(refusalDetails);
-        }
-
+      if (error) {
+        // max_tool_calls was exceeded — tokens were still spent across the loop,
+        // so surface the cost alongside the error so it doesn't disappear from
+        // eval cost tracking.
         return {
-          output,
+          error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
-          ...(finishReason && { finishReason }),
-          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            resolvedMessage.usage?.input_tokens,
-            resolvedMessage.usage?.output_tokens,
-            resolvedMessage.usage?.cache_read_input_tokens ?? undefined,
-            resolvedMessage.usage?.cache_creation_input_tokens ?? undefined,
-          ),
+          cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
         };
       }
+
+      if (shouldUseResponseCache) {
+        try {
+          await cache.set(cacheKey, JSON.stringify(resolvedMessage));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+
+      const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
+      let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
+
+      // Handle structured JSON output parsing
+      if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+        try {
+          output = JSON.parse(output);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+        }
+      }
+
+      const refusalDetails = getRefusalDetails(resolvedMessage);
+      if (refusalDetails) {
+        logger.warn(refusalDetails);
+      }
+
+      return {
+        output,
+        tokenUsage: getTokenUsage(resolvedMessage, false),
+        ...(finishReason && { finishReason }),
+        ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
+        cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+      };
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
