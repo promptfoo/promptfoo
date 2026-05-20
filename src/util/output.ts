@@ -5,15 +5,14 @@ import * as path from 'path';
 import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
 import yaml from 'js-yaml';
-import { BLOB_MAX_SIZE, getBlobByHash } from '../blobs';
 import { collectBlobHashes } from '../blobs/blobRefs';
+import { BLOB_MAX_SIZE } from '../blobs/constants';
 import { VERSION } from '../constants';
 import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
-import { getTraceStore } from '../tracing/store';
 import {
   type CsvRow,
   type ExportedBlobAsset,
@@ -125,6 +124,7 @@ export async function createOutputData(
   let traces;
   try {
     // TraceStore redacts sensitive attribute keys on reads by default.
+    const { getTraceStore } = await import('../tracing/store');
     traces = await getTraceStore().getTracesByEvaluation(evalRecord.id);
   } catch (error) {
     logger.debug(`Failed to fetch traces for output ${evalRecord.id}: ${error}`);
@@ -155,6 +155,7 @@ async function exportBlobAssets(
   results: OutputFile['results'],
   traces?: OutputFile['traces'],
 ): Promise<ExportedBlobAsset[]> {
+  const { getBlobByHash } = await import('../blobs');
   const assets: ExportedBlobAsset[] = [];
   for (const hash of collectBlobHashes({ results, traces })) {
     try {
