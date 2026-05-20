@@ -9,6 +9,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { TraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -40,6 +41,8 @@ describe('importCommand', () => {
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
+    db.run('DELETE FROM spans');
+    db.run('DELETE FROM traces');
     db.run('DELETE FROM eval_results');
     db.run('DELETE FROM evals_to_datasets');
     db.run('DELETE FROM evals_to_prompts');
@@ -182,6 +185,53 @@ describe('importCommand', () => {
       expect(importedEval!.evaluationDurationMs).toBe(4198);
     });
 
+    it('should import traces and attach them to the imported eval', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-imported',
+          evaluationId: 'eval-from-another-machine',
+          testCaseId: 'trace-case',
+          metadata: { source: 'portable-export' },
+          spans: [
+            {
+              spanId: 'span-imported',
+              name: 'portable span',
+              startTime: 10,
+              endTime: 20,
+              attributes: { operation: 'search' },
+              statusCode: 1,
+            },
+          ],
+        },
+      ];
+
+      const filePath = path.join(__dirname, `temp-trace-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const traces = await new TraceStore().getTracesByEvaluation(sampleData.evalId);
+      expect(traces).toHaveLength(1);
+      expect(traces[0]).toMatchObject({
+        traceId: 'trace-imported',
+        evaluationId: sampleData.evalId,
+        testCaseId: 'trace-case',
+        metadata: { source: 'portable-export' },
+      });
+      expect(traces[0].spans).toEqual([
+        expect.objectContaining({
+          spanId: 'span-imported',
+          name: 'portable span',
+          attributes: { operation: 'search' },
+          statusCode: 1,
+        }),
+      ]);
+    });
+
     it('should preserve author from metadata', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
@@ -276,6 +326,44 @@ describe('importCommand', () => {
       const newEval = allEvals.find((e) => e.id !== sampleData.evalId);
       expect(originalEval).toBeDefined();
       expect(newEval).toBeDefined();
+    });
+
+    it('should remap trace IDs for duplicate imports with --new-id', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-duplicate-import',
+          evaluationId: sampleData.evalId,
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-duplicate-import', name: 'span', startTime: 10 }],
+        },
+      ];
+
+      const filePath = path.join(__dirname, `temp-trace-new-id-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', '--new-id', filePath]);
+
+      const allEvals = await Eval.getMany(10);
+      const duplicateEval = allEvals.find((eval_) => eval_.id !== sampleData.evalId);
+      expect(duplicateEval).toBeDefined();
+
+      const traceStore = new TraceStore();
+      const originalTraces = await traceStore.getTracesByEvaluation(sampleData.evalId);
+      const duplicateTraces = await traceStore.getTracesByEvaluation(duplicateEval!.id);
+      expect(originalTraces).toHaveLength(1);
+      expect(duplicateTraces).toHaveLength(1);
+      expect(duplicateTraces[0].traceId).not.toBe(originalTraces[0].traceId);
+      expect(duplicateTraces[0].spans).toEqual([
+        expect.objectContaining({ spanId: 'span-duplicate-import' }),
+      ]);
     });
 
     it('should replace existing eval with --force flag', async () => {

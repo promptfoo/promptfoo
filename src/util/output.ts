@@ -10,6 +10,7 @@ import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
+import { getTraceStore } from '../tracing/store';
 import { type CsvRow, type OutputFile, ResultFailureReason } from '../types';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
@@ -81,6 +82,13 @@ export async function createOutputData(
 ): Promise<OutputFile> {
   const summary = await evalRecord.toEvaluateSummary();
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  let traces;
+  try {
+    // TraceStore redacts sensitive attribute keys on reads by default.
+    traces = await getTraceStore().getTracesByEvaluation(evalRecord.id);
+  } catch (error) {
+    logger.debug(`Failed to fetch traces for output ${evalRecord.id}: ${error}`);
+  }
 
   return {
     evalId: evalRecord.id,
@@ -90,6 +98,7 @@ export async function createOutputData(
     metadata: createOutputMetadata(evalRecord),
     ...(evalRecord.vars?.length > 0 && { vars: [...evalRecord.vars] }),
     ...(evalRecord.runtimeOptions && { runtimeOptions: evalRecord.runtimeOptions }),
+    ...(traces && traces.length > 0 && { traces }),
   };
 }
 

@@ -1393,6 +1393,7 @@ export interface OutputFile {
   metadata?: OutputMetadata;
   vars?: string[];
   runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
 }
 
 // Live eval job state

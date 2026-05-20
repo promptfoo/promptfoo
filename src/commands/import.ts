@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs/promises';
 
 import { getDb } from '../database/index';
@@ -6,7 +7,9 @@ import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
 import telemetry from '../telemetry';
+import { getTraceStore } from '../tracing/store';
 import type { Command } from 'commander';
+import type { TraceData } from '../types';
 
 /**
  * Extract the eval ID from export data, checking both v3 (evalId) and legacy (id) formats.
@@ -85,6 +88,51 @@ function extractDurations(evalData: any) {
   };
 }
 
+function isImportableTrace(trace: unknown): trace is TraceData {
+  const candidate = trace as Partial<TraceData>;
+  return (
+    trace !== null &&
+    typeof trace === 'object' &&
+    typeof candidate.traceId === 'string' &&
+    typeof candidate.testCaseId === 'string' &&
+    Array.isArray(candidate.spans)
+  );
+}
+
+async function importTraces(
+  traces: unknown,
+  evalId: string,
+  generateNewTraceIds: boolean,
+): Promise<void> {
+  if (!Array.isArray(traces)) {
+    return;
+  }
+
+  const traceStore = getTraceStore();
+  for (const trace of traces) {
+    if (!isImportableTrace(trace)) {
+      logger.debug('Skipping malformed trace during import');
+      continue;
+    }
+
+    // Trace IDs are globally unique in the local trace store. Duplicate eval
+    // imports need fresh IDs so spans never attach to the original eval.
+    const traceId = generateNewTraceIds
+      ? crypto.randomUUID().replaceAll('-', '')
+      : trace.traceId;
+
+    await traceStore.createTrace({
+      traceId,
+      evaluationId: evalId,
+      testCaseId: trace.testCaseId,
+      metadata: trace.metadata,
+    });
+    if (trace.spans.length > 0) {
+      await traceStore.addSpans(traceId, trace.spans);
+    }
+  }
+}
+
 export function importCommand(program: Command) {
   program
     .command('import <file>')
@@ -136,6 +184,7 @@ export function importCommand(program: Command) {
             ...durations,
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
+          await importTraces(evalData.traces, evalRecord.id, Boolean(cmdObj.newId));
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
