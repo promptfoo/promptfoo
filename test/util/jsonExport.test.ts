@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as blobs from '../../src/blobs';
+import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
 import { createTempDir, removeTempDir } from './utils';
 
@@ -134,6 +135,47 @@ describe('JSON export with improved error handling', () => {
           data: data.toString('base64'),
         },
       ]);
+    });
+
+    it('should embed blob bytes referenced only by exported traces', async () => {
+      const hash = 'b'.repeat(64);
+      const data = Buffer.from('portable trace image');
+      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+        {
+          traceId: 'trace-media-export',
+          evaluationId: mockEval.id,
+          testCaseId: 'trace-media-case',
+          metadata: { attachment: `promptfoo://blob/${hash}` },
+          spans: [],
+        },
+      ]);
+      vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+        data,
+        metadata: {
+          mimeType: 'image/png',
+          sizeBytes: data.length,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          provider: 'filesystem',
+          key: hash,
+        },
+      });
+
+      try {
+        await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+
+        const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+        expect(parsed.traces[0].metadata.attachment).toBe(`promptfoo://blob/${hash}`);
+        expect(parsed.blobAssets).toEqual([
+          {
+            hash,
+            mimeType: 'image/png',
+            sizeBytes: data.length,
+            data: data.toString('base64'),
+          },
+        ]);
+      } finally {
+        traceSpy.mockRestore();
+      }
     });
 
     it('should handle null shareableUrl', async () => {

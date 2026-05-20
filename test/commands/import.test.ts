@@ -304,6 +304,97 @@ describe('importCommand', () => {
       }
     });
 
+    it('should import embedded blob assets referenced only by traces', async () => {
+      const blobDir = createTempDir('promptfoo-import-trace-blobs-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from('portable trace image from eval export');
+        const hash = sha256(data);
+        sampleData.traces = [
+          {
+            traceId: 'trace-media-import',
+            evaluationId: sampleData.evalId,
+            testCaseId: 'trace-media-case',
+            metadata: { attachment: `promptfoo://blob/${hash}` },
+            spans: [],
+          },
+        ];
+        sampleData.blobAssets = [
+          {
+            hash,
+            mimeType: 'image/png',
+            sizeBytes: data.length,
+            data: data.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-trace-blob-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        const imported = await getBlobByHash(hash);
+        expect(imported.data).toEqual(data);
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it('should ignore unreferenced embedded blob assets before validation and storage', async () => {
+      const blobDir = createTempDir('promptfoo-import-filtered-blobs-');
+      const provider = new FilesystemBlobStorageProvider({ basePath: blobDir });
+      const storeSpy = vi.spyOn(provider, 'store');
+      setBlobStorageProvider(provider);
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const referencedData = Buffer.from('referenced portable image');
+        const referencedHash = sha256(referencedData);
+        const unreferencedHash = sha256(Buffer.from('expected orphan bytes'));
+        const tamperedOrphanData = Buffer.from('tampered orphan bytes');
+        sampleData.results.results[0].response = {
+          output: `promptfoo://blob/${referencedHash}`,
+        };
+        sampleData.blobAssets = [
+          {
+            hash: referencedHash,
+            mimeType: 'image/png',
+            sizeBytes: referencedData.length,
+            data: referencedData.toString('base64'),
+          },
+          {
+            hash: unreferencedHash,
+            mimeType: 'image/png',
+            sizeBytes: tamperedOrphanData.length,
+            data: tamperedOrphanData.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-filtered-blob-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+        expect(storeSpy).toHaveBeenCalledTimes(1);
+        expect((await getBlobByHash(referencedHash)).data).toEqual(referencedData);
+        await expect(getBlobByHash(unreferencedHash)).rejects.toThrow();
+      } finally {
+        storeSpy.mockRestore();
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
     it('should reject embedded blob assets whose bytes do not match the exported hash', async () => {
       const blobDir = createTempDir('promptfoo-import-corrupt-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
@@ -312,9 +403,11 @@ describe('importCommand', () => {
         const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
         const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
         const data = Buffer.from('wrong bytes');
+        const hash = 'f'.repeat(64);
+        sampleData.results.results[0].response = { output: `promptfoo://blob/${hash}` };
         sampleData.blobAssets = [
           {
-            hash: 'f'.repeat(64),
+            hash,
             mimeType: 'image/png',
             sizeBytes: data.length,
             data: data.toString('base64'),
@@ -597,9 +690,11 @@ describe('importCommand', () => {
       const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
       const replacementData = structuredClone(sampleData);
       const badData = Buffer.from('wrong replacement bytes');
+      const hash = 'f'.repeat(64);
+      replacementData.results.results[0].response = { output: `promptfoo://blob/${hash}` };
       replacementData.blobAssets = [
         {
-          hash: 'f'.repeat(64),
+          hash,
           mimeType: 'image/png',
           sizeBytes: badData.length,
           data: badData.toString('base64'),
@@ -629,6 +724,60 @@ describe('importCommand', () => {
       const preservedEval = await Eval.findById(sampleData.evalId);
       expect(preservedEval).toBeDefined();
       expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+    });
+
+    it('should keep the existing eval when a --force replacement cannot store embedded media', async () => {
+      const blobDir = createTempDir('promptfoo-import-force-store-failure-');
+      const provider = new FilesystemBlobStorageProvider({ basePath: blobDir });
+      setBlobStorageProvider(provider);
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const replacementData = structuredClone(sampleData);
+        const replacementBlob = Buffer.from('valid replacement bytes');
+        const replacementHash = sha256(replacementBlob);
+        replacementData.results.results[0].response = {
+          output: `promptfoo://blob/${replacementHash}`,
+        };
+        replacementData.blobAssets = [
+          {
+            hash: replacementHash,
+            mimeType: 'image/png',
+            sizeBytes: replacementBlob.length,
+            data: replacementBlob.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-force-store-failure-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(replacementData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+        expect(process.exitCode).toBeUndefined();
+
+        vi.clearAllMocks();
+        process.exitCode = undefined;
+        const storeSpy = vi
+          .spyOn(provider, 'store')
+          .mockRejectedValueOnce(new Error('embedded media storage failed'));
+
+        const program2 = new Command();
+        importCommand(program2);
+        await program2.parseAsync(['node', 'test', 'import', '--force', filePath]);
+
+        expect(storeSpy).toHaveBeenCalledTimes(1);
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('embedded media storage failed'),
+        );
+        expect(process.exitCode).toBe(1);
+        expect(await Eval.findById(sampleData.evalId)).toBeDefined();
+        expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
     });
 
     it('should import normally with --force flag when eval does not exist', async () => {

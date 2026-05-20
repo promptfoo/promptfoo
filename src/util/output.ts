@@ -84,9 +84,10 @@ function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
       return trace;
     }
 
-    const { vars: _vars, ...metadata } = trace.metadata;
+    const { metadata: traceMetadata, ...projectedTrace } = trace;
+    const { vars: _vars, ...metadata } = traceMetadata;
     return {
-      ...trace,
+      ...projectedTrace,
       ...(Object.keys(metadata).length > 0 && { metadata }),
     };
   });
@@ -141,7 +142,7 @@ export async function createOutputData(
   };
 
   if (options.includeMedia) {
-    const blobAssets = await exportBlobAssets(summary);
+    const blobAssets = await exportBlobAssets(summary, output.traces);
     if (blobAssets.length > 0) {
       output.blobAssets = blobAssets;
     }
@@ -150,9 +151,12 @@ export async function createOutputData(
   return output;
 }
 
-async function exportBlobAssets(results: OutputFile['results']): Promise<ExportedBlobAsset[]> {
+async function exportBlobAssets(
+  results: OutputFile['results'],
+  traces?: OutputFile['traces'],
+): Promise<ExportedBlobAsset[]> {
   const assets: ExportedBlobAsset[] = [];
-  for (const hash of collectBlobHashes(results)) {
+  for (const hash of collectBlobHashes({ results, traces })) {
     try {
       const blob = await getBlobByHash(hash);
       if (blob.data.length > BLOB_MAX_SIZE) {

@@ -348,6 +348,35 @@ describe('writeOutput', () => {
     }
   });
 
+  it('omits trace metadata when stripped vars are the only metadata', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+      {
+        traceId: 'trace-strip-only-vars',
+        evaluationId: 'eval-strip-only-vars',
+        testCaseId: 'case-strip-only-vars',
+        metadata: {
+          vars: {
+            customerEmail: 'trace-only-var-secret@example.com',
+          },
+        },
+        spans: [],
+      },
+    ]);
+
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0]).not.toHaveProperty('metadata');
+      expect(written).not.toContain('trace-only-var-secret@example.com');
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
+
   it('omits trace metadata from JSON output when metadata stripping is enabled', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
     const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([

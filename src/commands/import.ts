@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 
 import { BLOB_MAX_SIZE, storeBlob } from '../blobs';
+import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
@@ -97,7 +98,6 @@ function extractDurations(evalData: any) {
   };
 }
 
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
 
 function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
@@ -164,7 +164,10 @@ interface PreparedBlobAsset {
   data: Buffer;
 }
 
-function prepareBlobAssets(blobAssets: unknown): PreparedBlobAsset[] {
+function prepareBlobAssets(
+  blobAssets: unknown,
+  referencedBlobHashes: ReadonlySet<string>,
+): PreparedBlobAsset[] {
   if (!Array.isArray(blobAssets)) {
     return [];
   }
@@ -173,6 +176,10 @@ function prepareBlobAssets(blobAssets: unknown): PreparedBlobAsset[] {
   for (const asset of blobAssets) {
     if (!isImportableBlobAsset(asset)) {
       logger.debug('Skipping malformed embedded blob during import');
+      continue;
+    }
+    if (!referencedBlobHashes.has(asset.hash.toLowerCase())) {
+      logger.debug('Skipping unreferenced embedded blob during import');
       continue;
     }
 
@@ -309,13 +316,13 @@ export function importCommand(program: Command) {
           throw new Error('Unsupported eval export results format');
         }
 
-        const blobAssets = importV3 ? prepareBlobAssets(evalData.blobAssets) : [];
         const traces = importV3 ? prepareTraces(evalData.traces) : [];
-
-        if (existingEval) {
-          logger.info(`Replacing existing eval ${importId}`);
-          await existingEval.delete();
-        }
+        const referencedBlobHashes = importV3
+          ? collectBlobHashes({ results: evalData.results, traces })
+          : new Set<string>();
+        const blobAssets = importV3
+          ? prepareBlobAssets(evalData.blobAssets, referencedBlobHashes)
+          : [];
 
         if (importV3) {
           logger.debug('Importing v3 eval');
@@ -323,6 +330,10 @@ export function importCommand(program: Command) {
           const vars = extractVars(evalData);
           const durations = extractDurations(evalData);
           await importBlobAssets(blobAssets);
+          if (existingEval) {
+            logger.info(`Replacing existing eval ${importId}`);
+            await existingEval.delete();
+          }
 
           const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
             id: cmdObj.newId ? undefined : importId,
@@ -338,6 +349,10 @@ export function importCommand(program: Command) {
           evalId = evalRecord.id;
         } else {
           logger.debug('Importing v2 eval');
+          if (existingEval) {
+            logger.info(`Replacing existing eval ${importId}`);
+            await existingEval.delete();
+          }
           evalId = cmdObj.newId
             ? createEvalId(importCreatedAt)
             : importId || createEvalId(importCreatedAt);
