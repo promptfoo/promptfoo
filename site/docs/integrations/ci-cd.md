@@ -400,8 +400,7 @@ interface OutputFile {
 ```
 
 `promptfoo eval -o results.json` and `promptfoo export eval <evalId>` use the
-same eval output envelope. Older table-backed outputs use the legacy
-`results.version: 2` summary shape. Portable exports created with
+same eval output envelope. Portable exports created with
 `promptfoo export eval <evalId> --include-media` may add embedded `blobAssets`.
 
 Example processing script:
