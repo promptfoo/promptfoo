@@ -4492,4 +4492,24 @@ describe('useStableColumnSampleBody', () => {
     rerender({ evalId: 'eval-b', body: evalB });
     expect(result.current).toBe(evalB);
   });
+
+  it('waits for fresh rows when the eval changes before the table body updates', () => {
+    const evalA = makeRows(2);
+    const evalBPage1 = makeRows(4);
+    const evalBPage2 = makeRows(4);
+    const { result, rerender } = renderHook(
+      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
+      { initialProps: { evalId: 'eval-a', body: evalA } },
+    );
+    expect(result.current).toBe(evalA);
+
+    rerender({ evalId: 'eval-b', body: evalA });
+    expect(result.current).toBe(evalA);
+
+    rerender({ evalId: 'eval-b', body: evalBPage1 });
+    expect(result.current).toBe(evalBPage1);
+
+    rerender({ evalId: 'eval-b', body: evalBPage2 });
+    expect(result.current).toBe(evalBPage1);
+  });
 });

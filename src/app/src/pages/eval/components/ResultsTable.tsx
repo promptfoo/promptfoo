@@ -206,15 +206,36 @@ export function useStableColumnSampleBody(
   evalId: string | null,
   tableBody: ExtendedEvaluateTableRow[],
 ): ExtendedEvaluateTableRow[] {
-  const sampleRef = useRef<{ evalId: string | null; body: ExtendedEvaluateTableRow[] } | null>(
-    null,
-  );
+  const previousEvalIdRef = useRef(evalId);
+  const previousTableBodyRef = useRef(tableBody);
+  const [sample, setSample] = React.useState<{
+    evalId: string | null;
+    body: ExtendedEvaluateTableRow[];
+  } | null>(() => (tableBody.length > 0 ? { evalId, body: tableBody } : null));
 
-  if (tableBody.length > 0 && sampleRef.current?.evalId !== evalId) {
-    sampleRef.current = { evalId, body: tableBody };
-  }
+  useEffect(() => {
+    const evalChanged = previousEvalIdRef.current !== evalId;
+    const tableBodyChanged = previousTableBodyRef.current !== tableBody;
 
-  return sampleRef.current?.evalId === evalId ? sampleRef.current.body : tableBody;
+    previousEvalIdRef.current = evalId;
+    previousTableBodyRef.current = tableBody;
+
+    setSample((currentSample) => {
+      if (evalChanged) {
+        // The store updates evalId before the next eval page arrives. Wait for
+        // fresh rows instead of adopting the previous eval's page as this eval's sample.
+        return tableBodyChanged && tableBody.length > 0 ? { evalId, body: tableBody } : null;
+      }
+
+      if (currentSample?.evalId === evalId || tableBody.length === 0) {
+        return currentSample;
+      }
+
+      return { evalId, body: tableBody };
+    });
+  }, [evalId, tableBody]);
+
+  return sample?.evalId === evalId ? sample.body : tableBody;
 }
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
