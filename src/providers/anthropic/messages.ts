@@ -13,6 +13,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
+import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -302,8 +303,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
       const responseToolUses = response.content.filter(
-        (block): block is Anthropic.Messages.ToolUseBlock =>
-          block.type === 'tool_use',
+        (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
       );
       const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
 
@@ -384,11 +384,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         coerceMcpToolInput(toolUse.input),
       );
 
-      if (result.error) {
+      if (isMcpErrorResult(result)) {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `MCP Tool Error (${toolUse.name}): ${result.error}`,
+          content: `MCP Tool Error (${toolUse.name}): ${getMcpErrorMessage(result)}`,
           is_error: true,
         };
       }
