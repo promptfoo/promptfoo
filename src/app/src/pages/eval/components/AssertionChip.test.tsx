@@ -98,7 +98,7 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClick handler when Enter is pressed on a standalone chip', async () => {
+  it('calls onClick handler when Enter or Space is pressed on a standalone chip', async () => {
     const handleClick = vi.fn();
     render(
       <AssertionChip metric="keyboard-metric" score={1} passed={true} onClick={handleClick} />,
@@ -111,6 +111,9 @@ describe('AssertionChip', () => {
 
     await userEvent.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
+
+    await userEvent.keyboard(' ');
+    expect(handleClick).toHaveBeenCalledTimes(2);
   });
 
   it('renders assert-set with chevron for expansion', () => {
@@ -313,7 +316,7 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClick handler when Enter is pressed on an assert-set chip body', async () => {
+  it('calls onClick handler when Enter or Space is pressed on an assert-set chip body', async () => {
     const handleClick = vi.fn();
     const childResults: GradingResult[] = [
       {
@@ -349,6 +352,10 @@ describe('AssertionChip', () => {
     chipButton.focus();
     await userEvent.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
+
+    chipButton.focus();
+    await userEvent.keyboard(' ');
+    expect(handleClick).toHaveBeenCalledTimes(2);
   });
 
   it('renders tooltip for assert-sets with children', async () => {

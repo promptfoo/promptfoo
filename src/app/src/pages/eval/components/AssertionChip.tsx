@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -72,6 +72,25 @@ function AssertionChip({
 
   // Hide boolean scores (0 and 1) and hide score for assert-sets (shown in popover)
   const displayScore = !isAssertSet && score !== 0 && score !== 1 ? score.toFixed(2) : null;
+
+  const handleChipKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!onClick) {
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onClick();
+    }
+  };
+
+  const interactiveChipProps = onClick
+    ? {
+        onClick,
+        onKeyDown: handleChipKeyDown,
+        role: 'button' as const,
+        tabIndex: 0,
+      }
+    : {};
 
   // Main chip content
   const chipMainContent = (
@@ -147,13 +166,7 @@ function AssertionChip({
     const chipContent = (
       <div className={chipClasses} data-testid={`assertion-chip-${metric}`}>
         {/* Main area - click to filter */}
-        <div
-          className="inline-flex items-center gap-1.5"
-          onClick={onClick}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
-        >
+        <div className="inline-flex items-center gap-1.5" {...interactiveChipProps}>
           {chipMainContent}
         </div>
         {/* Chevron - click to open popover */}
@@ -187,14 +200,7 @@ function AssertionChip({
 
   // Standalone chip (no popover)
   const standaloneChip = (
-    <div
-      className={chipClasses}
-      onClick={onClick}
-      data-testid={`assertion-chip-${metric}`}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
-    >
+    <div className={chipClasses} data-testid={`assertion-chip-${metric}`} {...interactiveChipProps}>
       {chipMainContent}
     </div>
   );

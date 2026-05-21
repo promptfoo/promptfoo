@@ -270,10 +270,9 @@ describe('EvaluationPanel - groupByHierarchy', () => {
     expect(screen.getByText('child2')).toBeInTheDocument();
   });
 
-  it('handles null/undefined results in array', () => {
+  it('renders when results are pre-filtered for null/undefined', () => {
     const gradingResults: GradingResult[] = [
-      // Filter out nulls to avoid triggering bug in GradingPromptSection
-      // The groupByHierarchy logic itself handles nulls correctly
+      // Nulls are pre-filtered here to avoid triggering GradingPromptSection behavior
       {
         pass: true,
         score: 1,
