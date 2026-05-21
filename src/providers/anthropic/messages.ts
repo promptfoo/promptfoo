@@ -117,7 +117,9 @@ function getMaxMcpToolCalls(config: AnthropicMessageOptions): number {
     return DEFAULT_MAX_MCP_TOOL_CALLS;
   }
 
-  if (!Number.isFinite(config.max_tool_calls) || config.max_tool_calls < 1) {
+  // Negative or non-finite values are invalid and fall back to the default;
+  // 0 is honored as an explicit "disable automatic MCP tool execution" setting.
+  if (!Number.isFinite(config.max_tool_calls) || config.max_tool_calls < 0) {
     return DEFAULT_MAX_MCP_TOOL_CALLS;
   }
 
@@ -295,10 +297,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return { response: initialResponse };
     }
 
+    const maxToolCalls = getMaxMcpToolCalls(config);
+    if (maxToolCalls === 0) {
+      // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
+      // Return the model's initial response (which may contain tool_use
+      // blocks) unchanged rather than treating unexecuted tools as an error.
+      return { response: initialResponse };
+    }
+
     let response = initialResponse;
     const responses = [initialResponse];
     let messages = params.messages;
-    const maxToolCalls = getMaxMcpToolCalls(config);
     let executedMcpToolCalls = 0;
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
