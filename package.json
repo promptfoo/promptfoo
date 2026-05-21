@@ -126,6 +126,7 @@
       "@anthropic-ai/sdk": "^0.95.2"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
+    "brace-expansion@5": "^5.0.6",
     "fast-xml-parser": "$fast-xml-parser",
     "minimatch@<=3.1.3": "3.1.5",
     "vite": "^8.0.5",
@@ -161,7 +162,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.142",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -219,7 +220,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.142",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
