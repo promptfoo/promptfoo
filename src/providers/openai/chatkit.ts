@@ -820,7 +820,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       this.server!.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit server: ${err.message}`));
       });
-      this.server!.listen(this.chatKitConfig.serverPort, () => {
+      this.server!.listen(this.chatKitConfig.serverPort, '127.0.0.1', () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitProvider] Server started', { port: this.serverPort });

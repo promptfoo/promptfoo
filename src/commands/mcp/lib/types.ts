@@ -2,6 +2,7 @@
 export interface McpCommandOptions {
   port: string;
   transport: string;
+  host?: string;
 }
 
 // Tool response types - more specific than using 'any'

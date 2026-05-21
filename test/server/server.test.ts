@@ -42,6 +42,7 @@ import logger from '../../src/logger';
 // Import after mocks are set up
 import { ServerError } from '../../src/server/errors';
 import { handleServerError, startServer } from '../../src/server/server';
+import { openBrowser } from '../../src/util/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -119,11 +120,13 @@ describe('server', () => {
         listen: vi.fn().mockImplementation(function (
           this: MockHttpServer,
           _port: number,
-          callback: () => void,
+          hostOrCallback: string | (() => void),
+          maybeCallback?: () => void,
         ) {
+          const callback = typeof hostOrCallback === 'function' ? hostOrCallback : maybeCallback;
           // Simulate async listen - server is now listening
           this.listening = true;
-          setImmediate(() => callback());
+          setImmediate(() => callback?.());
           return this;
         }),
         close: vi.fn().mockImplementation(function (
@@ -142,6 +145,7 @@ describe('server', () => {
 
     afterEach(() => {
       http.createServer = originalCreateServer;
+      vi.unstubAllEnvs();
       vi.restoreAllMocks();
     });
 
@@ -165,6 +169,47 @@ describe('server', () => {
       expect(signalHandlers.has('SIGTERM')).toBe(true);
 
       // Trigger shutdown to complete the promise
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should bind to loopback by default', async () => {
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
+      await vi.waitFor(() => {
+        expect(openBrowser).toHaveBeenCalledWith(expect.any(Number), 0, '127.0.0.1');
+      });
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should fall back to loopback when the host env var is empty', async () => {
+      vi.stubEnv('PROMPTFOO_SERVER_HOST', '');
+
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should bind to an explicit host when provided', async () => {
+      const serverPromise = startServer(0, undefined, '0.0.0.0');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '0.0.0.0', expect.any(Function));
+      await vi.waitFor(() => {
+        expect(openBrowser).toHaveBeenCalledWith(expect.any(Number), 0, '0.0.0.0');
+      });
+
       triggerSignal('SIGINT');
       await serverPromise;
     });
@@ -203,7 +248,7 @@ describe('server', () => {
 
       await vi.waitFor(() =>
         expect(logger.info).toHaveBeenCalledWith(
-          'Server running at http://localhost:0 and monitoring for new evals.',
+          'Server running at http://127.0.0.1:0 and monitoring for new evals.',
         ),
       );
       mockHttpServer.emit('error', runtimeError);

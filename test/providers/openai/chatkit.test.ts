@@ -1,3 +1,5 @@
+import * as http from 'http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import {
@@ -30,7 +32,7 @@ vi.mock('playwright', () => ({
 // Mock http server
 vi.mock('http', () => ({
   createServer: vi.fn().mockReturnValue({
-    listen: vi.fn((_port: number, callback: () => void) => callback()),
+    listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
     address: vi.fn().mockReturnValue({ port: 3000 }),
     close: vi.fn(),
     once: vi.fn(), // For error event handler
@@ -260,6 +262,9 @@ describe('OpenAiChatKitProvider', () => {
 
       // Initialize first (will use mocked playwright)
       await (provider as any).initialize();
+
+      const server = vi.mocked(http.createServer).mock.results[0].value;
+      expect(server.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
 
       // Then cleanup
       await provider.cleanup();

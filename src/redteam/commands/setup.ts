@@ -12,6 +12,7 @@ export function redteamSetupCommand(program: Command) {
     .command('setup [configDirectory]')
     .description('Start browser UI and open to redteam setup')
     .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option('--host <host>', 'Host address to bind the local server')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
@@ -19,6 +20,7 @@ export function redteamSetupCommand(program: Command) {
         directory: string | undefined,
         cmdObj: {
           port: number;
+          host?: string;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
@@ -42,7 +44,11 @@ export function redteamSetupCommand(program: Command) {
         if (isRunning) {
           await openBrowser(browserBehavior);
         } else {
-          await startServer(cmdObj.port, browserBehavior);
+          if (cmdObj.host) {
+            await startServer(cmdObj.port, browserBehavior, cmdObj.host);
+          } else {
+            await startServer(cmdObj.port, browserBehavior);
+          }
         }
       },
     );

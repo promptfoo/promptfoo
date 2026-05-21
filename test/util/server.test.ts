@@ -189,6 +189,18 @@ describe('Server Utilities', () => {
 
       expect(opener).toHaveBeenCalledWith(`http://localhost:${customPort}`);
     });
+
+    it('should use the bound host when provided', async () => {
+      await openBrowser(BrowserBehavior.OPEN, 5000, '127.0.0.1');
+
+      expect(opener).toHaveBeenCalledWith('http://127.0.0.1:5000');
+    });
+
+    it('should open localhost when the server is bound to all interfaces', async () => {
+      await openBrowser(BrowserBehavior.OPEN, 5000, '0.0.0.0');
+
+      expect(opener).toHaveBeenCalledWith('http://localhost:5000');
+    });
   });
 
   describe('checkServerFeatureSupport', () => {

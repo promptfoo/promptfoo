@@ -226,7 +226,7 @@ export class ChatKitBrowserPool {
       this.server!.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
       });
-      this.server!.listen(this.config.serverPort, () => {
+      this.server!.listen(this.config.serverPort, '127.0.0.1', () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitPool] Server started', { port: this.serverPort });

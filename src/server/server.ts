@@ -12,6 +12,7 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
 import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
+import { getEnvString } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -83,6 +84,16 @@ export function handleServerError(
   const serverError = new ServerError(error, port, phase);
   logger.error(serverError.message);
   return serverError;
+}
+
+function getUrlHost(host: string): string {
+  if (host === '0.0.0.0' || host === '::') {
+    return 'localhost';
+  }
+  if (host.includes(':') && !host.startsWith('[')) {
+    return `[${host}]`;
+  }
+  return host;
 }
 
 /**
@@ -358,6 +369,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
+  host = getEnvString('PROMPTFOO_SERVER_HOST') || '127.0.0.1',
 ) {
   const app = createApp();
 
@@ -490,13 +502,16 @@ export async function startServer(
     };
 
     httpServer.once('error', handleStartupError);
-    httpServer.listen(port, () => {
+    httpServer.listen(port, host, () => {
       httpServer.removeListener('error', handleStartupError);
       httpServer.on('error', handleRuntimeError);
 
-      const url = `http://localhost:${port}`;
+      const url = `http://${getUrlHost(host)}:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
+      if (host === '0.0.0.0' || host === '::') {
+        logger.warn('Server is listening on all network interfaces. Use only on trusted networks.');
+      }
+      openBrowser(browserBehavior, port, host).catch((error) => {
         logger.error(
           `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
         );

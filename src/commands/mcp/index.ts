@@ -10,6 +10,7 @@ export function mcpCommand(program: Command): void {
     .command('mcp')
     .description('Start an MCP server for external tool integrations')
     .option('-p, --port <number>', 'Port number for HTTP transport', '3100')
+    .option('--host <host>', 'Host address to bind the HTTP transport')
     .option('--transport <type>', 'Transport type: "http" or "stdio"', 'http')
     .action(async (cmdObj: McpCommandOptions & Command) => {
       // Validate transport type
@@ -33,7 +34,7 @@ export function mcpCommand(program: Command): void {
           process.exitCode = 1;
           return;
         }
-        await startHttpMcpServer(port);
+        await startHttpMcpServer(port, cmdObj.host || undefined);
       }
     });
 }
