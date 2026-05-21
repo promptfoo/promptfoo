@@ -432,6 +432,15 @@ export interface ChildLogger {
   getLogs: () => TestLogEntry[];
 }
 
+export interface ChildLoggerOptions {
+  /**
+   * When true, child logs are captured and written only to file transports.
+   * This lets per-test reporters display logs at completion without duplicating
+   * or interleaving console output.
+   */
+  suppressConsole?: boolean;
+}
+
 // Maximum log entries per child logger to prevent memory issues
 const MAX_CHILD_LOG_ENTRIES = 50;
 
@@ -444,6 +453,7 @@ function createChildLogMethod(
   level: keyof typeof LOG_LEVELS,
   logBuffer: TestLogEntry[],
   _metadata: { testIdx: number; promptIdx: number },
+  options: ChildLoggerOptions,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
     if (isLoggerShuttingDown) {
@@ -451,12 +461,17 @@ function createChildLogMethod(
     }
 
     // Capture to this test's buffer (respecting verbose setting)
-    const shouldCapture = level === 'error' || isDebugEnabled();
+    const shouldCapture = level === 'error' || level === 'warn' || isDebugEnabled();
     if (shouldCapture && logBuffer.length < MAX_CHILD_LOG_ENTRIES) {
       const fullMessage = context
         ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
         : message;
       logBuffer.push({ level, message: fullMessage, timestamp: Date.now() });
+    }
+
+    if (!options.suppressConsole) {
+      logger[level](message, context);
+      return;
     }
 
     // Log to file transports only (skip console to avoid duplicate output)
@@ -519,14 +534,17 @@ const logger = {
    * @param metadata - Test metadata (testIdx, promptIdx) for identification
    * @returns A child logger with the same interface plus getLogs() method
    */
-  child(metadata: { testIdx: number; promptIdx: number }): ChildLogger {
+  child(
+    metadata: { testIdx: number; promptIdx: number },
+    options: ChildLoggerOptions = {},
+  ): ChildLogger {
     const logBuffer: TestLogEntry[] = [];
 
     return {
-      error: createChildLogMethod('error', logBuffer, metadata),
-      warn: createChildLogMethod('warn', logBuffer, metadata),
-      info: createChildLogMethod('info', logBuffer, metadata),
-      debug: createChildLogMethod('debug', logBuffer, metadata),
+      error: createChildLogMethod('error', logBuffer, metadata, options),
+      warn: createChildLogMethod('warn', logBuffer, metadata, options),
+      info: createChildLogMethod('info', logBuffer, metadata, options),
+      debug: createChildLogMethod('debug', logBuffer, metadata, options),
       getLogs: () => [...logBuffer],
     };
   },

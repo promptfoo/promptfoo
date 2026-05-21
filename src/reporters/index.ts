@@ -24,17 +24,85 @@ export { SilentReporter } from './SilentReporter';
 export { SummaryReporter } from './SummaryReporter';
 export * from './types';
 
+type ReporterConstructor = new (options?: Record<string, unknown>) => Reporter;
+type ReporterFactory = (options?: Record<string, unknown>) => Reporter | Promise<Reporter>;
+
+const REPORTER_EXPORT_NAME_RE = /^[A-Za-z_$][\w$]*$/;
+const REPORTER_METHODS = [
+  'getLastError',
+  'onIterationProgress',
+  'onRunComplete',
+  'onRunStart',
+  'onTestResult',
+  'onTestStart',
+  'cleanup',
+] as const satisfies readonly (keyof Reporter)[];
+
 /**
  * Built-in reporter registry
  */
-const builtInReporters: Record<string, new (options?: Record<string, unknown>) => Reporter> = {
-  default: DefaultReporter,
-  verbose: DefaultReporter, // alias
-  silent: SilentReporter,
-  summary: SummaryReporter,
-  progressbar: ProgressBarReporter,
-  progress: ProgressBarReporter, // alias
-};
+const builtInReporters = new Map<string, ReporterConstructor>([
+  ['default', DefaultReporter],
+  ['verbose', DefaultReporter], // alias
+  ['silent', SilentReporter],
+  ['summary', SummaryReporter],
+  ['progressbar', ProgressBarReporter],
+  ['progress', ProgressBarReporter], // alias
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function hasReporterMethod(value: unknown): boolean {
+  return isRecord(value) && REPORTER_METHODS.some((method) => typeof value[method] === 'function');
+}
+
+function isClassFunction(value: unknown): boolean {
+  return typeof value === 'function' && /^class\s/.test(Function.prototype.toString.call(value));
+}
+
+function isReporterConstructor(value: unknown): value is ReporterConstructor {
+  return typeof value === 'function' && hasReporterMethod(value.prototype);
+}
+
+function assertReporter(value: unknown, reporterName: string): Reporter {
+  if (hasReporterMethod(value)) {
+    return value as Reporter;
+  }
+  throw new Error(`Reporter ${reporterName} must expose at least one reporter lifecycle method`);
+}
+
+function getReporterExport(mod: unknown, funcName: string | undefined): unknown {
+  if (!funcName) {
+    return mod;
+  }
+  if (!REPORTER_EXPORT_NAME_RE.test(funcName)) {
+    throw new Error(`Invalid reporter export name: ${funcName}`);
+  }
+  if (!isRecord(mod) || !Object.hasOwn(mod, funcName)) {
+    throw new Error(`Reporter export not found: ${funcName}`);
+  }
+  return mod[funcName];
+}
+
+async function createReporter(
+  moduleExport: unknown,
+  options: Record<string, unknown>,
+  reporterName: string,
+): Promise<Reporter> {
+  if (isReporterConstructor(moduleExport) || isClassFunction(moduleExport)) {
+    const ReporterClass = moduleExport as ReporterConstructor;
+    return assertReporter(new ReporterClass(options), reporterName);
+  }
+
+  if (typeof moduleExport === 'function') {
+    const reporterFactory = moduleExport as ReporterFactory;
+    return assertReporter(await reporterFactory(options), reporterName);
+  }
+
+  return assertReporter(moduleExport, reporterName);
+}
 
 /**
  * Load a reporter from configuration
@@ -58,8 +126,9 @@ export async function loadReporter(config: ReporterConfig): Promise<Reporter> {
   const [name, options] = Array.isArray(config) ? config : [config, {}];
 
   // Check built-in reporters
-  if (builtInReporters[name]) {
-    return new builtInReporters[name](options);
+  const BuiltInReporter = builtInReporters.get(name);
+  if (BuiltInReporter) {
+    return new BuiltInReporter(options);
   }
 
   // Load from file path
@@ -73,29 +142,12 @@ export async function loadReporter(config: ReporterConfig): Promise<Reporter> {
       : [filePath, undefined];
 
     const resolvedPath = path.resolve(modulePath);
-    const mod = await importModule(resolvedPath, funcName);
-
-    // Module can export a class, function, or instance
-    if (typeof mod === 'function') {
-      // Check if it's a class (has prototype with reporter methods)
-      if (
-        mod.prototype &&
-        (typeof mod.prototype.onRunStart === 'function' ||
-          typeof mod.prototype.onTestResult === 'function' ||
-          typeof mod.prototype.onRunComplete === 'function')
-      ) {
-        return new mod(options);
-      }
-      // Factory function
-      return mod(options);
-    }
-
-    // Already an instance
-    return mod as Reporter;
+    const mod = await importModule(resolvedPath);
+    return createReporter(getReporterExport(mod, funcName), options, name);
   }
 
   throw new Error(
-    `Unknown reporter: ${name}. Built-in reporters: ${Object.keys(builtInReporters).join(', ')}`,
+    `Unknown reporter: ${name}. Built-in reporters: ${Array.from(builtInReporters.keys()).join(', ')}`,
   );
 }
 
@@ -192,6 +244,19 @@ export class ReporterManager {
         await reporter.onRunComplete?.(context);
       } catch (err) {
         logger.warn(`Reporter onRunComplete error: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Called when evaluation is ending, including error paths.
+   */
+  async cleanup(): Promise<void> {
+    for (const reporter of this.reporters) {
+      try {
+        await reporter.cleanup?.();
+      } catch (err) {
+        logger.warn(`Reporter cleanup error: ${err}`);
       }
     }
   }

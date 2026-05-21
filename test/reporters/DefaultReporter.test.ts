@@ -335,4 +335,21 @@ describe('DefaultReporter', () => {
     ).toMatch(/\.\.\.$/);
     expect(reporterInternals.getDisplayName('multi-turn:self-harm')).toBe('Multi Turn Self Harm');
   });
+
+  it('restores process output when cleaned up before run completion', () => {
+    const reporter = new DefaultReporter({
+      captureOutput: true,
+      showStatus: false,
+    });
+
+    reporter.onRunStart(makeRunStart());
+    process.stdout.write('buffered before cleanup\n');
+
+    reporter.cleanup();
+    process.stdout.write('visible after cleanup\n');
+
+    const stdout = stdoutWrite.mock.calls.flat().join('');
+    expect(stdout).toContain('buffered before cleanup');
+    expect(stdout).toContain('visible after cleanup');
+  });
 });

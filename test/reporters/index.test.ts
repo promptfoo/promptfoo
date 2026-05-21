@@ -50,7 +50,7 @@ describe('reporter loading', () => {
     const instanceReporter = { onTestResult: vi.fn() };
     const reporterFactory = vi.fn(() => factoryReporter);
 
-    importModuleMock.mockResolvedValueOnce(CustomReporter);
+    importModuleMock.mockResolvedValueOnce({ CustomReporter });
     importModuleMock.mockResolvedValueOnce(reporterFactory);
     importModuleMock.mockResolvedValueOnce(instanceReporter);
 
@@ -62,17 +62,26 @@ describe('reporter loading', () => {
     );
     await expect(loadReporter('file://./instance.ts')).resolves.toBe(instanceReporter);
 
-    expect(importModuleMock).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('reporter.ts'),
-      'CustomReporter',
-    );
-    expect(importModuleMock).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('factory.ts'),
-      undefined,
-    );
+    expect(importModuleMock).toHaveBeenNthCalledWith(1, expect.stringContaining('reporter.ts'));
+    expect(importModuleMock).toHaveBeenNthCalledWith(2, expect.stringContaining('factory.ts'));
     expect(reporterFactory).toHaveBeenCalledWith({ compact: true });
+  });
+
+  it('rejects invalid custom reporter modules before accepting them', async () => {
+    importModuleMock.mockResolvedValueOnce({ NotAReporter: {} });
+    await expect(loadReporter('file://./reporter.ts:NotAReporter')).rejects.toThrow(
+      'must expose at least one reporter lifecycle method',
+    );
+
+    importModuleMock.mockResolvedValueOnce({});
+    await expect(loadReporter('file://./reporter.ts:not-valid-export!')).rejects.toThrow(
+      'Invalid reporter export name',
+    );
+
+    importModuleMock.mockResolvedValueOnce(vi.fn(() => ({})));
+    await expect(loadReporter('file://./factory.ts')).rejects.toThrow(
+      'must expose at least one reporter lifecycle method',
+    );
   });
 });
 
@@ -162,6 +171,28 @@ describe('ReporterManager', () => {
     await expect(manager.addReporter('file://./missing.ts')).rejects.toThrow('missing reporter');
     expect(loggerMock.error).toHaveBeenCalledWith(
       expect.stringContaining('Failed to load reporter: Error: missing reporter'),
+    );
+  });
+
+  it('cleans up reporters and logs cleanup failures', async () => {
+    const manager = new ReporterManager();
+    const goodReporter: Reporter = {
+      cleanup: vi.fn(),
+    };
+    const failingReporter: Reporter = {
+      cleanup: vi.fn(() => {
+        throw new Error('cleanup failed');
+      }),
+    };
+
+    (manager as unknown as { reporters: Reporter[] }).reporters.push(goodReporter, failingReporter);
+
+    await manager.cleanup();
+
+    expect(goodReporter.cleanup).toHaveBeenCalled();
+    expect(failingReporter.cleanup).toHaveBeenCalled();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Reporter cleanup error: Error: cleanup failed'),
     );
   });
 });

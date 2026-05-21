@@ -87,6 +87,9 @@ export interface Reporter {
 
   /** Optional method to retrieve any error that occurred during reporting */
   getLastError?(): Error | undefined;
+
+  /** Optional cleanup hook for reporters that hold process-level resources */
+  cleanup?(): void | Promise<void>;
 }
 
 /**

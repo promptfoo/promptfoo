@@ -1339,7 +1339,10 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
-  const testLogger = logger.child({ testIdx, promptIdx });
+  const testLogger = logger.child(
+    { testIdx, promptIdx },
+    { suppressConsole: usesDefaultTestReporter(evaluateOptions) },
+  );
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1480,6 +1483,15 @@ async function runEvalInternal({
       },
     ];
   }
+}
+
+function usesDefaultTestReporter(evaluateOptions: RunEvalOptions['evaluateOptions']): boolean {
+  return (
+    evaluateOptions?.reporters?.some((config) => {
+      const reporterName = Array.isArray(config) ? config[0] : config;
+      return reporterName === 'default' || reporterName === 'verbose';
+    }) ?? false
+  );
 }
 
 function buildProviderErrorContext({
@@ -4591,6 +4603,8 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      await this.reporterManager.cleanup();
 
       // Log rate limit metrics for debugging before cleanup
       if (this.rateLimitRegistry) {

@@ -297,9 +297,7 @@ export class DefaultReporter implements Reporter {
     this.clearStatus();
 
     // Stop output capture - flushes any remaining buffered output
-    if (this.options.captureOutput) {
-      this.outputController.stopCapture();
-    }
+    this.cleanup();
 
     // Print summary
     process.stdout.write(
@@ -308,6 +306,12 @@ export class DefaultReporter implements Reporter {
         `${chalk.yellow(`${context.errors} errors`)} ` +
         `(${context.successes + context.failures + context.errors} total)\n\n`,
     );
+  }
+
+  cleanup(): void {
+    if (this.options.captureOutput && this.outputController.isActive()) {
+      this.outputController.stopCapture();
+    }
   }
 
   /**

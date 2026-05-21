@@ -100,11 +100,7 @@ export class ProgressBarReporter implements Reporter {
   }
 
   onRunComplete(context: EvalSummaryContext): void {
-    if (this.progressBar) {
-      // Stop the progress bar - this preserves the final state
-      this.progressBar.stop();
-      this.progressBar = null;
-    }
+    this.cleanup();
 
     // Print summary on a new line (doesn't overwrite progress bar)
     const total = context.successes + context.failures + context.errors;
@@ -117,5 +113,13 @@ export class ProgressBarReporter implements Reporter {
     );
     // Extra newline for spacing before subsequent output
     process.stdout.write('\n');
+  }
+
+  cleanup(): void {
+    if (this.progressBar) {
+      // Stop the progress bar - this preserves the final state
+      this.progressBar.stop();
+      this.progressBar = null;
+    }
   }
 }
