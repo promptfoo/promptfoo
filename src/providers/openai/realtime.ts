@@ -1890,6 +1890,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.persistentConnectionLifecycleCleanup = null;
     this.persistentConnection = null;
     this.connectionReady = null;
+    // Realtime item IDs are scoped to the socket session. Reusing them after a
+    // reconnect makes conversation.item.create point at a missing item.
+    this.previousItemId = null;
+    this.assistantMessageIds = [];
   }
 
   // Treat CONNECTING/OPEN as live; CLOSING/CLOSED (or undefined readyState on
@@ -2508,8 +2512,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // a re-used provider instance can open a fresh socket on the next turn.
       this.persistentConnection.close();
       this.tearDownPersistentConnection('cleanup() called');
-      this.previousItemId = null;
-      this.assistantMessageIds = [];
     }
   }
 }

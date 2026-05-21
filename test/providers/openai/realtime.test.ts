@@ -2507,6 +2507,12 @@ describe('OpenAI Realtime Provider', () => {
         // Let setup register the request timeout, then advance past it without
         // ever delivering a server response.
         await vi.advanceTimersByTimeAsync(0);
+        emitRealtimeEvent(lastMessageHandler(), {
+          type: 'conversation.item.added',
+          item: { id: 'assistant-timeout', role: 'assistant' },
+        });
+        expect(provider.previousItemId).toBe('assistant-timeout');
+        expect(provider.assistantMessageIds).toEqual(['assistant-timeout']);
         await vi.advanceTimersByTimeAsync(100);
 
         const result = await turnPromise;
@@ -2517,6 +2523,8 @@ describe('OpenAI Realtime Provider', () => {
         expect(ws.close).toHaveBeenCalled();
         expect(provider.persistentConnection).toBeNull();
         expect((provider as any).connectionReady).toBeNull();
+        expect(provider.previousItemId).toBeNull();
+        expect(provider.assistantMessageIds).toEqual([]);
       } finally {
         vi.useRealTimers();
       }
