@@ -50,9 +50,9 @@
     "db:studio": "npx drizzle-kit studio",
     "openapi:generate": "tsx scripts/generateOpenApi.ts",
     "openapi:check": "tsx scripts/generateOpenApi.ts --check",
-    "dev:app": "API_PORT=18601 npm run dev --prefix src/app",
+    "dev:app": "npm run dev --prefix src/app",
     "storybook": "npm run storybook --prefix src/app",
-    "dev:server": "API_PORT=18601 tsx --watch src/server/index.ts",
+    "dev:server": "tsx watch src/server/index.ts --dev-api",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:app\"",
     "f": "git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(js|jsx|mjs|cjs|ts|tsx|json)$' | xargs npx @biomejs/biome check --write && git diff --name-only --diff-filter=ACMRTUXB origin/main | grep -E '\\.(css|scss|html|md|mdc|mdx|yaml|yml)$' | xargs prettier --write",
     "format:check": "npx @biomejs/biome check && prettier --check '**/*.{css,scss,html,md,mdc,mdx,yaml,yml}'",
@@ -66,7 +66,7 @@
     "lint:src": "npx @biomejs/biome lint src",
     "lint:tests": "npx @biomejs/biome lint test",
     "lint": "npm run lint:src",
-    "local:web": "API_PORT=18601 npm run dev --prefix src/app",
+    "local:web": "npm run dev --prefix src/app",
     "local": "tsx src/main.ts",
     "preversion": "command -v gh >/dev/null 2>&1 || (echo \"Error: GitHub CLI required.\" && exit 1) && [ \"$(git rev-parse --abbrev-ref HEAD)\" = \"main\" ] || (echo \"Error: Must be on main branch to version\" && exit 1) && git pull origin main && git checkout -b \"chore/bump-version-$(date +%s)\"",
     "changelog:release": "node scripts/update-changelog-version.cjs",
@@ -154,14 +154,14 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.106.2",
-    "dompurify": "3.4.2",
+    "dompurify": "3.4.3",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.2"
+      "dompurify": "3.4.3"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.139",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -173,7 +173,7 @@
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/biome": "2.4.15",
     "@fal-ai/client": "~1.10.1",
-    "@ibm-cloud/watsonx-ai": "^1.7.11",
+    "@ibm-cloud/watsonx-ai": "^1.7.12",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
@@ -220,7 +220,7 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.139",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.141",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -232,7 +232,7 @@
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@fal-ai/client": "~1.10.1",
     "@huggingface/transformers": "^4.0.0",
-    "@ibm-cloud/watsonx-ai": "^1.7.11",
+    "@ibm-cloud/watsonx-ai": "^1.7.12",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@openai/codex-sdk": "^0.130.0",
     "@playwright/browser-chromium": "^1.60.0",
@@ -258,7 +258,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.95.2",
+    "@anthropic-ai/sdk": "^0.97.1",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",

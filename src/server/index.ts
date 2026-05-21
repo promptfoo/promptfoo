@@ -1,4 +1,5 @@
 import { getDefaultPort } from '../constants';
+import { getEnvInt } from '../envars';
 import logger from '../logger';
 import { formatNativeAddonVersionMismatchMessage } from '../util/nativeAddonErrors';
 import { BrowserBehavior, checkServerRunning } from '../util/server';
@@ -6,7 +7,7 @@ import { ServerError } from './errors';
 import { startServer } from './server';
 
 async function main() {
-  const port = getDefaultPort();
+  const port = process.argv.includes('--dev-api') ? getEnvInt('API_PORT', 18601) : getDefaultPort();
   const isRunning = await checkServerRunning(port);
   if (isRunning) {
     logger.info(`Promptfoo server already running at http://localhost:${port}`);
