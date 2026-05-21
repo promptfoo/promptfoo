@@ -2248,8 +2248,29 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     // Extra actions should be visible because shift key is mocked as pressed
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy link to output')).toBeInTheDocument();
-    // Copy button exists (no aria-label, so check by icon class)
-    expect(container.querySelector('.lucide-clipboard-copy')).toBeInTheDocument();
+    expect(screen.getByLabelText('Copy output to clipboard')).toBeInTheDocument();
+  });
+
+  it('keeps utility and review actions in a stable, grouped order', () => {
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const actionsArea = container.querySelector('.cell-actions');
+    expect(actionsArea).toBeInTheDocument();
+
+    const actionNames = Array.from(actionsArea?.querySelectorAll('button') ?? []).map(
+      (button) => button.getAttribute('aria-label') ?? '',
+    );
+
+    expect(actionNames).toEqual([
+      'Copy output to clipboard',
+      'Copy link to output',
+      'Toggle test highlight',
+      'Mark test passed',
+      'Mark test failed',
+      'Set test score',
+      'Edit comment',
+      'View output and test details',
+    ]);
   });
 });
 
