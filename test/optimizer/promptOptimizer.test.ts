@@ -88,7 +88,7 @@ describe('prompt optimizer', () => {
       namedScores: {
         token: 'Bearer this-is-also-sensitive-12345678901234567890',
       },
-    } as EvaluateResult;
+    } as unknown as EvaluateResult;
 
     await generateOptimizedPromptCandidates({
       prompt: 'Original prompt',
@@ -293,6 +293,71 @@ describe('prompt optimizer', () => {
 
     await expect(optimizePromptTestSuite({}, testSuite, { providerIndex: 1 })).rejects.toThrow(
       'Provider index 1 is out of range. Available provider indices: 0-0.',
+    );
+  });
+
+  it('preserves config evaluation runtime options for internal optimizer evals', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}],
+    };
+
+    await optimizePromptTestSuite(
+      {
+        evaluateOptions: {
+          cache: true,
+          delay: 50,
+          maxConcurrency: 1,
+          repeat: 2,
+          showProgressBar: true,
+        },
+      },
+      testSuite,
+    );
+
+    expect(vi.mocked(evaluate).mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        cache: false,
+        delay: 50,
+        eventSource: 'library',
+        maxConcurrency: 1,
+        repeat: 2,
+        showProgressBar: false,
+        silent: true,
+      }),
     );
   });
 

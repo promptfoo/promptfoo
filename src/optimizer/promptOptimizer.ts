@@ -521,34 +521,35 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
+    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
   };
 }
 
 function cloneTestCaseForOptimization<T extends Record<string, unknown>>(testCase: T): T {
-  const cloned = { ...testCase } as T;
+  const cloned: Record<string, unknown> = { ...testCase };
 
   if (Array.isArray(testCase.assert)) {
     cloned.assert = testCase.assert.map((assertion) =>
       assertion && typeof assertion === 'object' ? { ...assertion } : assertion,
-    ) as T['assert'];
+    );
   }
   if (testCase.options && typeof testCase.options === 'object') {
-    cloned.options = { ...(testCase.options as Record<string, unknown>) } as T['options'];
+    cloned.options = { ...(testCase.options as Record<string, unknown>) };
   }
   if (testCase.metadata && typeof testCase.metadata === 'object') {
-    cloned.metadata = { ...(testCase.metadata as Record<string, unknown>) } as T['metadata'];
+    cloned.metadata = { ...(testCase.metadata as Record<string, unknown>) };
   }
   if (testCase.vars && typeof testCase.vars === 'object') {
-    cloned.vars = { ...(testCase.vars as Record<string, unknown>) } as T['vars'];
+    cloned.vars = { ...(testCase.vars as Record<string, unknown>) };
   }
   if (Array.isArray(testCase.prompts)) {
-    cloned.prompts = [...testCase.prompts] as T['prompts'];
+    cloned.prompts = [...testCase.prompts];
   }
   if (Array.isArray(testCase.providers)) {
-    cloned.providers = [...testCase.providers] as T['providers'];
+    cloned.providers = [...testCase.providers];
   }
 
-  return cloned;
+  return cloned as T;
 }
 
 function cloneScenarioForOptimization(
@@ -593,8 +594,9 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   return explicitTests + scenarioTests;
 }
 
-function createEvaluationOptions(): InternalEvaluateOptions {
+function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
   return {
+    ...config.evaluateOptions,
     cache: false,
     eventSource: 'library',
     showProgressBar: false,
@@ -623,13 +625,13 @@ export async function optimizePromptTestSuite(
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(config, { persisted: false }),
-    createEvaluationOptions(),
+    createEvaluationOptions(config),
   );
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(config, { persisted: false }),
-        createEvaluationOptions(),
+        createEvaluationOptions(config),
       )
     : undefined;
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
@@ -692,7 +694,7 @@ export async function optimizePromptTestSuite(
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(config, { persisted: false }),
-      createEvaluationOptions(),
+      createEvaluationOptions(config),
     );
     const candidateValidationEval = validationTestSuite
       ? await evaluate(
@@ -705,7 +707,7 @@ export async function optimizePromptTestSuite(
             ),
           ),
           new Eval(config, { persisted: false }),
-          createEvaluationOptions(),
+          createEvaluationOptions(config),
         )
       : undefined;
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =
