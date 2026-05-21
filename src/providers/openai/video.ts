@@ -233,39 +233,6 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     });
   }
 
-  private async createJsonVideoJob(
-    body: OpenAI.VideoCreateParams,
-    headers?: Record<string, string>,
-  ): Promise<{ job: OpenAiVideoJob; error?: string }> {
-    try {
-      const response = await fetchWithProxy(`${this.getApiUrl()}/videos`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.getApiKey()}`,
-          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-          ...headers,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        return {
-          job: {} as OpenAiVideoJob,
-          error: formatCreateVideoError({ status: response.status, error }),
-        };
-      }
-
-      return { job: (await response.json()) as OpenAiVideoJob };
-    } catch (err: unknown) {
-      return {
-        job: {} as OpenAiVideoJob,
-        error: formatCreateVideoError(err),
-      };
-    }
-  }
-
   /**
    * Create a new video generation job
    */
@@ -317,14 +284,6 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         remixVideoId: config.remix_video_id,
         model: this.modelName,
       });
-
-      if (
-        !config.remix_video_id &&
-        config.input_reference &&
-        isJsonVideoInputReference(config.input_reference)
-      ) {
-        return this.createJsonVideoJob(body, config.headers);
-      }
 
       const job = config.remix_video_id
         ? ((await client.videos.remix(config.remix_video_id, {

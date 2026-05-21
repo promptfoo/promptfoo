@@ -1054,7 +1054,7 @@ describe('OpenAiVideoProvider', () => {
       expect((inputReference as File).name).toBe('input-reference.png');
     });
 
-    it('should send URL input_reference as JSON image_url data', async () => {
+    it('should send URL input_reference through SDK multipart image_url data', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: 'https://example.com/frame.png' },
       });
@@ -1075,10 +1075,8 @@ describe('OpenAiVideoProvider', () => {
 
       await provider.callApi('Animate this URL');
 
-      const requestBody = getRequestJsonBody('/videos');
-      expect(requestBody.input_reference).toEqual({
-        image_url: 'https://example.com/frame.png',
-      });
+      const requestBody = getRequestFormData('/videos');
+      expect(requestBody.get('input_reference[image_url]')).toBe('https://example.com/frame.png');
     });
 
     it('should read file input references into multipart uploads when using file://', async () => {
