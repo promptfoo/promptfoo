@@ -6,6 +6,7 @@ import {
   type ExtractionResult,
   fetchRemoteGenerationWithMetadata,
   formatPrompts,
+  getExtractionErrorTokenUsage,
 } from './util';
 
 import type { ApiProvider } from '../../types/index';
@@ -36,7 +37,11 @@ export async function extractEntitiesWithMetadata(
       logger.warn(
         `[Entity Extraction] Failed, returning 0 entities. Error using remote generation: ${error}`,
       );
-      return { result: [] };
+      const tokenUsage = getExtractionErrorTokenUsage(error);
+      return {
+        result: [],
+        ...(tokenUsage ? { tokenUsage } : {}),
+      };
     }
   }
 
@@ -81,6 +86,10 @@ export async function extractEntitiesWithMetadata(
     return entities;
   } catch (error) {
     logger.warn(`Error using local extraction, returning empty list: ${error}`);
-    return { result: [] };
+    const tokenUsage = getExtractionErrorTokenUsage(error);
+    return {
+      result: [],
+      ...(tokenUsage ? { tokenUsage } : {}),
+    };
   }
 }

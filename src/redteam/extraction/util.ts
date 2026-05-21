@@ -33,6 +33,18 @@ class ExtractionError extends Error {
   }
 }
 
+export function getExtractionErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  return error instanceof ExtractionError ? error.tokenUsage : undefined;
+}
+
+function getResponseTokenUsage(data: unknown): TokenUsage | undefined {
+  if (!data || typeof data !== 'object' || !('tokenUsage' in data)) {
+    return undefined;
+  }
+
+  return (data as { tokenUsage?: TokenUsage }).tokenUsage;
+}
+
 /**
  * Fetches remote generation results for a given task and prompts.
  *
@@ -81,10 +93,25 @@ export async function fetchRemoteGenerationWithMetadata(
       'json',
     );
 
-    const parsedResponse = RedTeamGenerationResponse.parse(response.data);
+    if (response.status !== 200) {
+      throw new ExtractionError(
+        `Remote extraction failed for task '${task}' with status ${response.status}`,
+        getResponseTokenUsage(response.data),
+      );
+    }
+
+    const parsedResponse = RedTeamGenerationResponse.safeParse(response.data);
+    if (!parsedResponse.success) {
+      const tokenUsage = getResponseTokenUsage(response.data);
+      if (tokenUsage) {
+        throw new ExtractionError(parsedResponse.error.message, tokenUsage);
+      }
+      throw parsedResponse.error;
+    }
+
     return {
-      result: parsedResponse.result,
-      ...(parsedResponse.tokenUsage ? { tokenUsage: parsedResponse.tokenUsage } : {}),
+      result: parsedResponse.data.result,
+      ...(parsedResponse.data.tokenUsage ? { tokenUsage: parsedResponse.data.tokenUsage } : {}),
     };
   } catch (error) {
     logger.warn(`Error using remote generation for task '${task}': ${error}`);

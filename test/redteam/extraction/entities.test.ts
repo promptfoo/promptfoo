@@ -134,6 +134,28 @@ describe('Entities Extractor', () => {
     );
   });
 
+  it('should preserve remote error token usage through the metadata helper', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        error: 'Remote entity extraction failed',
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      },
+      status: 500,
+      statusText: 'Internal Server Error',
+      cached: false,
+    });
+
+    const result = await extractEntitiesWithMetadata(provider, ['prompt1', 'prompt2']);
+
+    expect(result).toEqual({
+      result: [],
+      tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+    });
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should use local extraction when remote generation is disabled', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
@@ -156,6 +178,21 @@ describe('Entities Extractor', () => {
     expect(result).toEqual({
       result: ['Apple', 'Google'],
       tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+    });
+  });
+
+  it('should preserve local extraction usage when the provider returns an error', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
+    vi.mocked(provider.callApi).mockResolvedValue({
+      error: 'entity extraction failed',
+      tokenUsage: { total: 11, prompt: 7, completion: 4 },
+    });
+
+    const result = await extractEntitiesWithMetadata(provider, ['prompt']);
+
+    expect(result).toEqual({
+      result: [],
+      tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
     });
   });
 

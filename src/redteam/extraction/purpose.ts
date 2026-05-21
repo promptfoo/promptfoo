@@ -6,6 +6,7 @@ import {
   type ExtractionResult,
   fetchRemoteGenerationWithMetadata,
   formatPrompts,
+  getExtractionErrorTokenUsage,
 } from './util';
 
 import type { ApiProvider } from '../../types/index';
@@ -47,7 +48,11 @@ export async function extractSystemPurposeWithMetadata(
       };
     } catch (error) {
       logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
-      return { result: '' };
+      const tokenUsage = getExtractionErrorTokenUsage(error);
+      return {
+        result: '',
+        ...(tokenUsage ? { tokenUsage } : {}),
+      };
     }
   }
 
@@ -72,6 +77,10 @@ export async function extractSystemPurposeWithMetadata(
     });
   } catch (error) {
     logger.warn(`[purpose] Error using extracting purpose, returning empty string: ${error}`);
-    return { result: '' };
+    const tokenUsage = getExtractionErrorTokenUsage(error);
+    return {
+      result: '',
+      ...(tokenUsage ? { tokenUsage } : {}),
+    };
   }
 }

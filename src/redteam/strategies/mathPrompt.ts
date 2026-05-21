@@ -193,10 +193,7 @@ export async function addMathPrompt(
         return mathPromptTestCases;
       }
     } catch (error) {
-      if (
-        error instanceof MathPromptGenerationError &&
-        error.tokenUsage
-      ) {
+      if (error instanceof MathPromptGenerationError && error.tokenUsage) {
         fallbackTestCases = testCases.map((testCase, index) =>
           index === 0
             ? {

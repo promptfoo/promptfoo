@@ -372,10 +372,7 @@ describe('Plugins', () => {
 
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
-          result: [
-            { vars: { testVar: 'first' } },
-            { vars: { testVar: 'second' } },
-          ],
+          result: [{ vars: { testVar: 'first' } }, { vars: { testVar: 'second' } }],
           tokenUsage: { total: 29, prompt: 18, completion: 11, numRequests: 1 },
         },
         cached: false,

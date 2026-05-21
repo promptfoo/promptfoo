@@ -228,10 +228,7 @@ describe('citation strategy', () => {
       });
 
     const result = await addCitationTestCases(
-      [
-        { vars: { prompt: 'first' } },
-        { vars: { prompt: 'second' } },
-      ] as any,
+      [{ vars: { prompt: 'first' } }, { vars: { prompt: 'second' } }] as any,
       'prompt',
       {},
     );
