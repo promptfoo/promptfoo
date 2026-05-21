@@ -24,7 +24,7 @@ function makeResult(overrides: Partial<EvaluateResult> & { success: boolean }): 
 }
 
 describe('groupResultsByTest', () => {
-  it('groups results by test description, promptId, and provider', () => {
+  it('groups repeated results by test case, promptId, and provider', () => {
     const results = [
       makeResult({ testIdx: 0, success: true, testCase: { description: 'test A' } }),
       makeResult({ testIdx: 1, success: false, testCase: { description: 'test A' } }),
@@ -54,10 +54,36 @@ describe('groupResultsByTest', () => {
     expect(groups.size).toBe(2);
   });
 
+  it('separates groups by provider label', () => {
+    const results = [
+      makeResult({ success: true, provider: { id: 'openai:gpt-4', label: 'temperature-0' } }),
+      makeResult({ success: false, provider: { id: 'openai:gpt-4', label: 'temperature-1' } }),
+    ];
+
+    const groups = groupResultsByTest(results);
+    expect(groups.size).toBe(2);
+  });
+
   it('separates groups by promptId', () => {
     const results = [
       makeResult({ success: true, promptId: 'prompt-1' }),
       makeResult({ success: false, promptId: 'prompt-2' }),
+    ];
+
+    const groups = groupResultsByTest(results);
+    expect(groups.size).toBe(2);
+  });
+
+  it('separates test cases that share a description', () => {
+    const results = [
+      makeResult({
+        success: true,
+        testCase: { description: 'same description', vars: { input: 'passing' } },
+      }),
+      makeResult({
+        success: false,
+        testCase: { description: 'same description', vars: { input: 'failing' } },
+      }),
     ];
 
     const groups = groupResultsByTest(results);

@@ -12,16 +12,15 @@ export function groupResultsByTest(
 ): Map<string, RepeatPassRateGroup> {
   const groups = new Map<string, RepeatPassRateGroup>();
   for (const result of results) {
-    const testCase = 'testCase' in result ? result.testCase : undefined;
-    const description = testCase?.description || JSON.stringify(testCase?.vars || {});
-    const providerId =
-      'provider' in result && result.provider
-        ? typeof result.provider === 'object' && 'id' in result.provider
-          ? (result.provider.id as string)
-          : ''
-        : '';
-    const promptId = 'promptId' in result ? (result.promptId as string) : '';
-    const key = `${description}|||${promptId}|||${providerId}`;
+    const description = result.testCase.description || JSON.stringify(result.testCase.vars || {});
+    const key = JSON.stringify({
+      testCase: result.testCase,
+      promptId: result.promptId,
+      provider: {
+        id: result.provider.id,
+        label: result.provider.label,
+      },
+    });
     if (!groups.has(key)) {
       groups.set(key, { pass: 0, total: 0, description });
     }

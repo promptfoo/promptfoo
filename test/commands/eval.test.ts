@@ -23,6 +23,7 @@ import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
+import { ResultFailureReason } from '../../src/types/index';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -31,6 +32,7 @@ import {
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
@@ -202,6 +204,47 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+  });
+
+  it('checks repeat pass-rate thresholds against --no-write results', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '100',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'repeated failure' },
+          promptId: 'prompt-1',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        };
+
+        await (evalRecord as Eval).addResult(result);
+        await (evalRecord as Eval).addResult({ ...result, testIdx: 1 });
+        return evalRecord as Eval;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(100);
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
   });
 
   it('should merge runtime tags over config tags', async () => {

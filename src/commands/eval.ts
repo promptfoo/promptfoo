@@ -1102,7 +1102,7 @@ export async function doEval(
 
       const repeatPassRateThreshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
       if (repeatPassRateThreshold !== undefined && repeat > 1) {
-        const results = await evalRecord.getResults();
+        const results = evalRecord.persisted ? await evalRecord.getResults() : evalRecord.results;
         const groups = groupResultsByTest(results);
         const failing = getFailingGroups(groups, repeatPassRateThreshold);
 
