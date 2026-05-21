@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { generateIdFromPrompt } from '../models/prompt';
 import { OPTIMIZE_PROMPT_SYSTEM_MESSAGE } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import {
@@ -496,11 +497,17 @@ function createCandidateTestSuite(
   seedPrompt: Prompt,
   candidates: PromptOptimizationCandidate[],
 ): TestSuite {
-  const candidatePrompts: Prompt[] = candidates.map((candidate, index) => ({
-    ...seedPrompt,
-    raw: candidate.prompt,
-    label: `${seedPrompt.label || 'prompt'} [optimized ${index + 1}]`,
-  }));
+  const candidatePrompts: Prompt[] = candidates.map((candidate, index) => {
+    const prompt = {
+      ...seedPrompt,
+      raw: candidate.prompt,
+      label: `${seedPrompt.label || 'prompt'} [optimized ${index + 1}]`,
+    };
+    return {
+      ...prompt,
+      id: generateIdFromPrompt(prompt),
+    };
+  });
   const candidateLabels = candidatePrompts
     .map((prompt) => prompt.label)
     .filter(Boolean) as string[];

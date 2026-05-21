@@ -409,9 +409,13 @@ describe('prompt optimizer', () => {
 
     await optimizePromptTestSuite({}, testSuite);
 
-    expect(vi.mocked(evaluate).mock.calls[1][0].providerPromptMap).toEqual({
+    const candidateSuite = vi.mocked(evaluate).mock.calls[1][0];
+    expect(candidateSuite.providerPromptMap).toEqual({
       'target-provider': ['seed-id', 'Seed', 'Seed [optimized 1]'],
     });
+    expect(candidateSuite.prompts[0].id).toBe('seed-id');
+    expect(candidateSuite.prompts[1].id).toEqual(expect.any(String));
+    expect(candidateSuite.prompts[1].id).not.toBe('seed-id');
   });
 
   it('keeps exact-label provider prompt routing intact after adopting a candidate', async () => {
