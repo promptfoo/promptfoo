@@ -313,17 +313,30 @@ export class XAIResponsesProvider implements ApiProvider {
       modelName: this.modelName,
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        getXAICostInUsd(usage) ??
-        calculateXAICost(
-          modelName,
-          config || {},
-          usage?.input_tokens || usage?.prompt_tokens,
-          usage?.output_tokens || usage?.completion_tokens,
+      costCalculator: (modelName: string, usage: any, config?: any) => {
+        const reasoningTokens =
           usage?.output_tokens_details?.reasoning_tokens ??
-            usage?.completion_tokens_details?.reasoning_tokens,
-        ) ??
-        0,
+          usage?.completion_tokens_details?.reasoning_tokens;
+        // output_tokens / completion_tokens already include reasoning tokens;
+        // calculateXAICost expects completion exclusive of reasoning and adds
+        // it back, so subtract it here to avoid billing reasoning twice.
+        const totalOutputTokens = usage?.output_tokens || usage?.completion_tokens;
+        const completionTokens =
+          typeof totalOutputTokens === 'number'
+            ? Math.max(totalOutputTokens - (reasoningTokens ?? 0), 0)
+            : totalOutputTokens;
+        return (
+          getXAICostInUsd(usage) ??
+          calculateXAICost(
+            modelName,
+            config || {},
+            usage?.input_tokens || usage?.prompt_tokens,
+            completionTokens,
+            reasoningTokens,
+          ) ??
+          0
+        );
+      },
     });
   }
 

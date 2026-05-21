@@ -248,7 +248,10 @@ describe('XAIResponsesProvider', () => {
 
     const result = await provider.callApi('hello');
 
-    expect(result.cost).toBeCloseTo(0.0000325, 10);
+    // output_tokens (5) already includes the 3 reasoning tokens, so the
+    // billable split is 2 completion + 3 reasoning, both at the output rate:
+    // 10 input @ $1.25/M + 5 output @ $2.50/M = 0.0000125 + 0.0000125.
+    expect(result.cost).toBeCloseTo(0.000025, 10);
     expect(result.tokenUsage?.completionDetails?.reasoning).toBe(3);
   });
 

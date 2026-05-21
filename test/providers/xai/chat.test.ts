@@ -874,5 +874,37 @@ describe('xAI Chat Provider', () => {
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
     });
+
+    it('does not double-count reasoning tokens in cost', async () => {
+      // Regression: completion_tokens already includes reasoning tokens, but
+      // the cost path passed the full completion count to calculateXAICost
+      // *and* the reasoning count separately, billing reasoning twice.
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'reasoned answer' } }],
+          usage: {
+            prompt_tokens: 500,
+            completion_tokens: 500,
+            total_tokens: 1000,
+            completion_tokens_details: { reasoning_tokens: 200 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-3-mini-beta', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. completion_tokens (500)
+      // already includes the 200 reasoning tokens, so billable output is 500,
+      // not 700: 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025.
+      expect(result.tokenUsage?.completionDetails?.reasoning).toBe(200);
+      expect(result.cost).toBeCloseTo(0.0004, 10);
+    });
   });
 });
