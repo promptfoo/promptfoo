@@ -76,26 +76,139 @@ describe('PythonWorker stderr parsing', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it('clears traceback state after a blank traceback separator', () => {
+  it('classifies the standard Python logging format (LEVEL:name:message)', () => {
     const worker = createTestableWorker();
 
+    worker.handleStderr(
+      ['DEBUG:root:retry state', 'INFO:root:loaded config', 'WARNING:urllib3:pool full', ''].join(
+        '\n',
+      ),
+    );
+
+    expect(logger.debug).toHaveBeenCalledWith('Python worker stderr: DEBUG:root:retry state');
+    expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:root:loaded config');
+    expect(logger.warn).toHaveBeenCalledWith('Python worker stderr: WARNING:urllib3:pool full');
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('ends a traceback at its exception summary without a trailing blank line', () => {
+    const worker = createTestableWorker();
+
+    // A real traceback.print_exc() emits no trailing blank line. The summary
+    // line itself must terminate the traceback so later stderr is not poisoned.
     worker.handleStderr(
       [
         'Traceback (most recent call last):',
         '  File "/tmp/provider.py", line 1, in <module>',
         'ValueError: boom',
         '',
-        'plain stderr after handled error',
+      ].join('\n'),
+    );
+
+    worker.handleStderr('routine progress from the next call\n');
+
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr: ValueError: boom');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Python worker stderr: routine progress from the next call',
+    );
+    expect(logger.error).not.toHaveBeenCalledWith(
+      'Python worker stderr: routine progress from the next call',
+    );
+  });
+
+  it('does not leak traceback state across calls in a long-lived worker', () => {
+    const worker = createTestableWorker();
+
+    // Call 1 prints a handled traceback (no trailing blank line).
+    worker.handleStderr(
+      'Traceback (most recent call last):\n  File "x", line 1\nValueError: boom\n',
+    );
+    // Call 2 emits a plain, unprefixed stderr line.
+    worker.handleStderr('plain progress line\n');
+
+    expect(logger.error).not.toHaveBeenCalledWith('Python worker stderr: plain progress line');
+    expect(logger.warn).toHaveBeenCalledWith('Python worker stderr: plain progress line');
+  });
+
+  it('keeps chained exception reports coherent at error level', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr(
+      [
+        'Traceback (most recent call last):',
+        '  File "x", line 1',
+        'ValueError: inner',
+        '',
+        'During handling of the above exception, another exception occurred:',
+        '',
+        'Traceback (most recent call last):',
+        '  File "x", line 2',
+        'RuntimeError: outer',
         '',
       ].join('\n'),
     );
 
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr: ValueError: inner');
+    expect(logger.error).toHaveBeenCalledWith(
+      'Python worker stderr: During handling of the above exception, another exception occurred:',
+    );
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr: RuntimeError: outer');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake an indented traceback source line for a log prefix', () => {
+    const worker = createTestableWorker();
+
+    // The displayed source frame happens to start with the word INFO.
+    worker.handleStderr(
+      [
+        'Traceback (most recent call last):',
+        '  File "/tmp/provider.py", line 2, in call_api',
+        '    INFO = build_info()',
+        'ValueError: boom',
+        '',
+      ].join('\n'),
+    );
+
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr:     INFO = build_info()');
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
+  it('keeps a buffered final traceback line at error level on flush', () => {
+    const worker = createTestableWorker();
+
+    // Worker dies mid-write: the exception summary has no trailing newline.
+    worker.handleStderr('Traceback (most recent call last):\n  File "x", line 1\nValueError: boom');
+    worker.flushStderr();
+
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr: ValueError: boom');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('keeps traceback continuation at error level when a CRLF pair is split across chunks', () => {
+    const worker = createTestableWorker();
+
+    worker.handleStderr('Traceback (most recent call last):\r');
+    worker.handleStderr('\n  File "x", line 1\r\nValueError: boom\r\n');
+
     expect(logger.error).toHaveBeenCalledWith(
       'Python worker stderr: Traceback (most recent call last):',
     );
-    expect(logger.warn).toHaveBeenCalledWith(
-      'Python worker stderr: plain stderr after handled error',
-    );
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr:   File "x", line 1');
+    expect(logger.error).toHaveBeenCalledWith('Python worker stderr: ValueError: boom');
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('decodes multi-byte stderr characters split across buffer chunks', () => {
+    const worker = createTestableWorker();
+    const full = Buffer.from('INFO:café\n', 'utf8');
+
+    // Split inside the two-byte UTF-8 sequence for é.
+    worker.handleStderr(full.subarray(0, full.length - 2));
+    expect(logger.info).not.toHaveBeenCalled();
+
+    worker.handleStderr(full.subarray(full.length - 2));
+    expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:café');
   });
 
   it('does not treat a one-line ERROR log as traceback continuation state', () => {
@@ -136,13 +249,26 @@ describe('PythonWorker stderr parsing', () => {
     expect(logger.warn).toHaveBeenCalledWith('Python worker stderr: WARNING:partial stderr line');
   });
 
-  it('flushes carriage-return-delimited stderr updates', () => {
+  it('treats bare carriage returns as line delimiters', () => {
     const worker = createTestableWorker();
 
-    worker.handleStderr('INFO:step 1\rINFO:step 2\r');
+    // Each \r that is followed by more data is a complete line ending.
+    worker.handleStderr('INFO:step 1\rINFO:step 2\rINFO:step 3\n');
 
     expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:step 1');
     expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:step 2');
+    expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:step 3');
+  });
+
+  it('holds a trailing carriage return until the next chunk disambiguates it', () => {
+    const worker = createTestableWorker();
+
+    // A trailing \r might be the first half of a split \r\n, so it waits.
+    worker.handleStderr('INFO:buffered step\r');
+    expect(logger.info).not.toHaveBeenCalled();
+
+    worker.flushStderr();
+    expect(logger.info).toHaveBeenCalledWith('Python worker stderr: INFO:buffered step');
   });
 
   it('bounds an unterminated stderr buffer', () => {
@@ -210,12 +336,14 @@ def call_api(prompt, options, context):
 `,
     );
 
+    // Uses Python's default logging format (LEVEL:name:message) so the test
+    // exercises what real providers emit when they don't customize logging.
     fs.writeFileSync(
       loggingPath,
       `
 import logging
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
+logging.basicConfig(level=logging.INFO)
 
 def call_api(prompt, options, context):
     logging.info("provider startup details")
@@ -331,11 +459,12 @@ def call_api(prompt, options, context):
 
       expect(result.output).toBe('Logged: hello');
       expect(logger.error).not.toHaveBeenCalled();
+      // Default Python logging format is LEVEL:name:message (e.g. WARNING:root:...).
       expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Python worker stderr: WARNING:provider warning'),
+        expect.stringContaining('Python worker stderr: WARNING:root:provider warning'),
       );
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Python worker stderr: INFO:provider startup details'),
+        expect.stringContaining('Python worker stderr: INFO:root:provider startup details'),
       );
     },
     TEST_TIMEOUT,
