@@ -949,6 +949,38 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.error).toBe('MCP Tool Error (read_file): Path traversal not allowed');
     });
 
+    it('surfaces a thrown MCP tool error with a clean message', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [{ function: { name: 'read_file', arguments: '{}' } }],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockRejectedValue(new Error('connection lost')),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const result = await provider.callApi('Read the file');
+
+      expect(result.output).toBe('MCP Tool Error (read_file): connection lost');
+      expect(result.error).toBe('MCP Tool Error (read_file): connection lost');
+    });
+
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
         data: {

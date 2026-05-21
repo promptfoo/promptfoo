@@ -704,7 +704,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 continue; // Skip to next function call
               } catch (error) {
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                const message = formatMcpToolError(functionName, String(error));
+                const message = formatMcpToolError(
+                  functionName,
+                  error instanceof Error ? error.message : String(error),
+                );
                 results.push(message);
                 mcpErrors.push(message);
                 hasSuccessfulCallback = true;
