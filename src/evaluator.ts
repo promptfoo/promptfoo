@@ -4525,9 +4525,13 @@ class Evaluator {
 
         for (const [key, m] of Object.entries(metrics)) {
           if (m.totalRequests > 0) {
+            const providerFinalConcurrency = Math.min(
+              m.maxConcurrency,
+              this.concurrencyTracker.initial,
+            );
             totalRateLimitHits += m.rateLimitHits;
             totalRetries += m.retriedRequests;
-            minFinalConcurrency = Math.min(minFinalConcurrency, m.maxConcurrency);
+            minFinalConcurrency = Math.min(minFinalConcurrency, providerFinalConcurrency);
             logger.debug(`[Scheduler] Final metrics for ${key}`, {
               totalRequests: m.totalRequests,
               completedRequests: m.completedRequests,
