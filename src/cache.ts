@@ -552,7 +552,7 @@ async function prepareFetchResponse(
     throw new Error(
       `Error parsing response from ${url}: ${
         (err as Error).message
-      }. Received text: ${responseText}`,
+      }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
   }
 }
@@ -634,8 +634,12 @@ export async function fetchWithCache<T = unknown>(
           // No-op when cache is disabled
         },
       };
-    } catch {
-      throw new Error(`Error parsing response as JSON: ${respText}`);
+    } catch (err) {
+      throw new Error(
+        `Error parsing response from ${url}: ${
+          (err as Error).message
+        }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
+      );
     }
   }
 

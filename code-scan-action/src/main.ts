@@ -21,6 +21,7 @@ import {
   type PullRequestContext,
   type ScanResponse,
 } from '../../src/types/codeScan';
+import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
 import { getGitHubContext, getPRFiles } from './github';
 
@@ -80,7 +81,17 @@ function getActionInputs(): ActionInputs {
   };
 }
 
-function createScanEnv(): Record<string, string> {
+const SUBPROCESS_ENV_EXCLUSIONS = [
+  'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
+  'ACTIONS_ID_TOKEN_REQUEST_URL',
+  'GH_TOKEN',
+  'GITHUB_OIDC_TOKEN',
+  'GITHUB_TOKEN',
+  'INPUT_GITHUB-TOKEN',
+  'INPUT_GITHUB_TOKEN',
+] as const;
+
+function createSubprocessEnv(): Record<string, string> {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => {
       return typeof entry[1] === 'string';
@@ -90,6 +101,18 @@ function createScanEnv(): Record<string, string> {
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
 
+  for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
+    delete env[key];
+  }
+
+  return env;
+}
+
+function createScanEnv(oidcToken: string | undefined): Record<string, string> {
+  const env = createSubprocessEnv();
+  if (oidcToken) {
+    env.GITHUB_OIDC_TOKEN = oidcToken;
+  }
   return env;
 }
 
@@ -152,18 +175,17 @@ function shouldSkipForkPullRequest(enableForkPrs: boolean): boolean {
   return !enableForkPrs && isPullRequestFromFork();
 }
 
-async function authenticateWithOidc(): Promise<void> {
+async function authenticateWithOidc(): Promise<string | undefined> {
   try {
-    const oidcToken = await core.getIDToken('promptfoo');
+    const oidcToken = await getGitHubOIDCToken('promptfoo');
     core.info('🔐 Got OIDC token for server authentication');
-
-    // Set as environment variable for CLI to use
-    Object.assign(process.env, { GITHUB_OIDC_TOKEN: oidcToken });
+    return oidcToken;
   } catch (error) {
     // OIDC tokens are not available for fork PRs (GitHub security restriction)
     // For fork PRs, the server will use PR-based authentication instead
     core.info(`OIDC token not available: ${formatError(error)}`);
     core.info('For fork PRs, this is expected. Authentication will use PR context instead.');
+    return undefined;
   }
 }
 
@@ -282,17 +304,21 @@ function parseScanOutput(scanOutput: string): ScanResponse {
   }
 }
 
-async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undefined> {
-  const scanEnv = createScanEnv();
+async function runPromptfooScan(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+): Promise<ScanResponse | undefined> {
+  const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
-  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: scanEnv });
+  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: installEnv });
   core.info('✅ Promptfoo installed successfully');
 
   core.info('🚀 Running promptfoo code-scans run...');
 
   let scanOutput = '';
   let scanError = '';
+  const scanEnv = createScanEnv(oidcToken);
 
   const exitCode = await exec.exec('promptfoo', cliArgs, {
     env: scanEnv,
@@ -323,11 +349,14 @@ async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undef
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(cliArgs: string[]): Promise<ScanResponse | undefined> {
+function getScanResponse(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+): Promise<ScanResponse | undefined> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
-  return runPromptfooScan(cliArgs);
+  return runPromptfooScan(cliArgs, oidcToken);
 }
 
 function buildCommentBody(comment: Comment): string {
@@ -650,7 +679,7 @@ async function runCodeScan(): Promise<void> {
 
   core.info('✅ Not a setup PR - proceeding with security scan');
 
-  await authenticateWithOidc();
+  const oidcToken = await authenticateWithOidc();
 
   const finalConfigPath = resolveConfigPath(
     inputs.configPath,
@@ -664,7 +693,7 @@ async function runCodeScan(): Promise<void> {
     await fetchBaseBranch(baseBranch);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath.path, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs);
+    const scanResponse = await getScanResponse(cliArgs, oidcToken);
 
     if (!scanResponse) {
       return;
