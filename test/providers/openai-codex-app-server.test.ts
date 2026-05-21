@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -3732,6 +3733,15 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'streamed line one\nstreamed line two',
+        }),
+      ]),
+    );
     expect(result.metadata?.codexAppServer.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3824,6 +3834,15 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'sdk reports a much longer divergent output + late delta',
+        }),
+      ]),
+    );
     expect(result.metadata?.codexAppServer.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3925,6 +3944,7 @@ describe('OpenAICodexAppServerProvider', () => {
   it('continues from a completed command aggregate when earlier deltas already exist', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
+    const loggerDebugSpy = vi.spyOn(logger, 'debug');
 
     const provider = new OpenAICodexAppServerProvider({
       config: {
@@ -4016,6 +4036,10 @@ describe('OpenAICodexAppServerProvider', () => {
           aggregatedOutput: 'line one\nline two\nline three',
         }),
       ]),
+    );
+    expect(loggerDebugSpy).not.toHaveBeenCalledWith(
+      '[CodexAppServer] commandExecution output deltas diverged from the SDK aggregate',
+      expect.any(Object),
     );
   });
 

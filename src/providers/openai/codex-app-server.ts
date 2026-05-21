@@ -2359,6 +2359,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
 
     if (
       typeof item.aggregatedOutput === 'string' &&
+      item.aggregatedOutput.startsWith(aggregatedOutput)
+    ) {
+      return item;
+    }
+
+    if (
+      typeof item.aggregatedOutput === 'string' &&
       !aggregatedOutput.startsWith(item.aggregatedOutput)
     ) {
       // The streamed deltas and the SDK's completed-item aggregate diverged
