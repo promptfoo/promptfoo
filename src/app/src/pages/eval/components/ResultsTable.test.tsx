@@ -4602,7 +4602,7 @@ describe('ResultsTable default column sizing', () => {
   const mockTable = {
     body: [
       {
-        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        outputs: [{ pass: true, score: 1, text: 'test output', metadata: {} }],
         test: {},
         vars: [
           'ok',
@@ -4755,6 +4755,98 @@ describe('ResultsTable default column sizing', () => {
     expect(promptHeader).not.toBeNull();
     expect(promptWidth).toBeGreaterThan(160);
     expect(promptWidth).toBeLessThanOrEqual(360);
+  });
+
+  it('sizes description columns from current rows when the stable sample has no descriptions', () => {
+    let table = mockTable;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          test: { description: 'Later page description '.repeat(20) },
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const descriptionHeader = screen.getByText('Description').closest('th') as HTMLElement | null;
+    const descriptionWidth = Number.parseFloat(descriptionHeader?.style.width || '0');
+
+    expect(descriptionHeader).not.toBeNull();
+    expect(descriptionWidth).toBeGreaterThan(160);
+  });
+
+  it('sizes transform columns from current rows when the stable sample lacks their keys', () => {
+    let table = {
+      ...mockTable,
+      head: { ...mockTable.head, vars: [] },
+    };
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    table = {
+      ...table,
+      body: [
+        {
+          ...table.body[0],
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                transformDisplayVars: {
+                  __late: 'Later page transform value '.repeat(20),
+                },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const transformHeader = screen.getByText('late').closest('th') as HTMLElement | null;
+    const transformWidth = Number.parseFloat(transformHeader?.style.width || '0');
+
+    expect(transformHeader).not.toBeNull();
+    expect(transformWidth).toBeGreaterThan(160);
   });
 });
 

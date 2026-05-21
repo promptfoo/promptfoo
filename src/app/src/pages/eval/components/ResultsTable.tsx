@@ -198,6 +198,17 @@ function estimateMetadataColumnSize(header: string, values: unknown[]): number {
   );
 }
 
+function getMetadataColumnSizeValues<Row>(
+  sampleRows: Row[],
+  currentRows: Row[],
+  getValue: (row: Row) => unknown,
+): unknown[] {
+  const sampleValues = sampleRows.map(getValue);
+  return sampleValues.some((value) => getLongestMetadataLineLength(value) > 0)
+    ? sampleValues
+    : currentRows.map(getValue);
+}
+
 /**
  * Returns a row sample for estimating metadata column widths that stays stable
  * as the user paginates.
@@ -1804,7 +1815,7 @@ function ResultsTable({
       head.vars.map((varName, idx) =>
         estimateMetadataColumnSize(
           varName,
-          columnSizeSampleBody.map((row) =>
+          getMetadataColumnSizeValues(columnSizeSampleBody, tableBody, (row) =>
             getVariableCellValue({
               row,
               varName,
@@ -1814,7 +1825,7 @@ function ResultsTable({
           ),
         ),
       ),
-    [head.vars, injectVarName, columnSizeSampleBody],
+    [head.vars, injectVarName, columnSizeSampleBody, tableBody],
   );
 
   const transformDisplayVarColumnSizes = React.useMemo(() => {
@@ -1823,7 +1834,7 @@ function ResultsTable({
         varName,
         estimateMetadataColumnSize(
           varName.replace(/^__/, ''),
-          columnSizeSampleBody.map((row) => {
+          getMetadataColumnSizeValues(columnSizeSampleBody, tableBody, (row) => {
             const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
               | Record<string, string>
               | undefined;
@@ -1832,15 +1843,21 @@ function ResultsTable({
         ),
       ]),
     ) as Record<string, number>;
-  }, [columnSizeSampleBody, transformDisplayVarKeys]);
+  }, [columnSizeSampleBody, tableBody, transformDisplayVarKeys]);
 
   const descriptionColumnSize = React.useMemo(
     () =>
       estimateMetadataColumnSize(
         'Description',
-        hasDescriptionColumn ? columnSizeSampleBody.map((row) => row.test.description || '') : [],
+        hasDescriptionColumn
+          ? getMetadataColumnSizeValues(
+              columnSizeSampleBody,
+              tableBody,
+              (row) => row.test.description || '',
+            )
+          : [],
       ),
-    [columnSizeSampleBody, hasDescriptionColumn],
+    [columnSizeSampleBody, hasDescriptionColumn, tableBody],
   );
 
   const parseQueryParams = (queryString: string) => {
