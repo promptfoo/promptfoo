@@ -2293,16 +2293,15 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       typeof completedItem.id === 'string' &&
       typeof completedItem.aggregatedOutput === 'string'
     ) {
-      const existingOutput = state.commandExecutionOutputDeltasByItemId.get(completedItem.id);
-      if (
-        typeof existingOutput !== 'string' ||
-        completedItem.aggregatedOutput.startsWith(existingOutput)
-      ) {
-        state.commandExecutionOutputDeltasByItemId.set(
-          completedItem.id,
-          completedItem.aggregatedOutput,
-        );
-      }
+      // Reconcile the delta accumulator with the value withCommandExecutionOutput
+      // settled on — it has already resolved any divergence between the streamed
+      // deltas and the SDK aggregate. Without this, a later outputDelta for a
+      // diverged item fails the equality guard in handleCommandExecutionOutputDelta
+      // and is dropped, freezing the item at the value chosen here.
+      state.commandExecutionOutputDeltasByItemId.set(
+        completedItem.id,
+        completedItem.aggregatedOutput,
+      );
     }
     state.items.push(completedItem);
     const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();

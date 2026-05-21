@@ -3742,6 +3742,98 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('reconciles a diverged item so post-completion deltas still apply', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with a late divergent delta');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_reconcile' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_reconcile', status: 'inProgress' } },
+    });
+
+    // A short streamed delta, then a completed item whose SDK aggregate
+    // diverges from and is longer than that delta — so the SDK value is kept.
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'cmd_reconcile',
+        delta: 'short',
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_reconcile',
+          command: 'printf "..."',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'sdk reports a much longer divergent output',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    // A delta arriving after completion must still extend the chosen value —
+    // not be dropped because the accumulator diverged from it.
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'cmd_reconcile',
+        delta: ' + late delta',
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_reconcile',
+        turnId: 'turn_reconcile',
+        itemId: 'msg_reconcile',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_reconcile',
+        turn: { id: 'turn_reconcile', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'sdk reports a much longer divergent output + late delta',
+        }),
+      ]),
+    );
+  });
+
   it('continues completed command output when later deltas extend an existing aggregate', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
