@@ -8,11 +8,13 @@ import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
 import { getDb } from '../../src/database/index';
+import { evalsToPromptsTable } from '../../src/database/tables';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
+import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
@@ -73,7 +75,9 @@ describe('importCommand', () => {
 
       const importCmd = program.commands.find((cmd) => cmd.name() === 'import');
       expect(importCmd).toBeDefined();
-      expect(importCmd!.description()).toBe('Import an eval record from a JSON file');
+      expect(importCmd!.description()).toBe(
+        'Import a Promptfoo eval JSON export or an OpenAI Evals JSONL export',
+      );
     });
   });
 
@@ -97,7 +101,7 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', filePath]);
 
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringMatching(/Failed to import eval.*SyntaxError/),
+        expect.stringMatching(/Failed to import eval.*(?:Unexpected token|JSON)/i),
       );
       expect(process.exitCode).toBe(1);
     });
@@ -566,6 +570,322 @@ describe('importCommand', () => {
         version: 2,
         results: [{ success: true, vars: { topic: 'legacy' } }],
         table: { head: { vars: ['topic'] } },
+      });
+    });
+  });
+
+  describe('with OpenAI eval items JSONL export', () => {
+    it('should import grader outcomes and preserve OpenAI metadata', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/openai-evals-items.jsonl');
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEval = await Eval.findById('openai-evals-evalrun_import_fixture');
+      expect(importedEval).toBeDefined();
+      expect(importedEval!.config.description).toBe(
+        'Imported from OpenAI Evals run evalrun_import_fixture',
+      );
+      expect(importedEval!.config.metadata?.openaiEvalsImport).toEqual({
+        format: 'dashboard-output-items-jsonl',
+        rowCount: 2,
+        runIds: ['evalrun_import_fixture'],
+      });
+      expect(importedEval!.prompts).toHaveLength(1);
+      expect(importedEval!.prompts[0].metrics?.testPassCount).toBe(1);
+      expect(importedEval!.prompts[0].metrics?.testFailCount).toBe(1);
+      expect(importedEval!.prompts[0].metrics?.assertPassCount).toBe(5);
+      expect(importedEval!.prompts[0].metrics?.assertFailCount).toBe(1);
+
+      const results = (await EvalResult.findManyByEvalId(importedEval!.id)).sort(
+        (a, b) => a.testIdx - b.testIdx,
+      );
+      expect(results).toHaveLength(2);
+      expect(results[0].namedScores).toEqual({
+        Relevance: 6,
+        Directness: 3,
+        'Tool called': 1,
+      });
+      expect(results[0].gradingResult?.pass).toBe(true);
+      expect(results[0].gradingResult?.componentResults).toHaveLength(3);
+      expect(results[0].metadata?.openai?.dataSourceIdx).toBe(10);
+      expect(results[0].metadata?.openai?.graderSamples?.Relevance).toEqual({
+        outputs: [{ role: 'assistant', content: '{"result":6}' }],
+      });
+      expect(results[0].metadata?.openai?.outputItem).toMatchObject({
+        run_id: 'evalrun_import_fixture',
+        data_source_idx: 10,
+        item: {
+          input: 'How do I unsubscribe from marketing emails?',
+        },
+      });
+
+      expect(results[1].success).toBe(false);
+      expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(results[1].gradingResult?.reason).toContain('Relevance');
+      expect(results[1].testCase.vars?.item).toMatchObject({
+        input: 'Can I use multiple promo codes?',
+      });
+    });
+
+    it('should preserve run-based collision behavior for OpenAI JSONL imports', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/openai-evals-items.jsonl');
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(process.exitCode).toBeUndefined();
+
+      vi.clearAllMocks();
+      process.exitCode = undefined;
+
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Eval openai-evals-evalrun_import_fixture already exists'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should import multi-run samples as comparable prompt columns', async () => {
+      const sampleFilePath = path.join(
+        __dirname,
+        '../__fixtures__/openai-evals-multi-run-items.jsonl',
+      );
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEvals = await Eval.getMany(10);
+      expect(importedEvals).toHaveLength(1);
+      expect(importedEvals[0].prompts).toHaveLength(2);
+      expect(new Set(importedEvals[0].prompts.map((prompt) => prompt.label)).size).toBe(2);
+      expect(importedEvals[0].prompts.map((prompt) => prompt.provider)).toEqual([
+        'openai-evals:evalrun_error_fixture',
+        'openai-evals:evalrun_pass_fixture',
+      ]);
+      expect(importedEvals[0].prompts[0].metrics?.testErrorCount).toBe(1);
+      expect(importedEvals[0].prompts[0].metrics?.testFailCount).toBe(0);
+      expect(importedEvals[0].prompts[1].metrics?.testPassCount).toBe(1);
+      expect(importedEvals[0].prompts[1].metrics?.tokenUsage).toMatchObject({
+        total: 10,
+        prompt: 8,
+        completion: 2,
+        cached: 1,
+        numRequests: 1,
+      });
+
+      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+      expect(results).toHaveLength(2);
+      expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
+      expect(new Set(results.map((result) => result.promptId)).size).toBe(2);
+      expect(
+        getDb()
+          .select()
+          .from(evalsToPromptsTable)
+          .all()
+          .filter((promptLink) => promptLink.evalId === importedEvals[0].id),
+      ).toHaveLength(2);
+
+      const errorResult = results.find(
+        (result) => result.metadata?.openai?.runId === 'evalrun_error_fixture',
+      );
+      expect(errorResult?.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(errorResult?.error).toBe('Response input item missing role');
+      expect(errorResult?.metadata?.openai?.sample?.error?.type).toBe('invalid_request_error');
+
+      const passedResult = results.find(
+        (result) => result.metadata?.openai?.runId === 'evalrun_pass_fixture',
+      );
+      expect(passedResult?.response?.output).toBe('Hardware');
+      expect(passedResult?.response?.finishReason).toBe('stop');
+      expect(passedResult?.response?.tokenUsage).toEqual({
+        total: 10,
+        prompt: 8,
+        completion: 2,
+        cached: 1,
+        numRequests: 1,
+      });
+    });
+
+    it('should keep non-equivalent multi-run items on separate test rows', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        [
+          {
+            run_id: 'evalrun_first_dataset',
+            data_source_idx: 0,
+            item: { input: 'First dataset item' },
+            grades: { Match: 1 },
+            passes: { Match: true },
+          },
+          {
+            run_id: 'evalrun_second_dataset',
+            data_source_idx: 0,
+            item: { input: 'Different dataset item' },
+            grades: { Match: 1 },
+            passes: { Match: true },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n'),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEvals = await Eval.getMany(10);
+      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+
+      expect(importedEvals[0].config.tests).toHaveLength(2);
+      expect(results).toHaveLength(2);
+      expect(results.map((result) => result.testIdx)).toEqual([0, 1]);
+      expect(results.map((result) => result.testCase.vars?.item)).toEqual([
+        { input: 'First dataset item' },
+        { input: 'Different dataset item' },
+      ]);
+    });
+
+    it('should import dashboard rows that omit optional pass results as score-only data', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({
+          run_id: 'evalrun_without_passes',
+          data_source_idx: 0,
+          item: { input: 'Grade this later' },
+          grades: { Quality: 0.5 },
+          eval_id: 'eval_future_shape',
+        }),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEval = await Eval.findById('openai-evals-evalrun_without_passes');
+      const results = await EvalResult.findManyByEvalId(importedEval!.id);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(true);
+      expect(results[0].gradingResult?.pass).toBe(true);
+      expect(results[0].gradingResult?.componentResults).toEqual([]);
+      expect(results[0].gradingResult?.reason).toContain('did not include grader pass results');
+      expect(importedEval!.prompts[0].metrics).toMatchObject({
+        testPassCount: 1,
+        testFailCount: 0,
+        assertPassCount: 0,
+        assertFailCount: 0,
+      });
+      expect(results[0].metadata?.openai?.passes).toEqual({});
+      expect(results[0].metadata?.openai?.outputItem?.eval_id).toBe('eval_future_shape');
+    });
+
+    it('should align rows whose items have identical content but different key orderings', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        [
+          {
+            run_id: 'evalrun_canonical_a',
+            data_source_idx: 0,
+            item: { a: 1, b: 2, nested: { x: 10, y: 20 } },
+            grades: { Quality: 1 },
+            passes: { Quality: true },
+          },
+          {
+            run_id: 'evalrun_canonical_b',
+            data_source_idx: 0,
+            item: { nested: { y: 20, x: 10 }, b: 2, a: 1 },
+            grades: { Quality: 1 },
+            passes: { Quality: true },
+          },
+        ]
+          .map((row) => JSON.stringify(row))
+          .join('\n'),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+
+      const importedEvals = await Eval.getMany(10);
+      const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
+
+      expect(importedEvals[0].config.tests).toHaveLength(1);
+      expect(results).toHaveLength(2);
+      expect(results.map((result) => result.testIdx)).toEqual([0, 0]);
+      expect(new Set(results.map((result) => result.promptIdx)).size).toBe(2);
+    });
+
+    it('should surface JSON error when a JSONL file mixes valid and invalid lines', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        [
+          JSON.stringify({
+            run_id: 'evalrun_valid',
+            data_source_idx: 0,
+            item: { input: 'hi' },
+            grades: { X: 1 },
+            passes: { X: true },
+          }),
+          'this is not json at all',
+          JSON.stringify({
+            run_id: 'evalrun_valid',
+            data_source_idx: 1,
+            item: { input: 'there' },
+            grades: { X: 1 },
+            passes: { X: true },
+          }),
+        ].join('\n'),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to import eval'));
+      const importedEvals = await Eval.getMany(10);
+      expect(importedEvals).toHaveLength(0);
+    });
+
+    it('should sanitize unsafe characters in the OpenAI run id used as eval id', async () => {
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify({
+          run_id: 'evalrun/with spaces & slashes',
+          data_source_idx: 0,
+          item: { input: 'sanitize me' },
+          grades: { Match: 1 },
+          passes: { Match: true },
+        }),
+      );
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      const importedEval = await Eval.findById('openai-evals-evalrun_with_spaces___slashes');
+      expect(importedEval).toBeDefined();
+      expect(importedEval!.config.metadata?.openaiEvalsImport).toMatchObject({
+        runIds: ['evalrun/with spaces & slashes'],
       });
     });
   });

@@ -5,6 +5,7 @@ import { BLOB_MAX_SIZE, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
+import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
@@ -21,48 +22,30 @@ import type {
   TraceSpan,
 } from '../types';
 
-/**
- * Extract the eval ID from export data, checking both v3 (evalId) and legacy (id) formats.
- */
 function extractEvalId(evalData: any): string | undefined {
   return evalData.evalId || evalData.id;
 }
 
-/**
- * Extract createdAt from export data, checking metadata and legacy locations.
- */
 function extractCreatedAt(evalData: any): Date {
-  // V3 exports store timestamp in metadata.evaluationCreatedAt
   if (evalData.metadata?.evaluationCreatedAt) {
     return new Date(evalData.metadata.evaluationCreatedAt);
   }
-  // Also check results.timestamp as fallback
   if (evalData.results?.timestamp) {
     return new Date(evalData.results.timestamp);
   }
-  // Legacy format may have createdAt at top level
   if (evalData.createdAt) {
     return new Date(evalData.createdAt);
   }
-  // Default to now if no timestamp found
   return new Date();
 }
 
-/**
- * Extract author from export data, checking metadata and legacy locations.
- */
 function extractAuthor(evalData: any): string | undefined {
-  // V3 exports store author in metadata.author
   if (evalData.metadata?.author) {
     return evalData.metadata.author;
   }
-  // Legacy format may have author at top level
   return evalData.author;
 }
 
-/**
- * Derive variable names from results for table display.
- */
 function deriveVarsFromResults(results: any[]): string[] {
   const varSet = new Set<string>();
   for (const result of results) {
@@ -329,7 +312,7 @@ async function importTraces(
 export function importCommand(program: Command) {
   program
     .command('import <file>')
-    .description('Import an eval record from a JSON file')
+    .description('Import a Promptfoo eval JSON export or an OpenAI Evals JSONL export')
     .option('--new-id', 'Generate a new eval ID instead of preserving the original')
     .option('--force', 'Replace existing eval with the same ID')
     .action(async (file, cmdObj) => {
@@ -337,15 +320,15 @@ export function importCommand(program: Command) {
       let evalId: string;
       try {
         const fileContent = await fs.readFile(file, 'utf-8');
-        const evalData = JSON.parse(fileContent);
+        const parsed = parseImportFile(fileContent);
+        const evalData: any = parsed.evalData;
+        const source = parsed.source;
 
-        // Extract fields from correct locations (v3 export format)
         const importId = extractEvalId(evalData);
         const importCreatedAt = extractCreatedAt(evalData);
         const importAuthor = extractAuthor(evalData);
         let existingEval: Eval | undefined;
 
-        // Check for collision if not forcing new ID
         if (importId && !cmdObj.newId) {
           const existing = await Eval.findById(importId);
           if (existing) {
@@ -423,9 +406,12 @@ export function importCommand(program: Command) {
           evalId,
           newId: cmdObj.newId || false,
           force: cmdObj.force || false,
+          source,
         });
       } catch (error) {
-        logger.error(`Failed to import eval: ${error}`);
+        logger.error(
+          `Failed to import eval: ${error instanceof Error ? error.message : String(error)}`,
+        );
         process.exitCode = 1;
       }
     });
