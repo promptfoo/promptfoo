@@ -189,6 +189,22 @@ providers:
 
 `collaboration_mode` is experimental and is sent on `turn/start`. App-server may let the selected mode override model, reasoning effort, or developer instructions for the turn.
 
+### Goals and Subagents
+
+Codex exposes goals and subagents as [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Pass them through `cli_config`; current Codex releases enable subagent workflows by default.
+
+```yaml
+providers:
+  - id: openai:codex-app-server:gpt-5.5
+    config:
+      cli_config:
+        features:
+          goals: true
+          multi_agent: true
+```
+
+`features.goals` enables the experimental goals feature. `features.multi_agent` controls subagent collaboration tools.
+
 ## Server Request Policy
 
 Configure deterministic responses when you intentionally want app-server approval flows:

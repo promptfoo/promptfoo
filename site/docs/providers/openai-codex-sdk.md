@@ -535,6 +535,22 @@ Collaboration mode is a beta feature. `config.collaboration_mode` is merged into
 
 :::
 
+### Goals and Subagents
+
+Codex exposes goals and subagents as [feature flags](https://developers.openai.com/codex/config-basic#feature-flags). Pass them through `cli_config`; current Codex releases enable subagent workflows by default.
+
+```yaml
+providers:
+  - id: openai:codex-sdk:gpt-5.5
+    config:
+      cli_config:
+        features:
+          goals: true
+          multi_agent: true
+```
+
+`features.goals` enables the experimental goals feature. `features.multi_agent` controls subagent collaboration tools.
+
 ## Model Reasoning Effort
 
 Control how much reasoning the model uses:
