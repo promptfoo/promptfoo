@@ -61,6 +61,42 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('should expose eval runtime vars to prompt and provider rendering', async () => {
+    await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalId}} {{__evalStepId}} {{__repeatIndex}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: {
+          __evalId: 'spoofed-eval-id',
+          __evalStepId: 'spoofed-step-id',
+          __repeatIndex: 99,
+        },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'eval-runtime-vars test-3-prompt-4-repeat-2 2',
+      expect.objectContaining({
+        vars: expect.objectContaining({
+          __evalId: 'eval-runtime-vars',
+          __evalStepId: 'test-3-prompt-4-repeat-2',
+          __repeatIndex: 2,
+        }),
+      }),
+      undefined,
+    );
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {

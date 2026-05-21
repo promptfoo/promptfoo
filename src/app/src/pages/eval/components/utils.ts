@@ -1,5 +1,139 @@
+import { useSyncExternalStore } from 'react';
+
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+
+const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
+
+export interface EvalOutputPromptHashTarget {
+  rowIndex: number;
+  promptIndex: number;
+}
+
+export interface EvalUrlParts {
+  pathname: string;
+  search: string;
+  hash: string;
+}
+
+/**
+ * Builds the URL hash used for deep-linking to an eval output details dialog.
+ * Public URLs use one-based row/prompt numbers while the UI uses zero-based indexes internally.
+ */
+export function buildEvalOutputPromptHash(rowIndex: number, promptIndex: number): string {
+  return `#details-row-${rowIndex + 1}-prompt-${promptIndex + 1}`;
+}
+
+/**
+ * Parses an eval output details hash into zero-based row/prompt indexes.
+ */
+export function parseEvalOutputPromptHash(hash: string): EvalOutputPromptHashTarget | null {
+  const match = hash.match(EVAL_OUTPUT_PROMPT_HASH_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  const rowNumber = Number.parseInt(match[1], 10);
+  const promptNumber = Number.parseInt(match[2], 10);
+
+  if (rowNumber < 1 || promptNumber < 1) {
+    return null;
+  }
+
+  return {
+    rowIndex: rowNumber - 1,
+    promptIndex: promptNumber - 1,
+  };
+}
+
+/**
+ * Builds router location parts after mutating search params while preserving the current hash.
+ *
+ * If `source.hash` is omitted, reads the live `window.location.hash`. The dialog deep-link
+ * code mutates the hash via `history.replaceState`, which doesn't update React Router's
+ * `useLocation()`, so callers that read `location` from React Router must pass the hash
+ * explicitly or omit it (in which case we read live).
+ */
+export function buildEvalUrlWithSearchParams(
+  source: { pathname: string; search: string; hash?: string },
+  mutateSearchParams: (params: URLSearchParams) => void,
+): EvalUrlParts {
+  const nextSearchParams = new URLSearchParams(source.search);
+  mutateSearchParams(nextSearchParams);
+  const nextSearch = nextSearchParams.toString();
+
+  let hash: string;
+  if (source.hash !== undefined) {
+    hash = source.hash;
+  } else if (typeof window === 'undefined') {
+    hash = '';
+  } else {
+    hash = window.location.hash;
+  }
+
+  return {
+    pathname: source.pathname,
+    search: nextSearch ? `?${nextSearch}` : '',
+    hash,
+  };
+}
+
+/**
+ * Shared subscription for the URL hash that the eval-output details dialogs use as a deep
+ * link. We need a single source of truth because:
+ *   1. `history.replaceState` (used by the dialog open/close handlers) does not fire
+ *      `hashchange`, so per-component listeners would go stale silently.
+ *   2. Tables can render thousands of cells; one global listener is much cheaper than one
+ *      listener per cell.
+ *
+ * Components subscribe via `useEvalDetailsHash()`. Code that mutates the hash should call
+ * `setEvalDetailsHash()`, which performs the `replaceState` and notifies subscribers.
+ */
+const evalDetailsHashListeners = new Set<() => void>();
+
+function notifyEvalDetailsHashListeners(): void {
+  for (const cb of evalDetailsHashListeners) {
+    cb();
+  }
+}
+
+if (typeof window !== 'undefined') {
+  // Covers direct address-bar edits and back/forward navigation. `replaceState` is handled
+  // explicitly by `setEvalDetailsHash`.
+  window.addEventListener('hashchange', notifyEvalDetailsHashListeners);
+}
+
+function subscribeEvalDetailsHash(callback: () => void): () => void {
+  evalDetailsHashListeners.add(callback);
+  return () => {
+    evalDetailsHashListeners.delete(callback);
+  };
+}
+
+function getCurrentEvalDetailsHash(): string {
+  return typeof window === 'undefined' ? '' : window.location.hash;
+}
+
+export function setEvalDetailsHash(hash: string, rowPositionIndex?: number): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const next = hash ? (hash.startsWith('#') ? hash : `#${hash}`) : '';
+  const url = new URL(window.location.href);
+  if (rowPositionIndex !== undefined) {
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
+  }
+  url.hash = next;
+  if (url.href === window.location.href) {
+    return;
+  }
+  window.history.replaceState(window.history.state, '', url);
+  notifyEvalDetailsHashListeners();
+}
+
+export function useEvalDetailsHash(): string {
+  return useSyncExternalStore(subscribeEvalDetailsHash, getCurrentEvalDetailsHash, () => '');
+}
 
 /**
  * Creates a deterministic hash from a list of variable names.
