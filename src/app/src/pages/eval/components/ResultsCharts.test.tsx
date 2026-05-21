@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
@@ -569,6 +570,71 @@ describe('ResultsCharts', () => {
       // Should render charts (the specific chart type logic is tested indirectly)
       const canvasElements = container.querySelectorAll('canvas');
       expect(canvasElements.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should render finite metric chart values if named scores are all zero', () => {
+      const mockTableWithZeroNamedScores = {
+        head: {
+          prompts: [
+            {
+              provider: 'test-provider-1',
+              metrics: {
+                namedScores: {
+                  accuracy: 0,
+                  precision: 0,
+                },
+              },
+            },
+            {
+              provider: 'test-provider-2',
+              metrics: {
+                namedScores: {
+                  accuracy: 0,
+                  precision: 0,
+                },
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [
+          {
+            outputs: [
+              { score: 0.7, pass: true, text: 'test 1' },
+              { score: 0.8, pass: true, text: 'test 2' },
+            ],
+            vars: [],
+          },
+        ],
+      };
+
+      const scores = calculateScores(mockTableWithZeroNamedScores);
+
+      vi.mocked(useTableStore).mockReturnValue({
+        table: mockTableWithZeroNamedScores,
+        evalId: 'test-eval',
+        config: { description: 'test config' },
+        setTable: vi.fn(),
+        fetchEvalData: vi.fn(),
+      });
+
+      render(<ResultsCharts {...defaultProps} scores={scores} />);
+
+      const chartCalls = vi.mocked(Chart).mock.calls;
+      const metricChartConfig = chartCalls
+        .map(([, config]) => config)
+        .find((config) => {
+          const labels = config.data?.labels;
+          return Array.isArray(labels) && labels.includes('accuracy');
+        });
+
+      expect(metricChartConfig).toBeDefined();
+      const values = metricChartConfig!.data!.datasets.flatMap((dataset) => dataset.data ?? []);
+      expect(values).toHaveLength(4);
+      expect(values.every((value) => typeof value === 'number' && Number.isFinite(value))).toBe(
+        true,
+      );
+      expect(values).toEqual([0, 0, 0, 0]);
     });
   });
 

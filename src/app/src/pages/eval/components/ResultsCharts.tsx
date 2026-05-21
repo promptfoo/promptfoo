@@ -422,7 +422,7 @@ function MetricChart({ table }: ChartProps) {
         const maxValue = Math.max(
           ...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0),
         );
-        return value / maxValue;
+        return maxValue > 0 ? value / maxValue : 0;
       });
       return {
         label: `${table.head.prompts[promptIdx].provider}`,
