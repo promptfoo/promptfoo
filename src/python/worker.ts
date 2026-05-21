@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { StringDecoder } from 'string_decoder';
 
 import { PythonShell } from 'python-shell';
 import { getWrapperDir } from '../esm';
@@ -9,12 +10,17 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
 import { validatePythonPath } from './pythonUtils';
 
+const MAX_STDERR_BUFFER_LENGTH = 16_384;
+
 export class PythonWorker {
   private process: PythonShell | null = null;
   private ready: boolean = false;
   private busy: boolean = false;
   private shuttingDown: boolean = false;
   private crashCount: number = 0;
+  private stderrBuffer: string = '';
+  private stderrDecoder = new StringDecoder('utf8');
+  private inTraceback: boolean = false;
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
     resolve: (result: unknown) => void;
@@ -99,6 +105,7 @@ export class PythonWorker {
       });
 
       this.process!.on('close', () => {
+        this.flushStderr();
         if (!this.shuttingDown) {
           this.handleCrash();
         }
@@ -110,43 +117,148 @@ export class PythonWorker {
     });
   }
 
-  private handleStderr(data: unknown): void {
-    const message = String(data).trimEnd();
-    if (!message) {
-      return;
+  private handleStderr(data: Buffer | string): void {
+    const text = typeof data === 'string' ? data : this.stderrDecoder.write(data);
+    this.stderrBuffer += text;
+
+    // A trailing bare `\r` may be the first half of a `\r\n` pair split across
+    // chunks, so hold it back until the next chunk (or flush) disambiguates it.
+    const carry = this.stderrBuffer.endsWith('\r') ? '\r' : '';
+    const normalized = (carry ? this.stderrBuffer.slice(0, -1) : this.stderrBuffer).replace(
+      /\r\n?/g,
+      '\n',
+    );
+
+    const lines = normalized.split('\n');
+    this.stderrBuffer = (lines.pop() ?? '') + carry;
+
+    for (const line of lines) {
+      this.logStderrLine(line);
     }
 
-    for (const line of message.split(/\r?\n/)) {
-      this.logStderrLine(line);
+    // Bound an unterminated line so a misbehaving provider cannot grow the
+    // buffer without limit. The flushed fragment is best-effort: it may be the
+    // middle of a longer line and is classified on its own.
+    if (this.stderrBuffer.length >= MAX_STDERR_BUFFER_LENGTH) {
+      this.logStderrLine(this.stderrBuffer);
+      this.stderrBuffer = '';
     }
   }
 
-  private logStderrLine(message: string): void {
-    if (!message) {
+  private flushStderr(): void {
+    const remaining = this.stderrBuffer + this.stderrDecoder.end();
+    this.stderrBuffer = '';
+
+    if (remaining) {
+      for (const line of remaining.split(/\r\n|[\r\n]/)) {
+        this.logStderrLine(line);
+      }
+    }
+
+    // Reset traceback state only after the buffered lines are logged, so a
+    // buffered final traceback line is still classified as an error. Refresh
+    // the decoder in case the worker restarts and reuses this instance.
+    this.inTraceback = false;
+    this.stderrDecoder = new StringDecoder('utf8');
+  }
+
+  private logStderrLine(line: string): void {
+    // Blank lines terminate any in-progress traceback.
+    if (!line.trim()) {
+      this.inTraceback = false;
       return;
     }
 
-    const logMessage = `Python worker stderr: ${message}`;
-    if (message.startsWith('[PythonProvider] OpenTelemetry tracing enabled')) {
-      logger.debug(logMessage);
+    // Inside a traceback, indented lines are always continuation frames.
+    // Classify them before prefix detection so a source line such as
+    // `    info = get_info()` is not mistaken for an INFO log record.
+    if (this.inTraceback && /^\s/.test(line)) {
+      this.writeStderrLog('error', line);
+      return;
+    }
+
+    const trimmedStart = line.trimStart();
+
+    // The traceback header opens a new traceback block.
+    if (/^Traceback \(most recent call last\):/i.test(trimmedStart)) {
+      this.inTraceback = true;
+      this.writeStderrLog('error', line);
+      return;
+    }
+
+    // An explicit Python log-level prefix wins over everything else.
+    const prefixMatch = /^(DEBUG|INFO|WARN|WARNING|ERROR|CRITICAL|FATAL)\b[: ]?/i.exec(
+      trimmedStart,
+    );
+    if (prefixMatch) {
+      this.inTraceback = false;
+      this.writeStderrLog(this.normalizeStderrLevel(prefixMatch[1]), line);
+      return;
+    }
+
+    // A non-indented line while inside a traceback is the exception summary
+    // (e.g. `ValueError: boom`) that ends the traceback.
+    if (this.inTraceback) {
+      this.inTraceback = false;
+      this.writeStderrLog('error', line);
+      return;
+    }
+
+    // Connector lines bridge chained exceptions; keep them at error level so a
+    // multi-exception report reads coherently in the logs.
+    if (
+      /^(During handling of the above exception|The above exception was the direct cause)/i.test(
+        trimmedStart,
+      )
+    ) {
+      this.writeStderrLog('error', line);
+      return;
+    }
+
+    if (trimmedStart.startsWith('[PythonProvider] OpenTelemetry tracing enabled')) {
+      this.writeStderrLog('debug', line);
       return;
     }
 
     if (
-      message.startsWith('[PythonProvider] OpenTelemetry packages not installed') ||
-      message.startsWith('[PythonProvider] Failed to initialize tracing') ||
-      message.startsWith('[PythonProvider] Tracing error')
+      trimmedStart.startsWith('[PythonProvider] OpenTelemetry packages not installed') ||
+      trimmedStart.startsWith('[PythonProvider] Failed to initialize tracing') ||
+      trimmedStart.startsWith('[PythonProvider] Tracing error')
     ) {
-      logger.warn(logMessage);
+      this.writeStderrLog('warn', line);
       return;
     }
 
-    if (isPythonWarningStderr(message)) {
-      logger.warn(logMessage);
+    if (isPythonWarningStderr(trimmedStart)) {
+      this.writeStderrLog('warn', line);
       return;
     }
 
-    logger.error(logMessage);
+    // Unclassified stderr stays visible without being treated as a failure.
+    this.writeStderrLog('warn', line);
+  }
+
+  private normalizeStderrLevel(level: string): 'debug' | 'info' | 'warn' | 'error' {
+    switch (level.toUpperCase()) {
+      case 'DEBUG':
+        return 'debug';
+      case 'INFO':
+        return 'info';
+      case 'WARN':
+      case 'WARNING':
+        return 'warn';
+      case 'ERROR':
+      case 'CRITICAL':
+      case 'FATAL':
+        return 'error';
+      default:
+        return 'warn';
+    }
+  }
+
+  private writeStderrLog(level: 'debug' | 'info' | 'warn' | 'error', line: string): void {
+    const message = `Python worker stderr: ${line}`;
+    logger[level](message);
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {

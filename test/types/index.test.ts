@@ -604,6 +604,23 @@ describe('CommandLineOptionsSchema', () => {
     );
   });
 
+  it('should validate runtime tags', () => {
+    const options = {
+      providers: ['provider1'],
+      output: ['output1'],
+      tags: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    };
+    expect(CommandLineOptionsSchema.parse(options)).toMatchObject({
+      tags: {
+        runId: 'ci-123',
+        skillVersion: '1.2.3',
+      },
+    });
+  });
+
   it('should validate options without filterErrorsOnly', () => {
     const options = {
       providers: ['provider1'],
@@ -1267,6 +1284,23 @@ describe('TestSuiteSchema', () => {
 
       const result = TestSuiteSchema.safeParse(suite);
       expect(result.success).toBe(true);
+    });
+
+    it('should default the OTLP HTTP receiver host to localhost', () => {
+      const suite = {
+        ...baseTestSuite,
+        tracing: {
+          otlp: {
+            http: {
+              enabled: true,
+            },
+          },
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(suite);
+      expect(result.success).toBe(true);
+      expect(result.data!.tracing?.otlp?.http?.host).toBe('127.0.0.1');
     });
   });
 });

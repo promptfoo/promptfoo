@@ -130,6 +130,7 @@ export const CommandLineOptionsSchema = z.object({
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
@@ -1098,7 +1099,7 @@ export const TestSuiteSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
             })
             .optional(),
@@ -1238,7 +1239,7 @@ export const TestSuiteConfigSchema = z.object({
             .object({
               enabled: z.boolean().prefault(true),
               port: z.number().prefault(4318),
-              host: z.string().prefault('0.0.0.0'),
+              host: z.string().prefault('127.0.0.1'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
             })
             .optional(),
@@ -1384,6 +1385,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1391,6 +1399,10 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state

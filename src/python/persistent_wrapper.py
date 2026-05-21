@@ -35,23 +35,17 @@ import traceback
 
 _tracer = None
 _tracing_enabled = False
-_tracing_init_attempted = False
 
 
 def _init_tracing():
     """Initialize OpenTelemetry tracing if enabled and packages are available."""
-    global _tracer, _tracing_enabled, _tracing_init_attempted
+    global _tracer, _tracing_enabled
 
     if _tracing_enabled and _tracer is not None:
         return
 
     if os.getenv("PROMPTFOO_ENABLE_OTEL", "").lower() not in ("true", "1", "yes"):
         return
-
-    if _tracing_init_attempted:
-        return
-
-    _tracing_init_attempted = True
 
     try:
         from opentelemetry import trace
