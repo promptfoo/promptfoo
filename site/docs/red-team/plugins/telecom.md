@@ -501,23 +501,6 @@ redteam:
 
 For a target that supports both calls and promotional texts, describe those supported consumer flows in `redteam.purpose` so generated tests can cover the relevant channels.
 
-### Sample App
-
-The Promptfoo examples include a local TCPA consent-revocation demo target with vulnerable and hardened modes:
-
-```bash
-cd examples/redteam-tcpa-consent-revocation-agent
-npm start
-```
-
-Then, in another terminal from the same example directory, run:
-
-```bash
-promptfoo eval
-```
-
-The sample app represents outbound voice requests as text transcripts, exposes mock revocation and suppression state, and includes a trace summary in its Promptfoo HTTP provider config. It is intended for plugin testing only and never places real calls or sends real texts.
-
 ## Getting Help
 
 For questions about telecommunications plugins:
