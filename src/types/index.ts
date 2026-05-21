@@ -691,7 +691,7 @@ export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
 const AssertionXFailProviderSchema = z.union([z.string(), z.array(z.string())]);
 
-export const AssertionXFailSchema = z.union([
+const AssertionXFailSchema = z.union([
   z.boolean(),
   AssertionXFailProviderSchema,
   z.object({
@@ -699,8 +699,6 @@ export const AssertionXFailSchema = z.union([
     reason: z.string().optional(),
   }),
 ]);
-
-export type AssertionXFail = z.infer<typeof AssertionXFailSchema>;
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({

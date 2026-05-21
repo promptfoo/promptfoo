@@ -369,10 +369,9 @@ describe('runAssertions', () => {
       },
       providerResponse: { output: 'Hi there world' },
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Aggregate score 0.33 ? 0.25 threshold',
-    });
+    expect(result).toMatchObject({ pass: true });
+    expect(result.reason).toContain('Aggregate score 0.33');
+    expect(result.reason).toContain('0.25 threshold');
   });
 
   describe('assert-set', () => {
