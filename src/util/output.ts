@@ -385,6 +385,7 @@ export async function writeOutput(
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+    const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
