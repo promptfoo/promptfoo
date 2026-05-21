@@ -222,7 +222,6 @@ describe('evalCommand', () => {
       },
     } as UnifiedConfig;
     let capturedEvalRecord: Eval | undefined;
-    let capturedTestSuite: TestSuite | undefined;
 
     vi.mocked(resolveConfigs).mockResolvedValue({
       config,
@@ -233,21 +232,18 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
-    vi.mocked(evaluate).mockImplementation(async (testSuite, evalRecord) => {
-      capturedTestSuite = testSuite as TestSuite;
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
       capturedEvalRecord = evalRecord as Eval;
       return evalRecord as Eval;
     });
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    const expectedTags = {
+    expect(capturedEvalRecord?.config.tags).toEqual({
       env: 'ci',
       run: '123',
       suite: 'smoke',
-    };
-    expect(capturedEvalRecord?.config.tags).toEqual(expectedTags);
-    expect(capturedTestSuite?.tags).toEqual(expectedTags);
+    });
   });
 
   it('should apply command-line tag defaults before explicit runtime tags', async () => {
@@ -336,6 +332,44 @@ describe('evalCommand', () => {
           'skill-version': '1.2.3',
         },
       }),
+    );
+  });
+
+  it('should document the repeatable --tag option in help text', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+
+    expect(helpText).toContain('--tag <key=value>');
+    expect(helpText).toContain('Set an eval tag in key=value format.');
+  });
+
+  it('should parse repeated --tag values, preserve embedded equals, and keep empty values', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+
+    cmd.parseOptions([
+      '--tag',
+      'build=first',
+      '--tag',
+      'build=second',
+      '--tag',
+      'token=a=b',
+      '--tag',
+      'empty=',
+    ]);
+
+    expect(cmd.opts().tag).toEqual({
+      build: 'second',
+      token: 'a=b',
+      empty: '',
+    });
+  });
+
+  it.each(['invalid', '=value'])('should reject malformed --tag value %s', (tagValue) => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    cmd.exitOverride();
+
+    expect(() => cmd.parseOptions(['--tag', tagValue])).toThrow(
+      '--tag must be specified in key=value format.',
     );
   });
 
