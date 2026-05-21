@@ -32,8 +32,7 @@ jobs:
       - name: Use Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          # The standalone scan's published CLI install times out on Node 24.16.0.
-          node-version: '24.15.0'
+          node-version-file: '.nvmrc'
 
       - name: Run Promptfoo Code Scan
         uses: promptfoo/code-scan-action@c4839dcb8623ca031ee6d271c7850dc71d994dd3 # v0
