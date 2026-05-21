@@ -149,7 +149,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](/docs/configuration/expected-outputs/deterministic/#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
-| [skill-used](/docs/configuration/expected-outputs/deterministic/#skill-used)                                       | Ensure normalized provider skill metadata includes expected skills |
+| [skill-used](/docs/configuration/expected-outputs/deterministic/#skill-used)                                       | Check expected or forbidden skills in normalized provider metadata |
 | [trajectory:tool-used](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used)                    | Ensure a traced agent trajectory used specific tools               |
 | [trajectory:tool-args-match](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match)        | Ensure traced tool calls used the expected arguments               |
 | [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order            |

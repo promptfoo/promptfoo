@@ -652,7 +652,7 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 
 ### skill-used {#skill-used}
 
-The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?". Errored skill tool attempts can still appear in provider metadata for diagnostics, but they do not satisfy `skill-used`.
+The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?". Errored skill tool attempts can still appear in provider metadata for diagnostics, but they do not satisfy `skill-used`. They do fail `not-skill-used`, because a forbidden skill was still attempted.
 
 Promptfoo currently populates `metadata.skillCalls` for:
 
