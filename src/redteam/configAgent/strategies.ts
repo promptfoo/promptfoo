@@ -184,7 +184,6 @@ function analyzeAuthErrorResults(
   let headerName: string | undefined;
 
   const errorText = (result.body || '').toLowerCase();
-  const _errorJson = result.json as Record<string, unknown> | null;
 
   if (
     errorText.includes('api key') ||
@@ -234,7 +233,7 @@ function analyzeAuthErrorResults(
   };
 }
 
-function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
+export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
   switch (strategyId) {
     case 'openai_compatible':
       return {

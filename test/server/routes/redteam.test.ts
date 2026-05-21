@@ -47,13 +47,9 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 }
 
 async function waitForFetchCalls(callCount: number): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (mockedFetchWithProxy.mock.calls.length >= callCount) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  expect(mockedFetchWithProxy).toHaveBeenCalledTimes(callCount);
+  await vi.waitFor(() => {
+    expect(mockedFetchWithProxy.mock.calls.length).toBeGreaterThanOrEqual(callCount);
+  });
 }
 
 describe('Redteam Routes', () => {
@@ -769,7 +765,7 @@ describe('Redteam Routes', () => {
         .send({ baseUrl: 'https://api.example.com' });
 
       expect(startResponse.status).toBe(200);
-      const { sessionId } = startResponse.body;
+      const { sessionId } = startResponse.body.data;
 
       await waitForFetchCalls(3);
 
@@ -782,7 +778,7 @@ describe('Redteam Routes', () => {
 
       expect(inputResponse.status).toBe(200);
       expect(JSON.stringify(inputResponse.body)).not.toContain('sk-test-secret');
-      expect(Object.values(inputResponse.body.session.finalConfig.headers)).toContain(
+      expect(Object.values(inputResponse.body.data.session.finalConfig.headers)).toContain(
         'Bearer ••••cret',
       );
 
@@ -792,7 +788,7 @@ describe('Redteam Routes', () => {
 
       expect(sessionResponse.status).toBe(200);
       expect(JSON.stringify(sessionResponse.body)).not.toContain('sk-test-secret');
-      expect(Object.values(sessionResponse.body.config.headers)).toContain('Bearer ••••cret');
+      expect(Object.values(sessionResponse.body.data.config.headers)).toContain('Bearer ••••cret');
     });
   });
 

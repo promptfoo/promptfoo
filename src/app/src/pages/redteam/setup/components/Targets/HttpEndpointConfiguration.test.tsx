@@ -16,6 +16,29 @@ vi.mock('react-simple-code-editor', () => ({
   ),
 }));
 
+vi.mock('../ConfigAgent', () => ({
+  ConfigAgentDrawer: ({ onConfigDiscovered }: any) => (
+    <button
+      type="button"
+      onClick={() =>
+        onConfigDiscovered?.(
+          {
+            apiType: 'openai_compatible',
+            method: 'POST',
+            path: '/v1/chat/completions',
+            headers: { Authorization: 'Bearer edited-token' },
+            body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+            transformResponse: 'json.choices[0].message.content',
+          },
+          'https://edited.example.com',
+        )
+      }
+    >
+      Apply ConfigAgent result
+    </button>
+  ),
+}));
+
 // Wrapper component for providing tooltip context
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <TooltipProvider>{children}</TooltipProvider>
@@ -143,6 +166,30 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
+  });
+
+  it('applies the URL discovered inside the config agent drawer', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Apply ConfigAgent result' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'url',
+      'https://edited.example.com/v1/chat/completions',
+    );
+    expect(mockUpdateCustomTarget).not.toHaveBeenCalledWith(
+      'url',
+      'https://api.example.com/chat/v1/chat/completions',
+    );
   });
 
   it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {

@@ -11,7 +11,7 @@ import { isIP } from 'node:net';
 
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch';
-import { ALL_STRATEGIES, analyzeProbeResults } from './strategies';
+import { ALL_STRATEGIES, analyzeProbeResults, getBaseConfigForStrategy } from './strategies';
 
 import type {
   AgentMessage,
@@ -24,8 +24,6 @@ import type {
 } from './types';
 
 const DEFAULT_TIMEOUT = 10000;
-const _MAX_RETRIES = 2;
-
 const CLOUD_METADATA_HOSTS = new Set([
   'metadata.google.internal',
   'metadata.goog',
@@ -506,8 +504,7 @@ export class ConfigurationAgent {
     }
 
     // Ask for API key
-    const authTypeDisplay =
-      auth?.type === 'bearer' ? 'Bearer token' : auth?.type === 'api_key' ? 'API key' : 'API key';
+    const authTypeDisplay = auth?.type === 'bearer' ? 'Bearer token' : 'API key';
 
     this.addMessage('question', `Do you have an ${authTypeDisplay} for this service?`, {
       inputRequest: {
@@ -659,21 +656,10 @@ export class ConfigurationAgent {
         break;
 
       case 'openai':
-        // User indicated OpenAI format - use that strategy
         this.session.bestMatch = {
           strategyId: 'openai_compatible',
           confidence: 0.9,
-          discoveredConfig: {
-            apiType: 'openai_compatible',
-            method: 'POST',
-            path: '/v1/chat/completions',
-            headers: { 'Content-Type': 'application/json' },
-            body: {
-              model: '{{model}}',
-              messages: [{ role: 'user', content: '{{prompt}}' }],
-            },
-            transformResponse: 'json.choices[0].message.content',
-          },
+          discoveredConfig: getBaseConfigForStrategy('openai_compatible'),
           evidence: ['User indicated OpenAI-compatible'],
         };
         this.addMessage('info', 'Using OpenAI-compatible format. Do you have an API key?', {
@@ -694,21 +680,7 @@ export class ConfigurationAgent {
         this.session.bestMatch = {
           strategyId: 'anthropic_compatible',
           confidence: 0.9,
-          discoveredConfig: {
-            apiType: 'anthropic_compatible',
-            method: 'POST',
-            path: '/v1/messages',
-            headers: {
-              'Content-Type': 'application/json',
-              'anthropic-version': '2023-06-01',
-            },
-            body: {
-              model: '{{model}}',
-              max_tokens: 1024,
-              messages: [{ role: 'user', content: '{{prompt}}' }],
-            },
-            transformResponse: 'json.content[0].text',
-          },
+          discoveredConfig: getBaseConfigForStrategy('anthropic_compatible'),
           evidence: ['User indicated Anthropic-compatible'],
         };
         this.addMessage('info', 'Using Anthropic-compatible format. Do you have an API key?', {

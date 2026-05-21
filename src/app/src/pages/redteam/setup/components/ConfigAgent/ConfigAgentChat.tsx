@@ -1,50 +1,26 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import CheckIcon from '@mui/icons-material/Check';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import KeyIcon from '@mui/icons-material/Key';
-import SendIcon from '@mui/icons-material/Send';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
 import {
-  alpha,
-  Box,
-  Button,
-  IconButton,
-  InputAdornment,
-  keyframes,
-  Paper,
-  TextField,
   Tooltip,
-  Typography,
-  useTheme,
-} from '@mui/material';
-import type { Theme } from '@mui/material';
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Eye,
+  EyeOff,
+  KeyRound,
+  SendHorizontal,
+} from 'lucide-react';
 
 import type { AgentMessage, DiscoveredConfig } from '../../hooks/useConfigAgent';
-
-// Animation keyframes
-const fadeSlideIn = keyframes`
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
-const pulse = keyframes`
-  0%, 80%, 100% {
-    opacity: 0.3;
-    transform: scale(0.8);
-  }
-  40% {
-    opacity: 1;
-    transform: scale(1);
-  }
-`;
 
 interface ConfigAgentChatProps {
   messages: AgentMessage[];
@@ -54,10 +30,6 @@ interface ConfigAgentChatProps {
   onSubmitApiKey: (apiKey: string, field?: string) => void;
 }
 
-/**
- * Chat interface for the configuration agent
- * Design: Technical assistant aesthetic with clear visual hierarchy
- */
 export default function ConfigAgentChat({
   messages,
   isLoading,
@@ -65,635 +37,335 @@ export default function ConfigAgentChat({
   onSelectOption,
   onSubmitApiKey,
 }: ConfigAgentChatProps) {
-  const theme = useTheme();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [inputValue, setInputValue] = useState('');
   const [apiKeyValue, setApiKeyValue] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
 
-  // Get the current input request if any
   const lastMessage = messages[messages.length - 1];
   const inputRequest = lastMessage?.metadata?.inputRequest;
   const quickOptions = lastMessage?.metadata?.options;
+  const isApiKeyMode = inputRequest?.type === 'api_key';
 
-  // Auto-scroll to bottom when messages change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger on message count change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: message count is the scroll trigger
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
   const handleSendMessage = useCallback(() => {
-    if (inputValue.trim()) {
-      onSendMessage(inputValue.trim());
-      setInputValue('');
+    const message = inputValue.trim();
+    if (!message) {
+      return;
     }
+
+    onSendMessage(message);
+    setInputValue('');
   }, [inputValue, onSendMessage]);
 
   const handleSubmitApiKey = useCallback(() => {
-    if (apiKeyValue.trim()) {
-      onSubmitApiKey(apiKeyValue.trim(), inputRequest?.field);
-      setApiKeyValue('');
-      setShowApiKey(false);
+    const apiKey = apiKeyValue.trim();
+    if (!apiKey) {
+      return;
     }
+
+    onSubmitApiKey(apiKey, inputRequest?.field);
+    setApiKeyValue('');
+    setShowApiKey(false);
   }, [apiKeyValue, inputRequest?.field, onSubmitApiKey]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        if (inputRequest?.type === 'api_key') {
-          handleSubmitApiKey();
-        } else {
-          handleSendMessage();
-        }
+    (event: React.KeyboardEvent) => {
+      if (event.key !== 'Enter' || event.shiftKey) {
+        return;
+      }
+
+      event.preventDefault();
+      if (isApiKeyMode) {
+        handleSubmitApiKey();
+      } else {
+        handleSendMessage();
       }
     },
-    [handleSendMessage, handleSubmitApiKey, inputRequest?.type],
+    [handleSendMessage, handleSubmitApiKey, isApiKeyMode],
   );
 
-  const isApiKeyMode = inputRequest?.type === 'api_key';
+  const handleToggleApiKeyVisibility = useCallback(() => {
+    setShowApiKey((visible) => !visible);
+    inputRef.current?.focus();
+  }, []);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        backgroundColor: alpha(theme.palette.background.default, 0.5),
-      }}
-    >
-      {/* Messages Area */}
-      <Box
-        sx={{
-          flex: 1,
-          overflowY: 'auto',
-          p: 2,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-        }}
-      >
-        {messages.map((message, index) => (
-          <MessageBubble key={message.id} message={message} theme={theme} index={index} />
-        ))}
-
-        {/* Typing Indicator */}
-        {isLoading && <TypingIndicator theme={theme} />}
-
-        <div ref={messagesEndRef} />
-      </Box>
-
-      {/* Quick Options */}
-      {quickOptions && quickOptions.length > 0 && (
-        <Box
-          sx={{
-            px: 2,
-            pb: 1.5,
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 1,
-          }}
-        >
-          {quickOptions.map((option, index) => (
-            <Button
-              key={option.id}
-              size="small"
-              variant={option.primary ? 'contained' : 'outlined'}
-              onClick={() => onSelectOption(option.id)}
-              sx={{
-                borderRadius: '20px',
-                textTransform: 'none',
-                fontWeight: 500,
-                fontSize: '0.8125rem',
-                px: 2,
-                py: 0.75,
-                animation: `${fadeSlideIn} 0.3s ease-out`,
-                animationDelay: `${index * 0.05}s`,
-                animationFillMode: 'backwards',
-                ...(option.primary
-                  ? {
-                      background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
-                      '&:hover': {
-                        boxShadow: `0 4px 12px ${alpha(theme.palette.primary.main, 0.4)}`,
-                      },
-                    }
-                  : {
-                      borderColor: alpha(theme.palette.divider, 0.8),
-                      '&:hover': {
-                        borderColor: theme.palette.primary.main,
-                        backgroundColor: alpha(theme.palette.primary.main, 0.04),
-                      },
-                    }),
-              }}
-            >
-              {option.label}
-            </Button>
+    <TooltipProvider delayDuration={0}>
+      <section className="flex h-full min-h-0 flex-col bg-muted/20">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+          {messages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
           ))}
-        </Box>
-      )}
+          {isLoading && <TypingIndicator />}
+          <div ref={messagesEndRef} />
+        </div>
 
-      {/* Input Area */}
-      <Box
-        sx={{
-          p: 2,
-          borderTop: `1px solid ${theme.palette.divider}`,
-          backgroundColor: theme.palette.background.paper,
-          ...(isApiKeyMode && {
-            backgroundColor: alpha(theme.palette.warning.main, 0.04),
-            borderTop: `1px solid ${alpha(theme.palette.warning.main, 0.2)}`,
-          }),
-        }}
-      >
-        {/* API Key Mode Label */}
-        {isApiKeyMode && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.75,
-              mb: 1,
-              color: theme.palette.warning.dark,
-            }}
-          >
-            <KeyIcon sx={{ fontSize: 14 }} />
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>
-              Secure Input Mode
-            </Typography>
-          </Box>
+        {quickOptions && quickOptions.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-4 pb-3">
+            {quickOptions.map((option) => (
+              <Button
+                key={option.id}
+                type="button"
+                size="sm"
+                variant={option.primary ? 'default' : 'outline'}
+                onClick={() => onSelectOption(option.id)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
         )}
 
-        <TextField
-          fullWidth
-          size="small"
-          type={isApiKeyMode && !showApiKey ? 'password' : 'text'}
-          placeholder={
-            isApiKeyMode
-              ? inputRequest.placeholder || 'Enter API key...'
-              : 'Type a message... (Enter to send)'
-          }
-          value={isApiKeyMode ? apiKeyValue : inputValue}
-          onChange={(e) =>
-            isApiKeyMode ? setApiKeyValue(e.target.value) : setInputValue(e.target.value)
-          }
-          onKeyDown={handleKeyDown}
-          disabled={isLoading}
-          autoComplete="off"
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '24px',
-              backgroundColor: theme.palette.background.default,
-              transition: 'all 0.2s ease',
-              '&:hover': {
-                backgroundColor: alpha(theme.palette.background.default, 0.8),
-              },
-              '&.Mui-focused': {
-                backgroundColor: theme.palette.background.paper,
-                boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
-              },
-              ...(isApiKeyMode && {
-                backgroundColor: alpha(theme.palette.warning.main, 0.08),
-                '&.Mui-focused': {
-                  boxShadow: `0 0 0 2px ${alpha(theme.palette.warning.main, 0.2)}`,
-                },
-              }),
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'transparent',
-            },
-            '& .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'transparent',
-            },
-            '& .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'transparent',
-            },
-          }}
-          slotProps={{
-            input: {
-              endAdornment: (
-                <InputAdornment position="end" sx={{ gap: 0.5 }}>
-                  {isApiKeyMode && (
-                    <Tooltip title={showApiKey ? 'Hide' : 'Show'}>
-                      <IconButton
-                        size="small"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        edge="end"
-                        sx={{ color: theme.palette.text.secondary }}
-                      >
-                        {showApiKey ? (
-                          <VisibilityOffIcon fontSize="small" />
-                        ) : (
-                          <VisibilityIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-                  )}
-                  <Tooltip title="Send (Enter)">
-                    <span>
-                      <IconButton
-                        size="small"
-                        onClick={isApiKeyMode ? handleSubmitApiKey : handleSendMessage}
-                        disabled={
-                          isLoading || (isApiKeyMode ? !apiKeyValue.trim() : !inputValue.trim())
-                        }
-                        sx={{
-                          backgroundColor: theme.palette.primary.main,
-                          color: theme.palette.primary.contrastText,
-                          width: 32,
-                          height: 32,
-                          '&:hover': {
-                            backgroundColor: theme.palette.primary.dark,
-                          },
-                          '&.Mui-disabled': {
-                            backgroundColor: alpha(theme.palette.action.disabled, 0.12),
-                            color: theme.palette.action.disabled,
-                          },
-                        }}
-                      >
-                        <SendIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </span>
-                  </Tooltip>
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
-      </Box>
-    </Box>
+        <div
+          className={cn(
+            'border-t border-border bg-background p-4',
+            isApiKeyMode &&
+              'border-amber-200 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/20',
+          )}
+        >
+          {isApiKeyMode && (
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-200">
+              <KeyRound className="size-3.5" />
+              Secure input
+            </div>
+          )}
+
+          <div className="relative">
+            <Input
+              ref={inputRef}
+              type={isApiKeyMode && !showApiKey ? 'password' : 'text'}
+              placeholder={
+                isApiKeyMode
+                  ? inputRequest.placeholder || 'Enter API key...'
+                  : 'Type a message... (Enter to send)'
+              }
+              value={isApiKeyMode ? apiKeyValue : inputValue}
+              onChange={(event) =>
+                isApiKeyMode
+                  ? setApiKeyValue(event.target.value)
+                  : setInputValue(event.target.value)
+              }
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+              autoComplete="off"
+              className={cn('h-11 rounded-full pr-20', isApiKeyMode && 'border-amber-300')}
+            />
+            <div className="absolute inset-y-0 right-1 flex items-center gap-1">
+              {isApiKeyMode && (
+                <IconButton
+                  label={showApiKey ? 'Hide' : 'Show'}
+                  onClick={handleToggleApiKeyVisibility}
+                >
+                  {showApiKey ? <EyeOff /> : <Eye />}
+                </IconButton>
+              )}
+              <IconButton
+                label="Send"
+                onClick={isApiKeyMode ? handleSubmitApiKey : handleSendMessage}
+                disabled={isLoading || (isApiKeyMode ? !apiKeyValue.trim() : !inputValue.trim())}
+                emphasized
+              >
+                <SendHorizontal />
+              </IconButton>
+            </div>
+          </div>
+        </div>
+      </section>
+    </TooltipProvider>
   );
 }
 
-/**
- * Typing indicator with animated dots
- */
-function TypingIndicator({ theme }: { theme: Theme }) {
+function TypingIndicator() {
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        pl: 1,
-        animation: `${fadeSlideIn} 0.3s ease-out`,
-      }}
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-          px: 1.5,
-          py: 1,
-          borderRadius: '16px',
-          backgroundColor: alpha(theme.palette.primary.main, 0.08),
-        }}
-      >
-        {[0, 1, 2].map((i) => (
-          <Box
-            key={i}
-            sx={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              backgroundColor: theme.palette.primary.main,
-              animation: `${pulse} 1.4s infinite ease-in-out`,
-              animationDelay: `${i * 0.16}s`,
-            }}
+    <div className="flex items-center gap-2 pl-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-1 rounded-md bg-primary/10 px-3 py-2">
+        {[0, 1, 2].map((index) => (
+          <span
+            key={index}
+            className="size-1.5 animate-pulse rounded-full bg-primary"
+            style={{ animationDelay: `${index * 120}ms` }}
           />
         ))}
-      </Box>
-      <Typography
-        variant="caption"
-        sx={{
-          color: theme.palette.text.secondary,
-          fontFamily: 'monospace',
-          fontSize: '0.7rem',
-          letterSpacing: '0.05em',
-        }}
-      >
-        analyzing...
-      </Typography>
-    </Box>
+      </div>
+      <span className="font-mono">analyzing...</span>
+    </div>
   );
 }
 
-interface MessageBubbleProps {
-  message: AgentMessage;
-  theme: Theme;
-  index: number;
-}
-
-function MessageBubble({ message, theme, index }: MessageBubbleProps) {
-  const isUser = message.type === 'user';
-  const isStatus = message.type === 'status';
-  const isDiscovery = message.type === 'discovery';
-  const isSuccess = message.type === 'success';
-  const isError = message.type === 'error';
-
-  // Status messages are compact single-line
-  if (isStatus) {
+function MessageBubble({ message }: { message: AgentMessage }) {
+  if (message.type === 'status') {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          py: 0.5,
-          animation: `${fadeSlideIn} 0.3s ease-out`,
-        }}
-      >
-        <Box
-          sx={{
-            width: 4,
-            height: 4,
-            borderRadius: '50%',
-            backgroundColor: theme.palette.primary.main,
-            animation: `${pulse} 2s infinite`,
-          }}
-        />
-        <Typography
-          variant="caption"
-          sx={{
-            color: theme.palette.text.secondary,
-            fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-            fontSize: '0.75rem',
-            letterSpacing: '0.02em',
-          }}
-        >
-          {message.content}
-        </Typography>
-      </Box>
+      <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+        <span className="font-mono">{message.content}</span>
+      </div>
     );
   }
 
-  // Get accent color for message type
-  const getAccentColor = () => {
-    if (isSuccess) {
-      return theme.palette.success.main;
-    }
-    if (isError) {
-      return theme.palette.error.main;
-    }
-    if (isDiscovery) {
-      return theme.palette.info.main;
-    }
-    if (isUser) {
-      return theme.palette.primary.main;
-    }
-    return theme.palette.divider;
-  };
-
-  const getBackgroundColor = () => {
-    if (isUser) {
-      return alpha(theme.palette.primary.main, 0.08);
-    }
-    if (isSuccess) {
-      return alpha(theme.palette.success.main, 0.06);
-    }
-    if (isError) {
-      return alpha(theme.palette.error.main, 0.06);
-    }
-    if (isDiscovery) {
-      return alpha(theme.palette.info.main, 0.06);
-    }
-    return alpha(theme.palette.background.paper, 0.8);
-  };
+  const isUser = message.type === 'user';
+  const labeled = ['discovery', 'success', 'error'].includes(message.type);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: isUser ? 'flex-end' : 'flex-start',
-        animation: `${fadeSlideIn} 0.3s ease-out`,
-        animationDelay: `${Math.min(index * 0.05, 0.2)}s`,
-        animationFillMode: 'backwards',
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          position: 'relative',
-          p: 1.5,
-          maxWidth: '88%',
-          backgroundColor: getBackgroundColor(),
-          borderRadius: '12px',
-          border: `1px solid ${alpha(getAccentColor(), 0.2)}`,
-          borderLeft: isUser ? undefined : `3px solid ${getAccentColor()}`,
-          borderRight: isUser ? `3px solid ${getAccentColor()}` : undefined,
-          ...(isDiscovery && {
-            background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.08)} 0%, ${alpha(theme.palette.info.main, 0.02)} 100%)`,
-          }),
-          ...(isSuccess && {
-            background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.1)} 0%, ${alpha(theme.palette.success.main, 0.04)} 100%)`,
-          }),
-        }}
+    <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
+      <article
+        className={cn(
+          'max-w-[88%] rounded-md border bg-card p-3 text-sm leading-6 shadow-sm',
+          getMessageClassName(message.type),
+          isUser ? 'border-r-2' : 'border-l-2',
+        )}
       >
-        {/* Message Label */}
-        {!isUser && (isDiscovery || isSuccess || isError) && (
-          <Typography
-            variant="caption"
-            sx={{
-              display: 'block',
-              mb: 0.5,
-              fontWeight: 600,
-              fontSize: '0.65rem',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-              color: getAccentColor(),
-            }}
+        {!isUser && labeled && (
+          <div
+            className={cn(
+              'mb-1 text-[11px] font-semibold uppercase',
+              getLabelClassName(message.type),
+            )}
           >
-            {isDiscovery && '✓ Discovery'}
-            {isSuccess && '✓ Success'}
-            {isError && '✕ Error'}
-          </Typography>
+            {getMessageLabel(message.type)}
+          </div>
         )}
+        <div className="whitespace-pre-wrap text-foreground">
+          {renderFormattedText(message.content)}
+        </div>
 
-        {/* Message Content */}
-        <Typography
-          variant="body2"
-          component="div"
-          sx={{
-            fontSize: '0.875rem',
-            lineHeight: 1.5,
-            color: isUser ? theme.palette.text.primary : theme.palette.text.primary,
-            whiteSpace: 'pre-wrap',
-            '& strong': {
-              fontWeight: 600,
-              color: theme.palette.text.primary,
-            },
-          }}
-        >
-          {renderFormattedText(message.content, theme)}
-        </Typography>
-
-        {/* Config Preview */}
         {message.metadata?.discoveredConfig && (
-          <ConfigPreview config={message.metadata.discoveredConfig} theme={theme} />
+          <ConfigPreview config={message.metadata.discoveredConfig} />
         )}
-      </Paper>
-    </Box>
+      </article>
+    </div>
   );
 }
 
-interface ConfigPreviewProps {
-  config: DiscoveredConfig;
-  theme: Theme;
+function getMessageClassName(type: AgentMessage['type']): string {
+  switch (type) {
+    case 'user':
+      return 'border-primary/30 bg-primary/5';
+    case 'discovery':
+      return 'border-sky-500/30 bg-sky-50/70 dark:bg-sky-950/20';
+    case 'success':
+      return 'border-emerald-500/30 bg-emerald-50/70 dark:bg-emerald-950/20';
+    case 'error':
+      return 'border-destructive/30 bg-destructive/5';
+    default:
+      return 'border-border';
+  }
 }
 
-function ConfigPreview({ config, theme }: ConfigPreviewProps) {
+function getLabelClassName(type: AgentMessage['type']): string {
+  switch (type) {
+    case 'discovery':
+      return 'text-sky-700 dark:text-sky-300';
+    case 'success':
+      return 'text-emerald-700 dark:text-emerald-300';
+    case 'error':
+      return 'text-destructive';
+    default:
+      return 'text-muted-foreground';
+  }
+}
+
+function getMessageLabel(type: AgentMessage['type']): string {
+  switch (type) {
+    case 'discovery':
+      return 'Discovery';
+    case 'success':
+      return 'Success';
+    case 'error':
+      return 'Error';
+    default:
+      return '';
+  }
+}
+
+function ConfigPreview({ config }: { config: Partial<DiscoveredConfig> }) {
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
+  const configJson = JSON.stringify(config, null, 2);
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+      await navigator.clipboard.writeText(configJson);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Ignore clipboard errors
+      // Clipboard can be unavailable in embedded browser contexts.
     }
-  }, [config]);
-
-  const configJson = JSON.stringify(config, null, 2);
+  }, [configJson]);
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+    <section className="mt-3">
+      <div className="mb-2 flex items-center justify-between">
         <Button
-          size="small"
-          onClick={() => setExpanded(!expanded)}
-          sx={{
-            textTransform: 'none',
-            fontWeight: 500,
-            fontSize: '0.75rem',
-            color: theme.palette.text.secondary,
-            p: 0,
-            minWidth: 'auto',
-            '&:hover': {
-              backgroundColor: 'transparent',
-              color: theme.palette.primary.main,
-            },
-          }}
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-1 text-xs text-muted-foreground"
+          onClick={() => setExpanded((value) => !value)}
         >
-          {expanded ? '▼' : '▶'} Configuration
+          {expanded ? <ChevronDown /> : <ChevronRight />}
+          Configuration
         </Button>
-
         {expanded && (
-          <Tooltip title={copied ? 'Copied!' : 'Copy JSON'}>
-            <IconButton size="small" onClick={handleCopy} sx={{ p: 0.5 }}>
-              {copied ? (
-                <CheckIcon sx={{ fontSize: 14, color: theme.palette.success.main }} />
-              ) : (
-                <ContentCopyIcon sx={{ fontSize: 14, color: theme.palette.text.secondary }} />
-              )}
-            </IconButton>
-          </Tooltip>
+          <IconButton label={copied ? 'Copied!' : 'Copy JSON'} onClick={handleCopy}>
+            {copied ? <Check /> : <Copy />}
+          </IconButton>
         )}
-      </Box>
+      </div>
 
       {expanded && (
-        <Box
-          sx={{
-            position: 'relative',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            border: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-          }}
-        >
-          {/* Header bar */}
-          <Box
-            sx={{
-              px: 1.5,
-              py: 0.75,
-              backgroundColor: alpha(theme.palette.background.default, 0.8),
-              borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 0.5,
-              }}
-            >
-              {['#ff5f56', '#ffbd2e', '#27ca40'].map((color) => (
-                <Box
-                  key={color}
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: color,
-                    opacity: 0.8,
-                  }}
-                />
-              ))}
-            </Box>
-            <Typography
-              variant="caption"
-              sx={{
-                fontFamily: '"JetBrains Mono", monospace',
-                fontSize: '0.65rem',
-                color: theme.palette.text.secondary,
-                letterSpacing: '0.02em',
-              }}
-            >
-              config.json
-            </Typography>
-          </Box>
-
-          {/* Code content */}
-          <Box
-            component="pre"
-            sx={{
-              m: 0,
-              p: 1.5,
-              backgroundColor:
-                theme.palette.mode === 'dark'
-                  ? alpha('#0d1117', 0.8)
-                  : alpha(theme.palette.grey[50], 0.8),
-              fontFamily: '"JetBrains Mono", "Fira Code", "Consolas", monospace',
-              fontSize: '0.7rem',
-              lineHeight: 1.6,
-              overflow: 'auto',
-              maxHeight: 240,
-              color: theme.palette.mode === 'dark' ? '#e6edf3' : theme.palette.text.primary,
-              '&::-webkit-scrollbar': {
-                width: 6,
-                height: 6,
-              },
-              '&::-webkit-scrollbar-thumb': {
-                backgroundColor: alpha(theme.palette.text.primary, 0.2),
-                borderRadius: 3,
-              },
-            }}
-          >
-            <SyntaxHighlightedJson json={configJson} theme={theme} />
-          </Box>
-        </Box>
+        <div className="overflow-hidden rounded-md border border-border">
+          <div className="border-b border-border bg-muted/40 px-3 py-1.5 font-mono text-[11px] text-muted-foreground">
+            config.json
+          </div>
+          <pre className="max-h-60 overflow-auto bg-zinc-950 p-3 font-mono text-xs leading-5 text-zinc-100 dark:bg-zinc-950">
+            <SyntaxHighlightedJson json={configJson} />
+          </pre>
+        </div>
       )}
-    </Box>
+    </section>
   );
 }
 
-/**
- * Simple JSON syntax highlighting
- */
-function SyntaxHighlightedJson({ json, theme }: { json: string; theme: Theme }) {
-  const isDark = theme.palette.mode === 'dark';
+function IconButton({
+  children,
+  disabled = false,
+  emphasized = false,
+  label,
+  onClick,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  emphasized?: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          size="icon"
+          variant={emphasized ? 'default' : 'ghost'}
+          className={cn('size-8 rounded-full', !emphasized && 'text-muted-foreground')}
+          aria-label={label}
+          onClick={onClick}
+          disabled={disabled}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
-  const colors = {
-    key: isDark ? '#79c0ff' : '#0550ae',
-    string: isDark ? '#a5d6ff' : '#0a3069',
-    number: isDark ? '#a5d6ff' : '#0550ae',
-    boolean: isDark ? '#ff7b72' : '#cf222e',
-    null: isDark ? '#ff7b72' : '#cf222e',
-    punctuation: isDark ? '#8b949e' : '#57606a',
-  };
-
+function SyntaxHighlightedJson({ json }: { json: string }) {
   const tokenPattern =
     /"(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|null|[{}[\],:]/gi;
   const nodes: React.ReactNode[] = [];
@@ -706,19 +378,11 @@ function SyntaxHighlightedJson({ json, theme }: { json: string; theme: Theme }) 
     }
 
     const token = match[0];
-    let color = colors.punctuation;
-    if (token.startsWith('"')) {
-      color = /^\s*:/.test(json.slice(match.index + token.length)) ? colors.key : colors.string;
-    } else if (/^-?\d/.test(token)) {
-      color = colors.number;
-    } else if (token === 'true' || token === 'false') {
-      color = colors.boolean;
-    } else if (token === 'null') {
-      color = colors.null;
-    }
-
     nodes.push(
-      <span key={`${match.index}-${token}`} style={{ color }}>
+      <span
+        key={`${match.index}-${token}`}
+        className={getJsonTokenClassName(token, json, match.index)}
+      >
         {token}
       </span>,
     );
@@ -732,96 +396,56 @@ function SyntaxHighlightedJson({ json, theme }: { json: string; theme: Theme }) 
   return <code>{nodes}</code>;
 }
 
-/**
- * Safely render formatted text without dangerouslySetInnerHTML
- * Supports: **bold**, `code`, and newlines
- */
-interface MarkdownToken {
-  type: 'bold' | 'code';
-  index: number;
-  raw: string;
-  text: string;
-}
-
-function getNextMarkdownToken(text: string): MarkdownToken | null {
-  const boldMatch = text.match(/\*\*(.+?)\*\*/);
-  const codeMatch = text.match(/`(.+?)`/);
-  const boldIndex = boldMatch ? text.indexOf(boldMatch[0]) : -1;
-  const codeIndex = codeMatch ? text.indexOf(codeMatch[0]) : -1;
-
-  if (boldIndex === -1 && codeIndex === -1) {
-    return null;
+function getJsonTokenClassName(token: string, json: string, index: number): string {
+  if (token.startsWith('"')) {
+    return /^\s*:/.test(json.slice(index + token.length)) ? 'text-sky-300' : 'text-blue-200';
   }
-
-  const type = boldIndex !== -1 && (codeIndex === -1 || boldIndex < codeIndex) ? 'bold' : 'code';
-  const match = type === 'bold' ? boldMatch! : codeMatch!;
-
-  return {
-    type,
-    index: type === 'bold' ? boldIndex : codeIndex,
-    raw: match[0],
-    text: match[1],
-  };
+  if (/^-?\d/.test(token)) {
+    return 'text-cyan-200';
+  }
+  if (token === 'true' || token === 'false' || token === 'null') {
+    return 'text-rose-300';
+  }
+  return 'text-zinc-400';
 }
 
-function renderCodeToken(tokenText: string, key: string, theme: Theme): React.ReactNode {
-  return (
-    <code
-      key={key}
-      style={{
-        backgroundColor: alpha(theme.palette.primary.main, 0.1),
-        padding: '2px 6px',
-        borderRadius: 4,
-        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-        fontSize: '0.8em',
-        fontWeight: 500,
-      }}
-    >
-      {tokenText}
-    </code>
-  );
+function renderFormattedText(text: string): React.ReactNode[] {
+  return text.split('\n').flatMap((line, lineIndex) => {
+    const nodes = renderInlineText(line, `line-${lineIndex}`);
+    return lineIndex === 0 ? nodes : [<br key={`break-${lineIndex}`} />, ...nodes];
+  });
 }
 
-function renderFormattedLine(line: string, lineIndex: number, theme: Theme): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  let remaining = line;
-  let keyIndex = 0;
+function renderInlineText(text: string, keyPrefix: string): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const tokenPattern = /(\*\*.+?\*\*|`.+?`)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
-  while (remaining.length > 0) {
-    const token = getNextMarkdownToken(remaining);
-    if (!token) {
-      parts.push(remaining);
-      break;
+  while ((match = tokenPattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
     }
 
-    if (token.index > 0) {
-      parts.push(remaining.slice(0, token.index));
+    const token = match[0];
+    if (token.startsWith('**')) {
+      nodes.push(<strong key={`${keyPrefix}-${match.index}`}>{token.slice(2, -2)}</strong>);
+    } else {
+      nodes.push(
+        <code
+          key={`${keyPrefix}-${match.index}`}
+          className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
+        >
+          {token.slice(1, -1)}
+        </code>,
+      );
     }
-
-    const key = `${token.type}-${lineIndex}-${keyIndex++}`;
-    parts.push(
-      token.type === 'bold' ? (
-        <strong key={key}>{token.text}</strong>
-      ) : (
-        renderCodeToken(token.text, key, theme)
-      ),
-    );
-    remaining = remaining.slice(token.index + token.raw.length);
+    lastIndex = tokenPattern.lastIndex;
   }
 
-  return parts;
-}
-
-function renderFormattedText(text: string, theme: Theme): React.ReactNode {
-  if (!text) {
-    return null;
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
   }
 
-  const lines = text.split('\n');
-  return lines.map((line, lineIndex) => (
-    <React.Fragment key={`line-${lineIndex}`}>
-      {renderFormattedLine(line, lineIndex, theme)}
-      {lineIndex < lines.length - 1 && <br />}
-    </React.Fragment>
-  ));
+  return nodes;
 }

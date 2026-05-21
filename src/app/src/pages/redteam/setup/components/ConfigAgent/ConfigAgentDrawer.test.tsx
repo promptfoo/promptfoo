@@ -167,7 +167,7 @@ describe('ConfigAgentDrawer', () => {
       />,
     );
 
-    await waitFor(() => expect(onConfigDiscovered).toHaveBeenCalledWith(finalConfig));
+    expect(onConfigDiscovered).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: /start auto-discovery/i }));
     await user.click(screen.getByRole('button', { name: 'Copy URL' }));
@@ -176,7 +176,7 @@ describe('ConfigAgentDrawer', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /apply configuration/i }));
-    expect(onConfigDiscovered).toHaveBeenCalledWith(finalConfig);
+    expect(onConfigDiscovered).toHaveBeenCalledWith(finalConfig, 'https://api.example.com');
     expect(hookState.cancelSession).toHaveBeenCalled();
     expect(hookState.reset).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();

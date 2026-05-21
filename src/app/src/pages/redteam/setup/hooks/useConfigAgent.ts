@@ -15,7 +15,7 @@ export interface AgentMessage {
     strategyId?: string;
     options?: QuickOption[];
     inputRequest?: InputRequest;
-    discoveredConfig?: DiscoveredConfig;
+    discoveredConfig?: Partial<DiscoveredConfig>;
   };
 }
 
@@ -36,7 +36,14 @@ export interface InputRequest {
 }
 
 export interface DiscoveredConfig {
-  apiType: string;
+  apiType:
+    | 'openai_compatible'
+    | 'anthropic_compatible'
+    | 'azure_openai'
+    | 'generic_json'
+    | 'websocket'
+    | 'graphql'
+    | 'unknown';
   method: 'GET' | 'POST' | 'PUT';
   path?: string;
   headers: Record<string, string>;
@@ -182,7 +189,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
             return;
           }
 
-          const data = await response.json();
+          const { data } = await response.json();
 
           // Only update state if still mounted and polling is active
           if (!mountedRef.current || !pollingActiveRef.current) {
@@ -239,7 +246,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
           throw new Error(data.error || 'Failed to start session');
         }
 
-        const data = await response.json();
+        const { data } = await response.json();
         setSessionId(data.sessionId);
         setMessages(data.messages || []);
 
@@ -284,7 +291,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
           throw new Error(data.error || 'Failed to send input');
         }
 
-        const data = await response.json();
+        const { data } = await response.json();
         setMessages(data.messages || []);
         setSession(restoreSessionSecrets(data.session || null));
 

@@ -104,6 +104,60 @@ export const RedteamStatusResponseSchema = z.object({
 
 export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
+// Configuration agent endpoints
+
+const ConfigAgentMessageSchema = z.unknown();
+const ConfigAgentSessionSchema = z.unknown();
+
+export const ConfigAgentStartRequestSchema = z.object({
+  baseUrl: z.string().trim().min(1, 'URL is required'),
+  hints: z
+    .object({
+      apiType: z.string().optional(),
+      hasAuth: z.boolean().optional(),
+      authType: z.string().optional(),
+    })
+    .optional(),
+});
+
+export const ConfigAgentInputRequestSchema = z.object({
+  sessionId: z.string(),
+  type: z.enum(['message', 'option', 'api_key', 'confirmation']),
+  value: z.union([z.string(), z.boolean()]),
+  field: z.string().optional(),
+});
+
+export const ConfigAgentStartResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    sessionId: z.string(),
+    messages: z.array(ConfigAgentMessageSchema),
+  }),
+});
+
+export const ConfigAgentInputResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    messages: z.array(ConfigAgentMessageSchema),
+    session: ConfigAgentSessionSchema,
+  }),
+});
+
+export const ConfigAgentSessionResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    messages: z.array(ConfigAgentMessageSchema),
+    session: ConfigAgentSessionSchema,
+    config: z.unknown().optional(),
+    isComplete: z.boolean(),
+  }),
+});
+
+export const ConfigAgentDeleteResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({}),
+});
+
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
   GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
@@ -115,4 +169,14 @@ export const RedteamSchemas = {
     Response: RedteamTaskResponseSchema,
   },
   Status: { Response: RedteamStatusResponseSchema },
+  ConfigAgentStart: {
+    Request: ConfigAgentStartRequestSchema,
+    Response: ConfigAgentStartResponseSchema,
+  },
+  ConfigAgentInput: {
+    Request: ConfigAgentInputRequestSchema,
+    Response: ConfigAgentInputResponseSchema,
+  },
+  ConfigAgentSession: { Response: ConfigAgentSessionResponseSchema },
+  ConfigAgentDelete: { Response: ConfigAgentDeleteResponseSchema },
 } as const;

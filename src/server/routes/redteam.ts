@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { ConfigurationAgent } from '../../redteam/configAgent';
+import { ConfigurationAgent } from '../../redteam/configAgent/agent';
 import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
@@ -452,33 +452,41 @@ function sanitizeSessionForClient(session: ConfigAgentSession): ConfigAgentSessi
   return sanitizedSession;
 }
 
-const StartConfigAgentSchema = z.object({
-  baseUrl: z.string().min(1, 'URL is required'),
-  hints: z
-    .object({
-      apiType: z.string().optional(),
-      hasAuth: z.boolean().optional(),
-      authType: z.string().optional(),
-    })
-    .optional(),
-});
+const CONFIG_AGENT_SESSION_TTL = 60 * 60 * 1000;
+
+function cleanExpiredConfigAgentSessions(): void {
+  const now = Date.now();
+  for (const [sessionId, agent] of configAgentSessions) {
+    const session = agent.getSession();
+    if (now - session.startedAt > CONFIG_AGENT_SESSION_TTL) {
+      agent.cancel();
+      configAgentSessions.delete(sessionId);
+      logger.debug('[ConfigAgent] Cleaned up expired session', { sessionId });
+    }
+  }
+}
 
 /**
  * Start a new configuration agent session
  */
 redteamRouter.post('/config-agent/start', async (req: Request, res: Response): Promise<void> => {
   try {
-    const parsedBody = StartConfigAgentSchema.safeParse(req.body);
+    const parsedBody = RedteamSchemas.ConfigAgentStart.Request.safeParse(req.body);
     if (!parsedBody.success) {
-      res.status(400).json({ error: 'Invalid request', details: parsedBody.error.message });
+      res
+        .status(400)
+        .json({ success: false, error: 'Invalid request', details: parsedBody.error.message });
       return;
     }
 
     const { baseUrl } = parsedBody.data;
 
+    cleanExpiredConfigAgentSessions();
+
     // Check session limit to prevent DoS
     if (configAgentSessions.size >= MAX_CONFIG_AGENT_SESSIONS) {
       res.status(503).json({
+        success: false,
         error: 'Too many active sessions. Please try again later.',
       });
       return;
@@ -491,6 +499,7 @@ redteamRouter.post('/config-agent/start', async (req: Request, res: Response): P
     } catch (urlError) {
       // URL validation failed (SSRF protection)
       res.status(400).json({
+        success: false,
         error: urlError instanceof Error ? urlError.message : 'Invalid URL',
       });
       return;
@@ -506,21 +515,19 @@ redteamRouter.post('/config-agent/start', async (req: Request, res: Response): P
       logger.error('[ConfigAgent] Discovery error', { error: err });
     });
 
-    res.json({
-      sessionId: session.id,
-      messages: sanitizeMessagesForClient(agent.getMessages()),
-    });
+    res.json(
+      RedteamSchemas.ConfigAgentStart.Response.parse({
+        success: true,
+        data: {
+          sessionId: session.id,
+          messages: sanitizeMessagesForClient(agent.getMessages()),
+        },
+      }),
+    );
   } catch (error) {
     logger.error('[ConfigAgent] Start error', { error });
-    res.status(500).json({ error: 'Failed to start configuration agent' });
+    res.status(500).json({ success: false, error: 'Failed to start configuration agent' });
   }
-});
-
-const UserInputSchema = z.object({
-  sessionId: z.string(),
-  type: z.enum(['message', 'option', 'api_key', 'confirmation']),
-  value: z.union([z.string(), z.boolean()]),
-  field: z.string().optional(),
 });
 
 /**
@@ -528,17 +535,21 @@ const UserInputSchema = z.object({
  */
 redteamRouter.post('/config-agent/input', async (req: Request, res: Response): Promise<void> => {
   try {
-    const parsedBody = UserInputSchema.safeParse(req.body);
+    const parsedBody = RedteamSchemas.ConfigAgentInput.Request.safeParse(req.body);
     if (!parsedBody.success) {
-      res.status(400).json({ error: 'Invalid request', details: parsedBody.error.message });
+      res
+        .status(400)
+        .json({ success: false, error: 'Invalid request', details: parsedBody.error.message });
       return;
     }
+
+    cleanExpiredConfigAgentSessions();
 
     const input = parsedBody.data as UserInput;
     const agent = configAgentSessions.get(input.sessionId);
 
     if (!agent) {
-      res.status(404).json({ error: 'Session not found' });
+      res.status(404).json({ success: false, error: 'Session not found' });
       return;
     }
 
@@ -547,13 +558,18 @@ redteamRouter.post('/config-agent/input', async (req: Request, res: Response): P
     // Sanitize session data to remove sensitive information
     const sanitizedSession = sanitizeSessionForClient(agent.getSession());
 
-    res.json({
-      messages: sanitizeMessagesForClient(agent.getMessages()),
-      session: sanitizedSession,
-    });
+    res.json(
+      RedteamSchemas.ConfigAgentInput.Response.parse({
+        success: true,
+        data: {
+          messages: sanitizeMessagesForClient(agent.getMessages()),
+          session: sanitizedSession,
+        },
+      }),
+    );
   } catch (error) {
     logger.error('[ConfigAgent] Input error', { error });
-    res.status(500).json({ error: 'Failed to process input' });
+    res.status(500).json({ success: false, error: 'Failed to process input' });
   }
 });
 
@@ -564,26 +580,33 @@ redteamRouter.get(
   '/config-agent/session/:sessionId',
   async (req: Request, res: Response): Promise<void> => {
     try {
+      cleanExpiredConfigAgentSessions();
+
       const sessionId = req.params.sessionId as string;
       const agent = configAgentSessions.get(sessionId);
 
       if (!agent) {
-        res.status(404).json({ error: 'Session not found' });
+        res.status(404).json({ success: false, error: 'Session not found' });
         return;
       }
 
       // Sanitize session data to remove sensitive information
       const sanitizedSession = sanitizeSessionForClient(agent.getSession());
 
-      res.json({
-        messages: sanitizeMessagesForClient(agent.getMessages()),
-        session: sanitizedSession,
-        config: sanitizedSession.finalConfig,
-        isComplete: agent.isComplete(),
-      });
+      res.json(
+        RedteamSchemas.ConfigAgentSession.Response.parse({
+          success: true,
+          data: {
+            messages: sanitizeMessagesForClient(agent.getMessages()),
+            session: sanitizedSession,
+            config: sanitizedSession.finalConfig,
+            isComplete: agent.isComplete(),
+          },
+        }),
+      );
     } catch (error) {
       logger.error('[ConfigAgent] Get session error', { error });
-      res.status(500).json({ error: 'Failed to get session' });
+      res.status(500).json({ success: false, error: 'Failed to get session' });
     }
   },
 );
@@ -595,6 +618,8 @@ redteamRouter.delete(
   '/config-agent/session/:sessionId',
   async (req: Request, res: Response): Promise<void> => {
     try {
+      cleanExpiredConfigAgentSessions();
+
       const sessionId = req.params.sessionId as string;
       const agent = configAgentSessions.get(sessionId);
 
@@ -603,31 +628,13 @@ redteamRouter.delete(
         configAgentSessions.delete(sessionId);
       }
 
-      res.json({ success: true });
+      res.json(RedteamSchemas.ConfigAgentDelete.Response.parse({ success: true, data: {} }));
     } catch (error) {
       logger.error('[ConfigAgent] Cancel error', { error });
-      res.status(500).json({ error: 'Failed to cancel session' });
+      res.status(500).json({ success: false, error: 'Failed to cancel session' });
     }
   },
 );
-
-// Clean up old sessions periodically (sessions older than 1 hour)
-const CONFIG_AGENT_SESSION_TTL = 60 * 60 * 1000; // 1 hour
-const configAgentCleanupInterval = setInterval(
-  () => {
-    const now = Date.now();
-    for (const [sessionId, agent] of configAgentSessions) {
-      const session = agent.getSession();
-      if (now - session.startedAt > CONFIG_AGENT_SESSION_TTL) {
-        agent.cancel();
-        configAgentSessions.delete(sessionId);
-        logger.debug('[ConfigAgent] Cleaned up expired session', { sessionId });
-      }
-    }
-  },
-  5 * 60 * 1000,
-); // Check every 5 minutes
-configAgentCleanupInterval.unref?.();
 
 // ============================================================================
 // Cloud Task Proxy (catch-all - must be last)

@@ -29,24 +29,30 @@ describe('useConfigAgent', () => {
     mockCallApi
       .mockResolvedValueOnce(
         apiResponse({
-          sessionId: 'session-1',
-          messages: [{ id: 'm1', type: 'info', content: 'started', timestamp: 1 }],
+          success: true,
+          data: {
+            sessionId: 'session-1',
+            messages: [{ id: 'm1', type: 'info', content: 'started', timestamp: 1 }],
+          },
         }),
       )
       .mockResolvedValueOnce(
         apiResponse({
-          messages: [{ id: 'm2', type: 'success', content: 'done', timestamp: 2 }],
-          session: {
-            id: 'session-1',
-            baseUrl: 'https://api.example.com',
-            phase: 'complete',
-            verified: true,
-            finalConfig: {
-              apiType: 'openai_compatible',
-              method: 'POST',
-              headers: { Authorization: 'Bearer sk-test' },
-              body: {},
-              transformResponse: 'json.text',
+          success: true,
+          data: {
+            messages: [{ id: 'm2', type: 'success', content: 'done', timestamp: 2 }],
+            session: {
+              id: 'session-1',
+              baseUrl: 'https://api.example.com',
+              phase: 'complete',
+              verified: true,
+              finalConfig: {
+                apiType: 'openai_compatible',
+                method: 'POST',
+                headers: { Authorization: 'Bearer sk-test' },
+                body: {},
+                transformResponse: 'json.text',
+              },
             },
           },
         }),
@@ -85,34 +91,42 @@ describe('useConfigAgent', () => {
 
   it('submits messages, options, confirmations, and restores masked API-key headers', async () => {
     mockCallApi
-      .mockResolvedValueOnce(apiResponse({ sessionId: 'session-1', messages: [] }))
+      .mockResolvedValueOnce(
+        apiResponse({ success: true, data: { sessionId: 'session-1', messages: [] } }),
+      )
       .mockResolvedValueOnce(
         apiResponse({
-          messages: [],
-          session: {
-            id: 'session-1',
-            baseUrl: 'https://api.example.com',
-            phase: 'confirming',
-            verified: false,
-            finalConfig: null,
+          success: true,
+          data: {
+            messages: [],
+            session: {
+              id: 'session-1',
+              baseUrl: 'https://api.example.com',
+              phase: 'confirming',
+              verified: false,
+              finalConfig: null,
+            },
           },
         }),
       )
       .mockResolvedValue(
         apiResponse({
-          messages: [{ id: 'm3', type: 'success', content: 'authed', timestamp: 3 }],
-          session: {
-            id: 'session-1',
-            baseUrl: 'https://api.example.com',
-            phase: 'complete',
-            verified: true,
-            finalConfig: {
-              apiType: 'openai_compatible',
-              method: 'POST',
-              headers: { Authorization: 'Bearer ••••cret' },
-              body: {},
-              transformResponse: 'json.text',
-              auth: { type: 'bearer', location: 'header', headerName: 'Authorization' },
+          success: true,
+          data: {
+            messages: [{ id: 'm3', type: 'success', content: 'authed', timestamp: 3 }],
+            session: {
+              id: 'session-1',
+              baseUrl: 'https://api.example.com',
+              phase: 'complete',
+              verified: true,
+              finalConfig: {
+                apiType: 'openai_compatible',
+                method: 'POST',
+                headers: { Authorization: 'Bearer ••••cret' },
+                body: {},
+                transformResponse: 'json.text',
+                auth: { type: 'bearer', location: 'header', headerName: 'Authorization' },
+              },
             },
           },
         }),
@@ -163,16 +177,21 @@ describe('useConfigAgent', () => {
   });
 
   it('handles input failures, cancellation, reset, and unmount cleanup', async () => {
-    mockCallApi.mockResolvedValueOnce(apiResponse({ sessionId: 'session-1', messages: [] }));
+    mockCallApi.mockResolvedValueOnce(
+      apiResponse({ success: true, data: { sessionId: 'session-1', messages: [] } }),
+    );
     mockCallApi.mockResolvedValueOnce(
       apiResponse({
-        messages: [{ id: 'm1', type: 'question', content: 'wait', timestamp: 1 }],
-        session: {
-          id: 'session-1',
-          baseUrl: 'https://api.example.com',
-          phase: 'confirming',
-          verified: false,
-          finalConfig: null,
+        success: true,
+        data: {
+          messages: [{ id: 'm1', type: 'question', content: 'wait', timestamp: 1 }],
+          session: {
+            id: 'session-1',
+            baseUrl: 'https://api.example.com',
+            phase: 'confirming',
+            verified: false,
+            finalConfig: null,
+          },
         },
       }),
     );

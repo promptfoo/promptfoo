@@ -397,6 +397,43 @@ describe('API schema red-team coverage', () => {
         }).success,
       ).toBe(false);
     });
+
+    it('keeps configuration-agent requests and responses in success envelopes', () => {
+      expect(
+        RedteamSchemas.ConfigAgentStart.Request.parse({ baseUrl: '  https://api.example.test  ' }),
+      ).toEqual({ baseUrl: 'https://api.example.test' });
+      expect(RedteamSchemas.ConfigAgentStart.Request.safeParse({ baseUrl: '   ' }).success).toBe(
+        false,
+      );
+      expect(
+        RedteamSchemas.ConfigAgentInput.Request.safeParse({
+          sessionId: 'session-1',
+          type: 'api_key',
+          value: 'sk-test',
+        }).success,
+      ).toBe(true);
+      expect(
+        RedteamSchemas.ConfigAgentInput.Request.safeParse({
+          sessionId: 'session-1',
+          type: 'api_key',
+          value: { secret: true },
+        }).success,
+      ).toBe(false);
+      expect(
+        RedteamSchemas.ConfigAgentSession.Response.parse({
+          success: true,
+          data: {
+            messages: [],
+            session: { id: 'session-1' },
+            config: null,
+            isComplete: false,
+          },
+        }),
+      ).toMatchObject({ success: true, data: { isComplete: false } });
+      expect(RedteamSchemas.ConfigAgentDelete.Response.safeParse({ success: true }).success).toBe(
+        false,
+      );
+    });
   });
 
   describe('model-audit schemas', () => {

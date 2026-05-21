@@ -531,12 +531,11 @@ ${exampleRequest}`;
   };
 
   const handleConfigAgentDiscovered = useCallback(
-    (discoveredConfig: DiscoveredConfig) => {
+    (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
       // Apply the discovered configuration
       resetState(false);
 
       // Build the URL from baseUrl + path
-      const baseUrl = selectedTarget.config.url || '';
       const fullUrl = discoveredConfig.path
         ? `${baseUrl.replace(/\/$/, '')}${discoveredConfig.path}`
         : baseUrl;
@@ -569,7 +568,7 @@ ${exampleRequest}`;
 
       setConfigAgentOpen(false);
     },
-    [resetState, updateCustomTarget, selectedTarget.config.url],
+    [resetState, updateCustomTarget],
   );
 
   return (
