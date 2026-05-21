@@ -4,6 +4,7 @@ import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { isMcpToolNameFilter } from '../../providers/mcp/util';
 import { loadTools } from '../../providers/openai/agents-loader';
+import { withGraderSpan } from '../../tracing/graderTracer';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -29,6 +30,7 @@ import type {
   Assertion,
   AssertionValue,
   AtomicTestCase,
+  CallApiContextParams,
   GradingResult,
   PluginConfig,
   ResultSuggestion,
@@ -446,6 +448,47 @@ export abstract class RedteamGraderBase {
     rubric: string;
     suggestions?: ResultSuggestion[];
   }> {
+    return withGraderSpan(
+      {
+        graderId: this.id,
+        promptLabel: 'llm-rubric',
+        evalId: test.metadata?.evaluationId,
+        testIndex: test.vars?.__testIdx as number | undefined,
+        iteration: gradingContext?.iteration,
+        traceparent: gradingContext?.traceparent,
+      },
+      async () =>
+        this.getResultInternal(
+          prompt,
+          llmOutput,
+          test,
+          provider,
+          renderedValue,
+          additionalRubric,
+          skipRefusalCheck,
+          gradingContext,
+        ),
+      (result) => ({
+        pass: result.grade.pass,
+        score: result.grade.score,
+      }),
+    );
+  }
+
+  private async getResultInternal(
+    prompt: string,
+    llmOutput: string,
+    test: AtomicTestCase,
+    provider: ApiProvider | undefined,
+    renderedValue: AssertionValue | undefined,
+    additionalRubric?: string,
+    skipRefusalCheck?: boolean,
+    gradingContext?: RedteamGradingContext,
+  ): Promise<{
+    grade: GradingResult;
+    rubric: string;
+    suggestions?: ResultSuggestion[];
+  }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
     const providerId = provider?.id?.();
@@ -543,7 +586,20 @@ export abstract class RedteamGraderBase {
       });
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
+    const providerCallContext = gradingContext?.traceparent
+      ? ({ traceparent: gradingContext.traceparent } as CallApiContextParams)
+      : undefined;
+    const grade = (await (providerCallContext
+      ? matchesLlmRubric(
+          finalRubric,
+          llmOutput,
+          grading,
+          undefined,
+          undefined,
+          undefined,
+          providerCallContext,
+        )
+      : matchesLlmRubric(finalRubric, llmOutput, grading))) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

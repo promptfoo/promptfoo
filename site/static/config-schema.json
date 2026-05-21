@@ -3077,6 +3077,52 @@
           },
           "required": ["enabled", "endpoint"],
           "additionalProperties": false
+        },
+        "provider": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "enum": ["tempo", "jaeger", "local"]
+            },
+            "endpoint": {
+              "type": "string"
+            },
+            "auth": {
+              "type": "object",
+              "properties": {
+                "token": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "headers": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "timeout": {
+              "type": "number"
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        },
+        "queryDelay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": ["enabled"],

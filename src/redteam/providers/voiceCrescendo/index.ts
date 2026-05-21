@@ -370,6 +370,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     audioPrompt: string,
     textPrompt: string,
     targetProvider: ApiProvider,
+    turnNumber: number,
     context?: CallApiContextParams,
   ): Promise<TargetResponse> {
     // Build the prompt with audio data
@@ -382,7 +383,11 @@ export class VoiceCrescendoProvider implements ApiProvider {
       transcript: textPrompt,
     });
 
-    const response = await getTargetResponse(targetProvider, prompt, context);
+    const response = await getTargetResponse(
+      targetProvider,
+      prompt,
+      context ? { ...context, iteration: turnNumber } : undefined,
+    );
     return externalizeResponseForRedteamHistory(response, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,
@@ -528,6 +533,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           audioPrompt,
           voicePrompt,
           targetProvider,
+          currentTurn,
           context,
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);

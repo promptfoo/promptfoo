@@ -4,6 +4,7 @@ import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
 import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
@@ -554,39 +555,50 @@ export class MistralChatCompletionProvider implements ApiProvider {
       ...context?.prompt?.config,
     };
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'mistral',
-      operationName: 'chat',
-      model: this.modelName,
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      temperature: config?.temperature,
-      topP: config?.top_p,
-      maxTokens: config?.max_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
+    return withTargetSpan(targetSpanContext, async () => {
+      const spanContext: GenAISpanContext = {
+        system: 'mistral',
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        temperature: config?.temperature,
+        topP: config?.top_p,
+        maxTokens: config?.max_tokens,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        traceparent: context?.traceparent,
+      };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, config),
-      resultExtractor,
-    );
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+          };
+        }
+        return result;
+      };
+
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context, config),
+        resultExtractor,
+      );
+    });
   }
 
   private async callApiInternal(

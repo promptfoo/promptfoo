@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
 
+import type { TraceProviderConfig } from '../../tracing/providers/types';
 import type { AtomicTestCase } from '../../types/index';
 
 export interface RedteamTracingOptions {
@@ -13,6 +14,10 @@ export interface RedteamTracingOptions {
   retryDelayMs?: number;
   spanFilter?: string[];
   sanitizeAttributes: boolean;
+  /** External trace provider configuration (read from root tracing config) */
+  provider?: TraceProviderConfig;
+  /** Delay in ms before querying external provider (read from root tracing config) */
+  queryDelay?: number;
 }
 
 export type RawTracingConfig = Partial<
@@ -33,7 +38,9 @@ export type RawTracingConfig = Partial<
   strategies?: Record<string, RawTracingConfig>;
 };
 
-const DEFAULT_TRACING_OPTIONS: RedteamTracingOptions = {
+const DEFAULT_QUERY_DELAY = 3000;
+
+const DEFAULT_TRACING_OPTIONS: Omit<RedteamTracingOptions, 'provider' | 'queryDelay'> = {
   enabled: false,
   includeInAttack: true,
   includeInGrading: true,
@@ -53,7 +60,10 @@ function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): Ra
   );
 }
 
-function normalizeTracingOptions(config: RawTracingConfig): RedteamTracingOptions {
+function normalizeTracingOptions(
+  config: RawTracingConfig,
+  rootTracingConfig?: { provider?: TraceProviderConfig; queryDelay?: number },
+): RedteamTracingOptions {
   const merged = { ...DEFAULT_TRACING_OPTIONS, ...config };
 
   return {
@@ -68,6 +78,9 @@ function normalizeTracingOptions(config: RawTracingConfig): RedteamTracingOption
     retryDelayMs: merged.retryDelayMs ?? DEFAULT_TRACING_OPTIONS.retryDelayMs,
     spanFilter: merged.spanFilter,
     sanitizeAttributes: merged.sanitizeAttributes ?? DEFAULT_TRACING_OPTIONS.sanitizeAttributes,
+    // Read provider and queryDelay from root tracing config
+    provider: rootTracingConfig?.provider,
+    queryDelay: rootTracingConfig?.queryDelay ?? DEFAULT_QUERY_DELAY,
   };
 }
 
@@ -80,8 +93,9 @@ export function resolveTracingOptions({
   test?: AtomicTestCase;
   config?: Record<string, unknown>;
 }): RedteamTracingOptions {
-  const globalConfig =
-    (cliState.config?.redteam?.tracing as RawTracingConfig | undefined) ?? undefined;
+  // Read redteam-specific tracing config
+  const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
+  const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
   const testConfig = (test?.metadata?.tracing as RawTracingConfig | undefined) ?? undefined;
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined
@@ -112,5 +126,10 @@ export function resolveTracingOptions({
     providerStrategyOverride,
   );
 
-  return normalizeTracingOptions(merged);
+  // Read provider and queryDelay from root tracing config (not redteam config)
+  const rootTracingConfig = cliState.config?.tracing as
+    | { provider?: TraceProviderConfig; queryDelay?: number }
+    | undefined;
+
+  return normalizeTracingOptions(merged, rootTracingConfig);
 }

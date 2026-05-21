@@ -12,7 +12,13 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { getTraceparent } from '../tracing/genaiTracer';
+import { withOAuthSpan } from '../tracing/oauthTracer';
+import {
+  type TargetSpanContext,
+  withHttpRequestSpan,
+  withTargetSpan,
+} from '../tracing/targetTracer';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -1509,6 +1515,7 @@ async function createHttpsAgent(
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
+  label?: string;
   private transformResponse: Promise<
     (data: any, text: string, context?: TransformResponseContext) => ProviderResponse
   >;
@@ -1535,6 +1542,7 @@ export class HttpProvider implements ApiProvider {
   private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
+    this.label = options.label;
     this.config = HttpProviderConfigSchema.parse(options.config);
     validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
@@ -1674,77 +1682,90 @@ export class HttpProvider implements ApiProvider {
     username?: string;
     password?: string;
   }): Promise<void> {
-    try {
-      // Prepare the token request body
-      const tokenRequestBody = new URLSearchParams();
-      tokenRequestBody.append('grant_type', oauthConfig.grantType);
-      if (oauthConfig.clientId) {
-        tokenRequestBody.append('client_id', oauthConfig.clientId);
-      }
-      if (oauthConfig.clientSecret) {
-        tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
-      }
+    await withOAuthSpan(
+      {
+        operation: 'token_refresh',
+        url: oauthConfig.tokenUrl,
+        grantType: oauthConfig.grantType,
+        clientId: oauthConfig.clientId,
+        scopes: oauthConfig.scopes,
+        providerType: 'http',
+      },
+      async () => {
+        try {
+          const tokenRequestBody = new URLSearchParams();
+          tokenRequestBody.append('grant_type', oauthConfig.grantType);
+          if (oauthConfig.clientId) {
+            tokenRequestBody.append('client_id', oauthConfig.clientId);
+          }
+          if (oauthConfig.clientSecret) {
+            tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+          }
 
-      // Add username and password for password grant type
-      if (oauthConfig.grantType === 'password') {
-        if (!oauthConfig.username || !oauthConfig.password) {
-          throw new Error('Username and password are required for password grant type');
+          if (oauthConfig.grantType === 'password') {
+            if (!oauthConfig.username || !oauthConfig.password) {
+              throw new Error('Username and password are required for password grant type');
+            }
+            tokenRequestBody.append('username', oauthConfig.username);
+            tokenRequestBody.append('password', oauthConfig.password);
+          }
+
+          if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
+            tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
+          }
+
+          const httpsAgent = await this.getHttpsAgent();
+          const fetchOptions: any = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: tokenRequestBody.toString(),
+          };
+
+          if (httpsAgent) {
+            fetchOptions.dispatcher = httpsAgent;
+          }
+
+          const response = await fetchWithCache(
+            oauthConfig.tokenUrl,
+            fetchOptions,
+            getRequestTimeoutMs(),
+            'text',
+            true,
+            0,
+          );
+
+          if (response.status < 200 || response.status >= 300) {
+            throw new Error(
+              `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+            );
+          }
+
+          const tokenData = JSON.parse(response.data as string);
+
+          if (!tokenData.access_token) {
+            throw new Error('OAuth token response missing access_token');
+          }
+
+          this.lastToken = tokenData.access_token;
+
+          const expiresInSeconds = tokenData.expires_in || 3600;
+          this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
+
+          logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+
+          return {
+            httpStatusCode: response.status,
+            expiresIn: expiresInSeconds,
+          };
+        } catch (err) {
+          logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
+          throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
         }
-        tokenRequestBody.append('username', oauthConfig.username);
-        tokenRequestBody.append('password', oauthConfig.password);
-      }
-
-      if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
-        tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
-      }
-
-      // Make the token request
-      const httpsAgent = await this.getHttpsAgent();
-      const fetchOptions: any = {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: tokenRequestBody.toString(),
-      };
-
-      if (httpsAgent) {
-        fetchOptions.dispatcher = httpsAgent;
-      }
-
-      const response = await fetchWithCache(
-        oauthConfig.tokenUrl,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        true, // Always bust cache for token requests
-        0, // No retries for token requests
-      );
-
-      if (response.status < 200 || response.status >= 300) {
-        throw new Error(
-          `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
-        );
-      }
-
-      const tokenData = JSON.parse(response.data as string);
-
-      if (!tokenData.access_token) {
-        throw new Error('OAuth token response missing access_token');
-      }
-
-      this.lastToken = tokenData.access_token;
-
-      // Calculate expiration time
-      // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
-      const expiresInSeconds = tokenData.expires_in || 3600;
-      this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
-
-      logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
-    } catch (err) {
-      logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
-      throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
-    }
+      },
+      (result) => result,
+    );
 
     invariant(this.lastToken, 'OAuth token should be defined at this point');
   }
@@ -2165,36 +2186,19 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'http',
-      operationName: 'chat',
-      model: this.url,
+    const spanContext: TargetSpanContext = {
+      targetType: 'http',
+      url: this.url,
       providerId: this.id(),
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
+      label: this.label,
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
-      return result;
-    };
-
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, context, options),
-      resultExtractor,
-    );
+    return withTargetSpan(spanContext, () => this.callApiInternal(prompt, context, options));
   }
 
   private async callApiInternal(
@@ -2307,15 +2311,6 @@ export class HttpProvider implements ApiProvider {
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
 
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      headers.tracestate = context.tracestate;
-    }
-
     if (this.config.multipart) {
       removeMultipartContentType(headers);
     } else {
@@ -2406,60 +2401,66 @@ export class HttpProvider implements ApiProvider {
         )
       : undefined;
 
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
-    const fetchOptions: any = {
-      method: renderedConfig.method,
-      headers: renderedConfig.headers,
-      ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(method !== 'GET' &&
-        multipartBody && {
-          body: multipartBody.body,
-        }),
-      ...(method !== 'GET' &&
-        !multipartBody &&
-        renderedConfig.body != null && {
-          body: contentTypeIsJson(headers)
-            ? typeof renderedConfig.body === 'string'
-              ? renderedConfig.body // Already a JSON string, use as-is
-              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-            : typeof renderedConfig.body === 'string'
-              ? renderedConfig.body.trim()
-              : String(renderedConfig.body),
-        }),
-    };
+    const { data, cached, status, statusText, responseHeaders, latencyMs } =
+      await withHttpRequestSpan(
+        { method, url },
+        async () => {
+          const traceparent = getTraceparent();
+          if (traceparent) {
+            headers.traceparent = traceparent;
+            logger.debug(`[HTTP Provider]: Adding traceparent header: ${traceparent}`);
+          }
+          if (context?.tracestate) {
+            headers.tracestate = context.tracestate;
+          }
 
-    // Add HTTPS agent as dispatcher if configured
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
-    }
+          const fetchOptions: any = {
+            method: renderedConfig.method,
+            headers: renderedConfig.headers,
+            ...(options?.abortSignal && { signal: options.abortSignal }),
+            ...(method !== 'GET' &&
+              multipartBody && {
+                body: multipartBody.body,
+              }),
+            ...(method !== 'GET' &&
+              !multipartBody &&
+              renderedConfig.body != null && {
+                body: contentTypeIsJson(headers)
+                  ? typeof renderedConfig.body === 'string'
+                    ? renderedConfig.body
+                    : JSON.stringify(renderedConfig.body)
+                  : typeof renderedConfig.body === 'string'
+                    ? renderedConfig.body.trim()
+                    : String(renderedConfig.body),
+              }),
+          };
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        multipartBody ? true : (context?.bustCache ?? context?.debug),
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+          if (httpsAgent) {
+            fetchOptions.dispatcher = httpsAgent;
+            logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+          }
+
+          const result = await fetchWithCache(
+            url,
+            fetchOptions,
+            getRequestTimeoutMs(),
+            'text',
+            multipartBody ? true : (context?.bustCache ?? context?.debug),
+            this.config.maxRetries,
+          );
+
+          return {
+            data: result.data,
+            cached: result.cached,
+            status: result.status,
+            statusText: result.statusText,
+            responseHeaders: result.headers,
+            latencyMs: result.latencyMs,
+          };
+        },
+        (result) => ({ httpStatusCode: result.status }),
+      );
 
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
@@ -2570,15 +2571,6 @@ export class HttpProvider implements ApiProvider {
     // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
     delete parsedRequest.headers['content-length'];
 
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      parsedRequest.headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      parsedRequest.headers.tracestate = context.tracestate;
-    }
-
     // Add OAuth Bearer token if configured
     if (this.config.auth?.type === 'oauth' && this.lastToken) {
       parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
@@ -2653,44 +2645,51 @@ export class HttpProvider implements ApiProvider {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
 
-    const fetchOptions: any = {
-      method: parsedRequest.method,
-      headers: parsedRequest.headers,
-      ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(bodyContent && { body: bodyContent }),
-    };
+    const { data, cached, status, statusText, responseHeaders, latencyMs } =
+      await withHttpRequestSpan(
+        { method: parsedRequest.method, url },
+        async () => {
+          const traceparent = getTraceparent();
+          if (traceparent) {
+            parsedRequest.headers.traceparent = traceparent;
+            logger.debug(`[HTTP Provider]: Adding traceparent header: ${traceparent}`);
+          }
+          if (context?.tracestate) {
+            parsedRequest.headers.tracestate = context.tracestate;
+          }
 
-    // Add HTTPS agent as dispatcher if configured
-    if (httpsAgent) {
-      fetchOptions.dispatcher = httpsAgent;
-      logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
-    }
+          const fetchOptions: any = {
+            method: parsedRequest.method,
+            headers: parsedRequest.headers,
+            ...(options?.abortSignal && { signal: options.abortSignal }),
+            ...(bodyContent && { body: bodyContent }),
+          };
 
-    let data,
-      cached = false,
-      status,
-      statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
+          if (httpsAgent) {
+            fetchOptions.dispatcher = httpsAgent;
+            logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
+          }
+
+          const result = await fetchWithCache(
+            url,
+            fetchOptions,
+            getRequestTimeoutMs(),
+            'text',
+            context?.bustCache ?? context?.debug,
+            this.config.maxRetries,
+          );
+
+          return {
+            data: result.data,
+            cached: result.cached,
+            status: result.status,
+            statusText: result.statusText,
+            responseHeaders: result.headers,
+            latencyMs: result.latencyMs,
+          };
+        },
+        (result) => ({ httpStatusCode: result.status }),
+      );
 
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,

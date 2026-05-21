@@ -603,6 +603,8 @@ export default class GoatProvider implements ApiProvider {
               retryDelayMs: tracingOptions.retryDelayMs,
               spanFilter: tracingOptions.spanFilter,
               sanitizeAttributes: tracingOptions.sanitizeAttributes,
+              providerConfig: tracingOptions.provider,
+              queryDelay: tracingOptions.queryDelay,
             });
 
             if (traceContext) {
@@ -779,7 +781,9 @@ export default class GoatProvider implements ApiProvider {
             getGraderAssertionValue(assertToUse),
             additionalRubric,
             undefined,
-            gradingContext,
+            gradingContext
+              ? { ...gradingContext, iteration: turn + 1, traceparent: context?.traceparent }
+              : { iteration: turn + 1, traceparent: context?.traceparent },
           );
           graderPassed = grade.pass;
           storedGraderResult = {

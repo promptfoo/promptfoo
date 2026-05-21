@@ -481,6 +481,8 @@ export async function runRedteamConversation({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
         });
         if (traceContext) {
           traceSnapshots.push(traceContext);
@@ -609,7 +611,9 @@ export async function runRedteamConversation({
           getGraderAssertionValue(assertToUse),
           additionalRubric,
           undefined,
-          gradingContext,
+          gradingContext
+            ? { ...gradingContext, iteration: i + 1, traceparent: context?.traceparent }
+            : { iteration: i + 1, traceparent: context?.traceparent },
         );
         storedGraderResult = {
           ...grade,

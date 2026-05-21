@@ -458,6 +458,8 @@ export async function runMetaAgentRedteam({
           retryDelayMs: tracingOptions.retryDelayMs,
           spanFilter: tracingOptions.spanFilter,
           sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          providerConfig: tracingOptions.provider,
+          queryDelay: tracingOptions.queryDelay,
         });
 
         if (traceContext) {
@@ -592,7 +594,9 @@ export async function runMetaAgentRedteam({
           getGraderAssertionValue(assertToUse),
           additionalRubric,
           undefined, // skipRefusalCheck
-          gradingContext,
+          gradingContext
+            ? { ...gradingContext, iteration: i + 1, traceparent: context?.traceparent }
+            : { iteration: i + 1, traceparent: context?.traceparent },
         );
         graderResult = {
           ...grade,

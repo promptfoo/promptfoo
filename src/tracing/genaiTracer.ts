@@ -57,6 +57,7 @@ export const PromptfooAttributes = {
   EVAL_ID: 'promptfoo.eval.id',
   TEST_INDEX: 'promptfoo.test.index',
   PROMPT_LABEL: 'promptfoo.prompt.label',
+  ITERATION: 'promptfoo.iteration',
   CACHE_HIT: 'promptfoo.cache_hit',
   REQUEST_BODY: 'promptfoo.request.body',
   RESPONSE_BODY: 'promptfoo.response.body',
@@ -131,6 +132,8 @@ export interface GenAISpanContext {
   evalId?: string;
   testIndex?: number;
   promptLabel?: string;
+  /** Iteration/turn number (1-indexed) for multi-turn evaluations */
+  iteration?: number;
 
   // W3C Trace Context - for propagating trace context from evaluation
   traceparent?: string;
@@ -316,6 +319,9 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
   }
   if (ctx.promptLabel) {
     attrs[PromptfooAttributes.PROMPT_LABEL] = ctx.promptLabel;
+  }
+  if (ctx.iteration !== undefined) {
+    attrs[PromptfooAttributes.ITERATION] = ctx.iteration;
   }
 
   // Request body (truncated, optionally sanitized)

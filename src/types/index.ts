@@ -1124,6 +1124,24 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+      // External provider for fetching traces (Tempo, Jaeger, etc.)
+      provider: z
+        .object({
+          id: z.enum(['tempo', 'jaeger', 'local']),
+          endpoint: z.string().optional(),
+          auth: z
+            .object({
+              token: z.string().optional(),
+              username: z.string().optional(),
+              password: z.string().optional(),
+            })
+            .optional(),
+          headers: z.record(z.string(), z.string()).optional(),
+          timeout: z.number().optional(),
+        })
+        .optional(),
+      // Delay before querying external provider
+      queryDelay: z.number().optional(),
     })
     .optional(),
 });
@@ -1268,6 +1286,26 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+
+      // External provider for fetching traces (Tempo, Jaeger, etc.)
+      provider: z
+        .object({
+          id: z.enum(['tempo', 'jaeger', 'local']),
+          endpoint: z.string().optional(),
+          auth: z
+            .object({
+              token: z.string().optional(),
+              username: z.string().optional(),
+              password: z.string().optional(),
+            })
+            .optional(),
+          headers: z.record(z.string(), z.string()).optional(),
+          timeout: z.number().optional(),
+        })
+        .optional(),
+
+      // Delay before querying external provider
+      queryDelay: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });

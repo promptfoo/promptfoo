@@ -75,6 +75,7 @@ export const handleRedteam = async ({
   provider,
   renderedValue,
   providerResponse,
+  providerCallContext,
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
@@ -155,7 +156,9 @@ export const handleRedteam = async ({
       renderedValue,
       undefined, // additionalRubric
       undefined, // skipRefusalCheck
-      gradingContext,
+      providerCallContext?.traceparent
+        ? { ...gradingContext, traceparent: providerCallContext.traceparent }
+        : gradingContext,
     );
 
     return {

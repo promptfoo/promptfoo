@@ -949,7 +949,9 @@ async function runRedteamConversation({
               getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined, // skipRefusalCheck
-              gradingContext,
+              gradingContext
+                ? { ...gradingContext, iteration: depth + 1, traceparent: context?.traceparent }
+                : { iteration: depth + 1, traceparent: context?.traceparent },
             );
             storedGraderResult = {
               ...grade,

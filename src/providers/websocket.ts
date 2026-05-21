@@ -4,6 +4,7 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
@@ -166,6 +167,7 @@ export async function createStreamResponse(
 export class WebSocketProvider implements ApiProvider {
   url: string;
   config: WebSocketProviderConfig;
+  label?: string;
   timeoutMs: number;
   transformResponse: (data: any) => ProviderResponse;
   streamResponse?: Promise<
@@ -179,6 +181,7 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
+    this.label = options.label;
     this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
@@ -203,6 +206,28 @@ export class WebSocketProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context for target span
+    const spanContext: TargetSpanContext = {
+      targetType: 'websocket',
+      url: this.url,
+      providerId: this.id(),
+      label: this.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+      // Promptfoo context from test case if available
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
+    };
+
+    return withTargetSpan(spanContext, () => this.callApiInternal(prompt, context));
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
       prompt,

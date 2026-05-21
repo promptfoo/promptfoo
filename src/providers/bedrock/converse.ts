@@ -24,6 +24,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { type TargetSpanContext, withTargetSpan } from '../../tracing/targetTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isClaudeOpus47Model } from '../anthropic/util';
@@ -1223,47 +1224,58 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     const inferenceConfig = this.buildInferenceConfig();
 
-    // Set up tracing context
-    const spanContext: GenAISpanContext = {
-      system: 'bedrock',
-      operationName: 'chat',
-      model: this.modelName,
+    const targetSpanContext: TargetSpanContext = {
+      targetType: 'llm',
       providerId: this.id(),
-      // Optional request parameters
-      maxTokens: inferenceConfig?.maxTokens,
-      temperature: inferenceConfig?.temperature,
-      topP: inferenceConfig?.topP,
-      stopSequences: inferenceConfig?.stopSequences,
-      // Promptfoo context from test case if available
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
-      promptLabel: context?.prompt?.label,
-      // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
+      promptLabel: context?.prompt?.label,
+      evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      iteration: context?.iteration,
     };
 
-    // Result extractor to set response attributes on the span
-    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
-      const result: GenAISpanResult = {};
+    return withTargetSpan(targetSpanContext, async () => {
+      const spanContext: GenAISpanContext = {
+        system: 'bedrock',
+        operationName: 'chat',
+        model: this.modelName,
+        providerId: this.id(),
+        maxTokens: inferenceConfig?.maxTokens,
+        temperature: inferenceConfig?.temperature,
+        topP: inferenceConfig?.topP,
+        stopSequences: inferenceConfig?.stopSequences,
+        testIndex: context?.test?.vars?.__testIdx as number | undefined,
+        promptLabel: context?.prompt?.label,
+        evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
+        iteration: context?.iteration,
+        traceparent: context?.traceparent,
+      };
 
-      if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
-      }
+      const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+        const result: GenAISpanResult = {};
 
-      // Extract finish reason if available from metadata
-      const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
-      if (stopReason) {
-        result.finishReasons = [stopReason];
-      }
+        if (response.tokenUsage) {
+          result.tokenUsage = {
+            prompt: response.tokenUsage.prompt,
+            completion: response.tokenUsage.completion,
+            total: response.tokenUsage.total,
+          };
+        }
 
-      return result;
-    };
+        const stopReason = (response.metadata as { stopReason?: string } | undefined)?.stopReason;
+        if (stopReason) {
+          result.finishReasons = [stopReason];
+        }
 
-    // Wrap the API call in a span
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+        return result;
+      };
+
+      return withGenAISpan(
+        spanContext,
+        () => this.callApiInternal(prompt, context),
+        resultExtractor,
+      );
+    });
   }
 
   /**
