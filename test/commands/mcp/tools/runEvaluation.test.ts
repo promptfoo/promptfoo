@@ -69,8 +69,9 @@ vi.mock('../../../../src/commands/eval', () => ({
     .mockImplementation(
       async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
         const testSuite = createMockTestSuite();
-        await customization?.beforeFilterTestSuite?.(testSuite);
-        await customization?.afterFilterTestSuite?.(testSuite);
+        const config = { providers: testSuite.providers };
+        await customization?.beforeFilterTestSuite?.(testSuite, config);
+        await customization?.afterFilterTestSuite?.(testSuite, config);
         return createMockEvalResult();
       },
     ),
@@ -186,8 +187,9 @@ describe('runEvaluation tool', () => {
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = createMockTestSuite();
-          await customization?.beforeFilterTestSuite?.(testSuite as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any);
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return {
             ...createMockEvalResult(),
             runtimeOptions: {
@@ -233,8 +235,9 @@ describe('runEvaluation tool', () => {
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
           const testSuite = createMockTestSuite();
-          await customization?.beforeFilterTestSuite?.(testSuite as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any);
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return {
             ...createMockEvalResult(),
             runtimeOptions: {
@@ -266,6 +269,47 @@ describe('runEvaluation tool', () => {
       expect(result.isError).toBe(false);
       expect(payload.data.configuration.options.delay).toBe(100);
       expect(payload.data.configuration.options.maxConcurrency).toBe(1);
+    });
+
+    it('should filter config providers before doEval checks cloud permissions', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      let observedConfigProviders: unknown;
+
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+          };
+          const config = {
+            providers: [{ id: 'allowed-provider' }, { id: 'blocked-provider' }],
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          observedConfigProviders = config.providers;
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        providerFilter: 'allowed-provider',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(observedConfigProviders).toEqual([{ id: 'allowed-provider' }]);
     });
 
     it('should return the same suite metadata shape for unfiltered evals', async () => {
@@ -315,9 +359,10 @@ describe('runEvaluation tool', () => {
             ],
           };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           testSuite.tests = testSuite.tests.slice(1, 2);
-          await customization?.afterFilterTestSuite?.(testSuite as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return createMockEvalResult() as any;
         },
       );
@@ -360,8 +405,9 @@ describe('runEvaluation tool', () => {
             ],
           };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any);
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return createMockEvalResult() as any;
         },
       );
@@ -404,8 +450,9 @@ describe('runEvaluation tool', () => {
             ],
           };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any);
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return createMockEvalResult() as any;
         },
       );
@@ -442,8 +489,9 @@ describe('runEvaluation tool', () => {
             tests: undefined,
           };
 
-          await customization?.beforeFilterTestSuite?.(testSuite as any);
-          await customization?.afterFilterTestSuite?.(testSuite as any);
+          const config = { providers: testSuite.providers };
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return createMockEvalResult() as any;
         },
       );

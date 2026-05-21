@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import chokidar from 'chokidar';
+import { InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
@@ -74,7 +75,10 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
-export type TestSuiteTransform = (testSuite: TestSuite) => void | Promise<void>;
+export type TestSuiteTransform = (
+  testSuite: TestSuite,
+  config: Partial<UnifiedConfig>,
+) => void | Promise<void>;
 export interface EvalRunCustomization {
   beforeFilterTestSuite?: TestSuiteTransform;
   afterFilterTestSuite?: TestSuiteTransform;
@@ -82,6 +86,34 @@ export interface EvalRunCustomization {
   allowConfigFilterRange?: boolean;
   disablePromptSuggestions?: boolean;
   skipRedteamEmailPreflight?: boolean;
+}
+
+function collectKeyValueOption(
+  optionName: string,
+  value: string,
+  previous: Record<string, string> | undefined,
+): Record<string, string> {
+  const separatorIndex = value.indexOf('=');
+  const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
+  const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
+
+  if (!key || val === undefined) {
+    throw new InvalidArgumentError(`${optionName} must be specified in key=value format.`);
+  }
+
+  return { ...previous, [key]: val };
+}
+
+function runtimeTagsForEval(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+): Record<string, string> | undefined {
+  const tags = {
+    ...(commandLineOptions?.tags || {}),
+    ...(cmdObj.tags || {}),
+  };
+
+  return Object.keys(tags).length > 0 ? tags : undefined;
 }
 
 export class EvalRunError extends Error {
@@ -279,6 +311,20 @@ export async function doEval(
       );
     }
 
+    const hasRuntimeTags = Boolean(cmdObj.tags && Object.keys(cmdObj.tags).length > 0);
+    if (resumeRaw && hasRuntimeTags) {
+      return failEvalRun(
+        'Cannot use --tag with --resume. Resumed evaluations keep their original tags.',
+        isCliInvocation,
+      );
+    }
+    if (retryErrors && hasRuntimeTags) {
+      return failEvalRun(
+        'Cannot use --tag with --retry-errors. Retried evaluations keep their original tags.',
+        isCliInvocation,
+      );
+    }
+
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
     const resumeId =
@@ -395,7 +441,7 @@ export async function doEval(
     }
 
     if (!resumeEval && customization.beforeFilterTestSuite) {
-      await customization.beforeFilterTestSuite(testSuite);
+      await customization.beforeFilterTestSuite(testSuite, config);
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
@@ -643,6 +689,12 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
+    const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
+    if (runtimeTags) {
+      // config.tags is the persisted sink (Eval.create reads it); cliState.config
+      // is the same object reference, and nothing reads testSuite.tags.
+      config.tags = { ...(config.tags || {}), ...runtimeTags };
+    }
     if (!resumeEval && customization.disablePromptSuggestions) {
       options.generateSuggestions = false;
       delete options.suggestionsCount;
@@ -662,7 +714,7 @@ export async function doEval(
     }
 
     if (!resumeEval && customization.afterFilterTestSuite) {
-      await customization.afterFilterTestSuite(testSuite);
+      await customization.afterFilterTestSuite(testSuite, config);
     }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
@@ -795,9 +847,9 @@ export async function doEval(
       return ret;
     }
 
-    // Preserve the terminal CLI's existing memory behavior while keeping rows available
-    // for reusable callers such as MCP that serialize structured responses afterward.
-    if (isCliInvocation) {
+    // CLI persisted evals can reload results later. Reusable callers may serialize
+    // in-memory rows after doEval returns, so leave those rows intact for them.
+    if (isCliInvocation && evalRecord.persisted) {
       evalRecord.clearResults();
     }
 
@@ -1161,14 +1213,17 @@ export function evalCommand(
     .option(
       '--var <key=value>',
       'Set a variable in key=value format',
-      (value, previous) => {
-        const [key, val] = value.split('=');
-        if (!key || val === undefined) {
-          throw new Error('--var must be specified in key=value format.');
-        }
-        return { ...previous, [key]: val };
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--var', value, previous);
       },
       {},
+    )
+    .option(
+      '--tag <key=value>',
+      'Set an eval tag in key=value format. Can be specified multiple times; CLI tags override config tags.',
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--tag', value, previous);
+      },
     )
 
     // Execution control
@@ -1267,7 +1322,11 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        validatedOpts = EvalCommandSchema.parse(opts);
+        const optsWithAliases = {
+          ...opts,
+          tags: (opts as EvalCommandOptions & { tag?: Record<string, string> }).tag ?? opts.tags,
+        };
+        validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
         Invalid command options:

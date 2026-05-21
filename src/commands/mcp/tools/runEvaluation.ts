@@ -1,16 +1,19 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import cliState from '../../../cliState';
 import logger from '../../../logger';
+import { resolveProviderConfigs } from '../../../providers';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
 import { filterPrompts } from '../../eval/filterPrompts';
+import { getProviderIdAndLabel } from '../../eval/filterProviders';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, TestSuite } from '../../../types/index';
+import type { CommandLineOptions, TestSuite, UnifiedConfig } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
 interface EvaluationFilterSummary {
@@ -41,11 +44,41 @@ function getProviderId(provider: TestSuite['providers'][number]): string {
   return typeof provider.id === 'function' ? provider.id() : provider.id;
 }
 
+function providerMatchesFilter(providerId: string, label: string | undefined, pattern: RegExp) {
+  return pattern.test(label || '') || pattern.test(providerId || '');
+}
+
 function hasStringFilters(filters?: string | string[]): filters is string | string[] {
   return Array.isArray(filters) ? filters.length > 0 : Boolean(filters);
 }
 
-function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | string[]): void {
+function filterConfigProviders(config: Partial<UnifiedConfig>, filters: string[]): void {
+  if (!config.providers) {
+    return;
+  }
+
+  const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
+  const resolvedProviders = resolveProviderConfigs(config.providers, {
+    basePath: cliState.basePath,
+  });
+
+  if (!Array.isArray(resolvedProviders)) {
+    const { id, label } = getProviderIdAndLabel(resolvedProviders, 0);
+    config.providers = providerMatchesFilter(id, label, filterPattern) ? resolvedProviders : [];
+    return;
+  }
+
+  config.providers = resolvedProviders.filter((provider, index) => {
+    const { id, label } = getProviderIdAndLabel(provider, index);
+    return providerMatchesFilter(id, label, filterPattern);
+  });
+}
+
+function applyProviderFilter(
+  testSuite: TestSuite,
+  providerFilter?: string | string[],
+  config?: Partial<UnifiedConfig>,
+): void {
   if (!hasStringFilters(providerFilter)) {
     return;
   }
@@ -72,6 +105,9 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
   }
 
   testSuite.providers = filteredProviders;
+  if (config) {
+    filterConfigProviders(config, filters);
+  }
 }
 
 function applyPromptFilter(testSuite: TestSuite, promptFilter?: string | string[]): void {
@@ -201,6 +237,7 @@ function applyMcpEvaluationFilters(
     promptFilter?: string | string[];
     providerFilter?: string | string[];
   },
+  config?: Partial<UnifiedConfig>,
 ): EvaluationFilterSummary {
   const { testCaseIndices, promptFilter, providerFilter } = options;
   const totals = {
@@ -209,7 +246,7 @@ function applyMcpEvaluationFilters(
     providers: testSuite.providers.length,
   };
 
-  applyProviderFilter(testSuite, providerFilter);
+  applyProviderFilter(testSuite, providerFilter, config);
   applyPromptFilter(testSuite, promptFilter);
   applyTestCaseFilter(testSuite, testCaseIndices);
 
@@ -467,12 +504,16 @@ export function registerRunEvaluationTool(server: McpServer) {
 
         const startTime = Date.now();
         const evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
-          beforeFilterTestSuite: (testSuite) => {
-            suiteSummary = applyMcpEvaluationFilters(testSuite, {
-              testCaseIndices,
-              promptFilter,
-              providerFilter,
-            });
+          beforeFilterTestSuite: (testSuite, config) => {
+            suiteSummary = applyMcpEvaluationFilters(
+              testSuite,
+              {
+                testCaseIndices,
+                promptFilter,
+                providerFilter,
+              },
+              config,
+            );
             if (hasFilters) {
               logger.debug(
                 `Running filtered eval with ${suiteSummary.testCases.filtered} test cases, ${suiteSummary.prompts.filtered} prompts, ${suiteSummary.providers.filtered} providers`,
@@ -501,8 +542,7 @@ export function registerRunEvaluationTool(server: McpServer) {
 
         const summary = await evalResult.toEvaluateSummary();
         const effectiveTimeoutMs = evalResult.runtimeOptions?.timeoutMs ?? timeoutMs;
-        const effectiveMaxConcurrency =
-          evalResult.runtimeOptions?.maxConcurrency ?? maxConcurrency;
+        const effectiveMaxConcurrency = evalResult.runtimeOptions?.maxConcurrency ?? maxConcurrency;
         const effectiveDelay = evalResult.runtimeOptions?.delay ?? delay;
         const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
           resultLimit,
