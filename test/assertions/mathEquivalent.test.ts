@@ -262,7 +262,15 @@ describe('cleanMathText', async () => {
   });
 
   it('strips multi-paragraph signatureless thinking blocks', async () => {
-    expect(cleanMathText('Thinking: line1\n\nline2 $$2$$\n\n0.5')).toBe('0.5');
+    // Provider format is `Thinking: ${reasoning}\n\n${output}` — reasoning uses
+    // single newlines between paragraphs, not blank-line separators.
+    expect(cleanMathText('Thinking: line1\nline2 $$2$$\n\n0.5')).toBe('0.5');
+  });
+
+  it('stops signatureless thinking strip at the first blank line before output', async () => {
+    expect(cleanMathText('Thinking: hidden\n\nFinal answer: 3\n\nNotes')).toBe(
+      'Final answer: 3\n\nNotes',
+    );
   });
 
   it('strips Bedrock <thinking> blocks', async () => {
@@ -854,6 +862,10 @@ describe('extractMathAnswer', async () => {
 
     it('ignores $$...$$ inside signatureless thinking blocks', async () => {
       expect(await extractMathAnswer('Thinking: $$2$$\n\nFinal answer: 3')).toBe('3');
+    });
+
+    it('extracts labelled answer when output follows thinking with later blank lines', async () => {
+      expect(await extractMathAnswer('Thinking: hidden\n\nFinal answer: 3\n\nNotes')).toBe('3');
     });
 
     it('ignores $$...$$ inside multi-paragraph thinking blocks', async () => {

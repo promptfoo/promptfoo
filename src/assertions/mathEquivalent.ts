@@ -498,9 +498,10 @@ function stripThinkingBlocks(text: string): string {
       .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:\r?\n)+/gi, '$1')
       // Anthropic redacted thinking is a single rendered line.
       .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\n]*(?:\r?\n)+/gi, '$1')
-      // OpenAI/OpenRouter-style signatureless thinking: strip through the last blank line
-      // before the visible answer so internal paragraph breaks in the reasoning are included.
-      .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*\r?\n\r?\n/gi, '$1')
+      // OpenAI/OpenRouter-style signatureless thinking (`Thinking: ${reasoning}\n\n${output}`).
+      // Stop at the first blank-line separator so later blank lines inside ${output}
+      // (e.g. "Final answer: 3\n\nNotes") are not consumed.
+      .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n\r?\n/gi, '$1')
   );
 }
 
