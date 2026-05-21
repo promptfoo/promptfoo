@@ -151,104 +151,104 @@ const CustomMetrics = ({
     return null;
   }
 
-  const metrics = Object.entries(lookup);
+  const metrics = Object.entries(lookup).sort(([metricA], [metricB]) =>
+    metricA.localeCompare(metricB),
+  );
   const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
 
   return (
     <div className="custom-metric-container my-2" data-testid="custom-metrics">
-      {displayMetrics
-        .sort(([metricA], [metricB]) => metricA.localeCompare(metricB))
-        .map(([metric, score]) => {
-          let displayLabel: string = metric;
-          let tooltipContent: React.ReactNode | null = null;
-          // Display a tooltip for policy metrics.
-          if (isPolicyMetric(metric)) {
-            const policyId = deserializePolicyIdFromMetric(metric);
-            const policy = policiesById[policyId];
-            if (policy) {
-              displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
-              tooltipContent = (
-                <div className="space-y-2 max-w-[400px]">
-                  <p className="text-sm font-semibold">{policy.name}</p>
-                  <p className="text-sm">{policy.text}</p>
-                  {determinePolicyTypeFromId(policy.id) === 'reusable' && cloudConfig?.appUrl && (
-                    <p className="text-sm">
-                      <a
-                        href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policy.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-primary hover:underline"
-                      >
-                        <span>View policy in Promptfoo Cloud</span>
-                        <ExternalLink className="size-3.5" />
-                      </a>
-                    </p>
-                  )}
-                </div>
-              );
-            }
-          }
-
-          if (!metric || typeof score === 'undefined') {
-            return null;
-          }
-
-          // Check if we have result data for this metric
-          const resultData = metricResultLookup.get(metric);
-
-          // If we have result data, use the new AssertionChip with color coding
-          if (resultData) {
-            const { result, isAssertSet, childResults } = resultData;
-            const threshold = result.metadata?.assertSetThreshold;
-            const thresholdLabel = isAssertSet ? getThresholdLabel(threshold) : undefined;
-
-            return (
-              <div data-testid={`metric-${metric}`} key={`${metric}-${score}`}>
-                <AssertionChip
-                  metric={displayLabel}
-                  score={score}
-                  passed={result.pass}
-                  isAssertSet={isAssertSet}
-                  threshold={threshold}
-                  thresholdLabel={thresholdLabel}
-                  childResults={childResults}
-                  tooltipContent={tooltipContent}
-                  onClick={() => handleClick(metric)}
-                />
+      {displayMetrics.map(([metric, score]) => {
+        let displayLabel: string = metric;
+        let tooltipContent: React.ReactNode | null = null;
+        // Display a tooltip for policy metrics.
+        if (isPolicyMetric(metric)) {
+          const policyId = deserializePolicyIdFromMetric(metric);
+          const policy = policiesById[policyId];
+          if (policy) {
+            displayLabel = formatPolicyIdentifierAsMetric(policy.name ?? policy.id, metric);
+            tooltipContent = (
+              <div className="space-y-2 max-w-[400px]">
+                <p className="text-sm font-semibold">{policy.name}</p>
+                <p className="text-sm">{policy.text}</p>
+                {determinePolicyTypeFromId(policy.id) === 'reusable' && cloudConfig?.appUrl && (
+                  <p className="text-sm">
+                    <a
+                      href={makeCustomPolicyCloudUrl(cloudConfig?.appUrl, policy.id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-primary hover:underline"
+                    >
+                      <span>View policy in Promptfoo Cloud</span>
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  </p>
+                )}
               </div>
             );
           }
+        }
 
-          // Fall back to neutral styling when no component results (backward compat)
+        if (!metric || typeof score === 'undefined') {
+          return null;
+        }
+
+        // Check if we have result data for this metric
+        const resultData = metricResultLookup.get(metric);
+
+        // If we have result data, use the new AssertionChip with color coding
+        if (resultData) {
+          const { result, isAssertSet, childResults } = resultData;
+          const threshold = result.metadata?.assertSetThreshold;
+          const thresholdLabel = isAssertSet ? getThresholdLabel(threshold) : undefined;
+
           return (
-            <div
-              data-testid={`metric-${metric}`}
-              className="metric-chip filterable"
-              key={`${metric}-${score}`}
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="metric-content" onClick={() => handleClick(metric)}>
-                    <span data-testid={`metric-name-${metric}`} className="metric-name">
-                      {displayLabel}
-                    </span>
-                    <span className="metric-value">
-                      <MetricValue
-                        metric={metric}
-                        score={score}
-                        counts={counts}
-                        metricTotals={metricTotals}
-                      />
-                    </span>
-                  </div>
-                </TooltipTrigger>
-                {tooltipContent && <TooltipContent>{tooltipContent}</TooltipContent>}
-              </Tooltip>
+            <div data-testid={`metric-${metric}`} key={`${metric}-${score}`}>
+              <AssertionChip
+                metric={displayLabel}
+                score={score}
+                passed={result.pass}
+                isAssertSet={isAssertSet}
+                threshold={threshold}
+                thresholdLabel={thresholdLabel}
+                childResults={childResults}
+                tooltipContent={tooltipContent}
+                onClick={() => handleClick(metric)}
+              />
             </div>
           );
-        })}
+        }
+
+        // Fall back to neutral styling when no component results (backward compat)
+        return (
+          <div
+            data-testid={`metric-${metric}`}
+            className="metric-chip filterable"
+            key={`${metric}-${score}`}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="metric-content" onClick={() => handleClick(metric)}>
+                  <span data-testid={`metric-name-${metric}`} className="metric-name">
+                    {displayLabel}
+                  </span>
+                  <span className="metric-value">
+                    <MetricValue
+                      metric={metric}
+                      score={score}
+                      counts={counts}
+                      metricTotals={metricTotals}
+                    />
+                  </span>
+                </div>
+              </TooltipTrigger>
+              {tooltipContent && <TooltipContent>{tooltipContent}</TooltipContent>}
+            </Tooltip>
+          </div>
+        );
+      })}
       {metrics.length > truncationCount && (
         <button
           type="button"

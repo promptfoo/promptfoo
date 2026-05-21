@@ -11,15 +11,15 @@ import VulnerabilityCategoriesTables from '@site/docs/\_shared/VulnerabilityCate
 
 # Harmful Content Plugin
 
-The Harmful Content plugin is designed to test an AI system's ability to handle and respond appropriately to various types of harmful or sensitive content. This plugin covers a wide range of potentially problematic areas, from violent crimes to misinformation.
+Use the Harmful Content plugin to test how a system responds to requests involving dangerous, abusive, or otherwise high-risk content. It covers broad refusal and safety behavior across categories ranging from violent crime to misinformation.
 
 ## Purpose
 
-The Harmful Content plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to recognize and handle harmful content.
-2. Test the AI's responses to various types of sensitive or dangerous information.
-3. Identify potential vulnerabilities in content moderation and ethical decision-making.
+1. Recognizes the harmful nature of a request.
+2. Refuses or redirects appropriately instead of assisting.
+3. Maintains a stable safety boundary across very different harmful-content categories.
 
 ## Configuration
 
@@ -212,11 +212,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for harmful content handling is critical for:
-
-- Ensuring AI systems do not inadvertently assist in dangerous or illegal activities
-- Maintaining ethical standards and social responsibility in AI interactions
-- Avoid brand and PR damage
+This plugin is the broad safety check for content categories where a fluent answer can become dangerous assistance. It is useful for finding inconsistent refusals, category-specific gaps, and cases where a model becomes more permissive under reframing.
 
 ## Related Concepts
 

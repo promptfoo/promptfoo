@@ -2745,7 +2745,7 @@
                     "enum": ["critical", "high", "medium", "low", "informational"]
                   }
                 },
-                "required": ["id", "numTests"],
+                "required": ["id"],
                 "additionalProperties": false
               }
             ]
@@ -2753,6 +2753,7 @@
           "description": "Plugins to use for redteam generation"
         },
         "strategies": {
+          "default": ["default"],
           "type": "array",
           "items": {
             "anyOf": [
@@ -3282,6 +3283,15 @@
           "type": "string"
         },
         "var": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tags": {
           "type": "object",
           "propertyNames": {
             "type": "string"
