@@ -28,7 +28,13 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isClaudeOpus47Model } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
-import { getMcpErrorMessage, isMcpErrorResult, joinMcpErrors } from '../mcp/util';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+} from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -381,14 +387,6 @@ function hasUsableMCPServer(mcp: MCPConfig | undefined): boolean {
     return true;
   }
   return Boolean(mcp.servers?.some(isMCPServerConfigured));
-}
-
-function formatMcpToolResult(name: string, content: string): string {
-  return `MCP Tool Result (${name}): ${content}`;
-}
-
-function formatMcpToolError(name: string, message: string): string {
-  return `MCP Tool Error (${name}): ${message}`;
 }
 
 interface StreamingToolUseBlock {

@@ -21,7 +21,13 @@ import {
 } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { getMcpErrorMessage, isMcpErrorResult, joinMcpErrors } from '../mcp/util';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+} from '../mcp/util';
 import {
   getRequestTimeoutMs,
   parseChatPrompt,
@@ -688,17 +694,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
                 if (isMcpErrorResult(mcpResult)) {
-                  const message = `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`;
+                  const message = formatMcpToolError(functionName, getMcpErrorMessage(mcpResult));
                   results.push(message);
                   mcpErrors.push(message);
                 } else {
-                  results.push(`MCP Tool Result (${functionName}): ${mcpResult.content}`);
+                  results.push(formatMcpToolResult(functionName, mcpResult.content));
                 }
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                const message = `MCP Tool Error (${functionName}): ${error}`;
+                const message = formatMcpToolError(functionName, String(error));
                 results.push(message);
                 mcpErrors.push(message);
                 hasSuccessfulCallback = true;

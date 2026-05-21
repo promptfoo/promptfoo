@@ -144,6 +144,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     expect(result).toEqual({
       output: 'MCP Tool Error (list_resources): MCP server connection failed',
       isError: true,
+      isMcpError: true,
     });
   });
 

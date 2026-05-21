@@ -49,6 +49,16 @@ export function joinMcpErrors(errors: string[]): string | undefined {
   return errors.length > 0 ? errors.join('; ') : undefined;
 }
 
+/** Format an MCP tool failure into the shared `MCP Tool Error (...)` string. */
+export function formatMcpToolError(name: string, message: string): string {
+  return `MCP Tool Error (${name}): ${message}`;
+}
+
+/** Format a successful MCP tool result into the shared `MCP Tool Result (...)` string. */
+export function formatMcpToolResult(name: string, content: string): string {
+  return `MCP Tool Result (${name}): ${content}`;
+}
+
 /**
  * Normalize MCP tool content into a readable string. MCP servers return content
  * as an array of typed blocks (`{ type: 'text', text }`, etc.); this joins the

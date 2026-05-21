@@ -4,7 +4,12 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
-import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
+import {
+  formatMcpToolError,
+  formatMcpToolResult,
+  getMcpErrorMessage,
+  isMcpErrorResult,
+} from './mcp/util';
 
 import type {
   FunctionCall,
@@ -109,16 +114,8 @@ export class FunctionCallbackHandler {
       callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
 
-    // MCP tool errors carry a formatted "MCP Tool Error (...)" output; a failed
-    // regular callback instead echoes back the stringified original call, so
-    // exclude those using the same check `hasSuccess` applies below.
     const mcpErrors = results
-      .filter(
-        (r, index) =>
-          r.isError &&
-          typeof r.output === 'string' &&
-          r.output !== JSON.stringify(callsArray[index]),
-      )
+      .filter((r) => r.isMcpError && typeof r.output === 'string')
       .map((r) => r.output as string);
 
     // If any callback succeeded, return processed results
@@ -265,18 +262,20 @@ export class FunctionCallbackHandler {
 
       if (isMcpErrorResult(result)) {
         return {
-          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
+          output: formatMcpToolError(toolName, getMcpErrorMessage(result)),
           isError: true,
+          isMcpError: true,
         };
       }
 
-      return { output: `MCP Tool Result (${toolName}): ${result.content}`, isError: false };
+      return { output: formatMcpToolResult(toolName, result.content), isError: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {
-        output: `MCP Tool Error (${toolName}): ${errorMessage}`,
+        output: formatMcpToolError(toolName, errorMessage),
         isError: true,
+        isMcpError: true,
       };
     }
   }

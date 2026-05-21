@@ -13,7 +13,12 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
-import { getMcpErrorMessage, isMcpErrorResult, joinMcpErrors } from '../mcp/util';
+import {
+  formatMcpToolError,
+  getMcpErrorMessage,
+  isMcpErrorResult,
+  joinMcpErrors,
+} from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -253,7 +258,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     shouldStream: boolean;
-  }): Promise<{ error?: string; mcpToolError?: string; response: Anthropic.Messages.Message }> {
+  }): Promise<{ error?: string; fatal?: boolean; response: Anthropic.Messages.Message }> {
     if (!this.mcpClient) {
       return { response: initialResponse };
     }
@@ -270,12 +275,15 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let executedMcpToolCalls = 0;
     const mcpToolErrors: string[] = [];
     const maxToolCallsError = `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`;
+    // `fatal` marks max_tool_calls exhaustion: the caller drops the output and
+    // returns only the error. A non-fatal `error` (tool-level failures) is kept
+    // alongside the model's recovered output.
     const finalize = (structuralError?: string) => {
-      const mcpToolError = joinMcpErrors(mcpToolErrors);
+      const error = structuralError ?? joinMcpErrors(mcpToolErrors);
       return {
         response: withMergedAnthropicUsage(response, responses),
-        ...(structuralError ? { error: structuralError } : {}),
-        ...(mcpToolError ? { mcpToolError } : {}),
+        ...(error ? { error } : {}),
+        ...(structuralError ? { fatal: true } : {}),
       };
     };
 
@@ -362,7 +370,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `MCP Tool Error (${toolUse.name}): ${getMcpErrorMessage(result)}`,
+          content: formatMcpToolError(toolUse.name, getMcpErrorMessage(result)),
           is_error: true,
         };
       }
@@ -376,9 +384,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: `MCP Tool Error (${toolUse.name}): ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        content: formatMcpToolError(
+          toolUse.name,
+          error instanceof Error ? error.message : String(error),
+        ),
         is_error: true,
       };
     }
@@ -778,7 +787,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       const {
         error,
-        mcpToolError,
+        fatal,
         response: resolvedMessage,
       } = await this.resolveMcpToolUse({
         config,
@@ -788,7 +797,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         shouldStream,
       });
 
-      if (error) {
+      if (fatal) {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
         // so surface the cost alongside the error so it doesn't disappear from
         // eval cost tracking.
@@ -830,7 +839,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(finishReason && { finishReason }),
         ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
         cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
-        ...(mcpToolError ? { error: mcpToolError } : {}),
+        ...(error ? { error } : {}),
       };
     } catch (err) {
       logger.error(

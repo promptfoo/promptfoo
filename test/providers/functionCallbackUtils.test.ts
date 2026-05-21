@@ -478,6 +478,7 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Tool execution failed: Invalid arguments',
         isError: true,
+        isMcpError: true,
       });
     });
 
@@ -496,6 +497,7 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Connection refused',
         isError: true,
+        isMcpError: true,
       });
     });
 
@@ -514,6 +516,7 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Tool returned an error result',
         isError: true,
+        isMcpError: true,
       });
     });
 
@@ -556,6 +559,7 @@ describe('FunctionCallbackHandler', () => {
       expect(result).toEqual({
         output: 'MCP Tool Error (error_tool): Connection lost',
         isError: true,
+        isMcpError: true,
       });
     });
 

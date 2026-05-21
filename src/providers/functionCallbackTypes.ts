@@ -35,4 +35,6 @@ export type FunctionCallbackConfig = Record<string, FunctionCallback | string>;
 export interface FunctionCallResult {
   output: string | any;
   isError: boolean;
+  /** True when the failure came from an MCP tool call (vs. a regular callback). */
+  isMcpError?: boolean;
 }
