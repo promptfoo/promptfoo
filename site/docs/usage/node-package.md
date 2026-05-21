@@ -31,15 +31,15 @@ const results = await evalRecord.toEvaluateSummary();
 
 The evaluate function takes the following parameters:
 
-- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/reference#testsuiteconfiguration).
+- `testSuite`: the Javascript equivalent of the promptfooconfig.yaml as a [`TestSuiteConfiguration` object](/docs/configuration/types#testsuiteconfiguration).
 
-- `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
+- `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/types#evaluateoptions).
 
-The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
+The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/types#evaluatesummary).
 
 ### Provider functions
 
-A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
+A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/types#providerfunction).
 
 You can load providers using the `loadApiProvider` function:
 
