@@ -52,11 +52,21 @@ export function parseImportFile(fileContent: string): ParsedImportFile {
     parsedJson = JSON.parse(fileContent);
   } catch (jsonError) {
     const parsedRows = parseJsonlLines(fileContent);
-    if (parsedRows && parsedRows.every(isOpenAIEvalsJsonlRow)) {
-      return {
-        source: IMPORT_SOURCE_OPENAI_EVALS,
-        evalData: convertOpenAIEvalsJsonl(parsedRows),
-      };
+    if (parsedRows) {
+      if (parsedRows.every(isOpenAIEvalsJsonlRow)) {
+        return {
+          source: IMPORT_SOURCE_OPENAI_EVALS,
+          evalData: convertOpenAIEvalsJsonl(parsedRows),
+        };
+      }
+      // The file parsed cleanly as JSONL but is not a valid OpenAI Evals
+      // export. Re-throwing the whole-file JSON error here would point at a
+      // bogus position; report the schema mismatch and the offending row.
+      const invalidRowIndex = parsedRows.findIndex((row) => !isOpenAIEvalsJsonlRow(row));
+      throw new Error(
+        `File parsed as JSONL but line ${invalidRowIndex + 1} is not a valid OpenAI Evals row. ` +
+          `Expected a promptfoo eval JSON export or an OpenAI Evals JSONL export.`,
+      );
     }
     throw jsonError;
   }

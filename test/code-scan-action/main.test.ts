@@ -338,11 +338,23 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
   expect(options?.env?.npm_config_before).toBeUndefined();
 }
 
-function expectCredentialRequestEnvUnset(
-  options: PromptfooExecCall['options'] | NpmExecCall['options'],
-) {
+function mockInheritedActionAuthEnv() {
+  mockProcessEnv({
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'inherited-id-token-request-token',
+    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.example/request',
+    GH_TOKEN: 'inherited-gh-token',
+    GITHUB_OIDC_TOKEN: 'stale-oidc-token',
+    GITHUB_TOKEN: 'inherited-github-token',
+    'INPUT_GITHUB-TOKEN': 'input-github-token',
+    INPUT_GITHUB_TOKEN: 'input-github-token-compat',
+  });
+}
+
+function expectNoActionAuthEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
   expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBeUndefined();
   expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_URL).toBeUndefined();
+  expect(options?.env?.GH_TOKEN).toBeUndefined();
+  expect(options?.env?.GITHUB_TOKEN).toBeUndefined();
   expect(options?.env?.['INPUT_GITHUB-TOKEN']).toBeUndefined();
   expect(options?.env?.INPUT_GITHUB_TOKEN).toBeUndefined();
 }
@@ -424,38 +436,31 @@ describe('code-scan-action main', () => {
 
     it('should pass the OIDC token only to the scan command if token minting succeeds', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'main' });
-      mockProcessEnv({
-        GITHUB_OIDC_TOKEN: 'stale-oidc-token',
-        ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token',
-        ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/request',
-        'INPUT_GITHUB-TOKEN': 'input-token',
-        INPUT_GITHUB_TOKEN: 'input-token-underscore',
-      });
+      mockInheritedActionAuthEnv();
 
       const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
 
       expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
-      expectCredentialRequestEnvUnset(npmInstall.options);
+      expectNoActionAuthEnv(npmInstall.options);
       expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
-      expectCredentialRequestEnvUnset(promptfoo.options);
+      expectNoActionAuthEnv(promptfoo.options);
       expect(process.env.GITHUB_OIDC_TOKEN).toBe('stale-oidc-token');
     });
 
     it('should not pass stale OIDC credentials to subprocesses if token minting fails', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'main' });
-      mockProcessEnv({
-        GITHUB_OIDC_TOKEN: 'stale-oidc-token',
-        ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token',
-        ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/request',
-      });
+      mockInheritedActionAuthEnv();
       mocks.core.getIDToken.mockRejectedValue(new Error('OIDC not configured'));
 
       const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
 
       expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
-      expectCredentialRequestEnvUnset(npmInstall.options);
+      expectNoActionAuthEnv(npmInstall.options);
       expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
-      expectCredentialRequestEnvUnset(promptfoo.options);
+      expectNoActionAuthEnv(promptfoo.options);
+      expect(mocks.core.info).toHaveBeenCalledWith(
+        'OIDC token not available: Failed to get GitHub OIDC token: OIDC not configured',
+      );
     });
   });
 
