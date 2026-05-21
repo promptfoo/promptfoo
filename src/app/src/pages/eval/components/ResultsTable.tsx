@@ -29,6 +29,7 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -70,6 +71,10 @@ import {
   setEvalDetailsHash,
   useEvalDetailsHash,
 } from './utils';
+
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
+  (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
+);
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -2500,19 +2505,15 @@ function ResultsTable({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
-                  50
-                </SelectItem>
-                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
-                  100
-                </SelectItem>
-                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
-                  500
-                </SelectItem>
-                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
-                  1000
-                </SelectItem>
+                {PAGE_SIZE_OPTIONS.map((size, idx) => (
+                  <SelectItem
+                    key={size}
+                    value={String(size)}
+                    disabled={filteredResultsCount <= (PAGE_SIZE_OPTIONS[idx - 1] ?? 0)}
+                  >
+                    {size}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
