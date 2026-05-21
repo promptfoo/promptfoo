@@ -2478,6 +2478,50 @@ describe('OpenAI Realtime Provider', () => {
       expect((provider as any).connectionReady).toBeNull();
     });
 
+    it('rejects the in-flight turn and tears down state when the response times out', async () => {
+      // Regression: the websocketTimeout callback rejected the turn but — unlike
+      // every other abort path — never detached the message handler or tore
+      // down the persistent connection. The stale handler kept firing for later
+      // turns' events (recreating the event-interleaving bug the provider was
+      // hardened against) and connectionReady stayed cached so the next turn
+      // skipped reconnection.
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: { modalities: ['text'], maintainContext: true, websocketTimeout: 50 },
+        });
+
+        const ws = {
+          on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+          once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+          readyState: 1,
+        } as unknown as WebSocket;
+        provider.persistentConnection = ws;
+
+        const ctx = { test: { metadata: { conversationId: 'timeout-turn' } } } as any;
+        const turnPromise = provider.callApi('no response please', ctx);
+
+        // Let setup register the request timeout, then advance past it without
+        // ever delivering a server response.
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(100);
+
+        const result = await turnPromise;
+        expect(result.error).toMatch(/timed out/i);
+        // The fix: the timeout path must detach the stale message handler and
+        // drop the socket so the next turn reconnects cleanly.
+        expect(ws.removeListener).toHaveBeenCalledWith('message', expect.any(Function));
+        expect(ws.close).toHaveBeenCalled();
+        expect(provider.persistentConnection).toBeNull();
+        expect((provider as any).connectionReady).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('rejects connectionReady and clears state when the socket closes before OPEN', async () => {
       // Regression: openPersistentConnection() only listened for 'error', so
       // a handshake rejection that surfaces as 'close' (without a preceding

@@ -2073,6 +2073,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       setTimeout(() => {
         logger.error('WebSocket response timed out');
         this.resetAudioState();
+        // Detach our listeners and drop the socket. A timed-out turn leaves an
+        // unanswered response on the shared connection; without teardown the
+        // stale handler keeps firing for every later turn's events, recreating
+        // the event-interleaving bug this provider was hardened against.
+        if (cleanupMessageHandler) {
+          cleanupMessageHandler();
+        }
+        const conn = this.persistentConnection;
+        this.tearDownPersistentConnection('response timeout');
+        conn?.close();
         reject(new Error('WebSocket response timed out'));
       }, this.config.websocketTimeout || 30000);
 
