@@ -4,6 +4,7 @@ import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { getMcpErrorMessage, isMcpErrorResult } from './mcp/util';
 
 import type {
   FunctionCall,
@@ -246,11 +247,9 @@ export class FunctionCallbackHandler {
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
       const result = await this.mcpClient.callTool(toolName, parsedArgs);
 
-      if (result?.error || result?.isError) {
+      if (isMcpErrorResult(result)) {
         return {
-          output: `MCP Tool Error (${toolName}): ${
-            result.error || result.content || 'Tool returned an error result'
-          }`,
+          output: `MCP Tool Error (${toolName}): ${getMcpErrorMessage(result)}`,
           isError: true,
         };
       }

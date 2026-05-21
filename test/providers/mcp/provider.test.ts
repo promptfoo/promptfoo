@@ -78,6 +78,44 @@ describe('MCPProvider', () => {
     });
   });
 
+  it('should preserve MCP tool error results as direct provider output via callApi', async () => {
+    const rawResult = {
+      content: [{ type: 'text', text: 'Path traversal not allowed' }],
+      isError: true,
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'Path traversal not allowed',
+      isError: true,
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const payload = { tool: 'read_file', args: { path: '../../../etc/passwd' } };
+
+    await expect(provider.callApi('', createContext(payload))).resolves.toEqual({
+      output: 'Path traversal not allowed',
+      raw: rawResult,
+      metadata: {
+        toolName: 'read_file',
+        toolArgs: { path: '../../../etc/passwd' },
+        originalPayload: payload,
+      },
+    });
+  });
+
+  it('should surface MCP client failures as a provider error', async () => {
+    const failure = { content: '', error: 'connection lost' };
+    mcpClientMock.callTool.mockResolvedValue(failure);
+
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const payload = { tool: 'lookup_user', args: { id: '123' } };
+
+    await expect(provider.callApi('', createContext(payload))).resolves.toEqual({
+      error: 'MCP tool error: connection lost',
+      raw: failure,
+    });
+  });
+
   it('should transform raw MCP results and merge provider metadata', async () => {
     const rawResult = {
       content: [{ type: 'text', text: 'raw response' }],

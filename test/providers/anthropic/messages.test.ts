@@ -1602,7 +1602,26 @@ describe('AnthropicMessagesProvider', () => {
       expect(createSpy.mock.calls[1][0]).not.toHaveProperty('tool_choice');
     });
 
-    it('marks MCP tool_result blocks as errors before continuing the Anthropic conversation', async () => {
+    it.each([
+      {
+        label: 'isError result with content',
+        mcpResult: { content: 'lookup failed', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): lookup failed',
+      },
+      {
+        label: 'thrown error surfaced via the error field',
+        mcpResult: { content: '', error: 'lookup failed' },
+        expectedContent: 'MCP Tool Error (search_companies): lookup failed',
+      },
+      {
+        label: 'error result without content',
+        mcpResult: { content: '', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): Tool returned an error result',
+      },
+    ])('marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)', async ({
+      mcpResult,
+      expectedContent,
+    }) => {
       provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
@@ -1615,10 +1634,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      mcpMocks.callTool.mockResolvedValueOnce({
-        content: 'lookup failed',
-        isError: true,
-      });
+      mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
 
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
@@ -1651,7 +1667,7 @@ describe('AnthropicMessagesProvider', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_error',
-              content: 'MCP Tool Error (search_companies): lookup failed',
+              content: expectedContent,
               is_error: true,
             },
           ],

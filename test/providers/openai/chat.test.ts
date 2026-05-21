@@ -766,7 +766,26 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
-    it('should surface MCP tool error results in chat tool callbacks', async () => {
+    it.each([
+      {
+        label: 'isError result',
+        callToolResult: { content: 'Path traversal not allowed', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): Path traversal not allowed',
+      },
+      {
+        label: 'thrown error surfaced via the error field',
+        callToolResult: { content: '', error: 'Connection refused' },
+        expectedOutput: 'MCP Tool Error (read_file): Connection refused',
+      },
+      {
+        label: 'error result without content',
+        callToolResult: { content: '', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): Tool returned an error result',
+      },
+    ])('should surface MCP tool error results in chat tool callbacks ($label)', async ({
+      callToolResult,
+      expectedOutput,
+    }) => {
       const mockResponse = {
         data: {
           choices: [
@@ -795,10 +814,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const mcpClient = {
         getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
-        callTool: vi.fn().mockResolvedValue({
-          content: 'Path traversal not allowed',
-          isError: true,
-        }),
+        callTool: vi.fn().mockResolvedValue(callToolResult),
       };
       (provider as any).mcpClient = mcpClient;
 
@@ -807,7 +823,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
         path: '../../../etc/passwd',
       });
-      expect(result.output).toBe('MCP Tool Error (read_file): Path traversal not allowed');
+      expect(result.output).toBe(expectedOutput);
     });
 
     it('should handle multiple function tool calls', async () => {
