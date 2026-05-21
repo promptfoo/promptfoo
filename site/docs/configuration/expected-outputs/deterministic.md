@@ -284,6 +284,17 @@ assert:
     threshold: 0.001
 ```
 
+To record raw cost as a named metric without affecting pass/fail scoring, omit `threshold` and
+set `metric`:
+
+```yaml
+assert:
+  - type: cost
+    metric: cost_usd
+```
+
+The thresholdless form requires `metric`. `not-cost` always requires `threshold`.
+
 ### Equality
 
 The `equals` assertion checks if the LLM output is equal to the expected value.
@@ -652,12 +663,13 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 
 ### skill-used {#skill-used}
 
-The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?".
+The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?". Errored skill tool attempts can still appear in provider metadata for diagnostics, but they do not satisfy `skill-used`.
 
 Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
 
@@ -809,6 +821,17 @@ assert:
   - type: latency
     threshold: 5000
 ```
+
+To record raw latency as a named metric without affecting pass/fail scoring, omit `threshold` and
+set `metric`:
+
+```yaml
+assert:
+  - type: latency
+    metric: latency_ms
+```
+
+The thresholdless form requires `metric`. `not-latency` always requires `threshold`.
 
 Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
 

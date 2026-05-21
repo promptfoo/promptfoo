@@ -4,6 +4,12 @@ import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { FilterIcon } from '@app/components/ui/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
 import {
@@ -20,6 +26,7 @@ import {
 } from './metricDisplay';
 import { useTableStore } from './store';
 import { getNamedMetricTotal } from './utils';
+import type { EvaluateTable } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
@@ -40,6 +47,106 @@ function formatMetricNumber(value: number): string {
   return value.toFixed(Math.abs(value) >= 1 ? 2 : 4);
 }
 
+type PromptHeader = EvaluateTable['head']['prompts'][number];
+
+function getMetricValue(metricScore: MetricScore, kind: MetricDisplayKind): number {
+  if (!metricScore.hasScore) {
+    return 0;
+  }
+
+  return getMetricAverage(kind, metricScore.score, metricScore.count);
+}
+
+function getPromptMetricScores(row: MetricRow): MetricScore[] {
+  return Object.entries(row)
+    .filter(([key]) => key.startsWith('prompt_'))
+    .map(([, value]) => value as MetricScore);
+}
+
+function getAverageMetricValue(row: MetricRow): number {
+  const promptScores = getPromptMetricScores(row);
+  let promptCount = 0;
+  let totalValue = 0;
+
+  promptScores.forEach((metricScore) => {
+    if (metricScore.hasScore) {
+      promptCount++;
+      totalValue += getMetricValue(metricScore, row.kind);
+    }
+  });
+
+  return promptCount > 0 ? totalValue / promptCount : 0;
+}
+
+function getMetricSpread(row: MetricRow): number | null {
+  const validPassRates = getPromptMetricScores(row)
+    .filter(({ hasScore }) => hasScore)
+    .map((metricScore) => getMetricValue(metricScore, row.kind));
+
+  if (validPassRates.length < 2) {
+    return null;
+  }
+
+  return Math.max(...validPassRates) - Math.min(...validPassRates);
+}
+
+function formatProviderLabel(prompt: PromptHeader, index: number): string {
+  if (typeof prompt.provider === 'string' && prompt.provider.trim()) {
+    return prompt.provider;
+  }
+
+  return `Prompt ${index + 1}`;
+}
+
+function getPromptHeaderTitle(prompt: PromptHeader, index: number): string {
+  const providerLabel = formatProviderLabel(prompt, index);
+  const promptLabel = prompt.label || prompt.display || prompt.raw;
+  return promptLabel ? `${providerLabel} - ${promptLabel}` : providerLabel;
+}
+
+function getPromptMetricToggleLabel(
+  prompt: PromptHeader,
+  index: number,
+  metricLabel: string,
+): string {
+  const providerLabel = formatProviderLabel(prompt, index);
+  const defaultPromptLabel = `Prompt ${index + 1}`;
+  const providerSuffix = providerLabel === defaultPromptLabel ? '' : ` - ${providerLabel}`;
+
+  return `${defaultPromptLabel}${providerSuffix} - ${metricLabel}`;
+}
+
+function PromptMetricGroupHeader({ prompt, index }: { prompt: PromptHeader; index: number }) {
+  const providerLabel = formatProviderLabel(prompt, index);
+
+  return (
+    <div
+      className="min-w-0 rounded-md border border-blue-100 bg-blue-50/70 px-3 py-2 dark:border-blue-900/70 dark:bg-blue-950/30"
+      title={getPromptHeaderTitle(prompt, index)}
+    >
+      <span className="block text-[11px] font-medium uppercase text-blue-700 dark:text-blue-300">
+        Prompt {index + 1}
+      </span>
+      <span className="block truncate text-sm font-semibold text-zinc-950 dark:text-zinc-100">
+        {providerLabel}
+      </span>
+    </div>
+  );
+}
+
+function SummaryMetricGroupHeader() {
+  return (
+    <div className="min-w-0 rounded-md border border-zinc-200 bg-zinc-100/80 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/80">
+      <span className="block text-[11px] font-medium uppercase text-zinc-600 dark:text-zinc-300">
+        Summary
+      </span>
+      <span className="block truncate text-sm font-semibold text-zinc-950 dark:text-zinc-100">
+        Across prompts
+      </span>
+    </div>
+  );
+}
+
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   const { table, config } = useTableStore();
   const applyFilterFromMetric = useApplyFilterFromMetric();
@@ -58,40 +165,55 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
    * @returns The Tailwind class names for styling.
    * @see https://observablehq.com/@d3/color-schemes#diverging
    */
-  const getPercentageClasses = React.useCallback((percentage: number): string => {
+  const getPercentageTextClasses = React.useCallback((percentage: number): string => {
     if (percentage >= 75) {
       if (percentage >= 90) {
-        return 'bg-green-900/90 text-white dark:bg-green-800/90';
+        return 'text-emerald-700 dark:text-emerald-300';
       }
       if (percentage >= 80) {
-        return 'bg-green-800/90 text-white dark:bg-green-700/90';
+        return 'text-green-700 dark:text-green-300';
       }
-      return 'bg-green-700/90 text-white dark:bg-green-600/90';
+      return 'text-green-600 dark:text-green-300';
     }
     if (percentage >= 50) {
       if (percentage >= 70) {
-        return 'bg-orange-900/90 text-white dark:bg-orange-800/90';
+        return 'text-amber-700 dark:text-amber-300';
       }
       if (percentage >= 60) {
-        return 'bg-orange-800/90 text-white dark:bg-orange-700/90';
+        return 'text-orange-700 dark:text-orange-300';
       }
-      return 'bg-orange-700/90 text-white dark:bg-orange-600/90';
+      return 'text-orange-600 dark:text-orange-300';
     }
     // Red scale for low percentages
     if (percentage <= 10) {
-      return 'bg-red-900 text-white dark:bg-red-800';
+      return 'text-red-800 dark:text-red-300';
     }
     if (percentage <= 20) {
-      return 'bg-red-800 text-white dark:bg-red-700';
+      return 'text-red-700 dark:text-red-300';
     }
     if (percentage <= 30) {
-      return 'bg-red-600 text-white dark:bg-red-500';
+      return 'text-red-600 dark:text-red-300';
     }
     if (percentage <= 40) {
-      return 'bg-red-500 text-white dark:bg-red-400 dark:text-black';
+      return 'text-red-500 dark:text-red-300';
     }
-    return 'bg-red-400 text-white dark:bg-red-300 dark:text-black';
+    return 'text-red-400 dark:text-red-300';
   }, []);
+
+  const renderPercentageValue = React.useCallback(
+    (percentage: number) => {
+      const classes = getPercentageTextClasses(percentage);
+
+      return (
+        <div className="flex h-full items-center justify-end">
+          <span className={cn('text-sm font-semibold tabular-nums', classes)}>
+            {percentage.toFixed(2)}%
+          </span>
+        </div>
+      );
+    },
+    [getPercentageTextClasses],
+  );
 
   /**
    * Applies the metric as a filter and closes the dialog.
@@ -122,19 +244,41 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     });
   }, [metricKinds, promptMetricNames, table.head.prompts]);
 
+  const renderMetricValue = React.useCallback(
+    (metricScore: MetricScore | undefined, metricKind: MetricDisplayKind) => {
+      if (!metricScore?.hasScore) {
+        return <span className="text-sm">0</span>;
+      }
+
+      const value = getMetricValue(metricScore, metricKind);
+      if (metricKind === 'value') {
+        return (
+          <div className="flex h-full items-center justify-end">
+            <span className="text-sm tabular-nums">{formatMetricNumber(value)}</span>
+          </div>
+        );
+      }
+
+      return renderPercentageValue(value);
+    },
+    [renderPercentageValue],
+  );
+
   // Create columns for DataTable
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
-    const rateHeader = hasValueMetrics ? 'Average' : 'Pass Rate';
-    const totalHeader = hasValueMetrics ? 'Total' : 'Pass Count';
-    const countHeader = hasValueMetrics ? 'Count' : 'Test Count';
-    const overallHeader = hasValueMetrics ? 'Avg.' : 'Avg. Pass Rate';
+    const valueColumnLabel = hasValueMetrics ? 'Pass / Avg.' : 'Pass';
+    const scoreColumnLabel = hasValueMetrics ? 'Score / Total' : 'Score';
+    const summaryAverageLabel = hasValueMetrics ? 'Avg.' : 'Avg. Pass';
 
     const cols: ColumnDef<MetricRow>[] = [
       {
         accessorKey: 'metric',
         header: 'Metric',
-        size: 300,
+        size: 240,
+        enableHiding: false,
+        meta: {
+          sticky: 'left',
+        },
         cell: ({ getValue }) => {
           const value = getValue<string>();
           if (isPolicyMetric(value)) {
@@ -153,150 +297,168 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     // Add a column for each prompt
     table.head.prompts.forEach((prompt, idx) => {
       const columnId = `prompt_${idx}` as PromptMetricColumnKey;
-      const providerName = prompt.provider;
 
       cols.push({
-        accessorKey: `${columnId}_pass_rate`,
-        header: `${providerName} - ${rateHeader}`,
-        size: 150,
-        cell: ({ row }) => {
-          const metricScore = row.original[columnId];
-          const metricKind = row.original.kind;
-
-          if (!metricScore) {
-            return <span className="text-sm">0</span>;
-          }
-
-          const { hasScore, score, count } = metricScore;
-
-          if (!hasScore) {
-            return <span className="text-sm">0</span>;
-          }
-
-          if (metricKind === 'value') {
-            return (
-              <div className="flex justify-end items-center h-full">
-                <span className="text-sm">
-                  {formatMetricNumber(getMetricAverage('value', score, count))}
+        id: `${columnId}_group`,
+        header: () => <PromptMetricGroupHeader prompt={prompt} index={idx} />,
+        columns: [
+          {
+            accessorKey: `${columnId}_pass_rate`,
+            header: valueColumnLabel,
+            size: 112,
+            enableSorting: false,
+            enableColumnFilter: false,
+            meta: {
+              align: 'right',
+              columnToggleLabel: getPromptMetricToggleLabel(prompt, idx, valueColumnLabel),
+            },
+            cell: ({ row }) => {
+              const metricScore = row.original[columnId];
+              return renderMetricValue(metricScore, row.original.kind);
+            },
+          },
+          {
+            accessorKey: `${columnId}_score`,
+            header: scoreColumnLabel,
+            size: 112,
+            enableSorting: false,
+            enableColumnFilter: false,
+            meta: {
+              align: 'right',
+              columnToggleLabel: getPromptMetricToggleLabel(prompt, idx, scoreColumnLabel),
+            },
+            cell: ({ row }) => {
+              const metricScore = row.original[columnId];
+              if (!metricScore) {
+                return <span className="text-sm">0</span>;
+              }
+              const { hasScore, score } = metricScore;
+              const displayValue = hasScore ? formatMetricNumber(score) : '0';
+              return (
+                <span className="text-sm tabular-nums" title={hasScore ? String(score) : '0'}>
+                  {displayValue}
                 </span>
-              </div>
-            );
-          }
-
-          const percentage = getMetricAverage('percentage', score, count);
-          const classes = getPercentageClasses(percentage);
-
-          return (
-            <div className="flex justify-end items-center h-full">
-              <span
-                className={cn(
-                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
-                  classes,
-                )}
-              >
-                {percentage.toFixed(2)}%
-              </span>
-            </div>
-          );
-        },
-      });
-      cols.push({
-        accessorKey: `${columnId}_score`,
-        header: `${providerName} - ${totalHeader}`,
-        size: 120,
-        cell: ({ row }) => {
-          const metricScore = row.original[columnId];
-
-          if (!metricScore) {
-            return <span className="text-sm">0</span>;
-          }
-
-          const { hasScore, score } = metricScore;
-          return <span className="text-sm">{hasScore ? formatMetricNumber(score) : '0'}</span>;
-        },
-      });
-      cols.push({
-        accessorKey: `${columnId}_count`,
-        header: `${providerName} - ${countHeader}`,
-        size: 120,
-        cell: ({ row }) => {
-          const metricScore = row.original[columnId];
-          const metricKind = row.original.kind;
-
-          if (!metricScore) {
-            return <span className="text-sm">0</span>;
-          }
-
-          const { count } = metricScore;
-          if (metricKind === 'value' && count === 0) {
-            return <span className="text-sm">-</span>;
-          }
-          return <span className="text-sm">{count}</span>;
-        },
+              );
+            },
+          },
+          {
+            accessorKey: `${columnId}_count`,
+            header: 'Count',
+            size: 72,
+            enableSorting: false,
+            enableColumnFilter: false,
+            meta: {
+              align: 'right',
+              columnToggleLabel: getPromptMetricToggleLabel(prompt, idx, 'Count'),
+            },
+            cell: ({ row }) => {
+              const metricScore = row.original[columnId];
+              const metricKind = row.original.kind;
+              if (!metricScore) {
+                return <span className="text-sm">0</span>;
+              }
+              const { count } = metricScore;
+              if (metricKind === 'value' && count === 0) {
+                return <span className="text-sm">-</span>;
+              }
+              return <span className="text-sm tabular-nums">{count}</span>;
+            },
+          },
+        ],
       });
     });
 
-    cols.push({
-      accessorKey: 'avg_pass_rate',
-      header: overallHeader,
-      size: 150,
-      cell: ({ row }) => {
-        let promptCount = 0;
-        let totalAverage = 0;
-        const metricKind = row.original.kind;
-
-        table.head.prompts.forEach((_prompt, promptIdx) => {
-          const metricScore = row.original[`prompt_${promptIdx}` as PromptMetricColumnKey];
-          if (!metricScore?.hasScore) {
-            return;
-          }
-
-          promptCount++;
-          totalAverage += getMetricAverage(metricKind, metricScore.score, metricScore.count);
-        });
-        const average = promptCount > 0 ? totalAverage / promptCount : 0;
-
-        if (metricKind === 'value') {
-          return (
-            <div className="flex justify-end items-center h-full">
-              <span className="text-sm">{formatMetricNumber(average)}</span>
-            </div>
-          );
-        }
-
-        const classes = getPercentageClasses(average);
-
-        return (
-          <div className="flex justify-end items-center h-full">
-            <span
-              className={cn(
-                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
-                classes,
-              )}
-            >
-              {average.toFixed(2)}%
-            </span>
-          </div>
-        );
-      },
-    });
+    if (table.head.prompts.length > 1) {
+      cols.push({
+        id: 'summary_group',
+        header: () => <SummaryMetricGroupHeader />,
+        columns: [
+          {
+            accessorKey: 'avg_pass_rate',
+            header: summaryAverageLabel,
+            size: 112,
+            enableSorting: false,
+            enableColumnFilter: false,
+            meta: {
+              align: 'right',
+              columnToggleLabel: `Summary - ${summaryAverageLabel}`,
+            },
+            cell: ({ row }) => {
+              const value = getAverageMetricValue(row.original);
+              if (row.original.kind === 'value') {
+                return (
+                  <div className="flex h-full items-center justify-end">
+                    <span className="text-sm tabular-nums">{formatMetricNumber(value)}</span>
+                  </div>
+                );
+              }
+              return renderPercentageValue(value);
+            },
+          },
+          {
+            accessorKey: 'pass_spread',
+            header: 'Spread',
+            size: 96,
+            enableSorting: false,
+            enableColumnFilter: false,
+            meta: {
+              align: 'right',
+              columnToggleLabel: 'Summary - Spread',
+            },
+            cell: ({ row }) => {
+              const spread = getMetricSpread(row.original);
+              const spreadText =
+                spread === null
+                  ? '--'
+                  : row.original.kind === 'value'
+                    ? formatMetricNumber(spread)
+                    : `${spread.toFixed(2)} pts`;
+              return (
+                <div className="flex h-full items-center justify-end">
+                  <span
+                    className="text-sm font-medium text-zinc-700 dark:text-zinc-200"
+                    title="Metric spread across prompt columns"
+                  >
+                    {spreadText}
+                  </span>
+                </div>
+              );
+            },
+          },
+        ],
+      });
+    }
 
     // Actions Column:
     cols.push({
       id: 'actions',
       header: '',
-      size: 80,
+      size: 64,
+      enableHiding: false,
+      enableSorting: false,
+      enableColumnFilter: false,
+      meta: {
+        sticky: 'right',
+      },
       cell: ({ row }) => {
         return (
           <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleMetricFilterClick(row.original.metric)}
-              className="filter-icon size-8 p-0"
-            >
-              <FilterIcon className="size-4" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label={`Filter results by ${row.original.metric}`}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleMetricFilterClick(row.original.metric)}
+                    className="filter-icon size-8 p-0"
+                  >
+                    <FilterIcon className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Filter results by this metric</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         );
       },
@@ -305,12 +467,11 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     return cols;
   }, [
     table.head.prompts,
-    promptMetricNames,
     policiesById,
-    getPercentageClasses,
-    handleMetricFilterClick,
     hasValueMetrics,
-    metricKinds,
+    renderMetricValue,
+    handleMetricFilterClick,
+    renderPercentageValue,
   ]);
 
   // Create rows for DataTable
@@ -355,6 +516,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       showToolbar
       showFilter
       showColumnToggle
+      showExport={false}
+      globalFilterLabel="Search custom metrics"
+      className="min-h-0 flex-1"
     />
   );
 };
@@ -368,7 +532,7 @@ export default function CustomMetricsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-[90vw] h-[80vh] overflow-auto">
+      <DialogContent className="flex h-[80vh] max-w-[98vw] flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Custom Metrics</DialogTitle>
         </DialogHeader>

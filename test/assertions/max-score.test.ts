@@ -102,4 +102,61 @@ describe('max-score assertion integration', () => {
     expect(results[0].score).toBe(1);
     expect(results[1].score).toBe(0);
   });
+
+  it('should ignore metric-only raw scores when selecting the max score', async () => {
+    const assertion = {
+      type: 'max-score',
+      value: { method: 'average' },
+    } as Assertion;
+
+    const results = await selectMaxScore(
+      ['expensive but low quality', 'cheap and higher quality'],
+      [
+        {
+          gradingResult: {
+            componentResults: [
+              {
+                pass: true,
+                score: 1000,
+                reason: 'Recorded raw cost',
+                assertion: { type: 'cost', metric: 'cost_usd' } as Assertion,
+                metadata: { isMetricOnly: true },
+              } satisfies GradingResult,
+              {
+                pass: true,
+                score: 0.2,
+                reason: 'Low quality score',
+                assertion: { type: 'contains', value: 'answer' } as Assertion,
+              } satisfies GradingResult,
+            ],
+          },
+        },
+        {
+          gradingResult: {
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Recorded raw cost',
+                assertion: { type: 'cost', metric: 'cost_usd' } as Assertion,
+                metadata: { isMetricOnly: true },
+              } satisfies GradingResult,
+              {
+                pass: true,
+                score: 0.8,
+                reason: 'Higher quality score',
+                assertion: { type: 'contains', value: 'answer' } as Assertion,
+              } satisfies GradingResult,
+            ],
+          },
+        },
+      ],
+      assertion,
+    );
+
+    expect(results[0].pass).toBe(false);
+    expect(results[1].pass).toBe(true);
+    expect(results[0].namedScores?.maxScore).toBe(0.2);
+    expect(results[1].namedScores?.maxScore).toBe(0.8);
+  });
 });
