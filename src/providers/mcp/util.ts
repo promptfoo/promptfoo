@@ -54,7 +54,11 @@ export function formatMcpToolError(name: string, message: string): string {
   return `MCP Tool Error (${name}): ${message}`;
 }
 
-/** Format a successful MCP tool result into the shared `MCP Tool Result (...)` string. */
+/**
+ * Format a successful MCP tool result into the shared `MCP Tool Result (...)`
+ * string. `content` is expected to be already normalized — `MCPClient.callTool`
+ * applies `normalizeMcpContent` before the result reaches callers.
+ */
 export function formatMcpToolResult(name: string, content: string): string {
   return `MCP Tool Result (${name}): ${content}`;
 }

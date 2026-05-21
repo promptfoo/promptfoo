@@ -246,6 +246,17 @@ describe('FunctionCallbackHandler', () => {
 
       expect(result).toBe(JSON.stringify(call));
     });
+
+    it('does not report a failed regular callback as an MCP error', async () => {
+      const callbacks: FunctionCallbackConfig = {
+        regular_fn: vi.fn().mockRejectedValue(new Error('callback boom')),
+      };
+      const call = { name: 'regular_fn', arguments: '{}' };
+
+      const { mcpErrors } = await handler.processCalls(call, callbacks);
+
+      expect(mcpErrors).toEqual([]);
+    });
   });
 
   describe('executeCallback', () => {

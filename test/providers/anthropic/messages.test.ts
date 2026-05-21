@@ -1658,8 +1658,6 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Find grid storage companies');
 
-      // The model's recovered answer is preserved as output, and the MCP tool
-      // failure is surfaced on ProviderResponse.error.
       expect(result.output).toBe('I could not complete that lookup.');
       expect(result.error).toBe(expectedContent);
       const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
@@ -1676,6 +1674,46 @@ describe('AnthropicMessagesProvider', () => {
           ],
         },
       ]);
+    });
+
+    it('surfaces a thrown MCP tool error on ProviderResponse.error', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockRejectedValueOnce(new Error('connection lost'));
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_throw',
+              name: 'search_companies',
+              input: { query: 'grid storage' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'I could not complete that lookup.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find grid storage companies');
+
+      expect(result.output).toBe('I could not complete that lookup.');
+      expect(result.error).toBe('MCP Tool Error (search_companies): connection lost');
     });
 
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {

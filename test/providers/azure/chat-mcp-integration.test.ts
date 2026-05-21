@@ -59,6 +59,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     mcpMocks.mockCallTool.mockReset().mockResolvedValue({
       content: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
     });
+    vi.mocked(fetchWithCache).mockReset();
 
     // Create provider with MCP enabled
     provider = new AzureChatCompletionProvider('test-deployment', {

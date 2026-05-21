@@ -824,8 +824,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         path: '../../../etc/passwd',
       });
       expect(result.output).toBe(expectedOutput);
-      // The MCP tool failure is also surfaced on ProviderResponse.error so
-      // assertions and exit codes treat the row as a failure.
       expect(result.error).toBe(expectedOutput);
     });
 

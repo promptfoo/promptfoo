@@ -280,7 +280,9 @@ export class ResponsesProcessor {
         note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
       });
     } else {
-      // Normal function call with arguments - execute the callback
+      // Normal function call with arguments - execute the callback.
+      // The Responses-API handler has no MCP client, so mcpErrors is always
+      // empty here; the hosted MCP path is handled separately by processMcpCall.
       functionResult = (
         await this.config.functionCallbackHandler.processCalls(
           item,
@@ -323,7 +325,8 @@ export class ResponsesProcessor {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-          // Handle function calls within message content
+          // Handle function calls within message content. mcpErrors is unused:
+          // the Responses-API handler has no MCP client (see processFunctionCall).
           const { output: functionResult } = await this.config.functionCallbackHandler.processCalls(
             contentItem,
             context.config.functionToolCallbacks,

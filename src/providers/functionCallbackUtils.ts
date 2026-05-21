@@ -114,9 +114,7 @@ export class FunctionCallbackHandler {
       callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
 
-    const mcpErrors = results
-      .filter((r) => r.isMcpError && typeof r.output === 'string')
-      .map((r) => r.output as string);
+    const mcpErrors = results.filter((r) => r.isMcpError).map((r) => String(r.output));
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(

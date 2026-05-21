@@ -71,6 +71,10 @@ describe('joinMcpErrors', () => {
     expect(joinMcpErrors([])).toBeUndefined();
   });
 
+  it('returns a single error unchanged', () => {
+    expect(joinMcpErrors(['only failure'])).toBe('only failure');
+  });
+
   it('joins multiple error messages with a separator', () => {
     expect(joinMcpErrors(['first failed', 'second failed'])).toBe('first failed; second failed');
   });
@@ -112,6 +116,10 @@ describe('normalizeMcpContent', () => {
 
   it('serializes non-array objects as JSON', () => {
     expect(normalizeMcpContent({ answer: 42 })).toBe('{"answer":42}');
+  });
+
+  it('stringifies primitive and nullish array elements', () => {
+    expect(normalizeMcpContent(['raw', 42, null, undefined])).toBe('raw\n42\nnull\nundefined');
   });
 });
 
