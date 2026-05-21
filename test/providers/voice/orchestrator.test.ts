@@ -112,6 +112,7 @@ async function startConversation(orchestrator: VoiceConversationOrchestrator) {
 
 describe('VoiceConversationOrchestrator', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
     connectionMocks.instances.length = 0;
   });
 
