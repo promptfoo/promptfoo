@@ -208,15 +208,17 @@ function createClaudeResultMetrics(finalMsg: SDKResultMessage): {
   sessionId: string;
   tokenUsage: ProviderResponse['tokenUsage'];
 } {
+  const promptTokens = finalMsg.usage?.input_tokens;
+  const completionTokens = finalMsg.usage?.output_tokens;
   return {
     cost: finalMsg.total_cost_usd ?? 0,
     sessionId: finalMsg.session_id,
     tokenUsage: {
-      prompt: finalMsg.usage?.input_tokens,
-      completion: finalMsg.usage?.output_tokens,
+      prompt: promptTokens,
+      completion: completionTokens,
       total:
-        finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-          ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
+        promptTokens != null && completionTokens != null
+          ? promptTokens + completionTokens
           : undefined,
     },
   };
@@ -241,32 +243,26 @@ function createClaudeResultMetadata(
 function createClaudeResultResponse(
   finalMsg: SDKResultMessage,
   metrics: ReturnType<typeof createClaudeResultMetrics>,
-  toolCalls: ToolCallEntry[],
+  metadata: NonNullable<ProviderResponse['metadata']>,
 ): ProviderResponse {
-  const raw = JSON.stringify(finalMsg);
-  const metadata = createClaudeResultMetadata(finalMsg, toolCalls);
-  const response = {
-    ...metrics,
-    raw,
-    metadata,
-  };
+  const base = { ...metrics, raw: JSON.stringify(finalMsg) };
 
   if (finalMsg.subtype !== 'success') {
     return {
-      ...response,
+      ...base,
+      metadata,
       error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
     };
   }
 
+  const { structured_output } = finalMsg;
   return {
-    ...response,
-    output: finalMsg.structured_output === undefined ? finalMsg.result : finalMsg.structured_output,
-    metadata: {
-      ...metadata,
-      ...(finalMsg.structured_output === undefined
-        ? {}
-        : { structuredOutput: finalMsg.structured_output }),
-    },
+    ...base,
+    output: structured_output === undefined ? finalMsg.result : structured_output,
+    metadata:
+      structured_output === undefined
+        ? metadata
+        : { ...metadata, structuredOutput: structured_output },
   };
 }
 
@@ -1523,7 +1519,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 
+          // Build metrics and metadata before the try so they survive a
+          // post-stream processing failure (e.g. JSON.stringify choking on a
+          // circular structured_output). Neither helper serializes finalMsg,
+          // so both are safe to compute eagerly.
           const metrics = createClaudeResultMetrics(finalMsg);
+          const metadata = createClaudeResultMetadata(finalMsg, Array.from(toolCallsMap.values()));
 
           try {
             // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -1571,11 +1572,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               });
             }
 
-            const response = createClaudeResultResponse(
-              finalMsg,
-              metrics,
-              Array.from(toolCallsMap.values()),
-            );
+            const response = createClaudeResultResponse(finalMsg, metrics, metadata);
 
             if (finalMsg.subtype === 'success') {
               logger.debug(`Claude Agent SDK response: ${response.raw}`);
@@ -1585,9 +1582,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return response;
           } catch (postStreamError) {
             logger.error(`Error processing Claude Agent SDK result: ${postStreamError}`);
+            // Return the pre-try metrics/metadata so error rows still carry accounting.
             return {
               error: `Error processing Claude Agent SDK result: ${postStreamError}`,
               ...metrics,
+              metadata,
             };
           }
         },

@@ -846,9 +846,11 @@ interface ProviderResponse {
 }
 ```
 
-If a provider returns an `error` after usage details are available, keep `cost`, `tokenUsage`,
-and `metadata` on the same response. Promptfoo preserves those fields for structured results
-and accounting on provider error rows.
+If a provider has already computed usage details when it hits an `error`, it should return
+`cost`, `tokenUsage`, and `metadata` on that same response. Promptfoo keeps those fields on
+error rows — whether the provider returns the error directly or a thrown exception or failing
+response transform interrupts processing — so token accounting and structured metadata stay
+accurate.
 
 ### ProviderEmbeddingResponse
 

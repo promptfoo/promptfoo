@@ -1450,6 +1450,12 @@ async function runEvalInternal({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
+        // When the provider call succeeded but post-processing (response
+        // transforms or grading) threw, `ret` holds the provider's accounting:
+        // cost, token usage, response, and the merged result metadata (which
+        // gives provider values precedence over test metadata). Keep that and
+        // layer the error context on top. If the failure happened before `ret`
+        // was built, fall back to the bare test-metadata + error context.
         metadata: ret
           ? {
               ...ret.metadata,

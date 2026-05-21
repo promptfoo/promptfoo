@@ -417,10 +417,12 @@ describe('ClaudeCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBe('Claude Agent SDK call failed: error_during_execution');
+        // An error response that consumed input but produced no output still
+        // has a valid total — 0 completion tokens is a real value, not missing.
         expect(result.tokenUsage).toEqual({
           prompt: 10,
           completion: 0,
-          total: undefined,
+          total: 10,
         });
       });
 
@@ -498,6 +500,18 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(result.cost).toBe(0.002);
           expect(result.sessionId).toBe('test-session-123');
           expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
+          // Metadata is derived from finalMsg without serializing it, so it
+          // survives the JSON.stringify failure and stays on the error row.
+          expect(result.metadata).toEqual(
+            expect.objectContaining({
+              numTurns: 1,
+              durationMs: 1000,
+              durationApiMs: 800,
+              toolCalls: [],
+              skillCalls: [],
+              permissionDenials: [],
+            }),
+          );
           expect(errorSpy).toHaveBeenCalledWith(
             expect.stringContaining('Error processing Claude Agent SDK result'),
           );
