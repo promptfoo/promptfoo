@@ -277,6 +277,18 @@ describe('XAI Image Provider', () => {
       );
     });
 
+    it('prices unknown Grok Imagine slugs at the quality tier, not grok-2-image', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-future-preview', {
+        config: { apiKey: mockApiKey },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      // Unknown grok-imagine-* slugs are priced like grok-imagine-image-quality
+      // ($0.05 at 1k), not the legacy grok-2-image rate ($0.07).
+      expect(result.cost).toBe(0.05);
+    });
+
     it('supports the quality image model with resolution-sensitive fallback pricing', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-quality', {
         config: { apiKey: mockApiKey, resolution: '2k' },

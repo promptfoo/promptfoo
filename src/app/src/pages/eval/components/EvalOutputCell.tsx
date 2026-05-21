@@ -41,7 +41,13 @@ import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { getHumanRating } from './utils';
+import {
+  buildEvalOutputPromptHash,
+  getHumanRating,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -1085,11 +1091,26 @@ function renderOutputActions({
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handleCopy}
                 onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy output to clipboard"
               >
                 {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy output to clipboard</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleRowShareLink}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Copy link to output"
+              >
+                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
@@ -1107,20 +1128,6 @@ function renderOutputActions({
               </button>
             </TooltipTrigger>
             <TooltipContent>Toggle test highlight</TooltipContent>
-          </Tooltip>
-          <Tooltip disableHoverableContent>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
-                onClick={handleRowShareLink}
-                onMouseDown={(e) => e.preventDefault()}
-                aria-label="Copy link to output"
-              >
-                {linked ? <Check className="size-4" /> : <Link className="size-4" />}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy link to output</TooltipContent>
           </Tooltip>
         </>
       )}
@@ -1231,6 +1238,7 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -1260,6 +1268,7 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
   firstOutput,
@@ -1290,6 +1299,7 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
@@ -1300,11 +1310,27 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
+  React.useEffect(() => {
+    const hashTarget = parseEvalOutputPromptHash(locationHash);
+    if (!hashTarget) {
+      setOpen(false);
+      return;
+    }
+
+    setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
+  }, [locationHash, rowIndex, promptIndex]);
+
+  const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
+
   const handlePromptOpen = () => {
     setOpen(true);
+    setEvalDetailsHash(promptDetailsHash, rowPositionIndex);
   };
   const handlePromptClose = () => {
     setOpen(false);
+    if (locationHash === promptDetailsHash) {
+      setEvalDetailsHash('');
+    }
   };
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -1483,7 +1509,10 @@ function EvalOutputCell({
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
-    url.searchParams.set('rowId', String(rowIndex + 1));
+    // Keep `rowId` as the filtered result position so pagination can reopen the
+    // right page, while the hash keeps the stable test/prompt identity for the dialog.
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
+    url.hash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
     navigator.clipboard
       .writeText(url.toString())
