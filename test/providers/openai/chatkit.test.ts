@@ -192,10 +192,6 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should include responding state tracking in window.__state', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
-
       const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the responding state is included
@@ -205,10 +201,6 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should have chatkit.response.start event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
-
       const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the response.start listener is included for multi-step workflow tracking
@@ -216,10 +208,6 @@ describe('OpenAiChatKitProvider', () => {
     });
 
     it('should have chatkit.response.end event listener', () => {
-      const provider = new OpenAiChatKitProvider('wf_test123', {
-        config: { apiKey: 'test-key' },
-      });
-
       const html = generateChatKitHTML('/api/chatkit/session');
 
       // Verify the response.end listener is included

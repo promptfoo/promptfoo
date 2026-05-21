@@ -488,8 +488,8 @@ describe('FunctionCallbackHandler', () => {
         { name: 'failing_tool', description: 'A tool that fails' },
       ]);
       mockMCPClient.callTool.mockResolvedValue({
-        content: '',
-        error: 'Tool execution failed: Invalid arguments',
+        content: 'Tool execution failed: Invalid arguments',
+        isError: true,
       });
 
       const call = { name: 'failing_tool', arguments: '{"invalid": true}' };
@@ -497,6 +497,42 @@ describe('FunctionCallbackHandler', () => {
 
       expect(result).toEqual({
         output: 'MCP Tool Error (failing_tool): Tool execution failed: Invalid arguments',
+        isError: true,
+      });
+    });
+
+    it('should surface MCP results that resolve with an error field', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'failing_tool', description: 'A tool that fails' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: '',
+        error: 'Connection refused',
+      });
+
+      const call = { name: 'failing_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result).toEqual({
+        output: 'MCP Tool Error (failing_tool): Connection refused',
+        isError: true,
+      });
+    });
+
+    it('should fall back to a generic message when an error result has no content', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'failing_tool', description: 'A tool that fails' },
+      ]);
+      mockMCPClient.callTool.mockResolvedValue({
+        content: '',
+        isError: true,
+      });
+
+      const call = { name: 'failing_tool', arguments: '{}' };
+      const result = await handler.processCall(call, {});
+
+      expect(result).toEqual({
+        output: 'MCP Tool Error (failing_tool): Tool returned an error result',
         isError: true,
       });
     });

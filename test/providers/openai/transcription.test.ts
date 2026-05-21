@@ -319,9 +319,7 @@ describe('OpenAiTranscriptionProvider', () => {
         const result = await provider.callApi('/path/to/audio.mp3');
 
         expect(result.output).toBe('This is a test transcription.');
-        expect(getTranscriptionRequest().headers.get('authorization')).toBe(
-          'Bearer gateway-token',
-        );
+        expect(getTranscriptionRequest().headers.get('authorization')).toBe('Bearer gateway-token');
       } finally {
         restoreEnv();
       }

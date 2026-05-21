@@ -16,6 +16,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { parseChatPrompt, transformToolChoice, transformTools } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
@@ -664,8 +665,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const args = functionCall.arguments || functionCall.function?.arguments || '{}';
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
       const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
-      return mcpResult?.error
-        ? `MCP Tool Error (${functionName}): ${mcpResult.error}`
+      return isMcpErrorResult(mcpResult)
+        ? `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`
         : `MCP Tool Result (${functionName}): ${normalizeMcpContent(mcpResult?.content)}`;
     } catch (error) {
       logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);

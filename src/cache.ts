@@ -292,6 +292,7 @@ const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 // response formats for the same URL/body. `x-promptfoo-version` is also kept in
 // the key so promptfoo upgrades remain a deliberate invalidation boundary.
 const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding']);
+const SDK_USER_AGENT_PATTERN = /^[\w.-]+\/JS \S+$/;
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
@@ -308,6 +309,7 @@ function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
   // preserving caller-authored User-Agent differences for generic fetch users.
   return (
     name === 'user-agent' &&
+    SDK_USER_AGENT_PATTERN.test(headers.get(name) ?? '') &&
     Array.from(headers.keys()).some((headerName) => headerName.startsWith('x-stainless-'))
   );
 }
@@ -578,7 +580,7 @@ async function prepareFetchResponse(
     throw new Error(
       `Error parsing response from ${url}: ${
         (err as Error).message
-      }. Received text: ${responseText}`,
+      }. HTTP ${response.status} ${response.statusText}. Received text: ${responseText}`,
     );
   }
 }
@@ -660,8 +662,12 @@ export async function fetchWithCache<T = unknown>(
           // No-op when cache is disabled
         },
       };
-    } catch {
-      throw new Error(`Error parsing response as JSON: ${respText}`);
+    } catch (err) {
+      throw new Error(
+        `Error parsing response from ${url}: ${
+          (err as Error).message
+        }. HTTP ${resp.status} ${resp.statusText}. Received text: ${respText}`,
+      );
     }
   }
 
