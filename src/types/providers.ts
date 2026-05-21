@@ -52,6 +52,14 @@ interface AtomicTestCase {
   metadata?: Record<string, any>;
   options?: Record<string, any>;
 }
+
+interface ProviderLogger {
+  error: (message: string, context?: Record<string, unknown>) => unknown;
+  warn: (message: string, context?: Record<string, unknown>) => unknown;
+  info: (message: string, context?: Record<string, unknown>) => unknown;
+  debug: (message: string, context?: Record<string, unknown>) => unknown;
+}
+
 export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
@@ -78,7 +86,7 @@ export interface ProviderOptions {
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
-  logger?: winston.Logger;
+  logger?: winston.Logger | ProviderLogger;
   originalProvider?: ApiProvider;
   prompt: Prompt;
   vars: Record<string, VarValue>;
@@ -106,6 +114,13 @@ export interface CallApiContextParams {
    */
   promptIdx?: number;
   repeatIndex?: number;
+
+  // Callback for multi-turn strategy iteration progress
+  iterationCallback?: (
+    currentIteration: number,
+    totalIterations: number,
+    description?: string,
+  ) => void;
 }
 
 export interface CallApiOptionsParams {

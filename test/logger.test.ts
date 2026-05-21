@@ -197,6 +197,39 @@ describe('logger', () => {
     });
   });
 
+  describe('child logger', () => {
+    it('captures warnings and errors while still writing to console by default', () => {
+      const child = logger.default.child({ testIdx: 1, promptIdx: 2 });
+
+      child.warn('child warning');
+      child.error('child error');
+
+      expect(mockLogger.warn).toHaveBeenCalledWith({
+        message: 'child warning',
+        location: '',
+      });
+      expect(mockLogger.error).toHaveBeenCalledWith({
+        message: 'child error',
+        location: '',
+      });
+      expect(child.getLogs()).toEqual([
+        expect.objectContaining({ level: 'warn', message: 'child warning' }),
+        expect.objectContaining({ level: 'error', message: 'child error' }),
+      ]);
+    });
+
+    it('can suppress console output for reporter-managed per-test logs', () => {
+      const child = logger.default.child({ testIdx: 1, promptIdx: 2 }, { suppressConsole: true });
+
+      child.warn('captured warning');
+
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(child.getLogs()).toEqual([
+        expect.objectContaining({ level: 'warn', message: 'captured warning' }),
+      ]);
+    });
+  });
+
   describe('getCallerLocation', () => {
     it('should return location string with filename and line number', () => {
       const location = logger.getCallerLocation();

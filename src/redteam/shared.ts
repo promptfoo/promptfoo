@@ -139,6 +139,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         filterPrompts: options.filterPrompts,
         filterProviders: options.filterProviders,
         filterTargets: options.filterTargets,
+        reporter: options.reporter ? [options.reporter] : undefined,
       },
       defaultConfig,
       redteamPath,

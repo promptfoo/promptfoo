@@ -19,7 +19,7 @@ import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
-import logger, { globalLogCallback, setLogCallback } from './logger';
+import logger, { type ChildLogger, globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
@@ -30,6 +30,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
+import { ReporterManager } from './reporters';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -93,7 +94,6 @@ import {
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
-import type winston from 'winston';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -757,8 +757,10 @@ async function callProviderForRunEval({
   renderedPrompt,
   repeatIndex,
   test,
+  testLogger,
   testIdx,
   testSuite,
+  iterationCallback,
   vars,
 }: Pick<
   RunEvalOptions,
@@ -777,6 +779,8 @@ async function callProviderForRunEval({
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
+  testLogger: ChildLogger;
+  iterationCallback: RunEvalOptions['iterationCallback'];
   vars: Vars;
 }): Promise<ProviderCallResult> {
   const startTime = Date.now();
@@ -800,7 +804,9 @@ async function callProviderForRunEval({
         renderedPrompt,
         repeatIndex,
         test,
+        testLogger,
         traceContext,
+        iterationCallback,
         vars,
       });
 
@@ -823,7 +829,9 @@ async function callActiveProvider({
   renderedPrompt,
   repeatIndex,
   test,
+  testLogger,
   traceContext,
+  iterationCallback,
   vars,
 }: Pick<
   RunEvalOptions,
@@ -832,7 +840,9 @@ async function callActiveProvider({
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
+  testLogger: ChildLogger;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
+  iterationCallback: RunEvalOptions['iterationCallback'];
   vars: Vars;
 }): Promise<ProviderResponse> {
   const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
@@ -840,7 +850,7 @@ async function callActiveProvider({
     isApiProvider(test.provider) ? test.provider : originalProvider,
     test,
   );
-  logger.debug(`Provider type: ${activeProvider.id()}`);
+  testLogger.debug(`Provider type: ${activeProvider.id()}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
@@ -849,7 +859,9 @@ async function callActiveProvider({
     promptForRender,
     repeatIndex,
     test,
+    testLogger,
     traceContext,
+    iterationCallback,
     vars,
   });
   const callApiOptions = abortSignal ? { abortSignal } : undefined;
@@ -859,8 +871,8 @@ async function callActiveProvider({
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
     : await callApi();
 
-  logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
-  logger.debug(`Provider response cached property explicitly: ${response.cached}`);
+  testLogger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
+  testLogger.debug(`Provider response cached property explicitly: ${response.cached}`);
   return response;
 }
 
@@ -871,7 +883,9 @@ function buildCallApiContext({
   promptForRender,
   repeatIndex,
   test,
+  testLogger,
   traceContext,
+  iterationCallback,
   vars,
 }: {
   evalId?: string;
@@ -880,7 +894,9 @@ function buildCallApiContext({
   promptForRender: Prompt;
   repeatIndex: number;
   test: AtomicTestCase;
+  testLogger: ChildLogger;
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
+  iterationCallback: RunEvalOptions['iterationCallback'];
   vars: Vars;
 }): CallApiContextParams {
   const callApiContext: CallApiContextParams = {
@@ -889,9 +905,10 @@ function buildCallApiContext({
     filters,
     originalProvider,
     test,
-    logger: logger as unknown as winston.Logger,
+    logger: testLogger,
     getCache,
     repeatIndex,
+    iterationCallback,
   };
 
   if (evalId) {
@@ -1302,6 +1319,7 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
+  iterationCallback,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
@@ -1321,6 +1339,10 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  const testLogger = logger.child(
+    { testIdx, promptIdx },
+    { suppressConsole: usesDefaultTestReporter(evaluateOptions) },
+  );
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1349,8 +1371,10 @@ async function runEvalInternal({
       renderedPrompt: rendered.renderedPrompt,
       repeatIndex,
       test,
+      testLogger,
       testIdx,
       testSuite,
+      iterationCallback,
       vars: state.vars,
     });
     const { response, traceContext } = providerCall;
@@ -1419,8 +1443,14 @@ async function runEvalInternal({
       registers[test.options.storeOutputAs] = ret.response.output;
     }
 
+    const capturedLogs = testLogger.getLogs();
+    if (capturedLogs.length > 0) {
+      ret.logs = capturedLogs;
+    }
+
     return [ret];
   } catch (err) {
+    const capturedLogs = testLogger.getLogs();
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -1449,9 +1479,19 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...(capturedLogs.length > 0 && { logs: capturedLogs }),
       },
     ];
   }
+}
+
+function usesDefaultTestReporter(evaluateOptions: RunEvalOptions['evaluateOptions']): boolean {
+  return (
+    evaluateOptions?.reporters?.some((config) => {
+      const reporterName = Array.isArray(config) ? config[0] : config;
+      return reporterName === 'default' || reporterName === 'verbose';
+    }) ?? false
+  );
 }
 
 function buildProviderErrorContext({
@@ -2890,6 +2930,7 @@ class Evaluator {
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
+  reporterManager: ReporterManager;
   rateLimitRegistry: RateLimitRegistry | undefined;
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: InternalEvaluateOptions) {
@@ -2904,6 +2945,7 @@ class Evaluator {
     };
     this.conversations = {};
     this.registers = {};
+    this.reporterManager = new ReporterManager();
 
     const jsonlFiles = Array.isArray(evalRecord.config.outputPath)
       ? evalRecord.config.outputPath.filter((p) => p.endsWith('.jsonl'))
@@ -3089,7 +3131,7 @@ class Evaluator {
       async () => {
         const rows =
           precomputedRows ||
-          (await this.runEvalStepAfterBeforeEach(evalStep, {
+          (await this.runEvalStepAfterBeforeEach(evalStep, index, {
             deferGrading,
             onRowsReady,
             providerCallQueue,
@@ -3106,6 +3148,7 @@ class Evaluator {
 
   private async runEvalStepAfterBeforeEach(
     evalStep: RunEvalOptions,
+    index: number,
     {
       deferGrading,
       onRowsReady,
@@ -3122,6 +3165,22 @@ class Evaluator {
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+
+    if (this.reporterManager.count > 0 && !cliState.webUI) {
+      await this.reporterManager.onTestStart(evalStep, index);
+      evalStep.iterationCallback = (
+        currentIteration: number,
+        totalIterations: number,
+        description?: string,
+      ) => {
+        void this.reporterManager.onIterationProgress({
+          testIndex: index,
+          currentIteration,
+          totalIterations,
+          description,
+        });
+      };
+    }
 
     const rows = await runEvalInternal({
       ...evalStep,
@@ -3197,6 +3256,17 @@ class Evaluator {
         promptEvalCount,
         row,
       });
+
+      if (this.reporterManager.count > 0 && !cliState.webUI) {
+        await this.reporterManager.onTestResult({
+          result: row,
+          evalStep,
+          metrics,
+          completed: context.numComplete,
+          total: context.runEvalOptionsLength,
+          index,
+        });
+      }
 
       context.options.progressCallback?.(
         context.numComplete,
@@ -4070,6 +4140,18 @@ class Evaluator {
       varNames,
     });
 
+    if (this.reporterManager.count > 0 && !cliState.webUI) {
+      const totalTests = this.stats.successes + this.stats.failures + this.stats.errors;
+      await this.reporterManager.onRunComplete({
+        successes: this.stats.successes,
+        failures: this.stats.failures,
+        errors: this.stats.errors,
+        passRate: totalTests > 0 ? (this.stats.successes / totalTests) * 100 : 0,
+        durationMs: Date.now() - startTime,
+        isRedteam: Boolean(options.isRedteam),
+      });
+    }
+
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();
     }
@@ -4198,6 +4280,21 @@ class Evaluator {
     });
   }
 
+  private shouldUseReporters(isWebUI: boolean): boolean {
+    return !isWebUI && Boolean(this.options.reporters?.length);
+  }
+
+  private async startReporters(totalTests: number, concurrency: number): Promise<void> {
+    for (const config of this.options.reporters || []) {
+      await this.reporterManager.addReporter(config);
+    }
+    await this.reporterManager.onRunStart({
+      totalTests,
+      concurrency,
+      isRedteam: this.options.isRedteam ?? false,
+    });
+  }
+
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
@@ -4323,17 +4420,18 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
+    const useReporters = this.shouldUseReporters(isWebUI);
 
     // Choose appropriate progress reporter
     logger.debug(
       `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
     );
 
-    if (isCI() && !isWebUI) {
+    if (isCI() && !isWebUI && !useReporters) {
       // Use CI-friendly progress reporter
       ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
       ciProgressReporter.start();
-    } else if (this.options.showProgressBar && process.stderr.isTTY) {
+    } else if (!useReporters && this.options.showProgressBar && process.stderr.isTTY) {
       // Use visual progress bars
       progressBarManager = new ProgressBarManager(isWebUI);
     }
@@ -4400,6 +4498,10 @@ class Evaluator {
         shouldGroupGradingByProvider,
         usesConversationVar,
       });
+    }
+
+    if (useReporters) {
+      await this.startReporters(runEvalOptions.length, concurrency);
     }
 
     // Now start the progress bar after info messages
@@ -4501,6 +4603,8 @@ class Evaluator {
 
       // Clean up Python worker pools to prevent resource leaks
       await providerRegistry.shutdownAll();
+
+      await this.reporterManager.cleanup();
 
       // Log rate limit metrics for debugging before cleanup
       if (this.rateLimitRegistry) {

@@ -411,6 +411,102 @@ function createLogMethodWithContext(
   };
 }
 
+/**
+ * Log entry captured during test execution
+ */
+export interface TestLogEntry {
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  timestamp: number;
+}
+
+/**
+ * Child logger interface with test-scoped log capture
+ */
+export interface ChildLogger {
+  error: (message: string, context?: SanitizedLogContext) => void;
+  warn: (message: string, context?: SanitizedLogContext) => void;
+  info: (message: string, context?: SanitizedLogContext) => void;
+  debug: (message: string, context?: SanitizedLogContext) => void;
+  /** Retrieve all captured logs for this test */
+  getLogs: () => TestLogEntry[];
+}
+
+export interface ChildLoggerOptions {
+  /**
+   * When true, child logs are captured and written only to file transports.
+   * This lets per-test reporters display logs at completion without duplicating
+   * or interleaving console output.
+   */
+  suppressConsole?: boolean;
+}
+
+// Maximum log entries per child logger to prevent memory issues
+const MAX_CHILD_LOG_ENTRIES = 50;
+
+/**
+ * Creates a child logger method that captures logs to a buffer and writes
+ * to file transports, but skips console output. Console output will be
+ * displayed by the reporter when the test completes.
+ */
+function createChildLogMethod(
+  level: keyof typeof LOG_LEVELS,
+  logBuffer: TestLogEntry[],
+  _metadata: { testIdx: number; promptIdx: number },
+  options: ChildLoggerOptions,
+): (message: string, context?: SanitizedLogContext) => void {
+  return (message: string, context?: SanitizedLogContext) => {
+    if (isLoggerShuttingDown) {
+      return;
+    }
+
+    // Capture to this test's buffer (respecting verbose setting)
+    const shouldCapture = level === 'error' || level === 'warn' || isDebugEnabled();
+    if (shouldCapture && logBuffer.length < MAX_CHILD_LOG_ENTRIES) {
+      const fullMessage = context
+        ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
+        : message;
+      logBuffer.push({ level, message: fullMessage, timestamp: Date.now() });
+    }
+
+    if (!options.suppressConsole) {
+      logger[level](message, context);
+      return;
+    }
+
+    // Log to file transports only (skip console to avoid duplicate output)
+    // The reporter will display captured logs when the test completes
+    const location = level === 'debug' || isDebugEnabled() ? getCallerLocation() : '';
+    if (level === 'debug') {
+      void initializeSourceMapSupport();
+    }
+
+    const fullMessage = context
+      ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
+      : message;
+
+    // Write directly to file transports, skipping console
+    // We need to format the message ourselves since we're bypassing Winston's pipeline
+    const timestamp = new Date().toISOString();
+    const locationStr = location ? ` ${location}` : '';
+    const formattedMessage = `${timestamp} [${level.toUpperCase()}]${locationStr}: ${fullMessage}`;
+
+    for (const transport of winstonLogger.transports) {
+      if (!(transport instanceof winston.transports.Console)) {
+        const info = {
+          level,
+          message: fullMessage,
+          location,
+          [Symbol.for('level')]: level,
+          // Pre-formatted message for the transport to write directly
+          [Symbol.for('message')]: formattedMessage,
+        };
+        transport.log?.(info, () => {});
+      }
+    }
+  };
+}
+
 // Wrapper that delegates to the current logger instance
 const logger = {
   error: createLogMethodWithContext('error'),
@@ -431,6 +527,26 @@ const logger = {
     if (internalLogger.transports?.[0]) {
       internalLogger.transports[0].level = newLevel;
     }
+  },
+  /**
+   * Create a child logger for test-scoped log capture.
+   * Each child logger has its own buffer that captures logs during test execution.
+   * @param metadata - Test metadata (testIdx, promptIdx) for identification
+   * @returns A child logger with the same interface plus getLogs() method
+   */
+  child(
+    metadata: { testIdx: number; promptIdx: number },
+    options: ChildLoggerOptions = {},
+  ): ChildLogger {
+    const logBuffer: TestLogEntry[] = [];
+
+    return {
+      error: createChildLogMethod('error', logBuffer, metadata, options),
+      warn: createChildLogMethod('warn', logBuffer, metadata, options),
+      info: createChildLogMethod('info', logBuffer, metadata, options),
+      debug: createChildLogMethod('debug', logBuffer, metadata, options),
+      getLogs: () => [...logBuffer],
+    };
   },
 };
 

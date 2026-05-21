@@ -317,6 +317,7 @@ export interface RedteamRunOptions {
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
+  reporter?: string;
   description?: string;
   strict?: boolean;
 

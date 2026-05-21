@@ -630,6 +630,8 @@ export async function doEval(
       filterRange,
       maxConcurrency,
       cache,
+      // CLI --reporter flag overrides config file reporters
+      reporters: cmdObj.reporter ?? evaluateOptions.reporters,
     };
 
     if (!resumeEval && cmdObj.grader) {
@@ -1284,6 +1286,10 @@ export function evalCommand(
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option(
+      '--reporter <reporters...>',
+      'Reporter(s) to use for output (default, silent, summary, or file://path)',
+    )
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
