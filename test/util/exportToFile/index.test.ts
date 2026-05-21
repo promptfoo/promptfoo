@@ -399,6 +399,7 @@ describe('exportToFile utils', () => {
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
         metadata: { key: 'value' },
         error: null,
+        images: [{ blobRef: { hash: 'image-hash' }, mimeType: 'image/png' }],
         testCase: { vars: { state: 'colorado' }, provider: 'override-provider' },
         response: {
           output: 'denver',
@@ -496,12 +497,24 @@ describe('exportToFile utils', () => {
       expect(trimmed.response).toBeUndefined();
     });
 
-    it('should preserve audio and video fields', () => {
+    it('should preserve media fields rendered by the table', () => {
       const audio = { id: 'audio-1', format: 'mp3' };
       const video = { id: 'video-1', format: 'mp4' };
-      const trimmed = trimTableCellForApi(makeCell({ audio, video } as any));
+      const images = [
+        {
+          data: 'data:image/png;base64,duplicate',
+          blobRef: { hash: 'other-image-hash' },
+          mimeType: 'image/png',
+        },
+        { data: 'data:image/png;base64,direct', mimeType: 'image/png' },
+      ];
+      const trimmed = trimTableCellForApi(makeCell({ audio, video, images } as any));
       expect(trimmed.audio).toEqual(audio);
       expect(trimmed.video).toEqual(video);
+      expect(trimmed.images).toEqual([
+        { blobRef: { hash: 'other-image-hash' }, mimeType: 'image/png' },
+        { data: 'data:image/png;base64,direct', mimeType: 'image/png' },
+      ]);
     });
   });
 });

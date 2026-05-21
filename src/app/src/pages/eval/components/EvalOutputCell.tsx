@@ -1342,41 +1342,6 @@ function EvalOutputCell({
   const detailEvalId = cellEvalId || evaluationId || '';
   const canFetchCellDetail = Boolean(output.isTruncated && output.id && detailEvalId);
 
-  React.useEffect(() => {
-    if (!showPrompts || cellDetail || loadingDetail || output.prompt || !canFetchCellDetail) {
-      return;
-    }
-
-    let cancelled = false;
-    const loadDetail = async () => {
-      setLoadingDetail(true);
-      try {
-        const detail = await fetchCellDetail(detailEvalId, output.id);
-        if (!cancelled && detail) {
-          setCellDetail(detail);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingDetail(false);
-        }
-      }
-    };
-    loadDetail();
-
-    return () => {
-      cancelled = true;
-      setLoadingDetail(false);
-    };
-  }, [
-    showPrompts,
-    cellDetail,
-    loadingDetail,
-    output.prompt,
-    output.id,
-    detailEvalId,
-    canFetchCellDetail,
-  ]);
-
   const handlePromptOpen = useCallback(async () => {
     setOpen(true);
     if (!cellDetail && !loadingDetail && canFetchCellDetail) {

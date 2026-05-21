@@ -80,9 +80,11 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
  * The full `convertEvalResultToTableCell` output includes data that is either
  * duplicated elsewhere in the response (testCase is in row.test, prompt is
  * reconstructible from head.prompts + row.vars) or unnecessary for the table
- * view (raw HTTP response, internal IDs).  Stripping these fields prevents
+ * view (raw HTTP response, internal IDs). Stripping these fields prevents
  * RangeError crashes from JSON.stringify on large evals (e.g. base64 images
  * repeated across every cell) and dramatically reduces payload size.
+ * Structured `images` are preserved because the table renders them directly,
+ * but duplicate inline data is dropped when a blob reference is available.
  *
  * Callers that need the full cell data (export, download) should use the
  * un-trimmed output from convertEvalResultToTableCell directly.
@@ -91,13 +93,20 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
   // Trim response to only the fields the frontend needs for the table view.
   // response.prompt (provider-reported prompt) is stripped here because it can
   // contain base64 images for multimodal providers; it's fetched on demand.
-  let trimmedResponse: Partial<ProviderResponse> | undefined;
+  let trimmedResponse: ProviderResponse | undefined;
   if (cell.response) {
     trimmedResponse = {
       ...(cell.response.cached != null && { cached: cell.response.cached }),
       ...(cell.response.tokenUsage && { tokenUsage: cell.response.tokenUsage }),
     };
   }
+
+  const trimmedTestCase: AtomicTestCase = cell.testCase?.provider
+    ? { provider: cell.testCase.provider }
+    : {};
+  const trimmedImages = cell.images?.map((image) =>
+    image.blobRef ? { blobRef: image.blobRef, mimeType: image.mimeType } : image,
+  );
 
   const trimmed: EvaluateTableOutput = {
     id: cell.id,
@@ -116,14 +125,12 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     tokenUsage: cell.tokenUsage,
     metadata: cell.metadata,
     error: cell.error,
-    // testCase is already in row.test — only preserve provider for override badge.
-    // All AtomicTestCase fields are optional, so {} is a valid value.
-    testCase: cell.testCase?.provider
-      ? ({ provider: cell.testCase.provider } as AtomicTestCase)
-      : ({} as AtomicTestCase),
-    response: trimmedResponse as ProviderResponse | undefined,
+    // testCase is already in row.test; preserve provider only for the override badge.
+    testCase: trimmedTestCase,
+    response: trimmedResponse,
     audio: cell.audio,
     video: cell.video,
+    images: trimmedImages,
   };
 
   return trimmed;

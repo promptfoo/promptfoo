@@ -1,7 +1,7 @@
 ---
 sidebar_position: 66
 title: Test Agent Skills
-description: Compare Claude and Codex skill versions with Promptfoo evals that measure invocation, task quality, cost, latency, and trace evidence to choose a winner.
+description: Compare Claude, Codex, and other skill versions with Promptfoo evals that measure invocation, task quality, cost, latency, and trace evidence.
 ---
 
 # Test Agent Skills
@@ -33,7 +33,7 @@ skill-eval/
         └── src/auth.ts
 ```
 
-For Codex, use `.agents/skills/review-standards/SKILL.md` instead of `.claude/skills/...`. The rest of the comparison can stay the same.
+For Codex or OpenCode, use `.agents/skills/review-standards/SKILL.md` instead of `.claude/skills/...`. The rest of the comparison can stay the same.
 
 ## Compare Two Claude Skill Versions
 
@@ -151,10 +151,9 @@ defaultTest:
     - type: javascript
       threshold: 0.7
       value: |
-        // `output_format` hands us a parsed object; on Codex `output_schema`
-        // returns a string, so wrap with `JSON.parse(output)` there.
+        const result = typeof output === 'string' ? JSON.parse(output) : output;
         const expected = context.vars.expectedIssues;
-        const found = (output.issues || []).map((issue) => issue.id);
+        const found = (result.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
         const recall = hits.length / expected.length;
 
@@ -253,9 +252,78 @@ The runnable [`skill-comparison` example](https://github.com/promptfoo/promptfoo
 
 There is a [matching Claude example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/skill-comparison) that uses `output_format` and the `skills:` filter so you can run the same comparison against either provider.
 
+## Use the Same Eval With OpenCode
+
+To run the same comparison with [OpenCode SDK](/docs/providers/opencode-sdk), keep
+the tests and scoring logic, then enable OpenCode's native `skill` tool and use
+its `format` option for JSON Schema output:
+
+```yaml
+x-review-json-schema: &reviewJsonSchema
+  type: object
+  required: [summary, issues]
+  additionalProperties: false
+  properties:
+    summary: { type: string }
+    issues:
+      type: array
+      items:
+        type: object
+        required: [id, severity]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          severity: { type: string, enum: [high, medium, low] }
+
+providers:
+  - id: opencode:sdk
+    label: review-standards-v1
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-20250514
+      working_dir: ./fixtures/v1
+      tools:
+        read: true
+        grep: true
+        glob: true
+        list: true
+        skill: true
+      permission:
+        skill: allow
+      format:
+        type: json_schema
+        schema: *reviewJsonSchema
+
+  - id: opencode:sdk
+    label: review-standards-v2
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-20250514
+      working_dir: ./fixtures/v2
+      tools:
+        read: true
+        grep: true
+        glob: true
+        list: true
+        skill: true
+      permission:
+        skill: allow
+      format:
+        type: json_schema
+        schema: *reviewJsonSchema
+```
+
+OpenCode discovers `.agents/skills/` directories in the working-directory
+hierarchy, then loads the matching skill through its native `skill` tool.
+Promptfoo normalizes those tool calls into
+[`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used),
+so the same routing assertion works without a provider-specific heuristic.
+OpenCode's structured output reaches Promptfoo as JSON text, which the shared
+JavaScript assertion above already handles.
+
 ## Add Trace Evidence When Needed
 
-For Claude Agent SDK, `skill-used` is usually enough to prove invocation because it is based on first-class `Skill` tool calls. If you need the raw call details, inspect the recorded tool calls directly:
+For Claude Agent SDK and OpenCode SDK, `skill-used` is usually enough to prove invocation because it is based on first-class skill tool calls. If you need Claude's raw call details, inspect the recorded tool calls directly:
 
 ```yaml
 assert:

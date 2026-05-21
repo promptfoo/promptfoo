@@ -51,7 +51,10 @@ export async function fetchUserId(): Promise<string | null> {
   }
 }
 
-/** Fetches the full prompt, response, and test case for a trimmed eval table cell. */
+/**
+ * Fetch the full prompt, provider response, and test case for a table cell whose
+ * large fields were omitted from `/eval/:id/table`.
+ */
 export async function fetchCellDetail(
   evalId: string,
   resultId: string,
