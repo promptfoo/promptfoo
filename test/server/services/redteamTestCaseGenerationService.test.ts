@@ -137,4 +137,33 @@ describe('redteamTestCaseGenerationService', () => {
       expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
     });
   });
+
+  describe('getPluginConfigurationError', () => {
+    it('requires privacy geographies for privacy rights workflow test generation', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: {},
+        }),
+      ).toBe(
+        'Privacy Rights Request Workflow Integrity plugin requires privacy geographies configuration',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { geographies: ['california-ccpa'] },
+        }),
+      ).toBeNull();
+      expect(
+        getPluginConfigurationError({
+          id: 'privacy:rights-request-workflow-integrity',
+          config: { frameworks: ['gdpr'] },
+        }),
+      ).toBeNull();
+    });
+  });
 });

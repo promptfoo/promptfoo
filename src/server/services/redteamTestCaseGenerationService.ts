@@ -27,6 +27,20 @@ type PluginWithConfig = {
   config: Record<string, unknown>;
 };
 
+function hasNonEmptyStringList(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .some(Boolean);
+  }
+
+  return (
+    Array.isArray(value) &&
+    value.some((entry) => typeof entry === 'string' && entry.trim().length > 0)
+  );
+}
+
 export function getPluginConfigurationError(plugin: PluginWithConfig): string | null {
   const { id, config } = plugin;
   switch (id) {
@@ -38,6 +52,16 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
     case 'prompt-extraction':
       if (!config.systemPrompt) {
         return 'Prompt Extraction plugin requires systemPrompt configuration';
+      }
+      break;
+    case 'privacy-policy-consistency':
+      if (!config.privacyPolicy && !config.privacyPolicyContent) {
+        return 'Privacy Policy Consistency plugin requires a privacy policy file';
+      }
+      break;
+    case 'privacy:rights-request-workflow-integrity':
+      if (!hasNonEmptyStringList(config.geographies) && !hasNonEmptyStringList(config.frameworks)) {
+        return 'Privacy Rights Request Workflow Integrity plugin requires privacy geographies configuration';
       }
       break;
     case 'bfla': {

@@ -30,6 +30,8 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   'pii:social': `${BASE_DOCS_URL}/pii/`,
   pii: `${BASE_DOCS_URL}/pii/`,
   'prompt-extraction': `${BASE_DOCS_URL}/prompt-extraction/`,
+  'privacy-policy-consistency': `${BASE_DOCS_URL}/privacy-policy-consistency/`,
+  'privacy:rights-request-workflow-integrity': `${BASE_DOCS_URL}/privacy-rights-request-workflow-integrity/`,
   'agentic:memory-poisoning': `${BASE_DOCS_URL}/memory-poisoning/`,
 
   // Compliance & Legal
@@ -78,11 +80,23 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   religion: `${BASE_DOCS_URL}/religion/`,
 
   // Domain-Specific Risks
+  energy: `${BASE_DOCS_URL}/energy/`,
+  'energy:rates-programs-grounding': `${BASE_DOCS_URL}/energy/`,
+  'energy:protected-customer-process': `${BASE_DOCS_URL}/energy/`,
+  'energy:usage-load-privacy': `${BASE_DOCS_URL}/energy/`,
+  'energy:hazard-outage-misinformation': `${BASE_DOCS_URL}/energy/`,
+  'energy:green-claims-programs': `${BASE_DOCS_URL}/energy/`,
+  'energy:market-sensitive-disclosure': `${BASE_DOCS_URL}/energy/`,
+  'energy:sensitive-infrastructure-disclosure': `${BASE_DOCS_URL}/energy/`,
+  'energy:operations-workflow-integrity': `${BASE_DOCS_URL}/energy/`,
+  'energy:nuclear-safety-boundary': `${BASE_DOCS_URL}/energy/`,
+  'energy:controlled-research-boundary': `${BASE_DOCS_URL}/energy/`,
   'financial:calculation-error': `${BASE_DOCS_URL}/financial/`,
   'financial:compliance-violation': `${BASE_DOCS_URL}/financial/`,
   'financial:data-leakage': `${BASE_DOCS_URL}/financial/`,
   'financial:hallucination': `${BASE_DOCS_URL}/financial/`,
   'financial:japan-fiea-suitability': `${BASE_DOCS_URL}/financial/`,
+  'financial:regulated-record-integrity': `${BASE_DOCS_URL}/financial/`,
   'financial:sycophancy': `${BASE_DOCS_URL}/financial/`,
   'medical:anchoring-bias': `${BASE_DOCS_URL}/medical/`,
   'medical:fda:ai-disclosure': `${BASE_DOCS_URL}/medical/`,

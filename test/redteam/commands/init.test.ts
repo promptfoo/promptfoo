@@ -1,9 +1,15 @@
+import checkbox from '@inquirer/checkbox';
 import yaml from 'js-yaml';
-import { describe, expect, it } from 'vitest';
-import { renderRedteamConfig } from '../../../src/redteam/commands/init';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  configurePrivacyRightsRequestWorkflowIntegrityPlugin,
+  renderRedteamConfig,
+} from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
 
 import type { RedteamFileConfig } from '../../../src/redteam/types';
+
+vi.mock('@inquirer/checkbox');
 
 describe('renderRedteamConfig', () => {
   it('should generate valid YAML that conforms to RedteamFileConfig', () => {
@@ -130,6 +136,30 @@ describe('renderRedteamConfig', () => {
       config: {
         apiKey: '{{CUSTOM_API_KEY}}',
         baseUrl: 'https://api.custom.com',
+      },
+    });
+  });
+});
+
+describe('configurePrivacyRightsRequestWorkflowIntegrityPlugin', () => {
+  it('collects privacy geographies for CLI init config', async () => {
+    vi.mocked(checkbox).mockResolvedValue(['california-ccpa', 'eu-gdpr']);
+
+    const plugin = await configurePrivacyRightsRequestWorkflowIntegrityPlugin();
+
+    expect(checkbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('privacy:rights-request-workflow-integrity'),
+        choices: [
+          { name: 'California CCPA', value: 'california-ccpa' },
+          { name: 'EU GDPR', value: 'eu-gdpr' },
+        ],
+      }),
+    );
+    expect(plugin).toEqual({
+      id: 'privacy:rights-request-workflow-integrity',
+      config: {
+        geographies: ['california-ccpa', 'eu-gdpr'],
       },
     });
   });
