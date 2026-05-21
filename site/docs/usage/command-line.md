@@ -134,6 +134,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--share`                            | Create a shareable URL                                                                                   |
 | `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
 | `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
+| `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                         |
 | `--table`                            | Output table in CLI                                                                                      |
 | `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                              |
 | `-t, --tests <path>`                 | Path to CSV with test cases                                                                              |
@@ -141,6 +142,12 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
+
+Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
+
+```sh
+promptfoo eval --tag env=ci --tag run-id=$CI_RUN_ID
+```
 
 For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 

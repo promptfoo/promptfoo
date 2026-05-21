@@ -250,6 +250,60 @@ describe('evalCommand', () => {
     expect(capturedTestSuite?.tags).toEqual(expectedTags);
   });
 
+  it('should apply command-line tag defaults before explicit runtime tags', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      tags: {
+        env: 'local',
+        suite: 'smoke',
+      },
+      commandLineOptions: {
+        tags: {
+          env: 'default',
+          source: 'config',
+        },
+      },
+    } as UnifiedConfig;
+    let capturedEvalRecord: Eval | undefined;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        tags: config.tags,
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      capturedEvalRecord = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval(
+      {
+        table: false,
+        write: false,
+        tags: {
+          env: 'ci',
+          run: '123',
+        },
+      },
+      config,
+      defaultConfigPath,
+      {},
+    );
+
+    expect(capturedEvalRecord?.config.tags).toEqual({
+      env: 'ci',
+      run: '123',
+      source: 'config',
+      suite: 'smoke',
+    });
+  });
+
   it('should parse repeated --tag options from Commander', async () => {
     evalCommand(program, defaultConfig, defaultConfigPath);
     vi.mocked(resolveConfigs).mockResolvedValue({
