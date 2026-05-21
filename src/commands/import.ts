@@ -183,7 +183,7 @@ function prepareBlobAssets(
   const preparedAssets: PreparedBlobAsset[] = [];
   for (const asset of blobAssets) {
     if (!isImportableBlobAsset(asset)) {
-      logger.debug('Skipping malformed embedded blob during import');
+      logger.warn('Skipping malformed embedded blob during import');
       continue;
     }
     if (!referencedBlobHashes.has(asset.hash.toLowerCase())) {
@@ -220,16 +220,22 @@ async function recordImportedBlobReferences(
   );
 }
 
+/**
+ * Deletes the eval being replaced by a --force import. Returns its ID when a
+ * delete happened so the caller can disclose the data loss if the rest of the
+ * import then fails.
+ */
 async function replaceExistingEval(
   existingEval: Eval | undefined,
-  importId?: string,
-): Promise<void> {
+  importId: string | undefined,
+): Promise<string | undefined> {
   if (!existingEval) {
-    return;
+    return undefined;
   }
 
   logger.info(`Replacing existing eval ${importId}`);
   await existingEval.delete();
+  return importId;
 }
 
 function isImportableTrace(trace: unknown): trace is TraceData {
@@ -263,14 +269,14 @@ function prepareTraces(traces: unknown): TraceData[] {
   const preparedTraces: TraceData[] = [];
   for (const trace of traces) {
     if (!isImportableTrace(trace)) {
-      logger.debug('Skipping malformed trace during import');
+      logger.warn('Skipping malformed trace during import');
       continue;
     }
 
     const spans = trace.spans.filter((span): span is TraceSpan => {
       const importable = isImportableTraceSpan(span);
       if (!importable) {
-        logger.debug('Skipping malformed trace span during import');
+        logger.warn('Skipping malformed trace span during import');
       }
       return importable;
     });
@@ -309,6 +315,54 @@ async function importTraces(
   }
 }
 
+interface ImportedEvalContext {
+  newId: boolean;
+  importId: string | undefined;
+  importCreatedAt: Date;
+  importAuthor: string | undefined;
+}
+
+async function createImportedV3Eval(
+  evalData: any,
+  traces: TraceData[],
+  blobAssets: PreparedBlobAsset[],
+  context: ImportedEvalContext,
+): Promise<string> {
+  logger.debug('Importing v3 eval');
+  const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
+    id: context.newId ? undefined : context.importId,
+    createdAt: context.importCreatedAt,
+    author: context.importAuthor,
+    completedPrompts: evalData.results.prompts,
+    vars: extractVars(evalData),
+    runtimeOptions: evalData.runtimeOptions,
+    ...extractDurations(evalData),
+  });
+  await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
+  await importTraces(traces, evalRecord.id, context.newId);
+  await recordImportedBlobReferences(blobAssets, evalRecord.id);
+  return evalRecord.id;
+}
+
+function createImportedV2Eval(evalData: any, context: ImportedEvalContext): string {
+  logger.debug('Importing v2 eval');
+  const evalId = context.newId
+    ? createEvalId(context.importCreatedAt)
+    : context.importId || createEvalId(context.importCreatedAt);
+  getDb()
+    .insert(evalsTable)
+    .values({
+      id: evalId,
+      createdAt: context.importCreatedAt.getTime(),
+      author: context.importAuthor,
+      description: evalData.description || evalData.config?.description,
+      results: evalData.results,
+      config: evalData.config,
+    })
+    .run();
+  return evalId;
+}
+
 export function importCommand(program: Command) {
   program
     .command('import <file>')
@@ -316,8 +370,10 @@ export function importCommand(program: Command) {
     .option('--new-id', 'Generate a new eval ID instead of preserving the original')
     .option('--force', 'Replace existing eval with the same ID')
     .action(async (file, cmdObj) => {
-      const db = getDb();
       let evalId: string;
+      // Tracks the eval a --force replace deleted, so a later failure can warn
+      // the user it is gone instead of reporting an opaque error.
+      let removedExistingEvalId: string | undefined;
       try {
         const fileContent = await fs.readFile(file, 'utf-8');
         const parsed = parseImportFile(fileContent);
@@ -359,45 +415,20 @@ export function importCommand(program: Command) {
               )
             : [];
 
-        if (importV3) {
-          logger.debug('Importing v3 eval');
+        // Restore embedded media before the destructive replace so a corrupt
+        // artifact cannot delete the existing eval. blobAssets is empty for v2.
+        await importBlobAssets(blobAssets);
+        removedExistingEvalId = await replaceExistingEval(existingEval, importId);
 
-          const vars = extractVars(evalData);
-          const durations = extractDurations(evalData);
-          await importBlobAssets(blobAssets);
-          await replaceExistingEval(existingEval, importId);
-
-          const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
-            id: cmdObj.newId ? undefined : importId,
-            createdAt: importCreatedAt,
-            author: importAuthor,
-            completedPrompts: evalData.results.prompts,
-            vars,
-            runtimeOptions: evalData.runtimeOptions,
-            ...durations,
-          });
-          await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
-          await importTraces(traces, evalRecord.id, Boolean(cmdObj.newId));
-          await recordImportedBlobReferences(blobAssets, evalRecord.id);
-          evalId = evalRecord.id;
-        } else {
-          logger.debug('Importing v2 eval');
-          await replaceExistingEval(existingEval, importId);
-          evalId = cmdObj.newId
-            ? createEvalId(importCreatedAt)
-            : importId || createEvalId(importCreatedAt);
-          await db
-            .insert(evalsTable)
-            .values({
-              id: evalId,
-              createdAt: importCreatedAt.getTime(),
-              author: importAuthor,
-              description: evalData.description || evalData.config?.description,
-              results: evalData.results,
-              config: evalData.config,
-            })
-            .run();
-        }
+        const context: ImportedEvalContext = {
+          newId: Boolean(cmdObj.newId),
+          importId,
+          importCreatedAt,
+          importAuthor,
+        };
+        evalId = importV3
+          ? await createImportedV3Eval(evalData, traces, blobAssets, context)
+          : createImportedV2Eval(evalData, context);
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
 
@@ -412,6 +443,11 @@ export function importCommand(program: Command) {
         logger.error(
           `Failed to import eval: ${error instanceof Error ? error.message : String(error)}`,
         );
+        if (removedExistingEvalId) {
+          logger.error(
+            `The existing eval ${removedExistingEvalId} was deleted for a --force replacement that did not complete. Re-import it from a backup.`,
+          );
+        }
         process.exitCode = 1;
       }
     });

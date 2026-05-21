@@ -187,7 +187,9 @@ export async function createOutputData(
     const { getTraceStore } = await import('../tracing/store');
     traces = await getTraceStore().getTracesByEvaluation(evalRecord.id);
   } catch (error) {
-    logger.debug(`Failed to fetch traces for output ${evalRecord.id}: ${error}`);
+    logger.warn(
+      `Failed to fetch traces for output ${evalRecord.id}; traces omitted from export: ${error}`,
+    );
   }
 
   const output: OutputFile = {

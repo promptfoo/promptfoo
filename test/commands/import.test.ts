@@ -22,6 +22,7 @@ vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   },
 }));
@@ -268,6 +269,39 @@ describe('importCommand', () => {
           statusCode: 1,
         }),
       ]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Skipping malformed trace span'),
+      );
+    });
+
+    it('should skip malformed traces and still import the eval', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.traces = [
+        {
+          traceId: 'trace-valid',
+          evaluationId: sampleData.evalId,
+          testCaseId: 'trace-case',
+          spans: [{ spanId: 'span-valid', name: 'span', startTime: 1 }],
+        },
+        // Missing traceId — not an importable trace.
+        { evaluationId: sampleData.evalId, testCaseId: 'trace-orphan', spans: [] },
+      ];
+
+      const filePath = path.join(__dirname, `temp-malformed-trace-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Skipping malformed trace during import'),
+      );
+      const traces = await new TraceStore().getTracesByEvaluation(sampleData.evalId);
+      expect(traces).toHaveLength(1);
+      expect(traces[0].traceId).toBe('trace-valid');
     });
 
     it('should import embedded blob assets before recording result references', async () => {
@@ -499,6 +533,42 @@ describe('importCommand', () => {
           expect.stringContaining('Embedded blob hash mismatch'),
         );
         expect(process.exitCode).toBe(1);
+      } finally {
+        resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it('should reject embedded blob assets that exceed the import size limit', async () => {
+      const blobDir = createTempDir('promptfoo-import-oversized-blobs-');
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from('small bytes claiming to be huge');
+        const hash = 'a'.repeat(64);
+        sampleData.results.results[0].response = { output: `promptfoo://blob/${hash}` };
+        sampleData.blobAssets = [
+          {
+            hash,
+            // 60MB — over the 50MB BLOB_MAX_SIZE import cap.
+            sizeBytes: 60 * 1024 * 1024,
+            mimeType: 'image/png',
+            data: data.toString('base64'),
+          },
+        ];
+
+        const filePath = path.join(__dirname, `temp-oversized-blob-${Date.now()}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        tempFilePath = filePath;
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('byte import limit'));
+        expect(process.exitCode).toBe(1);
+        expect(await Eval.findById(sampleData.evalId)).toBeUndefined();
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
@@ -1167,6 +1237,39 @@ describe('importCommand', () => {
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
+      }
+    });
+
+    it('should warn that the original eval was deleted when a --force replacement fails after deletion', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(process.exitCode).toBeUndefined();
+      expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(4);
+
+      vi.clearAllMocks();
+      process.exitCode = undefined;
+      // Fail after replaceExistingEval has already deleted the original eval.
+      const createSpy = vi
+        .spyOn(EvalResult, 'createManyFromEvaluateResult')
+        .mockRejectedValueOnce(new Error('result write failed'));
+
+      try {
+        const program2 = new Command();
+        importCommand(program2);
+        await program2.parseAsync(['node', 'test', 'import', '--force', sampleFilePath]);
+
+        expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('result write failed'));
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.stringContaining('was deleted for a --force replacement'),
+        );
+        expect(process.exitCode).toBe(1);
+        // The original results are gone — the disclosure tells the user why.
+        expect(await EvalResult.findManyByEvalId(sampleData.evalId)).toHaveLength(0);
+      } finally {
+        createSpy.mockRestore();
       }
     });
 
