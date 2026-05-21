@@ -85,18 +85,55 @@ describe('eval routes', () => {
     );
   }
 
-  function createManualRatingPayload(originalResult: any, pass: boolean) {
-    const payload = { ...originalResult.gradingResult };
-    const score = pass ? 1 : 0;
-    payload.componentResults?.push({
+  function createManualRatingPayload(originalResult: any, pass: boolean, score = pass ? 1 : 0) {
+    const payload = structuredClone(originalResult.gradingResult ?? {});
+    const componentResults = payload.componentResults ?? [];
+    const humanRating = {
       pass,
       score,
       reason: 'Manual result (overrides all other grading results)',
       assertion: { type: 'human' },
-    });
+    };
+    const humanRatingIndex = componentResults.findIndex(
+      (result: any) => result.assertion?.type === 'human',
+    );
+    if (humanRatingIndex === -1) {
+      componentResults.push(humanRating);
+    } else {
+      componentResults[humanRatingIndex] = humanRating;
+    }
+    payload.componentResults = componentResults;
     payload.reason = 'Manual result (overrides all other grading results)';
     payload.pass = pass;
     payload.score = score;
+    return payload;
+  }
+
+  function createScoreOnlyRatingPayload(originalResult: any, score: number) {
+    const payload = structuredClone(originalResult.gradingResult ?? {});
+    payload.pass = originalResult.success;
+    payload.score = score;
+    payload.reason = 'Manual score override';
+    return payload;
+  }
+
+  function createClearManualRatingPayload(originalResult: any) {
+    const payload = structuredClone(originalResult.gradingResult ?? {});
+    const componentResults = (payload.componentResults ?? []).filter(
+      (result: any) => result.assertion?.type !== 'human',
+    );
+    payload.componentResults = componentResults;
+    if (componentResults.length > 0) {
+      payload.pass = componentResults.every((result: any) => result.pass);
+      const scores = componentResults
+        .map((result: any) => result.score)
+        .filter((score: unknown): score is number => typeof score === 'number');
+      payload.score =
+        scores.length > 0
+          ? scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length
+          : payload.score;
+      payload.reason = componentResults[0].reason;
+    }
     return payload;
   }
 
@@ -182,6 +219,132 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.pass).toBe(true);
       expect(res.body.gradingResult?.score).toBe(1);
       expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
+    it('should update prompt score if a passing result keeps pass status with a new score', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Prompt metrics are required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createScoreOnlyRatingPayload(result, 0.25));
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(true);
+      expect(updatedResult?.score).toBe(0.25);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.score).toBeCloseTo(originalMetrics.score - 0.75);
+      expect(updatedMetrics?.assertPassCount).toBe(originalMetrics.assertPassCount);
+      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount);
+      expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
+      expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
+      expect(updatedMetrics?.testErrorCount).toBe(originalMetrics.testErrorCount);
+    });
+
+    it('should update prompt score if a failing result keeps fail status with a new score', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Prompt metrics are required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createScoreOnlyRatingPayload(result, 0.4));
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(false);
+      expect(updatedResult?.score).toBe(0.4);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.score).toBeCloseTo(originalMetrics.score + 0.4);
+      expect(updatedMetrics?.assertPassCount).toBe(originalMetrics.assertPassCount);
+      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount);
+      expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
+      expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
+      expect(updatedMetrics?.testErrorCount).toBe(originalMetrics.testErrorCount);
+    });
+
+    it('should preserve assertion counts if an existing manual pass rating changes only score', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Prompt metrics are required');
+
+      const firstRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(firstRes.status).toBe(200);
+
+      const manuallyRatedResult = await EvalResult.findById(result.id);
+      invariant(manuallyRatedResult, 'Updated result is required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(manuallyRatedResult, true, 0.4));
+
+      expect(res.status).toBe(200);
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.score).toBeCloseTo(originalMetrics.score - 0.6);
+      expect(updatedMetrics?.assertPassCount).toBe(originalMetrics.assertPassCount + 1);
+      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount);
+      expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
+      expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
+    });
+
+    it('should decrement assertion counts if an existing manual rating is cleared', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Prompt metrics are required');
+
+      const firstRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(firstRes.status).toBe(200);
+
+      const manuallyRatedResult = await EvalResult.findById(result.id);
+      invariant(manuallyRatedResult, 'Updated result is required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createClearManualRatingPayload(manuallyRatedResult));
+
+      expect(res.status).toBe(200);
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.score).toBe(originalMetrics.score);
+      expect(updatedMetrics?.assertPassCount).toBe(originalMetrics.assertPassCount);
+      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount);
+      expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
+      expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {

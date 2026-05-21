@@ -1,12 +1,23 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
+import {
+  type EvalTableDTO,
+  type EvaluateSummaryV2,
+  type EvaluateTable,
+  type EvaluateTestSuite,
+  type GradingResult,
+  type Job,
+  type PromptMetrics,
+  ResultFailureReason,
+  type ResultsFile,
+  type Vars,
+} from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
@@ -23,22 +34,62 @@ import {
 } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
-import type {
-  EvalTableDTO,
-  EvaluateSummaryV2,
-  EvaluateTable,
-  EvaluateTestSuite,
-  GradingResult,
-  Job,
-  PromptMetrics,
-  ResultsFile,
-  Vars,
-} from '../../types/index';
-
 export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+type ResultMetricCategory = 'pass' | 'fail' | 'error';
+
+function countGradingAssertions(gradingResult: GradingResult | null | undefined): {
+  pass: number;
+  fail: number;
+} {
+  return (gradingResult?.componentResults || []).reduce(
+    (counts, componentResult) => {
+      if (componentResult.pass) {
+        counts.pass += 1;
+      } else {
+        counts.fail += 1;
+      }
+      return counts;
+    },
+    { pass: 0, fail: 0 },
+  );
+}
+
+function getResultMetricCategory(
+  success: boolean,
+  failureReason: ResultFailureReason | number | undefined,
+): ResultMetricCategory {
+  if (success) {
+    return 'pass';
+  }
+  return failureReason === ResultFailureReason.ERROR ? 'error' : 'fail';
+}
+
+function applyResultMetricDelta(
+  metrics: PromptMetrics,
+  previousCategory: ResultMetricCategory,
+  nextCategory: ResultMetricCategory,
+): void {
+  if (previousCategory === nextCategory) {
+    return;
+  }
+
+  const updateCategory = (category: ResultMetricCategory, delta: number) => {
+    if (category === 'pass') {
+      metrics.testPassCount += delta;
+    } else if (category === 'error') {
+      metrics.testErrorCount += delta;
+    } else {
+      metrics.testFailCount += delta;
+    }
+  };
+
+  updateCategory(previousCategory, -1);
+  updateCategory(nextCategory, 1);
+}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -723,14 +774,9 @@ evalRouter.post(
         return;
       }
 
-      // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
-      const successChanged = result.success !== gradingResult.pass;
-      const scoreChange = gradingResult.score - result.score;
+      const previousScore = result.score;
+      const previousCategory = getResultMetricCategory(result.success, result.failureReason);
+      const previousAssertions = countGradingAssertions(result.gradingResult);
 
       // Update the result
       result.gradingResult = gradingResult;
@@ -749,35 +795,13 @@ evalRouter.post(
         return;
       }
 
-      if (successChanged) {
-        if (result.success) {
-          // Result changed from fail to pass
-          prompt.metrics.testPassCount += 1;
-          prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
-        } else {
-          prompt.metrics.testPassCount -= 1;
-          prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
-        }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
-        }
-      }
+      const nextAssertions = countGradingAssertions(result.gradingResult);
+      const nextCategory = getResultMetricCategory(result.success, result.failureReason);
+
+      prompt.metrics.score += result.score - previousScore;
+      applyResultMetricDelta(prompt.metrics, previousCategory, nextCategory);
+      prompt.metrics.assertPassCount += nextAssertions.pass - previousAssertions.pass;
+      prompt.metrics.assertFailCount += nextAssertions.fail - previousAssertions.fail;
 
       await eval_.save();
       await result.save();
