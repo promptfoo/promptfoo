@@ -157,6 +157,11 @@ interface NpmExecCall {
   options?: { env?: Record<string, string> };
 }
 
+interface PromptfooAndNpmExecCalls {
+  npmInstall: NpmExecCall;
+  promptfoo: PromptfooExecCall;
+}
+
 function setupMocks() {
   mocks.github.context.eventName = 'pull_request';
   mocks.github.context.repo = {
@@ -287,6 +292,40 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   };
 }
 
+async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpmExecCalls> {
+  await import('../../code-scan-action/src/main');
+
+  const calls = await vi.waitFor(() => {
+    const promptfooCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+    );
+    const npmCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) =>
+        command === 'npm' &&
+        Array.isArray(args) &&
+        args[0] === 'install' &&
+        args[1] === '-g' &&
+        args[2] === 'promptfoo',
+    );
+
+    if (!promptfooCall || !Array.isArray(promptfooCall[1]) || !npmCall) {
+      throw new Error('expected promptfoo and npm install exec calls not found');
+    }
+
+    return { npmCall, promptfooCall };
+  });
+
+  return {
+    npmInstall: {
+      options: calls.npmCall[2] as NpmExecCall['options'],
+    },
+    promptfoo: {
+      args: calls.promptfooCall[1],
+      options: calls.promptfooCall[2] as PromptfooExecCall['options'],
+    },
+  };
+}
+
 function expectCliArg(args: string[], name: string, value: string): void {
   const argIndex = args.indexOf(name);
   expect(argIndex).toBeGreaterThan(-1);
@@ -297,6 +336,15 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
   expect(options?.env).toEqual(expect.any(Object));
   expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
   expect(options?.env?.npm_config_before).toBeUndefined();
+}
+
+function expectCredentialRequestEnvUnset(
+  options: PromptfooExecCall['options'] | NpmExecCall['options'],
+) {
+  expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_TOKEN).toBeUndefined();
+  expect(options?.env?.ACTIONS_ID_TOKEN_REQUEST_URL).toBeUndefined();
+  expect(options?.env?.['INPUT_GITHUB-TOKEN']).toBeUndefined();
+  expect(options?.env?.INPUT_GITHUB_TOKEN).toBeUndefined();
 }
 
 function setPullRequestRepos(headRepoFullName: string, baseRepoFullName = 'test-owner/test-repo') {
@@ -372,6 +420,42 @@ describe('code-scan-action main', () => {
       const { options } = await importActionAndGetNpmInstallCall();
 
       expectSanitizedExecEnv(options);
+    });
+
+    it('should pass the OIDC token only to the scan command if token minting succeeds', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({
+        GITHUB_OIDC_TOKEN: 'stale-oidc-token',
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token',
+        ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/request',
+        'INPUT_GITHUB-TOKEN': 'input-token',
+        INPUT_GITHUB_TOKEN: 'input-token-underscore',
+      });
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectCredentialRequestEnvUnset(npmInstall.options);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
+      expectCredentialRequestEnvUnset(promptfoo.options);
+      expect(process.env.GITHUB_OIDC_TOKEN).toBe('stale-oidc-token');
+    });
+
+    it('should not pass stale OIDC credentials to subprocesses if token minting fails', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({
+        GITHUB_OIDC_TOKEN: 'stale-oidc-token',
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token',
+        ACTIONS_ID_TOKEN_REQUEST_URL: 'https://token.actions.githubusercontent.com/request',
+      });
+      mocks.core.getIDToken.mockRejectedValue(new Error('OIDC not configured'));
+
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
+
+      expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectCredentialRequestEnvUnset(npmInstall.options);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectCredentialRequestEnvUnset(promptfoo.options);
     });
   });
 
