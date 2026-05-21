@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 71;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -996,6 +996,71 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('RedteamCancelResponse', RedteamSchemas.Cancel.Response),
       400: validationError(),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/redteam/config-agent/start',
+    operationId: 'startRedteamConfigAgent',
+    tags: ['Redteam'],
+    summary: 'Start redteam endpoint configuration discovery',
+    request: {
+      body: jsonBody('ConfigAgentStartRequest', RedteamSchemas.ConfigAgentStart.Request),
+    },
+    responses: {
+      200: jsonResponse('ConfigAgentStartResponse', RedteamSchemas.ConfigAgentStart.Response),
+      400: validationError(),
+      500: serverError(),
+      503: errorResponse('Too many active configuration agent sessions'),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/redteam/config-agent/input',
+    operationId: 'sendRedteamConfigAgentInput',
+    tags: ['Redteam'],
+    summary: 'Send input to a redteam configuration agent',
+    request: {
+      body: jsonBody('ConfigAgentInputRequest', RedteamSchemas.ConfigAgentInput.Request),
+    },
+    responses: {
+      200: jsonResponse('ConfigAgentInputResponse', RedteamSchemas.ConfigAgentInput.Response),
+      400: validationError(),
+      404: notFound('Configuration agent session not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/redteam/config-agent/session/{sessionId}',
+    operationId: 'getRedteamConfigAgentSession',
+    tags: ['Redteam'],
+    summary: 'Get a redteam configuration agent session',
+    request: {
+      params: params('ConfigAgentSessionParams', z.object({ sessionId: z.string() })),
+    },
+    responses: {
+      200: jsonResponse('ConfigAgentSessionResponse', RedteamSchemas.ConfigAgentSession.Response),
+      404: notFound('Configuration agent session not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'delete',
+    path: '/api/redteam/config-agent/session/{sessionId}',
+    operationId: 'cancelRedteamConfigAgentSession',
+    tags: ['Redteam'],
+    summary: 'Cancel a redteam configuration agent session',
+    request: {
+      params: params('ConfigAgentSessionParams', z.object({ sessionId: z.string() })),
+    },
+    responses: {
+      200: jsonResponse('ConfigAgentDeleteResponse', RedteamSchemas.ConfigAgentDelete.Response),
+      500: serverError(),
     },
   });
 

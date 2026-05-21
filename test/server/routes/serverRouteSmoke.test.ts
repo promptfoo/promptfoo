@@ -659,6 +659,32 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/redteam/config-agent/start',
+    path: '/api/redteam/config-agent/start',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
+    openApiPath: '/api/redteam/config-agent/input',
+    path: '/api/redteam/config-agent/input',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/redteam/config-agent/session/{sessionId}',
+    path: '/api/redteam/config-agent/session/missing-session',
+    expectedStatus: 404,
+  },
+  {
+    method: 'delete',
+    openApiPath: '/api/redteam/config-agent/session/{sessionId}',
+    path: '/api/redteam/config-agent/session/missing-session',
+    expectedStatus: 200,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/redteam/{taskId}',
     path: '/api/redteam/task-1',
     body: [],
