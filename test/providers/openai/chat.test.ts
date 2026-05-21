@@ -824,6 +824,48 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         path: '../../../etc/passwd',
       });
       expect(result.output).toBe(expectedOutput);
+      // The MCP tool failure is also surfaced on ProviderResponse.error so
+      // assertions and exit codes treat the row as a failure.
+      expect(result.error).toBe(expectedOutput);
+    });
+
+    it('does not set an error for a successful MCP tool call', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'read_file',
+                      arguments: '{"path":"package.json"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: 'file contents' }),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const result = await provider.callApi('Read the file');
+
+      expect(result.output).toBe('MCP Tool Result (read_file): file contents');
+      expect(result.error).toBeUndefined();
     });
 
     it('should handle multiple function tool calls', async () => {

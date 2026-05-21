@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
 const mcpMocks = vi.hoisted(() => {
@@ -144,6 +145,70 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
       output: 'MCP Tool Error (list_resources): MCP server connection failed',
       isError: true,
     });
+  });
+
+  it('surfaces MCP tool errors on ProviderResponse.error via callApi', async () => {
+    await (provider as any).initializationPromise;
+
+    mcpMocks.mockCallTool.mockResolvedValue({
+      content: 'Path traversal not allowed',
+      isError: true,
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                { type: 'function', function: { name: 'list_resources', arguments: '{}' } },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await provider.callApi('List the resources');
+
+    expect(result.output).toBe('MCP Tool Error (list_resources): Path traversal not allowed');
+    expect(result.error).toBe('MCP Tool Error (list_resources): Path traversal not allowed');
+  });
+
+  it('does not set an error for a successful MCP tool call via callApi', async () => {
+    await (provider as any).initializationPromise;
+
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              tool_calls: [
+                { type: 'function', function: { name: 'list_resources', arguments: '{}' } },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    } as any);
+
+    const result = await provider.callApi('List the resources');
+
+    expect(result.output).toContain('MCP Tool Result (list_resources)');
+    expect(result.error).toBeUndefined();
   });
 
   it('should work without MCP enabled (backwards compatibility)', () => {

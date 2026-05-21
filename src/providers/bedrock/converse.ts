@@ -28,7 +28,7 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isClaudeOpus47Model } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
-import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
+import { getMcpErrorMessage, isMcpErrorResult, joinMcpErrors } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -329,41 +329,6 @@ function transformMCPToolsToBedrockConverse(tools: MCPTool[]): BedrockConverseTo
   return result;
 }
 
-function normalizeMCPToolContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text?: unknown }).text);
-          }
-          if ('json' in part) {
-            return JSON.stringify((part as { json?: unknown }).json);
-          }
-          if ('data' in part) {
-            return JSON.stringify((part as { data?: unknown }).data);
-          }
-          logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
-            keys: Object.keys(part as object),
-          });
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
-
 /**
  * Extract a printable message from an unknown thrown value without losing
  * non-`Error` payloads to `[object Object]`.
@@ -418,12 +383,8 @@ function hasUsableMCPServer(mcp: MCPConfig | undefined): boolean {
   return Boolean(mcp.servers?.some(isMCPServerConfigured));
 }
 
-function joinMcpErrors(errors: string[]): string | undefined {
-  return errors.length > 0 ? errors.join('; ') : undefined;
-}
-
-function formatMcpToolResult(name: string, content: unknown): string {
-  return `MCP Tool Result (${name}): ${normalizeMCPToolContent(content)}`;
+function formatMcpToolResult(name: string, content: string): string {
+  return `MCP Tool Result (${name}): ${content}`;
 }
 
 function formatMcpToolError(name: string, message: string): string {
@@ -1435,7 +1396,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         const msg = formatMcpToolError(name, getMcpErrorMessage(mcpResult));
         return { output: msg, error: msg };
       }
-      return { output: formatMcpToolResult(name, mcpResult?.content) };
+      return { output: formatMcpToolResult(name, mcpResult.content) };
     } catch (err) {
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
       const msg = formatMcpToolError(name, errorMessage(err));

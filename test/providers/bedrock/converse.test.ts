@@ -1206,41 +1206,6 @@ describe('AwsBedrockConverseProvider', () => {
       });
     });
 
-    it('should join mixed-content MCP results into a readable string', async () => {
-      mcpMocks.mockCallTool.mockResolvedValueOnce({
-        content: [
-          'raw',
-          { text: 'hi' },
-          { json: { a: 1 } },
-          { data: [1, 2] },
-          { unknown: true },
-          42,
-        ],
-      });
-
-      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
-        config: {
-          region: 'us-east-1',
-          mcp: {
-            enabled: true,
-            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
-          },
-        },
-      });
-
-      mockSend.mockResolvedValueOnce(
-        createMockConverseResponse('', {
-          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
-          stopReason: 'tool_use',
-        }),
-      );
-
-      const result = await provider.callApi('hi');
-      expect(result.output).toBe(
-        'MCP Tool Result (list_resources): raw\nhi\n{"a":1}\n[1,2]\n{"unknown":true}\n42',
-      );
-    });
-
     it('should coerce array tool_use input into empty args (parseToolInput safety)', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {

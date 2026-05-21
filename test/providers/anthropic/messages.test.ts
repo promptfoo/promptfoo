@@ -1658,7 +1658,10 @@ describe('AnthropicMessagesProvider', () => {
 
       const result = await provider.callApi('Find grid storage companies');
 
+      // The model's recovered answer is preserved as output, and the MCP tool
+      // failure is surfaced on ProviderResponse.error.
       expect(result.output).toBe('I could not complete that lookup.');
+      expect(result.error).toBe(expectedContent);
       const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
       expect(secondRequest.messages.slice(-1)).toEqual([
         {

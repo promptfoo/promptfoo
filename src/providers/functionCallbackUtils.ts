@@ -84,21 +84,22 @@ export class FunctionCallbackHandler {
   }
 
   /**
-   * Processes multiple function calls
+   * Processes multiple function calls.
    * @param calls Array of calls or a single call
    * @param callbacks Configuration mapping function names to callbacks
    * @param context Optional context to pass to callbacks
    * @param options Processing options
-   * @returns Processed output in appropriate format
+   * @returns The processed output plus any MCP tool-error messages so callers
+   *   can surface them on `ProviderResponse.error`.
    */
   async processCalls(
     calls: any,
     callbacks?: FunctionCallbackConfig,
     context?: any,
     _options?: { returnRawOnError?: boolean },
-  ): Promise<any> {
+  ): Promise<{ output: any; mcpErrors: string[] }> {
     if (!calls) {
-      return calls;
+      return { output: calls, mcpErrors: [] };
     }
 
     const isArray = Array.isArray(calls);
@@ -107,6 +108,18 @@ export class FunctionCallbackHandler {
     const results = await Promise.all(
       callsArray.map((call) => this.processCall(call, callbacks, context)),
     );
+
+    // MCP tool errors carry a formatted "MCP Tool Error (...)" output; a failed
+    // regular callback instead echoes back the stringified original call, so
+    // exclude those using the same check `hasSuccess` applies below.
+    const mcpErrors = results
+      .filter(
+        (r, index) =>
+          r.isError &&
+          typeof r.output === 'string' &&
+          r.output !== JSON.stringify(callsArray[index]),
+      )
+      .map((r) => r.output as string);
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
@@ -117,19 +130,22 @@ export class FunctionCallbackHandler {
       const outputs = results.map((r) => r.output);
       // For single call with successful callback, return just the output
       if (!isArray && outputs.length === 1) {
-        return outputs[0];
+        return { output: outputs[0], mcpErrors };
       }
       // For multiple calls, join string results
-      return outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs;
+      return {
+        output: outputs.every((o) => typeof o === 'string') ? outputs.join('\n') : outputs,
+        mcpErrors,
+      };
     }
 
     // All failed or no callbacks - return stringified results
     if (!isArray && results.length === 1) {
-      return results[0].output;
+      return { output: results[0].output, mcpErrors };
     }
 
     // For arrays, return the original array
-    return calls;
+    return { output: calls, mcpErrors };
   }
 
   /**
@@ -254,41 +270,7 @@ export class FunctionCallbackHandler {
         };
       }
 
-      // Normalize MCP content to a readable string to avoid "[object Object]"
-      const normalizeContent = (content: any): string => {
-        if (content == null) {
-          return '';
-        }
-        if (typeof content === 'string') {
-          return content;
-        }
-        if (Array.isArray(content)) {
-          return content
-            .map((part) => {
-              if (typeof part === 'string') {
-                return part;
-              }
-              if (part && typeof part === 'object') {
-                if ('text' in part && (part as any).text != null) {
-                  return String((part as any).text);
-                }
-                if ('json' in part) {
-                  return JSON.stringify((part as any).json);
-                }
-                if ('data' in part) {
-                  return JSON.stringify((part as any).data);
-                }
-                return JSON.stringify(part);
-              }
-              return String(part);
-            })
-            .join('\n');
-        }
-        return JSON.stringify(content);
-      };
-
-      const content = normalizeContent(result?.content);
-      return { output: `MCP Tool Result (${toolName}): ${content}`, isError: false };
+      return { output: `MCP Tool Result (${toolName}): ${result.content}`, isError: false };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);

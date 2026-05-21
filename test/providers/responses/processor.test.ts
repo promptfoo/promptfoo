@@ -93,7 +93,10 @@ describe('ResponsesProcessor', () => {
     });
 
     it('should process function calls', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function executed successfully');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Function executed successfully',
+        mcpErrors: [],
+      });
 
       const mockData = {
         output: [
@@ -277,7 +280,10 @@ describe('ResponsesProcessor', () => {
     });
 
     it('should handle mixed response types', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function result');
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue({
+        output: 'Function result',
+        mcpErrors: [],
+      });
 
       const mockData = {
         output: [

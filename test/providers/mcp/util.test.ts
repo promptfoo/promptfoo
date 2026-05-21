@@ -7,6 +7,8 @@ import {
   getMcpErrorMessage,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  joinMcpErrors,
+  normalizeMcpContent,
 } from '../../../src/providers/mcp/util';
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';
@@ -61,6 +63,55 @@ describe('getMcpErrorMessage', () => {
     expect(getMcpErrorMessage({ content: '', isError: true })).toBe(
       'Tool returned an error result',
     );
+  });
+});
+
+describe('joinMcpErrors', () => {
+  it('returns undefined when there are no errors', () => {
+    expect(joinMcpErrors([])).toBeUndefined();
+  });
+
+  it('joins multiple error messages with a separator', () => {
+    expect(joinMcpErrors(['first failed', 'second failed'])).toBe('first failed; second failed');
+  });
+});
+
+describe('normalizeMcpContent', () => {
+  it('returns an empty string for nullish content', () => {
+    expect(normalizeMcpContent(null)).toBe('');
+    expect(normalizeMcpContent(undefined)).toBe('');
+  });
+
+  it('passes strings through unchanged', () => {
+    expect(normalizeMcpContent('plain text')).toBe('plain text');
+  });
+
+  it('decodes Buffer content', () => {
+    expect(normalizeMcpContent(Buffer.from('buffered'))).toBe('buffered');
+  });
+
+  it('joins text content blocks', () => {
+    expect(
+      normalizeMcpContent([
+        { type: 'text', text: 'line one' },
+        { type: 'text', text: 'line two' },
+      ]),
+    ).toBe('line one\nline two');
+  });
+
+  it('serializes json and data blocks', () => {
+    expect(normalizeMcpContent([{ type: 'json', json: { a: 1 } }])).toBe('{"a":1}');
+    expect(normalizeMcpContent([{ type: 'image', data: 'abc' }])).toBe('"abc"');
+  });
+
+  it('serializes unknown block shapes as JSON', () => {
+    expect(normalizeMcpContent([{ type: 'mystery', foo: 'bar' }])).toBe(
+      '{"type":"mystery","foo":"bar"}',
+    );
+  });
+
+  it('serializes non-array objects as JSON', () => {
+    expect(normalizeMcpContent({ answer: 42 })).toBe('{"answer":42}');
   });
 });
 

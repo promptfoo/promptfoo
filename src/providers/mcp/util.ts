@@ -42,6 +42,55 @@ export function getMcpErrorMessage(result: MCPToolResult): string {
 }
 
 /**
+ * Join MCP tool error messages into a single `ProviderResponse.error` string,
+ * or `undefined` when there were no errors.
+ */
+export function joinMcpErrors(errors: string[]): string | undefined {
+  return errors.length > 0 ? errors.join('; ') : undefined;
+}
+
+/**
+ * Normalize MCP tool content into a readable string. MCP servers return content
+ * as an array of typed blocks (`{ type: 'text', text }`, etc.); this joins the
+ * human-readable parts so consumers, assertions, and transforms see plain text
+ * rather than a JSON-encoded block array.
+ */
+export function normalizeMcpContent(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Buffer.isBuffer(content)) {
+    return content.toString();
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
+/**
  * Render environment variables in server config auth fields.
  * Supports {{VAR_NAME}} syntax for variable substitution.
  */

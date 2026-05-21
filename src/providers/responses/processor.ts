@@ -281,10 +281,12 @@ export class ResponsesProcessor {
       });
     } else {
       // Normal function call with arguments - execute the callback
-      functionResult = await this.config.functionCallbackHandler.processCalls(
-        item,
-        context.config.functionToolCallbacks,
-      );
+      functionResult = (
+        await this.config.functionCallbackHandler.processCalls(
+          item,
+          context.config.functionToolCallbacks,
+        )
+      ).output;
     }
 
     return { content: functionResult };
@@ -322,7 +324,7 @@ export class ResponsesProcessor {
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
           // Handle function calls within message content
-          const functionResult = await this.config.functionCallbackHandler.processCalls(
+          const { output: functionResult } = await this.config.functionCallbackHandler.processCalls(
             contentItem,
             context.config.functionToolCallbacks,
           );
