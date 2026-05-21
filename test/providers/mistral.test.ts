@@ -555,6 +555,66 @@ describe('Mistral', () => {
       );
     });
 
+    it('should isolate processed cache entries by effective showThinking', async () => {
+      const cacheGet = vi.fn().mockResolvedValue(null);
+      const cacheSet = vi.fn();
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockReturnValue({
+        get: cacheGet,
+        set: cacheSet,
+        wrap: vi.fn(),
+        del: vi.fn(),
+        clear: vi.fn(),
+        stores: [
+          {
+            get: vi.fn(),
+            set: vi.fn(),
+          },
+        ] as any,
+        mget: vi.fn(),
+        mset: vi.fn(),
+        mdel: vi.fn(),
+        reset: vi.fn(),
+        ttl: vi.fn(),
+        on: vi.fn(),
+        removeAllListeners: vi.fn(),
+      } as any);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: [
+                  { type: 'reasoning', content: 'private reasoning' },
+                  { type: 'text', text: 'Fresh output' },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Same prompt', {
+        prompt: { raw: 'Same prompt', label: 'same', config: { showThinking: true } },
+      } as any);
+      await provider.callApi('Same prompt', {
+        prompt: { raw: 'Same prompt', label: 'same', config: { showThinking: false } },
+      } as any);
+
+      const [showThinkingKey, hideThinkingKey] = cacheGet.mock.calls.map(([key]) => key);
+      expect(showThinkingKey).toMatch(
+        /^mistral:chat:mistral-tiny:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(hideThinkingKey).toMatch(
+        /^mistral:chat:mistral-tiny:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(showThinkingKey).not.toBe(hideThinkingKey);
+    });
+
     it('should isolate hashed cache keys by resolved API key', async () => {
       const cacheGet = vi.fn().mockResolvedValue(null);
       const cacheSet = vi.fn();
@@ -931,6 +991,7 @@ describe('Mistral', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Final answer');
+      expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Internal reasoning' }]);
     });
 
     it('should preserve chunk arrays that contain non-reasoning metadata', async () => {
@@ -951,7 +1012,12 @@ describe('Mistral', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.output).toEqual(content);
+      expect(result.output).toEqual([
+        { type: 'text', text: 'Final answer' },
+        { type: 'citation', url: 'https://example.com' },
+      ]);
+      expect(JSON.stringify(result.output)).not.toContain('Internal reasoning');
+      expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Internal reasoning' }]);
     });
 
     it('should preserve all choices in metadata when n returns multiple completions', async () => {

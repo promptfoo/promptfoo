@@ -533,7 +533,7 @@ export class GoogleLiveProvider implements ApiProvider {
               for (const part of serverContent.modelTurn.parts) {
                 if (part.text) {
                   if (part.thought === true) {
-                    if (this.config.showThinking !== false) {
+                    if (config.showThinking !== false) {
                       reasoningBlocks.push({
                         type: 'thought',
                         thought: part.text,

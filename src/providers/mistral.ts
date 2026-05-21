@@ -618,7 +618,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
-    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
+    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue({
+      params,
+      showThinking: config.showThinking !== false,
+    })}`;
     if (isCacheEnabled()) {
       const cache = getCache();
       if (cache) {
@@ -693,17 +696,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         []),
       ...(contentResult.reasoning ?? []),
     ];
-    const hasStructuredMetadata =
-      Array.isArray(message.content) &&
-      message.content.some(
-        (chunk: unknown) =>
-          chunk &&
-          typeof chunk === 'object' &&
-          !['thinking', 'reasoning', 'text'].includes((chunk as { type?: string }).type ?? ''),
-      );
-    const normalizedContent = normalizeMistralContent(
-      hasStructuredMetadata ? message.content : contentResult.output,
-    );
+    const normalizedContent = normalizeMistralContent(contentResult.output);
     let output: MistralNormalizedContent;
     if (normalizedContent && message.tool_calls?.length) {
       output = stripOpenAiCompatibleReasoningFields({ ...message, content: normalizedContent });

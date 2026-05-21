@@ -187,11 +187,33 @@ export function stripOpenAiCompatibleReasoningFields<T extends object>(
   return rest as Omit<T, 'reasoning' | 'reasoning_content' | 'thinking'>;
 }
 
+function getTextFromReasoningValue(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const text = value.map(getTextFromReasoningValue).filter(Boolean).join('');
+    return text || undefined;
+  }
+
+  if (value && typeof value === 'object') {
+    return getStringField(value as Record<string, unknown>, [
+      'text',
+      'content',
+      'thinking',
+      'reasoning',
+    ]);
+  }
+
+  return undefined;
+}
+
 function getStringField(record: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim()) {
-      return value;
+    const text = getTextFromReasoningValue(record[key]);
+    if (text) {
+      return text;
     }
   }
   return undefined;

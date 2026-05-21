@@ -382,6 +382,32 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should respect prompt-level showThinking false for thought parts', async () => {
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulatePartsMessage(mockWs, [
+          { text: 'private reasoning', thought: true, thoughtSignature: 'sig-1' },
+          { text: 'visible response' },
+        ]);
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt', config: { showThinking: false } },
+    } as any);
+
+    expect(response.output).toEqual({
+      text: 'visible response',
+      toolCall: { functionCalls: [] },
+      statefulApiState: undefined,
+    });
+    expect(response.reasoning).toBeUndefined();
+  });
+
   it('should send message and handle function call response', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
