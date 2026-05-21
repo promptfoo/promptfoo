@@ -151,12 +151,20 @@ describe('auth command', () => {
         expect.objectContaining({ method: 'POST' }),
         expect.any(Number),
       );
+      expect(JSON.parse(String(vi.mocked(fetchWithTimeout).mock.calls[0]?.[1]?.body))).toEqual({
+        client_id: 'promptfoo-cli',
+      });
       expect(fetchWithTimeout).toHaveBeenNthCalledWith(
         2,
         'https://api.promptfoo.app/api/v1/auth/device/token',
         expect.objectContaining({ method: 'POST' }),
         expect.any(Number),
       );
+      expect(JSON.parse(String(vi.mocked(fetchWithTimeout).mock.calls[1]?.[1]?.body))).toEqual({
+        device_code: 'device-code',
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        client_id: 'promptfoo-cli',
+      });
       expect(opener).toHaveBeenCalledWith('https://www.promptfoo.app/device?code=ABCD-EFGH');
       expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
         'device-token',

@@ -34,7 +34,7 @@ type DeviceCodeResponse = {
   verification_uri: string;
   verification_uri_complete: string;
   expires_in: number;
-  interval: number;
+  interval?: number;
 };
 
 type DeviceTokenSuccessResponse = {
@@ -310,11 +310,11 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
 async function pollForDeviceToken(
   apiHost: string,
   deviceCode: string,
-  intervalSeconds: number,
+  intervalSeconds: number | undefined,
   expiresInSeconds: number,
 ): Promise<DeviceTokenSuccessResponse> {
   const expiresAtMs = Date.now() + expiresInSeconds * 1000;
-  let pollIntervalMs = intervalSeconds * 1000;
+  let pollIntervalMs = (intervalSeconds ?? 5) * 1000;
 
   while (Date.now() < expiresAtMs) {
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
@@ -327,6 +327,7 @@ async function pollForDeviceToken(
         body: JSON.stringify({
           device_code: deviceCode,
           grant_type: DEVICE_GRANT_TYPE,
+          client_id: DEVICE_CLIENT_ID,
         }),
       },
       DEVICE_AUTH_REQUEST_TIMEOUT_MS,
