@@ -41,6 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { calculatePassPowerOfNFromResults } from '../util/passPowerOfN';
 import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -75,6 +76,41 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+function parseEvalResultsMetadata(results: unknown): {
+  durationMs?: number;
+  generationDurationMs?: number;
+  evaluationDurationMs?: number;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
+} {
+  const resultsObj =
+    results != null && typeof results === 'object' && !Array.isArray(results)
+      ? (results as Record<string, unknown>)
+      : undefined;
+
+  const validateDuration = (raw: unknown): number | undefined =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+
+  const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
+  const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
+  const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+  const durationMs =
+    rawDurationMs ??
+    (generationDurationMs != null || evaluationDurationMs != null
+      ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
+      : undefined);
+
+  const rawPassPowerOfN = resultsObj?.['passPowerOfN'];
+  const passPowerOfN =
+    rawPassPowerOfN != null &&
+    typeof rawPassPowerOfN === 'object' &&
+    'n' in rawPassPowerOfN &&
+    'overallScore' in rawPassPowerOfN
+      ? (rawPassPowerOfN as EvaluateStats['passPowerOfN'])
+      : undefined;
+
+  return { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN };
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -303,6 +339,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -355,22 +392,8 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
-    // Extract duration fields from results column (for V4 evals)
-    // Validate that values are finite non-negative numbers to guard against corrupted data
-    const resultsObj = eval_.results as Record<string, unknown> | undefined;
-
-    const validateDuration = (raw: unknown): number | undefined =>
-      typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
-
-    const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
-    const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
-    const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
-    // Recompute total if only split fields exist (defensive against partial writes)
-    const durationMs =
-      rawDurationMs ??
-      (generationDurationMs != null || evaluationDurationMs != null
-        ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
-        : undefined);
+    const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+      parseEvalResultsMetadata(eval_.results);
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
@@ -382,6 +405,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
+      passPowerOfN,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -408,19 +432,71 @@ export default class Eval {
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
       .all();
-    return evals.map(
-      (e) =>
-        new Eval(e.config, {
-          id: e.id,
-          createdAt: new Date(e.createdAt),
-          author: e.author,
-          description: e.description || undefined,
-          prompts: e.prompts || [],
-          persisted: true,
-        }),
-    );
+    return evals.map((e) => {
+      const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+        parseEvalResultsMetadata(e.results);
+      return new Eval(e.config, {
+        id: e.id,
+        createdAt: new Date(e.createdAt),
+        author: e.author,
+        description: e.description || undefined,
+        prompts: e.prompts || [],
+        persisted: true,
+        vars: e.vars || [],
+        runtimeOptions: e.runtimeOptions ?? undefined,
+        passPowerOfN,
+        durationMs,
+        generationDurationMs,
+        evaluationDurationMs,
+      });
+    });
   }
 
+  /**
+   * Get paginated evals with offset support for efficient infinite scroll.
+   * @param offset - Number of evals to skip
+   * @param limit - Maximum number of evals to return
+   */
+  static async getPaginated(
+    offset: number = 0,
+    limit: number = DEFAULT_QUERY_LIMIT,
+  ): Promise<Eval[]> {
+    const db = getDb();
+    const evals = await db
+      .select()
+      .from(evalsTable)
+      .orderBy(desc(evalsTable.createdAt))
+      .limit(limit)
+      .offset(offset)
+      .all();
+    return evals.map((e) => {
+      const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+        parseEvalResultsMetadata(e.results);
+      return new Eval(e.config, {
+        id: e.id,
+        createdAt: new Date(e.createdAt),
+        author: e.author,
+        description: e.description || undefined,
+        prompts: e.prompts || [],
+        persisted: true,
+        vars: e.vars || [],
+        runtimeOptions: e.runtimeOptions ?? undefined,
+        passPowerOfN,
+        durationMs,
+        generationDurationMs,
+        evaluationDurationMs,
+      });
+    });
+  }
+
+  /**
+   * Get total count of evals for pagination.
+   */
+  static async getCount(): Promise<number> {
+    const db = getDb();
+    const result = await db.select({ count: sql<number>`count(*)` }).from(evalsTable).get();
+    return result?.count ?? 0;
+  }
   static async create(
     config: Partial<UnifiedConfig>,
     renderedPrompts: Prompt[], // The config doesn't contain the actual prompts, so we need to pass them in separately
@@ -573,6 +649,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      passPowerOfN?: EvaluateStats['passPowerOfN'];
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -590,6 +667,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.passPowerOfN = opts?.passPowerOfN;
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
@@ -631,7 +709,8 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined
+      this.evaluationDurationMs !== undefined ||
+      this.passPowerOfN !== undefined
     ) {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
@@ -645,6 +724,9 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.passPowerOfN !== undefined) {
+        expr = sql`json_set(${expr}, '$.passPowerOfN', json(${JSON.stringify(this.passPowerOfN)}))`;
       }
       updateObj.results = expr;
     }
@@ -1246,6 +1328,15 @@ export default class Eval {
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
+    }
+
+    if (this.passPowerOfN) {
+      stats.passPowerOfN = this.passPowerOfN;
+    } else {
+      const passPower = this.runtimeOptions?.passPower;
+      if (passPower != null && this.results.length > 0) {
+        stats.passPowerOfN = calculatePassPowerOfNFromResults(this.results, passPower);
+      }
     }
 
     return stats;

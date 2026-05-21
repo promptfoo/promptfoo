@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
 
 import type { TokenUsage } from '../../types/index';
+import type { PassPowerResult } from '../../util/passPowerOfN';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
@@ -43,6 +44,8 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
+  /** pass^N consistency metric, when available */
+  passPowerOfN?: PassPowerResult;
 }
 
 type TokenUsageBreakdown = Pick<
@@ -278,15 +281,30 @@ function formatResultLine(
   )} ${chalk.gray(`(${formatResultPercentage(count, totalTests)})`)}`;
 }
 
+function formatPassPowerLine(passPowerOfN: PassPowerResult | undefined): string | undefined {
+  if (passPowerOfN == null) {
+    return undefined;
+  }
+
+  return `  ${chalk.white.bold(`pass^${passPowerOfN.n}`)} ${chalk.gray(
+    `(${passPowerOfN.overallScore.toFixed(2)}%)`,
+  )}`;
+}
+
 function getResultsLines({
   successes,
   failures,
   errors,
   duration,
   maxConcurrency,
-}: Pick<EvalSummaryParams, 'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency'>) {
+  passPowerOfN,
+}: Pick<
+  EvalSummaryParams,
+  'successes' | 'failures' | 'errors' | 'duration' | 'maxConcurrency' | 'passPowerOfN'
+>) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
+  const passPowerLine = formatPassPowerLine(passPowerOfN);
 
   return [
     '',
@@ -294,6 +312,7 @@ function getResultsLines({
     formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
+    ...(passPowerLine ? [passPowerLine] : []),
     chalk.gray(`Duration: ${formatDuration(duration)} (concurrency: ${maxConcurrency})`),
     '',
   ];

@@ -316,6 +316,14 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+function sanitizeStoredMetadata(result: Pick<EvaluateResult, 'metadata' | 'repeatIndex'>) {
+  const metadata =
+    result.repeatIndex == null
+      ? result.metadata
+      : { ...(result.metadata || {}), repeatIndex: result.repeatIndex };
+  return sanitizeMetadataForDb(sanitizeForDb(metadata));
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -333,7 +341,6 @@ export default class EvalResult {
       gradingResult,
       namedScores,
       cost,
-      metadata,
       failureReason,
       testCase,
     } = result;
@@ -376,7 +383,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(metadata),
+      metadata: sanitizeStoredMetadata(result),
       failureReason,
     };
     if (persist) {
@@ -418,7 +425,7 @@ export default class EvalResult {
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),
           gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
+          metadata: sanitizeStoredMetadata(result),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db
@@ -668,6 +675,9 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
+      ...(typeof this.metadata?.repeatIndex === 'number'
+        ? { repeatIndex: this.metadata.repeatIndex }
+        : {}),
     };
   }
 }

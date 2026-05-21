@@ -136,6 +136,39 @@ describe('EvalResult', () => {
       expect(retrieved).toBeNull();
     });
 
+    it('should round-trip repeatIndex through single-result metadata', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-id', {
+        ...mockEvaluateResult,
+        metadata: { testKey: 'testValue' },
+        repeatIndex: 2,
+      });
+
+      expect(result.metadata).toMatchObject({ testKey: 'testValue', repeatIndex: 2 });
+      expect(result.toEvaluateResult()).toMatchObject({
+        metadata: { testKey: 'testValue', repeatIndex: 2 },
+        repeatIndex: 2,
+      });
+    });
+
+    it('should round-trip repeatIndex through batch-result metadata', async () => {
+      const [result] = await EvalResult.createManyFromEvaluateResult(
+        [
+          {
+            ...mockEvaluateResult,
+            metadata: { testKey: 'testValue' },
+            repeatIndex: 3,
+          },
+        ],
+        'test-eval-id',
+      );
+
+      expect(result.metadata).toMatchObject({ testKey: 'testValue', repeatIndex: 3 });
+      expect(result.toEvaluateResult()).toMatchObject({
+        metadata: { testKey: 'testValue', repeatIndex: 3 },
+        repeatIndex: 3,
+      });
+    });
+
     it('should preserve response headers when persist option is false', async () => {
       const result = await EvalResult.createFromEvaluateResult(
         'test-eval-non-persisted-headers',

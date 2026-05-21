@@ -30,6 +30,54 @@ vi.mock('../../../src/logger', () => ({
   isDebugEnabled: vi.fn().mockReturnValue(false),
 }));
 
+vi.mock('../../../src/models/eval', () => {
+  const EvalMock = vi.fn().mockImplementation(function (
+    config: Record<string, unknown>,
+    opts?: { id?: string; runtimeOptions?: Partial<EvaluateOptions>; persisted?: boolean },
+  ) {
+    return {
+      id: opts?.id ?? 'mock-eval-id',
+      addResult: vi.fn().mockResolvedValue({}),
+      addPrompts: vi.fn().mockResolvedValue({}),
+      clearResults: vi.fn().mockReturnValue(undefined),
+      setDurationMs: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(undefined),
+      getResults: vi.fn().mockResolvedValue([]),
+      getTable: vi.fn().mockResolvedValue({
+        head: { prompts: [], vars: [] },
+        body: [],
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      resultsCount: 0,
+      prompts: [],
+      persisted: opts?.persisted ?? false,
+      results: [],
+      config: config || {},
+      runtimeOptions: opts?.runtimeOptions,
+      passPowerOfN: undefined,
+    };
+  });
+
+  Object.assign(EvalMock, {
+    create: vi
+      .fn()
+      .mockImplementation(
+        async (
+          config: Record<string, unknown>,
+          _prompts: unknown[],
+          opts?: { runtimeOptions?: Partial<EvaluateOptions> },
+        ) => new EvalMock(config, { ...opts, persisted: true }),
+      ),
+    findById: vi.fn(),
+    latest: vi.fn(),
+  });
+
+  return {
+    __esModule: true,
+    default: EvalMock,
+  };
+});
+
 vi.mock('../../../src/migrate', async (importOriginal) => {
   return {
     ...(await importOriginal()),

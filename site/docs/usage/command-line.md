@@ -131,6 +131,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-r, --providers <name or path...>`  | Provider names or paths to custom API caller modules                                                     |
 | `--remote`                           | Force remote inference wherever possible (used for red teams)                                            |
 | `--repeat <number>`                  | Number of times to run each test                                                                         |
+| `--pass-power <number>`              | The N exponent in pass^N consistency metric (default: repeat count). Requires `--repeat > 1`             |
+| `--pass-power-threshold <number>`    | Minimum pass^N score (0-100) for CI gating. Requires `--repeat > 1`                                      |
 | `--share`                            | Create a shareable URL                                                                                   |
 | `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
 | `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
@@ -163,6 +165,8 @@ promptfoo eval --filter-range :50     # first 50 tests
 Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3` runs 15 evaluations across the same 5 tests. When combined with other filters (`--filter-pattern`, `--filter-metadata`, etc.), range slices the post-filter list.
 
 When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
+
+When using `--repeat` with `--pass-power` or `--pass-power-threshold`, run with `--no-cache` if you need each repeat to be an independent model attempt. Cached repeats can reuse earlier responses and inflate the consistency score.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 

@@ -963,6 +963,7 @@ function createEvaluateResult({
   latencyMs,
   prompt,
   promptIdx,
+  repeatIndex,
   rendered,
   response,
   setup,
@@ -974,6 +975,7 @@ function createEvaluateResult({
   latencyMs: number;
   prompt: Prompt;
   promptIdx: number;
+  repeatIndex: number;
   rendered: RenderedRunEvalPrompt;
   response: ProviderResponse;
   setup: RunEvalSetup;
@@ -1001,6 +1003,7 @@ function createEvaluateResult({
     testCase: test,
     promptId: prompt.id || '',
     tokenUsage: createEmptyTokenUsage(),
+    repeatIndex,
   };
 
   if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
@@ -1378,6 +1381,7 @@ async function runEvalInternal({
       latencyMs,
       prompt,
       promptIdx,
+      repeatIndex,
       rendered,
       response,
       setup,
@@ -1449,6 +1453,7 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        repeatIndex,
       },
     ];
   }
@@ -2735,6 +2740,7 @@ function createEvalStepTimeoutResult(
     testIdx: evalStep.testIdx,
     testCase: sanitizedTestCase,
     promptId: evalStep.prompt.id || '',
+    repeatIndex: evalStep.repeatIndex,
   };
 }
 
@@ -2830,6 +2836,7 @@ function createMaxDurationTimeoutResult(
     testIdx: evalStep.testIdx,
     testCase: evalStep.test,
     promptId: evalStep.prompt.id || '',
+    repeatIndex: evalStep.repeatIndex,
   };
 }
 
