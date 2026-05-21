@@ -145,8 +145,9 @@ describe('normalizeLatex', async () => {
       ['sqrt2', '\\sqrt(2)'],
       ['cos4', '\\cos(4)'],
       ['cos 4', '\\cos(4)'],
+      ['sin x', '\\sin(x)'],
       ['sqrt 23', '\\sqrt(23)'],
-    ])('still rewrites the legitimate digit-suffixed shorthand (%s → %s)', async (input, expected) => {
+    ])('still rewrites legitimate function shorthand (%s → %s)', async (input, expected) => {
       expect(normalizeLatex(input)).toBe(expected);
     });
   });
@@ -162,6 +163,11 @@ describe('normalizeLatex', async () => {
 
     it('converts √{...} to \\sqrt{...}', async () => {
       expect(normalizeLatex('√{2}')).toBe('\\sqrt{2}');
+    });
+
+    it('converts √ over variables and commands to braced \\sqrt arguments', async () => {
+      expect(normalizeLatex('√x')).toBe('\\sqrt{x}');
+      expect(normalizeLatex('√\\pi')).toBe('\\sqrt{\\pi}');
     });
 
     it('converts × to *', async () => {
@@ -237,6 +243,30 @@ describe('cleanMathText', async () => {
   it('strips redacted thinking blocks', async () => {
     const raw = 'Thinking: \nSignature: AbCd123\n\n0.5';
     expect(cleanMathText(raw)).toBe('0.5');
+  });
+
+  it('strips Anthropic redacted thinking blocks', async () => {
+    expect(cleanMathText('Redacted Thinking: $$99$$\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips thinking blocks with content before a signature line', async () => {
+    expect(cleanMathText('Thinking: $$99$$\nSignature: AbCd123\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips signatureless thinking blocks', async () => {
+    expect(cleanMathText('Thinking: $$99$$\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips multi-paragraph thinking blocks before a signature line', async () => {
+    expect(cleanMathText('Thinking: line1\n\nline2 $$2$$\nSignature: AbCd123\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips multi-paragraph signatureless thinking blocks', async () => {
+    expect(cleanMathText('Thinking: line1\n\nline2 $$2$$\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips Bedrock <thinking> blocks', async () => {
+    expect(cleanMathText('<thinking>\n$$2$$\n</thinking>\n\n0.5')).toBe('0.5');
   });
 
   it('strips \\text{...} units', async () => {
@@ -473,6 +503,12 @@ describe('extractMathAnswer', async () => {
     expect(await extractMathAnswer('\\boxed{\\frac{1}{2}}')).toBe('\\frac{1}{2}');
   });
 
+  it('extracts a boxed answer with deeply nested braces', async () => {
+    expect(await extractMathAnswer('\\boxed{\\frac{1}{\\sqrt{\\frac{2}{3}}}}')).toBe(
+      '\\frac{1}{\\sqrt{\\frac{2}{3}}}',
+    );
+  });
+
   it('extracts a \\boxed{\\dfrac{...}} inside a $$ block', async () => {
     expect(await extractMathAnswer('$$\\boxed{\\dfrac{1}{2}}$$')).toBe('\\dfrac{1}{2}');
   });
@@ -596,6 +632,8 @@ describe('extractMathAnswer', async () => {
       ['The answer is x+y', 'x+y'],
       ['Therefore the result is 2x+3y', '2x+3y'],
       ['So the value is a-b*c', 'a-b*c'],
+      ['The answer is cos 4', 'cos 4'],
+      ['The answer is sin x', 'sin x'],
     ])('extracts compact symbolic prose tokens (no spaces around operators) (%s → %s)', async (input, expected) => {
       // Pre-fix: isMathShapedToken treated `x+y` (letters mixed with
       // operators, no digit and not single-letter) as non-math, so the
@@ -707,6 +745,10 @@ describe('extractMathAnswer', async () => {
       // scanner pick the documented latest block ("3").
       expect(await extractMathAnswer(input)).toBe(expected);
     });
+
+    it('prefers prose after multiple display blocks over the earlier fenced work', async () => {
+      expect(await extractMathAnswer('$$2$$ $$3$$ final answer is 4')).toBe('4');
+    });
   });
 
   describe('approximation chains (≈, \\approx) split like equality chains', async () => {
@@ -773,6 +815,14 @@ describe('extractMathAnswer', async () => {
       expect(await extractMathAnswer('$$230/530 = 23/53$$\nDone.')).toBe('230/530 = 23/53');
       expect((await isMathEquivalent('$$230/530 = 23/53$$\nDone.', '23/53')).pass).toBe(true);
     });
+
+    it.each([
+      ['42\nDone.', '42'],
+      ['The answer is 42\nDone.', '42'],
+    ])('falls back to an earlier plain answer when the last line is prose (%s → %s)', async (actual, expected) => {
+      expect(await extractMathAnswer(actual)).toBe(expected);
+      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+    });
   });
 
   describe('hidden-thinking display blocks must not leak through', async () => {
@@ -789,6 +839,32 @@ describe('extractMathAnswer', async () => {
     it('ignores $$...$$ inside redacted-thinking blocks', async () => {
       expect(await extractMathAnswer('Thinking: \nSignature: AbCd123\n$$99$$\n\nAnswer: 7')).toBe(
         '7',
+      );
+    });
+
+    it('ignores $$...$$ inside Anthropic redacted-thinking blocks', async () => {
+      expect(await extractMathAnswer('Redacted Thinking: $$99$$\n\nAnswer: 7')).toBe('7');
+    });
+
+    it('ignores $$...$$ inside thinking blocks with a later signature line', async () => {
+      expect(await extractMathAnswer('Thinking: $$2$$\nSignature: sig\n\nFinal answer: 3')).toBe(
+        '3',
+      );
+    });
+
+    it('ignores $$...$$ inside signatureless thinking blocks', async () => {
+      expect(await extractMathAnswer('Thinking: $$2$$\n\nFinal answer: 3')).toBe('3');
+    });
+
+    it('ignores $$...$$ inside multi-paragraph thinking blocks', async () => {
+      expect(
+        await extractMathAnswer('Thinking: line1\n\n$$2$$\nSignature: sig\n\nFinal answer: 3'),
+      ).toBe('3');
+    });
+
+    it('ignores $$...$$ inside Bedrock <thinking> blocks', async () => {
+      expect(await extractMathAnswer('<thinking>\n$$2$$\n</thinking>\n\nFinal answer: 3')).toBe(
+        '3',
       );
     });
   });
@@ -876,6 +952,13 @@ describe('isMathEquivalent', async () => {
     it('matches cos with space-separated digit', async () => {
       expect((await isMathEquivalent('24 + 6cos 4', '$24+6\\cos(4)$')).pass).toBe(true);
     });
+
+    it.each([
+      ['The answer is cos 4', '$\\cos(4)$'],
+      ['The answer is sin x', '$\\sin(x)$'],
+    ])('matches prose-wrapped bare function shorthand "%s"', async (actual, expected) => {
+      expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+    });
   });
 
   describe('nested boxed', async () => {
@@ -923,6 +1006,10 @@ describe('isMathEquivalent', async () => {
   describe('LLM judge audit patterns', async () => {
     it('matches unicode √ form', async () => {
       expect((await isMathEquivalent('20√57', '$20\\sqrt{57}$')).pass).toBe(true);
+    });
+
+    it('matches unicode √ over variables', async () => {
+      expect((await isMathEquivalent('√x', '$\\sqrt{x}$')).pass).toBe(true);
     });
 
     it('matches unicode √ with unicode minus', async () => {

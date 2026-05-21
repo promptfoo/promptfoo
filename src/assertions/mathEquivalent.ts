@@ -8,7 +8,7 @@
  *  3. Normalizing common LaTeX quirks (Unicode minus, \dfrac, missing
  *     trig backslashes, european decimal commas, ...).
  *  4. Parsing each side with CortexJS Compute Engine (handles LaTeX).
- *  5. Returning pass when ce.box(['Subtract', a, b]).simplify().is(0, 0).
+ *  5. Returning pass when ce.box(['Subtract', a, b]).simplify().is(0).
  *
  * See site/docs/configuration/expected-outputs/deterministic.md#math-equivalent.
  */
@@ -53,7 +53,9 @@ let _enginePromise: Promise<ComputeEngine> | undefined;
  */
 async function getEngine(): Promise<ComputeEngine> {
   if (!_enginePromise) {
-    _enginePromise = import('@cortex-js/compute-engine').then((m) => new m.ComputeEngine());
+    _enginePromise = import('@cortex-js/compute-engine').then(
+      (m) => new m.ComputeEngine({ tolerance: 0 }),
+    );
   }
   return _enginePromise;
 }
@@ -70,6 +72,7 @@ export function normalizeLatex(text: string): string {
   s = s.replace(/\u00f7/g, '/'); // ÷ → /
   s = s.replace(/√(\d+)/g, '\\sqrt{$1}');
   s = s.replace(/√\{/g, '\\sqrt{');
+  s = s.replace(/√(\\[A-Za-z]+|[A-Za-z])/g, '\\sqrt{$1}');
   s = s.replace(/√/g, '\\sqrt');
 
   // Approximation symbols collapse to equality so segment parsing can split on '='.
@@ -118,6 +121,11 @@ export function normalizeLatex(text: string): string {
     s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`);
     // fn<space><digits>(end-of-token) → \fn(<digits>)
     s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`);
+    // fn<space><symbol-or-command>(end-of-token) → \fn(<symbol-or-command>)
+    s = s.replace(
+      new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+([A-Za-z]|\\\\[A-Za-z]+)(?!\\w)`, 'g'),
+      `\\${fn}($1)`,
+    );
   }
 
   return s;
@@ -127,13 +135,7 @@ export function normalizeLatex(text: string): string {
  * Strip formatting wrappers that don't affect mathematical meaning.
  */
 export function cleanMathText(text: string): string {
-  let s = text;
-
-  // <think>…</think> blocks (multi-line).
-  s = s.replace(/<think>[\s\S]*?<\/think>/g, '');
-
-  // promptfoo-rendered redacted thinking blocks.
-  s = s.replace(/Thinking:\s*\nSignature:[\s\S]*?(?=\n\n|$)/g, '');
+  let s = stripThinkingBlocks(text);
 
   // \text{...} units/labels and any preceding space/backslash.
   s = s.replace(/\s*\\?\s*\\text\{[^}]*\}/g, '');
@@ -257,11 +259,43 @@ export async function tryParseEachSegment(text: string): Promise<BoxedExpression
 }
 
 const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
-const BOXED_PATTERN = /\\boxed\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
+const BOXED_PREFIX = '\\boxed{';
 const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/g;
 
+type BoxedMatch = {
+  content: string;
+  end: number;
+};
+
+function scanBoxed(text: string): BoxedMatch[] {
+  const matches: BoxedMatch[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (!text.startsWith(BOXED_PREFIX, i)) {
+      continue;
+    }
+
+    let depth = 1;
+    const contentStart = i + BOXED_PREFIX.length;
+    let j = contentStart;
+    while (j < text.length && depth > 0) {
+      if (text[j] === '{') {
+        depth++;
+      } else if (text[j] === '}') {
+        depth--;
+      }
+      j++;
+    }
+
+    if (depth === 0) {
+      matches.push({ content: text.slice(contentStart, j - 1), end: j });
+      i = j - 1;
+    }
+  }
+  return matches;
+}
+
 function findAllBoxed(text: string): string[] {
-  return [...text.matchAll(BOXED_PATTERN)].map((m) => m[1]);
+  return scanBoxed(text).map((match) => match.content);
 }
 
 function filterNonTrivialLines(s: string): string[] {
@@ -302,6 +336,9 @@ function isMathShapedToken(tok: string): boolean {
     return true;
   }
   if (tok.startsWith('\\')) {
+    return true;
+  }
+  if (TRIG_FNS.includes(tok)) {
     return true;
   }
   if (/^[A-Za-z]$/.test(tok)) {
@@ -437,30 +474,12 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
  * may carry arbitrarily nested braces (`\boxed{\frac{1}{\sqrt{2}}}`).
  */
 function remainderAfterLastBoxed(line: string): string | undefined {
-  const PREFIX = '\\boxed{';
-  let lastBoxedClose = -1;
-  for (let i = 0; i < line.length; i++) {
-    if (line.startsWith(PREFIX, i)) {
-      let depth = 1;
-      let j = i + PREFIX.length;
-      while (j < line.length && depth > 0) {
-        if (line[j] === '{') {
-          depth++;
-        } else if (line[j] === '}') {
-          depth--;
-        }
-        j++;
-      }
-      if (depth === 0) {
-        lastBoxedClose = j;
-        i = j - 1;
-      }
-    }
-  }
-  if (lastBoxedClose < 0) {
+  const boxed = scanBoxed(line);
+  const lastBoxed = boxed.length > 0 ? boxed[boxed.length - 1] : undefined;
+  if (!lastBoxed) {
     return undefined;
   }
-  const tail = line.slice(lastBoxedClose).replace(/^[,\s]+/, '');
+  const tail = line.slice(lastBoxed.end).replace(/^[,\s]+/, '');
   return tail || undefined;
 }
 
@@ -470,9 +489,35 @@ function remainderAfterLastBoxed(line: string): string | undefined {
  * `$$2$$` up as the answer; the docs promise that thinking blocks are ignored.
  */
 function stripThinkingBlocks(text: string): string {
-  return text
-    .replace(/<think>[\s\S]*?<\/think>/g, '')
-    .replace(/Thinking:\s*\nSignature:[\s\S]*?(?=\n\n|$)/g, '');
+  return (
+    text
+      // Provider-native XML thinking wrappers (Bedrock, etc.).
+      .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      // Anthropic extended thinking: multi-line body, then a Signature line, then a blank line.
+      .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:\r?\n)+/gi, '$1')
+      // Anthropic redacted thinking is a single rendered line.
+      .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\n]*(?:\r?\n)+/gi, '$1')
+      // OpenAI/OpenRouter-style signatureless thinking: strip through the last blank line
+      // before the visible answer so internal paragraph breaks in the reasoning are included.
+      .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*\r?\n\r?\n/gi, '$1')
+  );
+}
+
+function hasTrailingDisplaySuffix(line: string): boolean {
+  let lastBlockEnd = -1;
+  for (const match of line.matchAll(DISPLAY_BLOCK_PATTERN)) {
+    lastBlockEnd = (match.index ?? 0) + match[0].length;
+  }
+  if (lastBlockEnd < 0) {
+    return false;
+  }
+  return (
+    line
+      .slice(lastBlockEnd)
+      .replace(/^[,.;:!?\s]+/, '')
+      .trim().length > 0
+  );
 }
 
 /**
@@ -544,16 +589,16 @@ export async function extractMathAnswer(text: string): Promise<string> {
   // already returns undefined for pure prose, so the display-block scan
   // below still wins for prose-only trailers.
   //
-  // Exception: when the last visible line has 2+ display fences AND no
-  // labelled suffix ("$$2$$ $$3$$" or "work $$2$$ $$3$$"), the cleaned
-  // line collapses to a fence-stripped concat ("2 3") and
+  // Exception: when the last visible line has 2+ display fences and no
+  // suffix after the final fence ("$$2$$ $$3$$" or "work $$2$$ $$3$$"),
+  // the cleaned line collapses to a fence-stripped concat ("2 3") and
   // extractFromLastLine would commit it as the answer. Skip ahead to
   // display-block extraction so the documented "latest display block
-  // wins" semantics apply.
+  // wins" semantics apply. A trailing suffix ("... final answer is 4")
+  // still gets first crack at extraction.
   const fenceCount =
     (lastVisible.match(/\$\$/g)?.length ?? 0) / 2 + (lastVisible.match(/\\\[/g)?.length ?? 0);
-  const hasLabelledSuffix = /\s[A-Za-z][A-Za-z\s]*:\s*\S/.test(lastVisible);
-  const skipLastLine = fenceCount >= 2 && !hasLabelledSuffix;
+  const skipLastLine = fenceCount >= 2 && !hasTrailingDisplaySuffix(lastVisible);
   if (!skipLastLine) {
     const lineAnswer = extractFromLastLine(cleanedLines);
     if (lineAnswer) {
@@ -573,6 +618,21 @@ export async function extractMathAnswer(text: string): Promise<string> {
   const cleanedBoxed = findAllBoxed(cleaned);
   if (cleanedBoxed.length > 0) {
     return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
+  }
+
+  // If the final line was only a prose trailer ("Done.", "This is the
+  // final result."), fall back to the nearest earlier parseable line instead
+  // of returning the whole cleaned transcript.
+  for (let i = cleanedLines.length - 2; i >= 0; i--) {
+    const earlierAnswer = extractFromLastLine([cleanedLines[i]]);
+    if (!earlierAnswer) {
+      continue;
+    }
+    const expr =
+      (await parseMathExpression(earlierAnswer)) ?? (await tryParseEachSegment(earlierAnswer));
+    if (expr) {
+      return earlierAnswer;
+    }
   }
 
   return cleaned;
@@ -644,10 +704,8 @@ export async function isMathEquivalent(
   try {
     const ce = await getEngine();
     const diff = ce.box(['Subtract', expr1, expr2]).simplify();
-    // Use a zero tolerance for the final numeric fallback. `isEqual(0)` accepts
-    // differences within the engine-wide tolerance, which would make this
-    // assertion approximate instead of exact for tiny nonzero residuals.
-    const pass = Boolean(diff.is(0, 0));
+    // The engine is created with tolerance: 0, so this numeric fallback remains exact.
+    const pass = Boolean(diff.is(0));
     return {
       pass,
       score: pass ? 1 : 0,
