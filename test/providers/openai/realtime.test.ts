@@ -801,9 +801,6 @@ describe('OpenAI Realtime Provider', () => {
 
         // Manually set the previousItemId since the mock doesn't properly handle this
         provider.previousItemId = assistantId;
-        if (!provider.assistantMessageIds.includes(assistantId)) {
-          provider.assistantMessageIds.push(assistantId);
-        }
 
         // Response created
         await Promise.resolve(
@@ -877,7 +874,6 @@ describe('OpenAI Realtime Provider', () => {
       // Verify first response
       expect(firstResponse.output).toBe('First response');
       expect(provider.previousItemId).toBe('assistant_1');
-      expect(provider.assistantMessageIds).toContain('assistant_1');
 
       // Second message
       const secondResponsePromise = provider.callApi('Second message', context);
@@ -893,8 +889,6 @@ describe('OpenAI Realtime Provider', () => {
       // Verify second response
       expect(secondResponse.output).toBe('Second response');
       expect(provider.previousItemId).toBe('assistant_2');
-      expect(provider.assistantMessageIds).toContain('assistant_2');
-      expect(provider.assistantMessageIds).toHaveLength(2);
 
       // Verify connection state
       expect(provider.persistentConnection?.close).not.toHaveBeenCalled();

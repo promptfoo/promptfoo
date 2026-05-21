@@ -194,7 +194,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // Add persistent connection handling
   persistentConnection: WebSocket | null = null;
   previousItemId: string | null = null;
-  assistantMessageIds: string[] = []; // Track assistant message IDs
   private activeTimeouts: Set<NodeJS.Timeout> = new Set();
 
   // Resolves when persistentConnection reaches readyState OPEN. Concurrent
@@ -2245,7 +2244,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 response: await this.getRealtimeResponseConfig(realtimeToolConfig),
               });
             } else if (message.item.role === 'assistant') {
-              this.assistantMessageIds.push(message.item.id);
               this.previousItemId = message.item.id;
             }
             break;
@@ -2488,7 +2486,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       this.persistentConnection.close();
       this.tearDownPersistentConnection('cleanup() called');
       this.previousItemId = null;
-      this.assistantMessageIds = [];
     }
   }
 }
