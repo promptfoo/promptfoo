@@ -193,6 +193,30 @@ function estimateMetadataColumnSize(header: string, values: unknown[]): number {
   );
 }
 
+/**
+ * Returns a row sample for estimating metadata column widths that stays stable
+ * as the user paginates.
+ *
+ * The eval results store paginates server-side, so `tableBody` only ever holds
+ * the current page. Estimating column widths directly from it makes unresized
+ * columns visibly jump page-to-page. This captures the first non-empty page
+ * seen for an eval and reuses it until the eval changes.
+ */
+export function useStableColumnSampleBody(
+  evalId: string | null,
+  tableBody: ExtendedEvaluateTableRow[],
+): ExtendedEvaluateTableRow[] {
+  const sampleRef = useRef<{ evalId: string | null; body: ExtendedEvaluateTableRow[] } | null>(
+    null,
+  );
+
+  if (tableBody.length > 0 && sampleRef.current?.evalId !== evalId) {
+    sampleRef.current = { evalId, body: tableBody };
+  }
+
+  return sampleRef.current?.evalId === evalId ? sampleRef.current.body : tableBody;
+}
+
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
   if (output == null) {
     return output;
@@ -1740,12 +1764,16 @@ function ResultsTable({
 
   const injectVarName = config?.redteam?.injectVar || 'prompt';
 
+  // Estimate metadata column widths from a page sample that is stable across
+  // pagination, so unresized columns do not jump as the user pages.
+  const columnSizeSampleBody = useStableColumnSampleBody(evalId, tableBody);
+
   const variableColumnSizes = React.useMemo(
     () =>
       head.vars.map((varName, idx) =>
         estimateMetadataColumnSize(
           varName,
-          tableBody.map((row) =>
+          columnSizeSampleBody.map((row) =>
             getVariableCellValue({
               row,
               varName,
@@ -1755,7 +1783,7 @@ function ResultsTable({
           ),
         ),
       ),
-    [head.vars, injectVarName, tableBody],
+    [head.vars, injectVarName, columnSizeSampleBody],
   );
 
   const transformDisplayVarColumnSizes = React.useMemo(() => {
@@ -1764,7 +1792,7 @@ function ResultsTable({
         varName,
         estimateMetadataColumnSize(
           varName.replace(/^__/, ''),
-          tableBody.map((row) => {
+          columnSizeSampleBody.map((row) => {
             const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
               | Record<string, string>
               | undefined;
@@ -1773,15 +1801,15 @@ function ResultsTable({
         ),
       ]),
     ) as Record<string, number>;
-  }, [tableBody, transformDisplayVarKeys]);
+  }, [columnSizeSampleBody, transformDisplayVarKeys]);
 
   const descriptionColumnSize = React.useMemo(
     () =>
       estimateMetadataColumnSize(
         'Description',
-        hasDescriptionColumn ? body.map((row) => row.test.description || '') : [],
+        hasDescriptionColumn ? columnSizeSampleBody.map((row) => row.test.description || '') : [],
       ),
-    [body, hasDescriptionColumn],
+    [columnSizeSampleBody, hasDescriptionColumn],
   );
 
   const parseQueryParams = (queryString: string) => {

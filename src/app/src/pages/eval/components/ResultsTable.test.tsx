@@ -4,10 +4,10 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { screen, waitFor } from '@testing-library/react';
+import { renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable from './ResultsTable';
+import ResultsTable, { useStableColumnSampleBody } from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
@@ -4446,5 +4446,50 @@ describe('ResultsTable default column sizing', () => {
     expect(promptHeader).not.toBeNull();
     expect(promptWidth).toBeGreaterThan(160);
     expect(promptWidth).toBeLessThanOrEqual(360);
+  });
+});
+
+describe('useStableColumnSampleBody', () => {
+  const makeRows = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({ test: {}, vars: [`row${i}`], outputs: [] })) as any;
+
+  it('keeps the first non-empty page sample stable across pagination', () => {
+    const page1 = makeRows(3);
+    const page2 = makeRows(3);
+    const { result, rerender } = renderHook(
+      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
+      { initialProps: { evalId: 'eval-a', body: page1 } },
+    );
+    expect(result.current).toBe(page1);
+
+    // Paginating to another page of the same eval must not change the sample.
+    rerender({ evalId: 'eval-a', body: page2 });
+    expect(result.current).toBe(page1);
+  });
+
+  it('captures the first non-empty page when the initial page is empty', () => {
+    const loadedPage = makeRows(2);
+    const { result, rerender } = renderHook(
+      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
+      { initialProps: { evalId: 'eval-a', body: makeRows(0) } },
+    );
+    // Nothing to sample yet — falls back to the (empty) body.
+    expect(result.current).toEqual([]);
+
+    rerender({ evalId: 'eval-a', body: loadedPage });
+    expect(result.current).toBe(loadedPage);
+  });
+
+  it('refreshes the sample when the eval changes', () => {
+    const evalA = makeRows(2);
+    const evalB = makeRows(4);
+    const { result, rerender } = renderHook(
+      ({ evalId, body }) => useStableColumnSampleBody(evalId, body),
+      { initialProps: { evalId: 'eval-a', body: evalA } },
+    );
+    expect(result.current).toBe(evalA);
+
+    rerender({ evalId: 'eval-b', body: evalB });
+    expect(result.current).toBe(evalB);
   });
 });
