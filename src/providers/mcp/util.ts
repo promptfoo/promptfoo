@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch';
 import { renderVarsInObject } from '../../util/index';
+import { safeJsonStringify } from '../../util/json';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 
 import type { VarValue } from '../../types/shared';
@@ -90,18 +91,18 @@ export function normalizeMcpContent(content: unknown): string {
             return String((part as { text: unknown }).text);
           }
           if ('json' in part) {
-            return JSON.stringify((part as { json: unknown }).json);
+            return safeJsonStringify((part as { json: unknown }).json) ?? '';
           }
           if ('data' in part) {
-            return JSON.stringify((part as { data: unknown }).data);
+            return safeJsonStringify((part as { data: unknown }).data) ?? '';
           }
-          return JSON.stringify(part);
+          return safeJsonStringify(part) ?? '';
         }
         return String(part);
       })
       .join('\n');
   }
-  return JSON.stringify(content);
+  return safeJsonStringify(content) ?? '';
 }
 
 /**

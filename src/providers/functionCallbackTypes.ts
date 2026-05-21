@@ -32,9 +32,11 @@ export type FunctionCallbackConfig = Record<string, FunctionCallback | string>;
 /**
  * Result of processing function calls
  */
-export interface FunctionCallResult {
-  output: string | any;
-  isError: boolean;
-  /** True when the failure came from an MCP tool call (vs. a regular callback). */
-  isMcpError?: boolean;
-}
+/**
+ * Result of processing a single function/tool call. Modeled as a union so
+ * `isMcpError` (set only when an MCP tool — not a regular callback — failed)
+ * cannot be combined with `isError: false`.
+ */
+export type FunctionCallResult =
+  | { output: string | any; isError: false }
+  | { output: string | any; isError: true; isMcpError?: boolean };

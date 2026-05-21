@@ -202,6 +202,18 @@ function getAnthropicCostFromMessage(
   );
 }
 
+/**
+ * Outcome of running the Anthropic MCP tool loop.
+ * - `ok`: no tool errors; use `response` as normal.
+ * - `tool-error`: a tool failed but the model recovered — keep `response`'s
+ *   output and surface `error`.
+ * - `exhausted`: max_tool_calls hit — fatal; drop output, return `error` only.
+ */
+type McpResolution =
+  | { kind: 'ok'; response: Anthropic.Messages.Message }
+  | { kind: 'tool-error'; error: string; response: Anthropic.Messages.Message }
+  | { kind: 'exhausted'; error: string; response: Anthropic.Messages.Message };
+
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
@@ -258,14 +270,14 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     initialResponse: Anthropic.Messages.Message;
     params: Anthropic.Messages.MessageCreateParams;
     shouldStream: boolean;
-  }): Promise<{ error?: string; fatal?: boolean; response: Anthropic.Messages.Message }> {
+  }): Promise<McpResolution> {
     if (!this.mcpClient) {
-      return { response: initialResponse };
+      return { kind: 'ok', response: initialResponse };
     }
 
     const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
     if (mcpToolNames.size === 0) {
-      return { response: initialResponse };
+      return { kind: 'ok', response: initialResponse };
     }
 
     let response = initialResponse;
@@ -275,16 +287,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     let executedMcpToolCalls = 0;
     const mcpToolErrors: string[] = [];
     const maxToolCallsError = `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`;
-    // `fatal` marks max_tool_calls exhaustion: the caller drops the output and
-    // returns only the error. A non-fatal `error` (tool-level failures) is kept
-    // alongside the model's recovered output.
-    const finalize = (structuralError?: string) => {
-      const error = structuralError ?? joinMcpErrors(mcpToolErrors);
-      return {
-        response: withMergedAnthropicUsage(response, responses),
-        ...(error ? { error } : {}),
-        ...(structuralError ? { fatal: true } : {}),
-      };
+    const finalize = (structuralError?: string): McpResolution => {
+      const mergedResponse = withMergedAnthropicUsage(response, responses);
+      if (structuralError) {
+        return { kind: 'exhausted', error: structuralError, response: mergedResponse };
+      }
+      const toolError = joinMcpErrors(mcpToolErrors);
+      if (toolError) {
+        return { kind: 'tool-error', error: toolError, response: mergedResponse };
+      }
+      return { kind: 'ok', response: mergedResponse };
     };
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
@@ -785,24 +797,21 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         });
       }
 
-      const {
-        error,
-        fatal,
-        response: resolvedMessage,
-      } = await this.resolveMcpToolUse({
+      const resolution = await this.resolveMcpToolUse({
         config,
         headers,
         initialResponse: initialMessage,
         params,
         shouldStream,
       });
+      const resolvedMessage = resolution.response;
 
-      if (fatal) {
+      if (resolution.kind === 'exhausted') {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
         // so surface the cost alongside the error so it doesn't disappear from
         // eval cost tracking.
         return {
-          error,
+          error: resolution.error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
           cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
         };
@@ -839,7 +848,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(finishReason && { finishReason }),
         ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
         cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
-        ...(error ? { error } : {}),
+        ...(resolution.kind === 'tool-error' ? { error: resolution.error } : {}),
       };
     } catch (err) {
       logger.error(

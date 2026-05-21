@@ -121,6 +121,13 @@ describe('normalizeMcpContent', () => {
   it('stringifies primitive and nullish array elements', () => {
     expect(normalizeMcpContent(['raw', 42, null, undefined])).toBe('raw\n42\nnull\nundefined');
   });
+
+  it('does not throw on circular content', () => {
+    const circular: any = { a: 1 };
+    circular.self = circular;
+    expect(() => normalizeMcpContent([{ type: 'json', json: circular }])).not.toThrow();
+    expect(() => normalizeMcpContent(circular)).not.toThrow();
+  });
 });
 
 describe('getAuthHeaders', () => {

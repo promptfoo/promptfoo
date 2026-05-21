@@ -250,6 +250,26 @@ describe('ResponsesProcessor', () => {
       expect(result.output).toContain('MCP Tool Result (test_tool): Tool result');
     });
 
+    it('surfaces a hosted MCP tool call error on ProviderResponse.error', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'mcp_call',
+            name: 'read_file',
+            server_label: 'test_server',
+            error: 'Path traversal not allowed',
+            status: 'failed',
+          },
+        ],
+        usage: { input_tokens: 8, output_tokens: 6 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.output).toContain('MCP Tool Error (read_file): Path traversal not allowed');
+      expect(result.error).toBe('MCP Tool Error (read_file): Path traversal not allowed');
+    });
+
     it('should handle refusals correctly', async () => {
       const mockData = {
         id: 'resp_refusal456',

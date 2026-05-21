@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { formatMcpToolError, formatMcpToolResult, joinMcpErrors } from '../mcp/util';
 import { formatOpenAiError } from '../openai/util';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -127,6 +128,7 @@ export class ResponsesProcessor {
           isRefusal: true,
           cached,
           ...(cost === undefined ? {} : { cost }),
+          ...(processedOutput.mcpError ? { error: processedOutput.mcpError } : {}),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
         };
@@ -151,6 +153,7 @@ export class ResponsesProcessor {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         ...(cost === undefined ? {} : { cost }),
+        ...(processedOutput.mcpError ? { error: processedOutput.mcpError } : {}),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
       };
@@ -183,6 +186,7 @@ export class ResponsesProcessor {
     let refusal = '';
     let isRefusal = false;
     const annotations: any[] = [];
+    const mcpErrors: string[] = [];
 
     // Process all output items
     for (const item of output) {
@@ -208,6 +212,10 @@ export class ResponsesProcessor {
       if (processed.annotations) {
         annotations.push(...processed.annotations);
       }
+
+      if (processed.mcpError) {
+        mcpErrors.push(processed.mcpError);
+      }
     }
 
     return {
@@ -215,6 +223,7 @@ export class ResponsesProcessor {
       refusal,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
+      mcpError: joinMcpErrors(mcpErrors),
     };
   }
 
@@ -225,6 +234,7 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
+    mcpError?: string;
   }> {
     switch (item.type) {
       case 'function_call':
@@ -265,33 +275,30 @@ export class ResponsesProcessor {
     context: ProcessorContext,
   ): Promise<{
     content?: string;
+    mcpError?: string;
   }> {
-    let functionResult: string;
-
     // Check if this is a meaningful function call or just a status update
     if (item.arguments === '{}' && item.status === 'completed') {
       // This appears to be a status update with no meaningful arguments
       // This often happens when using Chat API tool format with Responses API
       // In this case, return the function call info instead of trying to execute with empty args
-      functionResult = JSON.stringify({
-        type: 'function_call',
-        name: item.name,
-        status: 'no_arguments_provided',
-        note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
-      });
-    } else {
-      // Normal function call with arguments - execute the callback.
-      // The Responses-API handler has no MCP client, so mcpErrors is always
-      // empty here; the hosted MCP path is handled separately by processMcpCall.
-      functionResult = (
-        await this.config.functionCallbackHandler.processCalls(
-          item,
-          context.config.functionToolCallbacks,
-        )
-      ).output;
+      return {
+        content: JSON.stringify({
+          type: 'function_call',
+          name: item.name,
+          status: 'no_arguments_provided',
+          note: 'Function called but no arguments were extracted. Consider using the correct Responses API tool format.',
+        }),
+      };
     }
 
-    return { content: functionResult };
+    // Normal function call with arguments - execute the callback.
+    const { output, mcpErrors } = await this.config.functionCallbackHandler.processCalls(
+      item,
+      context.config.functionToolCallbacks,
+    );
+    const mcpError = joinMcpErrors(mcpErrors);
+    return { content: output, ...(mcpError ? { mcpError } : {}) };
   }
 
   private async processMessage(
@@ -301,6 +308,7 @@ export class ResponsesProcessor {
     content?: string;
     isRefusal?: boolean;
     annotations?: any[];
+    mcpError?: string;
   }> {
     if (item.role !== 'assistant') {
       return {};
@@ -310,6 +318,7 @@ export class ResponsesProcessor {
     let isRefusal = false;
     let refusal = '';
     const annotations: any[] = [];
+    const messageMcpErrors: string[] = [];
 
     if (item.content) {
       for (const contentItem of item.content) {
@@ -325,13 +334,14 @@ export class ResponsesProcessor {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-          // Handle function calls within message content. mcpErrors is unused:
-          // the Responses-API handler has no MCP client (see processFunctionCall).
-          const { output: functionResult } = await this.config.functionCallbackHandler.processCalls(
-            contentItem,
-            context.config.functionToolCallbacks,
-          );
+          // Handle function calls within message content
+          const { output: functionResult, mcpErrors } =
+            await this.config.functionCallbackHandler.processCalls(
+              contentItem,
+              context.config.functionToolCallbacks,
+            );
           content = functionResult;
+          messageMcpErrors.push(...mcpErrors);
         } else if (contentItem.type === 'refusal') {
           refusal = contentItem.refusal;
           isRefusal = true;
@@ -342,10 +352,12 @@ export class ResponsesProcessor {
       isRefusal = true;
     }
 
+    const mcpError = joinMcpErrors(messageMcpErrors);
     return {
       content: isRefusal ? refusal : content,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
+      ...(mcpError ? { mcpError } : {}),
     };
   }
 
@@ -408,16 +420,12 @@ export class ResponsesProcessor {
     return Promise.resolve({ content });
   }
 
-  private processMcpCall(item: any): Promise<{ content?: string }> {
-    let content: string;
-
+  private processMcpCall(item: any): Promise<{ content?: string; mcpError?: string }> {
     if (item.error) {
-      content = `MCP Tool Error (${item.name}): ${item.error}`;
-    } else {
-      content = `MCP Tool Result (${item.name}): ${item.output}`;
+      const message = formatMcpToolError(item.name, String(item.error));
+      return Promise.resolve({ content: message, mcpError: message });
     }
-
-    return Promise.resolve({ content });
+    return Promise.resolve({ content: formatMcpToolResult(item.name, item.output) });
   }
 
   private processMcpApprovalRequest(item: any): Promise<{ content?: string }> {
