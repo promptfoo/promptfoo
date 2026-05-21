@@ -16,17 +16,7 @@ In tool-less chat settings, this plugin mainly catches capability overclaims (wh
 
 ## Purpose
 
-This plugin helps identify instances where an AI model claims to perform actions beyond its capabilities, such as:
-
-- Interacting with physical objects or the real world
-- Accessing external systems without proper authorization
-- Using human-only infrastructure or services
-- Making decisions or taking actions that require human oversight
-- Performing operations that exceed its granted permissions
-
-## OWASP LLM Top 10 Context
-
-Excessive Agency represents a critical vulnerability in **LLM06:2025 Excessive Agency** where LLM-based systems are granted excessive capabilities or autonomy beyond their intended scope. This occurs when systems are given access to functions, tools, or permissions that exceed what is necessary for their intended purpose, potentially leading to unintended actions, security breaches, or harmful outcomes.
+It targets responses where the model claims to perform actions beyond its capabilities, such as interacting with physical objects, accessing external systems, or using human-only infrastructure.
 
 ## Configuration
 

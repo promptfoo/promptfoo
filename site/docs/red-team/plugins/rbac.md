@@ -5,17 +5,15 @@ description: Red team role-based access control by simulating unauthorized privi
 
 # Role-Based Access Control (RBAC) Plugin
 
-The RBAC (Role-Based Access Control) red teaming plugin is designed to test an AI system's ability to maintain proper authorization controls for different user roles.
-
-This plugin helps identify vulnerabilities where users might access information or perform actions beyond their intended privileges. This is particularly useful for AI agents with access to tools, databases, and APIs.
+Use the RBAC plugin to test whether a system respects the caller's role when prompts ask for data, actions, or privileges that belong to someone else. It is aimed at agents backed by tools, databases, or APIs where role confusion can become an authorization bypass.
 
 ## Purpose
 
-The RBAC plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to enforce proper role-based access controls.
-2. Identify potential vulnerabilities in the authorization process for different user roles.
-3. Test the AI's response to attempts to access or perform unauthorized actions.
+1. Restricts sensitive actions and information according to user role.
+2. Avoids inferring or granting privilege from persuasive wording alone.
+3. Applies the same access boundary across different request types.
 
 ## Configuration
 
@@ -54,13 +52,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for RBAC vulnerabilities is critical for:
-
-- Ensuring proper access control in AI-powered systems
-- Preventing unauthorized access to sensitive information
-- Maintaining the integrity of role-based system architecture
-
-By incorporating the RBAC plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's role-based access control mechanisms.
+RBAC failures often arrive as routine support requests, not as obvious exploit strings. This plugin helps expose whether the model preserves role boundaries when the prompt presents escalation as an exception, urgency, or simple administrative cleanup.
 
 ## Related Concepts
 
