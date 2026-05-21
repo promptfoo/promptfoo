@@ -310,7 +310,11 @@ Here's the example output in JSON format:
       "total": 19,
       "prompt": 16,
       "completion": 3
-    }
+    },
+    "durationMs": 1234,
+    "evaluationDurationMs": 1234,
+    "maxConcurrency": 4,
+    "concurrencyUsed": 4
   }
 }
 ```

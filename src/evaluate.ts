@@ -329,9 +329,16 @@ export async function evaluateWithSource(
     constructedTestSuite.prompts,
   );
   const author = getAuthor(suiteAuthor);
+  const evaluateOptions = {
+    isRedteam: Boolean(testSuiteConfig.redteam),
+    ...options,
+  };
   const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
-    : new Eval(unifiedConfig, { author });
+    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, {
+        author,
+        runtimeOptions: evaluateOptions,
+      })
+    : new Eval(unifiedConfig, { author, runtimeOptions: evaluateOptions });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
     doEvaluate(
@@ -340,10 +347,7 @@ export async function evaluateWithSource(
         providerPromptMap: parsedProviderPromptMap,
       },
       evalRecord,
-      {
-        isRedteam: Boolean(testSuiteConfig.redteam),
-        ...options,
-      },
+      evaluateOptions,
     ),
   );
 

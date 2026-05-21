@@ -1223,7 +1223,7 @@ interface EvaluateSummaryV2 {
 
 ### EvaluateStats
 
-EvaluateStats is an object that includes statistics about the evaluation. It includes the number of successful and failed tests, and the total token usage.
+EvaluateStats is an object that includes statistics about the evaluation. It includes the number of successful and failed tests, total token usage, timing, and concurrency information.
 
 ```typescript
 interface EvaluateStats {
@@ -1234,8 +1234,35 @@ interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  maxConcurrency?: number;
+  concurrencyUsed?: number;
+  schedulerMetrics?: SchedulerMetrics;
+}
+
+interface SchedulerMetrics {
+  minConcurrency: number;
+  maxConcurrency: number;
+  finalConcurrency: number;
+  rateLimitHits: number;
+  retriedRequests: number;
+  concurrencyReduced: boolean;
 }
 ```
+
+| Property               | Type                          | Description                                                                                                                     |
+| ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `successes`            | number                        | Number of test cases that passed                                                                                                |
+| `failures`             | number                        | Number of test cases that failed assertions                                                                                     |
+| `errors`               | number                        | Number of test cases that resulted in errors                                                                                    |
+| `tokenUsage`           | Required\<TokenUsage\>        | Aggregated token usage across all test cases                                                                                    |
+| `durationMs`           | number \| undefined           | Total wall-clock time for the evaluation in milliseconds                                                                        |
+| `generationDurationMs` | number \| undefined           | Time spent generating adversarial test cases for red team runs                                                                  |
+| `evaluationDurationMs` | number \| undefined           | Time spent running the evaluation phase                                                                                         |
+| `maxConcurrency`       | number \| undefined           | The configured concurrency from CLI (`-j`), config, or environment before runtime overrides                                     |
+| `concurrencyUsed`      | number \| undefined           | The actual concurrency used during evaluation (may be reduced due to `_conversation` variable usage or `storeOutputAs` options) |
+| `schedulerMetrics`     | SchedulerMetrics \| undefined | Adaptive scheduler metrics, including rate-limit hits, retry attempts, and whether concurrency was reduced                      |
+
+The `maxConcurrency` and `concurrencyUsed` fields help diagnose performance issues. When `concurrencyUsed` is less than `maxConcurrency`, it indicates that the evaluation was forced to run with lower parallelism due to sequential dependencies (e.g., multi-turn conversations or tests that store outputs for later use).
 
 ### EvaluateResult
 

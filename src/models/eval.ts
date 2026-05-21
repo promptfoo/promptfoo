@@ -33,6 +33,7 @@ import {
   type Prompt,
   ResultFailureReason,
   type ResultsFile,
+  type SchedulerMetrics,
   type UnifiedConfig,
 } from '../types/index';
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
@@ -71,6 +72,27 @@ interface TestIndexRow {
 /** Result from queries selecting distinct metadata or variable keys */
 interface MetadataKeyResult {
   key: string;
+}
+
+function isSchedulerMetrics(raw: unknown): raw is SchedulerMetrics {
+  if (!raw || typeof raw !== 'object') {
+    return false;
+  }
+
+  const metrics = raw as Record<string, unknown>;
+  return (
+    typeof metrics.minConcurrency === 'number' &&
+    Number.isFinite(metrics.minConcurrency) &&
+    typeof metrics.maxConcurrency === 'number' &&
+    Number.isFinite(metrics.maxConcurrency) &&
+    typeof metrics.finalConcurrency === 'number' &&
+    Number.isFinite(metrics.finalConcurrency) &&
+    typeof metrics.rateLimitHits === 'number' &&
+    Number.isFinite(metrics.rateLimitHits) &&
+    typeof metrics.retriedRequests === 'number' &&
+    Number.isFinite(metrics.retriedRequests) &&
+    typeof metrics.concurrencyReduced === 'boolean'
+  );
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
@@ -310,6 +332,10 @@ export default class Eval {
   generationDurationMs?: number;
   /** Time spent running the evaluation phase. */
   evaluationDurationMs?: number;
+  /** Actual concurrency used after runtime overrides for serial-only features. */
+  concurrencyUsed?: number;
+  /** Adaptive scheduler metrics captured at the end of an evaluation. */
+  schedulerMetrics?: SchedulerMetrics;
 
   /**
    * The shareable URL for this evaluation, if it has been shared.
@@ -365,6 +391,16 @@ export default class Eval {
     const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
     const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
     const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+    const rawConcurrencyUsed = resultsObj?.['concurrencyUsed'];
+    const concurrencyUsed =
+      typeof rawConcurrencyUsed === 'number' &&
+      Number.isFinite(rawConcurrencyUsed) &&
+      rawConcurrencyUsed > 0
+        ? rawConcurrencyUsed
+        : undefined;
+    const schedulerMetrics = isSchedulerMetrics(resultsObj?.['schedulerMetrics'])
+      ? resultsObj.schedulerMetrics
+      : undefined;
     // Recompute total if only split fields exist (defensive against partial writes)
     const durationMs =
       rawDurationMs ??
@@ -385,9 +421,13 @@ export default class Eval {
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
+      concurrencyUsed,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
+    }
+    if (schedulerMetrics) {
+      evalInstance.setSchedulerMetrics(schedulerMetrics);
     }
 
     // backfill vars
@@ -576,6 +616,7 @@ export default class Eval {
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
+      concurrencyUsed?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -593,6 +634,7 @@ export default class Eval {
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
+    this.concurrencyUsed = opts?.concurrencyUsed;
   }
 
   version() {
@@ -631,9 +673,11 @@ export default class Eval {
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
-      this.evaluationDurationMs !== undefined
+      this.evaluationDurationMs !== undefined ||
+      this.concurrencyUsed !== undefined ||
+      this.schedulerMetrics !== undefined
     ) {
-      // For V4 evals, atomically merge duration fields into the results column
+      // For V4 evals, atomically merge stats into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
       // Guard against malformed or non-object JSON (arrays, strings, null) in legacy rows.
       let expr: SQL = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
@@ -645,6 +689,12 @@ export default class Eval {
       }
       if (this.evaluationDurationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.concurrencyUsed !== undefined) {
+        expr = sql`json_set(${expr}, '$.concurrencyUsed', ${this.concurrencyUsed})`;
+      }
+      if (this.schedulerMetrics !== undefined) {
+        expr = sql`json_set(${expr}, '$.schedulerMetrics', json(${JSON.stringify(this.schedulerMetrics)}))`;
       }
       updateObj.results = expr;
     }
@@ -676,6 +726,16 @@ export default class Eval {
     }
     this.generationDurationMs = durationMs;
     this.durationMs = durationMs + (this.evaluationDurationMs ?? 0);
+  }
+
+  setConcurrencyUsed(concurrency: number) {
+    if (Number.isFinite(concurrency) && concurrency > 0) {
+      this.concurrencyUsed = concurrency;
+    }
+  }
+
+  setSchedulerMetrics(metrics: SchedulerMetrics) {
+    this.schedulerMetrics = metrics;
   }
 
   getPrompts() {
@@ -1230,6 +1290,14 @@ export default class Eval {
   }
 
   getStats(): EvaluateStats {
+    const rawMaxConcurrency = this.runtimeOptions?.maxConcurrency;
+    const maxConcurrency =
+      typeof rawMaxConcurrency === 'number' &&
+      Number.isFinite(rawMaxConcurrency) &&
+      rawMaxConcurrency > 0
+        ? rawMaxConcurrency
+        : undefined;
+
     const stats: EvaluateStats = {
       successes: 0,
       failures: 0,
@@ -1238,6 +1306,9 @@ export default class Eval {
       durationMs: this.durationMs,
       generationDurationMs: this.generationDurationMs,
       evaluationDurationMs: this.evaluationDurationMs,
+      maxConcurrency,
+      concurrencyUsed: this.concurrencyUsed,
+      schedulerMetrics: this.schedulerMetrics,
     };
 
     for (const prompt of this.prompts) {

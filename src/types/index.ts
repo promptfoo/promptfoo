@@ -459,6 +459,21 @@ export interface EvaluateTable {
   body: EvaluateTableRow[];
 }
 
+export interface SchedulerMetrics {
+  /** Lowest concurrency observed during the evaluation */
+  minConcurrency: number;
+  /** Highest concurrency observed during the evaluation */
+  maxConcurrency: number;
+  /** Final concurrency when the evaluation completed */
+  finalConcurrency: number;
+  /** Total 429 rate limit errors encountered */
+  rateLimitHits: number;
+  /** Total retry attempts */
+  retriedRequests: number;
+  /** True if adaptive scheduler reduced concurrency due to rate limits */
+  concurrencyReduced: boolean;
+}
+
 export interface EvaluateStats {
   successes: number;
   failures: number;
@@ -467,6 +482,12 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  /** The configured/requested concurrency from CLI, config, or env before runtime overrides */
+  maxConcurrency?: number;
+  /** The actual concurrency used during evaluation after runtime overrides */
+  concurrencyUsed?: number;
+  /** Runtime metrics from the adaptive scheduler */
+  schedulerMetrics?: SchedulerMetrics;
 }
 
 export interface EvaluateSummaryV3 {

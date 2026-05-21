@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import type { EvaluateStats, ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
 const { mockShowToast, mockSetSearchParams } = vi.hoisted(() => ({
@@ -2763,6 +2763,204 @@ describe('ResultsView Duration Display', () => {
     await waitFor(() => {
       expect(screen.getAllByText('10m').length).toBeGreaterThanOrEqual(1);
     });
+  });
+});
+
+describe('ResultsView Concurrency Display', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+  const mockRecentEvals: ResultLightweightWithLabel[] = [
+    {
+      evalId: 'eval-1',
+      datasetId: null,
+      label: 'Evaluation 1',
+      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
+      description: 'Test evaluation 1',
+      numTests: 5,
+    },
+  ];
+
+  const renderWithStats = (stats: EvaluateStats | null) => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats,
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+  });
+
+  it('should display "X parallel" badge for normal runs (concurrency > 1, no rate limits)', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      maxConcurrency: 8,
+      concurrencyUsed: 8,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/8 parallel/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText(/Sequential/)).toBeNull();
+  });
+
+  it('should display "Rate limited" badge when schedulerMetrics.concurrencyReduced is true', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      maxConcurrency: 8,
+      concurrencyUsed: 4,
+      schedulerMetrics: {
+        minConcurrency: 2,
+        maxConcurrency: 8,
+        finalConcurrency: 4,
+        rateLimitHits: 5,
+        retriedRequests: 3,
+        concurrencyReduced: true,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Rate limited/)).toBeInTheDocument();
+      expect(screen.getByText(/8 → 4/)).toBeInTheDocument();
+    });
+  });
+
+  it('should display "Sequential" badge when concurrencyUsed is 1 and maxConcurrency > 1', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      maxConcurrency: 8,
+      concurrencyUsed: 1,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Sequential')).toBeInTheDocument();
+    });
+  });
+
+  it('should NOT display Sequential badge when concurrencyUsed is 1 and maxConcurrency is 1', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      maxConcurrency: 1,
+      concurrencyUsed: 1,
+    });
+
+    expect(screen.queryByText('Sequential')).toBeNull();
+  });
+
+  it('should display "Rate limited" badge instead of "Sequential" when rate limits caused reduction to 1', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      maxConcurrency: 8,
+      concurrencyUsed: 1,
+      schedulerMetrics: {
+        minConcurrency: 1,
+        maxConcurrency: 8,
+        finalConcurrency: 1,
+        rateLimitHits: 10,
+        retriedRequests: 5,
+        concurrencyReduced: true,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Rate limited/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Sequential')).toBeNull();
+  });
+
+  it('should not display any concurrency-related badge when stats is null', async () => {
+    renderWithStats(null);
+
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
+    expect(screen.queryByText(/parallel/)).toBeNull();
+  });
+
+  it('should display "X max" fallback badge for old evals with maxConcurrency but no concurrencyUsed', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      maxConcurrency: 4,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/4 max/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
+    expect(screen.queryByText(/parallel/)).toBeNull();
+  });
+
+  it('should display duration badge for normal parallel runs', async () => {
+    renderWithStats({
+      successes: 10,
+      failures: 5,
+      errors: 0,
+      tokenUsage: {} as any,
+      durationMs: 45000,
+      maxConcurrency: 8,
+      concurrencyUsed: 4,
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('45.0s').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/4 parallel/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Rate limited/)).toBeNull();
+    expect(screen.queryByText('Sequential')).toBeNull();
   });
 });
 

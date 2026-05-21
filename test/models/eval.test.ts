@@ -15,7 +15,7 @@ import Eval, {
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 
-import type { Prompt } from '../../src/types/index';
+import type { Prompt, SchedulerMetrics } from '../../src/types/index';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -434,6 +434,59 @@ describe('evaluator', () => {
       expect(persistedEval?.durationMs).toBe(15000);
     });
 
+    it('should extract valid concurrency stats from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      const schedulerMetrics: SchedulerMetrics = {
+        minConcurrency: 2,
+        maxConcurrency: 8,
+        finalConcurrency: 4,
+        rateLimitHits: 3,
+        retriedRequests: 2,
+        concurrencyReduced: true,
+      };
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ concurrencyUsed: 4, schedulerMetrics })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.concurrencyUsed).toBe(4);
+      expect(persistedEval?.schedulerMetrics).toEqual(schedulerMetrics);
+      expect(persistedEval?.getStats()).toEqual(
+        expect.objectContaining({
+          concurrencyUsed: 4,
+          schedulerMetrics,
+        }),
+      );
+    });
+
+    it('should ignore invalid concurrencyUsed in database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ concurrencyUsed: -1 })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.concurrencyUsed).toBeUndefined();
+      expect(persistedEval?.getStats().concurrencyUsed).toBeUndefined();
+    });
+
+    it('should ignore invalid schedulerMetrics in database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ schedulerMetrics: 'invalid' })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.schedulerMetrics).toBeUndefined();
+      expect(persistedEval?.getStats().schedulerMetrics).toBeUndefined();
+    });
+
     it('should handle missing generationDurationMs and evaluationDurationMs in database', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
@@ -491,8 +544,16 @@ describe('evaluator', () => {
       expect(persistedEval?.evaluationDurationMs).toBe(5000);
     });
 
-    it('should preserve existing keys in results JSON when saving duration fields', async () => {
+    it('should preserve existing keys in results JSON when saving stats fields', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
+      const schedulerMetrics: SchedulerMetrics = {
+        minConcurrency: 2,
+        maxConcurrency: 5,
+        finalConcurrency: 3,
+        rateLimitHits: 1,
+        retriedRequests: 1,
+        concurrencyReduced: true,
+      };
 
       // Seed the results column with an extra key (simulating future fields or other data)
       const db = getDb();
@@ -501,6 +562,8 @@ describe('evaluator', () => {
       );
 
       eval1.setDurationMs(5000);
+      eval1.setConcurrencyUsed(3);
+      eval1.setSchedulerMetrics(schedulerMetrics);
       await eval1.save();
 
       // Verify duration fields were written AND the extra key survived
@@ -511,6 +574,8 @@ describe('evaluator', () => {
       expect(results.someOtherKey).toBe('preserve-me');
       expect(results.durationMs).toBe(5000);
       expect(results.evaluationDurationMs).toBe(5000);
+      expect(results.concurrencyUsed).toBe(3);
+      expect(results.schedulerMetrics).toEqual(schedulerMetrics);
     });
 
     it('should recover from malformed JSON in results column', async () => {
@@ -780,6 +845,20 @@ describe('evaluator', () => {
       expect(stats.generationDurationMs).toBe(10000);
       expect(stats.evaluationDurationMs).toBe(5000);
       expect(stats.durationMs).toBe(15000);
+    });
+
+    it('should include configured and actual concurrency in stats', () => {
+      const eval1 = new Eval(
+        {},
+        {
+          runtimeOptions: { maxConcurrency: 8 },
+          concurrencyUsed: 4,
+        },
+      );
+
+      const stats = eval1.getStats();
+      expect(stats.maxConcurrency).toBe(8);
+      expect(stats.concurrencyUsed).toBe(4);
     });
   });
 

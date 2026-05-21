@@ -122,6 +122,7 @@ describeEvaluator('evaluator execution control', () => {
   type ConcurrencyProbe = {
     maxActiveCalls: number;
     callApi: ReturnType<typeof vi.fn>;
+    evalRecord: Eval;
   };
 
   async function runConcurrencyProbe(rawPrompt: string, testCount = 4): Promise<ConcurrencyProbe> {
@@ -183,7 +184,7 @@ describeEvaluator('evaluator execution control', () => {
     releaseHold?.();
     // Suppress unused-variable lint noise for holdPromise.
     holdPromise = holdPromise.then(() => undefined);
-    return { maxActiveCalls, callApi };
+    return { maxActiveCalls, callApi, evalRecord };
   }
 
   it('does not force concurrency to 1 for _conversation substrings', async () => {
@@ -195,12 +196,21 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('forces concurrency to 1 for real _conversation template references', async () => {
-    const { maxActiveCalls } = await runConcurrencyProbe(
+    const { evalRecord, maxActiveCalls } = await runConcurrencyProbe(
       '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
       2,
     );
 
     expect(maxActiveCalls).toBe(1);
+    expect(evalRecord.concurrencyUsed).toBe(1);
+    expect(evalRecord.schedulerMetrics).toEqual(
+      expect.objectContaining({
+        minConcurrency: 1,
+        maxConcurrency: 1,
+        finalConcurrency: 1,
+        concurrencyReduced: false,
+      }),
+    );
   });
 
   it('falls back to serial execution when a prompt that mentions _conversation fails to parse', async () => {
@@ -405,6 +415,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -482,6 +494,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -548,6 +562,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -643,6 +659,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -728,6 +746,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -809,6 +829,8 @@ describeEvaluator('evaluator execution control', () => {
       getResults: vi.fn().mockResolvedValue(results),
       save: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
       setVars: vi.fn(),
       toEvaluateSummary: vi.fn(),
     };

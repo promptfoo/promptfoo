@@ -23,7 +23,19 @@ import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart,
+  Copy,
+  Edit,
+  Eye,
+  Layers,
+  Play,
+  Settings,
+  Share,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
@@ -256,6 +268,7 @@ export default function ResultsView({
     totalResultsCount,
     highlightedResultsCount,
     userRatedResultsCount,
+    stats,
     filters,
     removeFilter,
   } = useTableStore();
@@ -271,8 +284,8 @@ export default function ResultsView({
     showInferenceDetails,
     comparisonEvalIds,
     setComparisonEvalIds,
-    hiddenVarNamesBySchema,
-    setHiddenVarNamesForSchema,
+    hiddenVarNamesBySchema = {},
+    setHiddenVarNamesForSchema = () => {},
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -928,6 +941,79 @@ export default function ResultsView({
                         </TooltipContent>
                       </Tooltip>
                     )}
+                    {stats?.schedulerMetrics?.concurrencyReduced && (
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Badge className="bg-amber-50 text-amber-700 border border-amber-200 font-medium dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
+                            <AlertTriangle className="size-3.5 mr-1" />
+                            Rate limited ({stats.schedulerMetrics.maxConcurrency} →{' '}
+                            {stats.schedulerMetrics.finalConcurrency})
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-sm">
+                            <div>Concurrency reduced due to rate limits</div>
+                            <div className="text-muted-foreground">
+                              {stats.schedulerMetrics.rateLimitHits} rate limit
+                              {stats.schedulerMetrics.rateLimitHits === 1 ? '' : 's'} ·{' '}
+                              {stats.schedulerMetrics.retriedRequests} retried
+                            </div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {stats?.concurrencyUsed === 1 &&
+                      (stats.maxConcurrency ?? 0) > 1 &&
+                      !stats.schedulerMetrics?.concurrencyReduced && (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                              Sequential
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Running one test at a time due to conversation mode or storeOutputAs
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    {stats?.concurrencyUsed != null &&
+                      stats.concurrencyUsed > 1 &&
+                      !stats.schedulerMetrics?.concurrencyReduced && (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                              <Layers className="size-3.5 mr-1" />
+                              {stats.concurrencyUsed} parallel
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-sm">
+                              <div>Effective concurrency: {stats.concurrencyUsed}</div>
+                              {stats.maxConcurrency != null && (
+                                <div className="text-muted-foreground">
+                                  Configured maximum: {stats.maxConcurrency}
+                                </div>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    {stats?.concurrencyUsed == null &&
+                      stats?.maxConcurrency != null &&
+                      stats.maxConcurrency > 1 &&
+                      !stats.schedulerMetrics?.concurrencyReduced && (
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Badge className="bg-slate-50 text-slate-700 border border-slate-200 font-medium dark:bg-slate-950/30 dark:text-slate-300 dark:border-slate-800">
+                              <Layers className="size-3.5 mr-1" />
+                              {stats.maxConcurrency} max
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Configured to run up to {stats.maxConcurrency} tests at a time
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                   </div>
                 </div>
               )}
