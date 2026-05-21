@@ -234,6 +234,9 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should show prompt-extraction-specific field
       expect(screen.getByLabelText('System Prompt')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Configure System Prompt Disclosure' }),
+      ).toBeInTheDocument();
 
       // Should ALSO show gradingGuidance field
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();

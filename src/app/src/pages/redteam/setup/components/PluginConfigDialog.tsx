@@ -12,6 +12,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
+import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -368,7 +369,7 @@ export default function PluginConfigDialog({
     if (plugin === 'intent') {
       return 'View Custom Intents';
     }
-    return `Configure ${plugin}`;
+    return `Configure ${getPluginDisplayName(plugin)}`;
   };
 
   return (
@@ -388,6 +389,14 @@ export default function PluginConfigDialog({
     </Dialog>
   );
 }
+
+const getPluginDisplayName = (plugin: Plugin | null) => {
+  if (!plugin) {
+    return '';
+  }
+
+  return displayNameOverrides[plugin] || categoryAliases[plugin] || plugin;
+};
 
 const arrayKeyToLabel = (key: string) => {
   switch (key) {
