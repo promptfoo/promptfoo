@@ -659,9 +659,7 @@ export class CrescendoProvider implements ApiProvider {
               getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined,
-              gradingContext
-                ? { ...gradingContext, iteration: roundNum, traceparent: context?.traceparent }
-                : { iteration: roundNum, traceparent: context?.traceparent },
+              { ...gradingContext, iteration: roundNum, traceparent: context?.traceparent },
             );
 
             graderPassed = grade.pass;

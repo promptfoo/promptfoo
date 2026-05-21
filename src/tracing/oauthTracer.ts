@@ -185,7 +185,7 @@ export async function withOAuthSpan<T>(
   const method = ctx.method ?? (ctx.operation === 'discovery' ? 'GET' : 'POST');
 
   // Span name follows HTTP convention: "{METHOD} {path}"
-  let spanName = `${method}`;
+  let spanName: string;
   try {
     const url = new URL(ctx.url);
     spanName = `${method} ${url.pathname}`;

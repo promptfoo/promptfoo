@@ -29,6 +29,7 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isClaudeOpus47Model } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
+import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -1442,8 +1443,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   ): Promise<{ output: string; error?: string }> {
     try {
       const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
-      if (mcpResult?.error) {
-        const msg = formatMcpToolError(name, String(mcpResult.error));
+      if (isMcpErrorResult(mcpResult)) {
+        const msg = formatMcpToolError(name, getMcpErrorMessage(mcpResult));
         return { output: msg, error: msg };
       }
       return { output: formatMcpToolResult(name, mcpResult?.content) };

@@ -442,9 +442,11 @@ export class MCPClient {
                   requestOptions,
                 );
 
+                // Handle different content types appropriately
                 let content = '';
                 if (result?.content) {
                   if (typeof result.content === 'string') {
+                    // Try to parse JSON first, fall back to raw string
                     try {
                       const parsed = JSON.parse(result.content);
                       content = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
@@ -460,11 +462,14 @@ export class MCPClient {
 
                 return {
                   content,
+                  ...(result.isError ? { isError: true } : {}),
                   raw: result,
                 };
               } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error);
 
+                // Check if this is an auth error and we have OAuth config for this server
+                // This is a fallback in case the proactive refresh didn't catch an expired token
                 const isAuthError =
                   errorMessage.includes('401') ||
                   errorMessage.includes('Unauthorized') ||
@@ -479,10 +484,11 @@ export class MCPClient {
                   retried = true;
                   try {
                     await this.refreshOAuthToken(serverKey, oauthConfig, true);
+                    // Get the new client after reconnection
                     const newClient = this.clients.get(serverKey);
                     if (newClient) {
                       currentClient = newClient;
-                      continue;
+                      continue; // Retry with new token
                     }
                   } catch (refreshError) {
                     const refreshErrorMsg =
