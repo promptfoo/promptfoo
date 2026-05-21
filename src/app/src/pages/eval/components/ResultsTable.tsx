@@ -71,7 +71,12 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals } from './utils';
+import {
+  getNamedMetricTotals,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 function addPercentageMetricTotal(totals: Record<string, number>, assertion: AssertionOrSet): void {
   if (!assertion.metric || isValueMetricAssertion(assertion)) {
@@ -1497,6 +1502,7 @@ interface ResultsTableProps {
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
+  originalRowPositionIndex?: number;
   originalPromptIndex?: number;
 }
 
@@ -1636,6 +1642,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1729,7 +1736,9 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
+    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1738,6 +1747,7 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
+              originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
@@ -1821,6 +1831,21 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
+  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
+  // below reads from each, and if either source still resolves to a row, the next paginate
+  // tick would bounce the user back to the deep-linked page.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('rowId')) {
+      url.searchParams.delete('rowId');
+      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+    }
+    if (parseEvalOutputPromptHash(window.location.hash)) {
+      setEvalDetailsHash('');
+    }
+  }, [navigate]);
+
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
@@ -1858,11 +1883,19 @@ function ResultsTable({
     );
   }, [filters.values]);
 
+  const hasMountedResultSetResetRef = useRef(false);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
+    if (!hasMountedResultSetResetRef.current) {
+      hasMountedResultSetResetRef.current = true;
+      return;
+    }
+
+    clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -2150,7 +2183,12 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.index}
+                    rowIndex={
+                      info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
+                    }
+                    rowPositionIndex={
+                      output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
+                    }
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2246,22 +2284,20 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  const clearRowIdFromUrl = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
-    }
-  }, [navigate]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
+    const detailsHashTarget = parseEvalOutputPromptHash(locationHash);
     const rowId = params['rowId'];
+    const rowIndexFromQuery =
+      rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
+    // Copied detail links carry both forms:
+    // - `rowId` is the filtered-table position used to resolve the correct page.
+    // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
+    const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
 
-    if (rowId && Number.isInteger(Number(rowId))) {
-      const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
+    if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
+      const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -2331,7 +2367,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount, locationHash]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.
@@ -2553,7 +2589,7 @@ function ResultsTable({
                     ...prev,
                     pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                   }));
-                  clearRowIdFromUrl();
+                  clearRowDeepLink();
                 }
               }}
               className="w-[60px] h-8 text-center"
@@ -2576,7 +2612,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -2593,7 +2629,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
