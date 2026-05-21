@@ -15,12 +15,15 @@ function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
     return [];
   }
 
+  // skill-used counts only successful invocations, so errored skill calls are
+  // dropped. not-skill-used must still flag a forbidden skill that was invoked
+  // and merely errored, so the inverse path keeps errored calls.
   return rawSkillCalls.filter(
     (entry): entry is SkillCallEntry =>
       Boolean(entry) &&
       typeof entry === 'object' &&
       typeof entry.name === 'string' &&
-      entry.is_error !== true,
+      (params.inverse === true || entry.is_error !== true),
   );
 }
 
