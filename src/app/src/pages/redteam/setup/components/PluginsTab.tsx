@@ -166,6 +166,20 @@ for (const [category, plugins] of Object.entries(riskCategories)) {
   }
 }
 
+function hasNonEmptyStringList(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .some(Boolean);
+  }
+
+  return (
+    Array.isArray(value) &&
+    value.some((entry) => typeof entry === 'string' && entry.trim().length > 0)
+  );
+}
+
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
   handlePluginToggle: (plugin: Plugin) => void;
@@ -235,6 +249,13 @@ export default function PluginsTab({
       }
       const config = pluginConfig[plugin];
       if (!config || Object.keys(config).length === 0) {
+        return false;
+      }
+      if (
+        plugin === 'privacy:rights-request-workflow-integrity' &&
+        !hasNonEmptyStringList(config.geographies) &&
+        !hasNonEmptyStringList(config.frameworks)
+      ) {
         return false;
       }
 

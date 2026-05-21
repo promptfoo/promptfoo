@@ -10,6 +10,14 @@ describe('requiresPluginConfig', () => {
     expect(requiresPluginConfig('prompt-extraction')).toBe(true);
   });
 
+  it('should return true for privacy-policy-consistency plugin', () => {
+    expect(requiresPluginConfig('privacy-policy-consistency')).toBe(true);
+  });
+
+  it('should return true for privacy rights workflow plugin', () => {
+    expect(requiresPluginConfig('privacy:rights-request-workflow-integrity')).toBe(true);
+  });
+
   it('should return false for plugins that do not require config', () => {
     expect(requiresPluginConfig('bola')).toBe(false);
     expect(requiresPluginConfig('harmful:hate')).toBe(false);
@@ -39,7 +47,11 @@ describe('requiresPluginConfig', () => {
     if (requiresPluginConfig(plugin)) {
       // TypeScript should narrow the type to PluginRequiringConfig
       // This is a type-level test - if it compiles, the type guard works
-      const narrowedPlugin: 'indirect-prompt-injection' | 'prompt-extraction' = plugin;
+      const narrowedPlugin:
+        | 'indirect-prompt-injection'
+        | 'privacy-policy-consistency'
+        | 'privacy:rights-request-workflow-integrity'
+        | 'prompt-extraction' = plugin;
       expect(narrowedPlugin).toBe('indirect-prompt-injection');
     }
   });

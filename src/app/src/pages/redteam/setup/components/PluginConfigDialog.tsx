@@ -19,6 +19,11 @@ import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
+const PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS = [
+  { id: 'california-ccpa', label: 'California CCPA' },
+  { id: 'eu-gdpr', label: 'EU GDPR' },
+] as const;
+
 interface PluginConfigDialogProps {
   open: boolean;
   plugin: Plugin | null;
@@ -89,6 +94,19 @@ export default function PluginConfigDialog({
 
   const hasEmptyArrayItems = (array: string[] | undefined) => {
     return array?.some((item) => item.trim() === '') ?? false;
+  };
+
+  const togglePrivacyRightsGeography = (geography: string, checked: boolean) => {
+    setLocalConfig((prev) => {
+      const current = Array.isArray(prev.geographies) ? (prev.geographies as string[]) : [];
+      const geographies = checked
+        ? [...new Set([...current, geography])]
+        : current.filter((entry) => entry !== geography);
+      return {
+        ...prev,
+        geographies,
+      };
+    });
   };
 
   const renderConfigInputs = () => {
@@ -199,6 +217,76 @@ export default function PluginConfigDialog({
                 value={(localConfig[key] as string) || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
               />
+            </div>
+          </div>
+        );
+        break;
+      case 'privacy-policy-consistency':
+        specificConfig = (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The Privacy Policy Consistency plugin tries to get your app or agent to behave in ways
+              that deviate from your actual privacy policy. Provide a file:// reference so grading
+              can compare responses, claimed actions, and tool behavior against the policy.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="privacy-policy">Privacy Policy</Label>
+              <Textarea
+                id="privacy-policy"
+                className="min-h-[160px]"
+                placeholder="file://privacy-policy.md"
+                value={(localConfig.privacyPolicy as string) || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
+              />
+            </div>
+          </div>
+        );
+        break;
+      case 'privacy:rights-request-workflow-integrity':
+        specificConfig = (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Test whether an AI app or agent safely handles privacy-rights and privacy-choice
+              workflows for the privacy geographies where you deploy it. Output-only scans can catch
+              unsafe responses; workflow, trace, and state context improves downstream integrity
+              checks.
+            </p>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Privacy Geographies</p>
+              <p className="text-sm text-muted-foreground">
+                Select at least one geography. Promptfoo generates a separate batch for each
+                selected profile.
+              </p>
+              {PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS.map(({ id, label }) => (
+                <label key={id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    aria-label={label}
+                    checked={
+                      Array.isArray(localConfig.geographies) &&
+                      (localConfig.geographies as string[]).includes(id)
+                    }
+                    onChange={(e) => togglePrivacyRightsGeography(id, e.target.checked)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="privacy-rights-workflow">Rights Workflow Evidence (Optional)</Label>
+              <Textarea
+                id="privacy-rights-workflow"
+                className="min-h-[100px]"
+                placeholder="file://privacy-rights-workflow.md"
+                value={(localConfig.rightsRequestPolicy as string) || ''}
+                onChange={(e) =>
+                  setLocalConfig({ ...localConfig, rightsRequestPolicy: e.target.value })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Provide a file:// rights workflow reference when generation and grading should use
+                your routing, verification, and status rules.
+              </p>
             </div>
           </div>
         );

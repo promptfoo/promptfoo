@@ -31,6 +31,10 @@ import {
   subCategoryDescriptions,
 } from '../constants';
 import { ProbeLimitExceededError } from '../types';
+import {
+  PRIVACY_RIGHTS_GEOGRAPHIES,
+  PRIVACY_RIGHTS_GEOGRAPHY_PROFILES,
+} from '../constants/privacy';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
@@ -204,6 +208,23 @@ export function renderRedteamConfig({
     purpose,
     strategies,
   });
+}
+
+export async function configurePrivacyRightsRequestWorkflowIntegrityPlugin(): Promise<RedteamPluginObject> {
+  const geographies = await checkbox({
+    message:
+      'You selected the `privacy:rights-request-workflow-integrity` plugin. Select the privacy geographies this app should support:',
+    choices: PRIVACY_RIGHTS_GEOGRAPHIES.map((geography) => ({
+      name: PRIVACY_RIGHTS_GEOGRAPHY_PROFILES[geography].displayName,
+      value: geography,
+    })),
+    validate: (answer) => answer.length > 0 || 'Select at least one privacy geography.',
+  });
+
+  return {
+    id: 'privacy:rights-request-workflow-integrity',
+    config: { geographies },
+  } as RedteamPluginObject;
 }
 
 export async function redteamInit(directory: string | undefined) {
@@ -454,6 +475,35 @@ export async function redteamInit(directory: string | undefined) {
       id: 'prompt-extraction',
       config: { systemPrompt: prompts[0] },
     } as RedteamPluginObject);
+  }
+
+  if (plugins.includes('privacy-policy-consistency')) {
+    plugins = plugins.filter((p) => p !== 'privacy-policy-consistency');
+
+    recordOnboardingStep('collect privacy policy reference');
+    const privacyPolicy = await editor({
+      message:
+        'You selected the `privacy-policy-consistency` plugin. Enter a file:// reference to your privacy policy, or leave empty to skip.',
+    });
+    recordOnboardingStep('choose privacy policy', { value: privacyPolicy.length });
+
+    if (privacyPolicy.trim() !== '') {
+      plugins.push({
+        id: 'privacy-policy-consistency',
+        config: { privacyPolicy: privacyPolicy.trim() },
+      } as RedteamPluginObject);
+    }
+  }
+
+  if (plugins.includes('privacy:rights-request-workflow-integrity')) {
+    plugins = plugins.filter((p) => p !== 'privacy:rights-request-workflow-integrity');
+
+    recordOnboardingStep('collect privacy rights geographies');
+    const privacyRightsPlugin = await configurePrivacyRightsRequestWorkflowIntegrityPlugin();
+    recordOnboardingStep('choose privacy rights geographies', {
+      value: privacyRightsPlugin.config?.geographies,
+    });
+    plugins.push(privacyRightsPlugin);
   }
 
   if (plugins.includes('indirect-prompt-injection')) {

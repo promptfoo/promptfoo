@@ -836,6 +836,34 @@ describe('PluginsTab', () => {
         ).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Remove Aegis Dataset' })).toBeInTheDocument();
       });
+
+      test('Treats legacy privacy rights framework config as configured', async () => {
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: [
+                {
+                  id: 'privacy:rights-request-workflow-integrity',
+                  config: { frameworks: ['gdpr'] },
+                },
+              ],
+            },
+          });
+        });
+
+        renderComponent();
+
+        expect(
+          screen.getByTestId('selected-plugin-privacy:rights-request-workflow-integrity'),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByTestId(
+            'selected-plugin-needs-config-privacy:rights-request-workflow-integrity',
+          ),
+        ).not.toBeInTheDocument();
+      });
     });
   });
 

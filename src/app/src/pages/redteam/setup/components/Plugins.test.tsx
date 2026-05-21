@@ -257,6 +257,29 @@ describe('Plugins', () => {
     expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument();
   });
 
+  it('enables next button for legacy privacy rights framework config', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'privacy:rights-request-workflow-integrity',
+            config: {
+              frameworks: ['ccpa'],
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
   // Custom policy validation tests
   it('enables next button when only custom policies are configured', async () => {
     mockUseRedTeamConfig.mockReturnValue({

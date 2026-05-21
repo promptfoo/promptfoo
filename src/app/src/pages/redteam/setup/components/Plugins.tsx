@@ -31,7 +31,12 @@ interface PluginsProps {
   onBack: () => void;
 }
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+const PLUGINS_REQUIRING_CONFIG = [
+  'indirect-prompt-injection',
+  'privacy-policy-consistency',
+  'privacy:rights-request-workflow-integrity',
+  'prompt-extraction',
+];
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',
@@ -103,6 +108,44 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     </p>
   ),
 };
+
+function hasConfiguredPluginValues(plugin: string, config: PluginConfig | undefined): boolean {
+  if (!config || Object.keys(config).length === 0) {
+    return false;
+  }
+
+  if (
+    plugin === 'privacy:rights-request-workflow-integrity' &&
+    !hasPrivacyRightsGeographyConfig(config)
+  ) {
+    return false;
+  }
+
+  return Object.values(config).every((value) => {
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    return typeof value !== 'string' || value.trim() !== '';
+  });
+}
+
+function hasNonEmptyStringList(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .some(Boolean);
+  }
+
+  return (
+    Array.isArray(value) &&
+    value.some((entry) => typeof entry === 'string' && entry.trim().length > 0)
+  );
+}
+
+function hasPrivacyRightsGeographyConfig(config: PluginConfig): boolean {
+  return hasNonEmptyStringList(config.geographies) || hasNonEmptyStringList(config.frameworks);
+}
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
@@ -243,20 +286,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
 
   const isConfigValid = useCallback(() => {
     for (const plugin of selectedPlugins) {
-      if (PLUGINS_REQUIRING_CONFIG.includes(plugin)) {
-        const config = pluginConfig[plugin];
-        if (!config || Object.keys(config).length === 0) {
-          return false;
-        }
-        for (const key in config) {
-          const value = config[key as keyof PluginConfig];
-          if (Array.isArray(value) && value.length === 0) {
-            return false;
-          }
-          if (typeof value === 'string' && value.trim() === '') {
-            return false;
-          }
-        }
+      if (
+        PLUGINS_REQUIRING_CONFIG.includes(plugin) &&
+        !hasConfiguredPluginValues(plugin, pluginConfig[plugin])
+      ) {
+        return false;
       }
     }
     return true;
@@ -296,21 +330,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       if (!PLUGINS_REQUIRING_CONFIG.includes(plugin) || plugin === 'policy') {
         return true;
       }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
+      return hasConfiguredPluginValues(plugin, pluginConfig[plugin]);
     },
     [pluginConfig],
   );

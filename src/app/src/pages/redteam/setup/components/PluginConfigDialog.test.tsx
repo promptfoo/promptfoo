@@ -241,6 +241,21 @@ describe('PluginConfigDialog - OSS', () => {
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
 
+    it('shows gradingGuidance alongside privacy-policy-consistency config', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy-policy-consistency"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByLabelText('Privacy Policy')).toBeInTheDocument();
+      expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
     it('shows gradingGuidance for plugins without specific config', () => {
       render(
         <PluginConfigDialog
@@ -254,6 +269,36 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should show gradingGuidance field even for plugins with no specific config
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
+    it('saves geography selection for privacy rights workflow integrity', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="privacy:rights-request-workflow-integrity"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('EU GDPR'));
+      await user.type(
+        screen.getByPlaceholderText('file://privacy-rights-workflow.md'),
+        'file://rights-workflow.md',
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'privacy:rights-request-workflow-integrity',
+          expect.objectContaining({
+            geographies: ['eu-gdpr'],
+            rightsRequestPolicy: 'file://rights-workflow.md',
+          }),
+        );
+      });
     });
   });
 
