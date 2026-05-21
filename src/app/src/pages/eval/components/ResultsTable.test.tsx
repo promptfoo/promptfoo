@@ -61,14 +61,21 @@ vi.mock('./EvalOutputCell', () => {
     ({
       onRating,
       rowIndex,
+      rowPositionIndex,
       searchText,
     }: {
       onRating: any;
       rowIndex?: number;
+      rowPositionIndex?: number;
       searchText?: string;
     }) => {
       return (
-        <div data-testid="eval-output-cell" data-rowindex={rowIndex} data-searchtext={searchText}>
+        <div
+          data-testid="eval-output-cell"
+          data-rowindex={rowIndex}
+          data-rowpositionindex={rowPositionIndex}
+          data-searchtext={searchText}
+        >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
           </button>
@@ -1056,7 +1063,11 @@ describe('ResultsTable Row Navigation', () => {
   });
 
   // Renders ResultsTable wired up with a deep-link to row 51 (page 2 with pageSize 50).
-  const setupDeepLinkedTable = (initialUrl: string, mockFetchEvalData = vi.fn()) => {
+  const setupDeepLinkedTable = (
+    initialUrl: string,
+    mockFetchEvalData = vi.fn(),
+    filteredResultsCount = 120,
+  ) => {
     window.history.replaceState({}, '', initialUrl);
 
     vi.mocked(useTableStore).mockImplementation(() => ({
@@ -1093,7 +1104,7 @@ describe('ResultsTable Row Navigation', () => {
       },
       version: 4,
       fetchEvalData: mockFetchEvalData,
-      filteredResultsCount: 120,
+      filteredResultsCount,
       totalResultsCount: 120,
       filters: {
         values: {},
@@ -1139,6 +1150,23 @@ describe('ResultsTable Row Navigation', () => {
     });
 
     expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
+
+  it('does not request a negative page when a details hash has no filtered rows', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1', vi.fn(), 0);
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: -1,
+      }),
+    );
   });
 
   it('uses rowId pagination when a details hash keeps a stable test index', async () => {
@@ -1225,6 +1253,55 @@ describe('ResultsTable Row Navigation', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '50');
+  });
+
+  it('falls back to the loaded row index when legacy rows omit a test index', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
   });
 
   // Regression test for the pagination-trap bug introduced when locationHash was kept in

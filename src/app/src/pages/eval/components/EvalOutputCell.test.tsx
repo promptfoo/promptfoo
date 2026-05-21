@@ -255,13 +255,14 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.testKey).toBe('testValue');
   });
 
-  it('adds a details hash when the prompt dialog opens', async () => {
+  it('adds row and details hints when the prompt dialog opens', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+    renderWithProviders(<EvalOutputCell {...defaultProps} rowPositionIndex={50} />);
 
     await user.click(screen.getByRole('button', { name: /view output and test details/i }));
 
+    expect(window.location.search).toBe('?rowId=51');
     expect(window.location.hash).toBe('#details-row-1-prompt-1');
   });
 

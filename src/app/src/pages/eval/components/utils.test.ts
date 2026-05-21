@@ -137,6 +137,17 @@ describe('eval-details hash store', () => {
     expect(window.location.hash).toBe('#details-row-4-prompt-2');
   });
 
+  it('adds a stable row hint while mutating the details hash', () => {
+    window.history.replaceState({}, '', '/eval/x');
+
+    act(() => {
+      setEvalDetailsHash('#details-row-51-prompt-2', 50);
+    });
+
+    expect(window.location.search).toBe('?rowId=51');
+    expect(window.location.hash).toBe('#details-row-51-prompt-2');
+  });
+
   it('coordinates updates across multiple subscribers', () => {
     const { result: a } = renderHook(() => useEvalDetailsHash());
     const { result: b } = renderHook(() => useEvalDetailsHash());

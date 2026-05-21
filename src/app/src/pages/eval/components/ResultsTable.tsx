@@ -1469,6 +1469,7 @@ interface ResultsTableProps {
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
+  originalRowPositionIndex?: number;
   originalPromptIndex?: number;
 }
 
@@ -1702,7 +1703,9 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
+    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1711,6 +1714,7 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
+              originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
@@ -1794,6 +1798,21 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
+  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
+  // below reads from each, and if either source still resolves to a row, the next paginate
+  // tick would bounce the user back to the deep-linked page.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('rowId')) {
+      url.searchParams.delete('rowId');
+      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+    }
+    if (parseEvalOutputPromptHash(window.location.hash)) {
+      setEvalDetailsHash('');
+    }
+  }, [navigate]);
+
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
@@ -1840,12 +1859,10 @@ function ResultsTable({
       return;
     }
 
-    if (parseEvalOutputPromptHash(window.location.hash)) {
-      setEvalDetailsHash('');
-    }
+    clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -2118,8 +2135,12 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.original.testIdx}
-                    rowPositionIndex={pagination.pageIndex * pagination.pageSize + info.row.index}
+                    rowIndex={
+                      info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
+                    }
+                    rowPositionIndex={
+                      output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
+                    }
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2215,21 +2236,6 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
-  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
-  // below reads from each, and if either source still resolves to a row, the next paginate
-  // tick would bounce the user back to the deep-linked page.
-  const clearRowDeepLink = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
-    }
-    if (parseEvalOutputPromptHash(window.location.hash)) {
-      setEvalDetailsHash('');
-    }
-  }, [navigate]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
@@ -2242,7 +2248,7 @@ function ResultsTable({
     // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
     const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
 
-    if (requestedRowIndex !== undefined) {
+    if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
       const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;

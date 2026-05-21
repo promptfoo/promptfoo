@@ -19,13 +19,25 @@ import './Eval.css';
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
-import { buildEvalUrlWithSearchParams } from './utils';
+import { buildEvalUrlWithSearchParams, setEvalDetailsHash } from './utils';
 
 interface EvalOptions {
   /**
    * ID of a specific eval to load.
    */
   fetchId: string | null;
+}
+
+function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null {
+  if (!filtersParam) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(filtersParam) as ResultsFilter[];
+  } catch {
+    return null;
+  }
 }
 
 export default function Eval({ fetchId }: EvalOptions) {
@@ -134,10 +146,14 @@ export default function Eval({ fetchId }: EvalOptions) {
     (mutateSearchParams: (params: URLSearchParams) => void) => {
       // Filter changes can change the visible result set, so any existing details
       // deep-link is stale and should not be carried into the replacement URL.
+      setEvalDetailsHash('');
       navigate(
         buildEvalUrlWithSearchParams(
           { pathname: location.pathname, search: location.search, hash: '' },
-          mutateSearchParams,
+          (params) => {
+            mutateSearchParams(params);
+            params.delete('rowId');
+          },
         ),
         { replace: true },
       );
@@ -193,30 +209,20 @@ export default function Eval({ fetchId }: EvalOptions) {
     const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
 
     // Read search params
-    const filtersParam = _searchParams.get('filter');
-    let invalidFiltersParam = false;
+    const filters = parseFiltersParam(_searchParams.get('filter'));
 
     isHydratingFiltersRef.current = true;
     try {
       doResetFilters();
-
-      if (filtersParam) {
-        let filters: ResultsFilter[] = [];
-        try {
-          filters = JSON.parse(filtersParam) as ResultsFilter[];
-        } catch {
-          invalidFiltersParam = true;
-          showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
-        }
-        filters.forEach((filter: ResultsFilter) => {
-          doAddFilter(filter);
-        });
-      }
+      filters?.forEach((filter) => {
+        doAddFilter(filter);
+      });
     } finally {
       isHydratingFiltersRef.current = false;
     }
 
-    if (invalidFiltersParam) {
+    if (!filters) {
+      showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
       return;
     }
 

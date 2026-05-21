@@ -114,16 +114,19 @@ function getCurrentEvalDetailsHash(): string {
   return typeof window === 'undefined' ? '' : window.location.hash;
 }
 
-export function setEvalDetailsHash(hash: string): void {
+export function setEvalDetailsHash(hash: string, rowPositionIndex?: number): void {
   if (typeof window === 'undefined') {
     return;
   }
   const next = hash ? (hash.startsWith('#') ? hash : `#${hash}`) : '';
-  if (window.location.hash === next) {
+  const url = new URL(window.location.href);
+  if (rowPositionIndex !== undefined) {
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
+  }
+  url.hash = next;
+  if (url.href === window.location.href) {
     return;
   }
-  const url = new URL(window.location.href);
-  url.hash = next;
   window.history.replaceState(window.history.state, '', url);
   notifyEvalDetailsHashListeners();
 }

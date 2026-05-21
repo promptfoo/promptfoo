@@ -43,7 +43,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { buildEvalUrlWithSearchParams, hashVarSchema } from './utils';
+import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -287,10 +287,12 @@ export default function ResultsView({
   // visible result set, so drop any existing details deep-link while replacing the URL.
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearchText(text);
+    setEvalDetailsHash('');
     navigate(
       buildEvalUrlWithSearchParams(
         { pathname: location.pathname, search: location.search, hash: '' },
         (params) => {
+          params.delete('rowId');
           if (text) {
             params.set('search', text);
           } else {
@@ -306,10 +308,12 @@ export default function ResultsView({
     setSearchInputValue('');
     debouncedUpdate.cancel();
     setDebouncedSearchText('');
+    setEvalDetailsHash('');
     navigate(
       buildEvalUrlWithSearchParams(
         { pathname: location.pathname, search: location.search, hash: '' },
         (params) => {
+          params.delete('rowId');
           params.delete('search');
         },
       ),
@@ -330,10 +334,12 @@ export default function ResultsView({
   const activeView: ActiveView = viewParam === 'report' ? 'report' : 'results';
   const setActiveView = React.useCallback(
     (view: ActiveView) => {
+      setEvalDetailsHash('');
       navigate(
         buildEvalUrlWithSearchParams(
           { pathname: location.pathname, search: location.search, hash: '' },
           (params) => {
+            params.delete('rowId');
             if (view === 'results') {
               params.delete('view');
             } else {

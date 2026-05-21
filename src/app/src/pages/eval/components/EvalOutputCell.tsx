@@ -1327,7 +1327,7 @@ function EvalOutputCell({
 
   const handlePromptOpen = () => {
     setOpen(true);
-    setEvalDetailsHash(promptDetailsHash);
+    setEvalDetailsHash(promptDetailsHash, rowPositionIndex);
   };
   const handlePromptClose = () => {
     setOpen(false);

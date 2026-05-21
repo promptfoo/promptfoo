@@ -131,6 +131,13 @@ describe('Eval', () => {
     mockShowToast.mockClear();
     window.history.replaceState({}, '', '/eval/test-eval');
 
+    (useTableStore as any).getState = vi.fn(() => ({
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    (useTableStore as any).subscribe = vi.fn(() => vi.fn());
+
     useTestTimers();
 
     // Use stable mock to prevent infinite loops
@@ -507,10 +514,11 @@ describe('Eval', () => {
       filters: mockFilters,
     });
 
-    window.history.replaceState({}, '', '/eval/test-eval#details-row-51-prompt-1');
+    const initialUrl = '/eval/test-eval?rowId=51#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
 
     render(
-      <MemoryRouter initialEntries={['/eval/test-eval#details-row-51-prompt-1']}>
+      <MemoryRouter initialEntries={[initialUrl]}>
         <Eval fetchId="test-eval" />
       </MemoryRouter>,
     );
@@ -538,5 +546,6 @@ describe('Eval', () => {
     expect(new URLSearchParams(nextLocation.search).get('filter')).toBe(
       JSON.stringify(Object.values(mockFilters.values)),
     );
+    expect(new URLSearchParams(nextLocation.search).has('rowId')).toBe(false);
   });
 });
