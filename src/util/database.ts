@@ -18,6 +18,7 @@ import {
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
+import { clearCountCache } from '../models/evalPerformance';
 import { generateIdFromPrompt } from '../models/prompt';
 import {
   type CompletedPrompt,
@@ -458,6 +459,7 @@ export async function deleteEval(evalId: string) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
+  clearCountCache(evalId);
 }
 
 /**
@@ -474,6 +476,9 @@ export function deleteEvals(ids: string[]) {
     db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
     db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
+  for (const id of ids) {
+    clearCountCache(id);
+  }
 }
 
 /**
@@ -492,6 +497,7 @@ export async function deleteAllEvals(): Promise<void> {
     db.delete(evalsToTagsTable).run();
     db.delete(evalsTable).run();
   });
+  clearCountCache();
 }
 
 export type StandaloneEval = CompletedPrompt & {

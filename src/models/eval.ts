@@ -45,6 +45,7 @@ import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
+  clearCountCache,
   getCachedResultsCount,
   getTotalResultRowCount,
   queryTestIndicesOptimized,
@@ -548,6 +549,10 @@ export default class Eval {
         }
       }
     });
+
+    if (opts?.results && opts.results.length > 0) {
+      clearCountCache(evalId);
+    }
 
     return new Eval(config, {
       id: evalId,
@@ -1205,6 +1210,9 @@ export default class Eval {
     if (this.persisted) {
       const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+      if (results.length > 0) {
+        clearCountCache(this.id);
+      }
     }
     this._resultsLoaded = true;
   }
@@ -1357,6 +1365,7 @@ export default class Eval {
       db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
+    clearCountCache(this.id);
   }
 
   /**
@@ -1514,6 +1523,10 @@ export default class Eval {
         });
       }
     });
+
+    if (copiedCount > 0) {
+      clearCountCache(newEvalId);
+    }
 
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,

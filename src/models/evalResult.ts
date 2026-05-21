@@ -21,6 +21,7 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
+import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -386,6 +387,7 @@ export default class EvalResult {
       args.gradingResult = sanitizeGradingResultForDb(args.gradingResult);
       args.metadata = sanitizeMetadataForDb(args.metadata);
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
     return new EvalResult(args);
@@ -429,6 +431,9 @@ export default class EvalResult {
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
       }
     });
+    if (returnResults.length > 0) {
+      clearCountCache(evalId);
+    }
     return returnResults;
   }
 
@@ -621,6 +626,7 @@ export default class EvalResult {
       const result = await db.insert(evalResultsTable).values(this).returning();
       this.id = result[0].id;
       this.persisted = true;
+      clearCountCache(this.evalId);
     }
   }
 

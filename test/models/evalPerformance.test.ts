@@ -7,7 +7,8 @@ import {
   getCachedResultsCount,
   getTotalResultRowCount,
 } from '../../src/models/evalPerformance';
-import { ResultFailureReason } from '../../src/types/index';
+import EvalResult from '../../src/models/evalResult';
+import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 
 describe('evalPerformance', () => {
   beforeAll(async () => {
@@ -28,6 +29,39 @@ describe('evalPerformance', () => {
    * Helper to create an eval and add results for provider x test combinations.
    * Returns the eval and the expected counts.
    */
+  function createEvaluateResult(providerIdx: number, testIdx: number): EvaluateResult {
+    return {
+      description: `test-${providerIdx}-${testIdx}`,
+      promptIdx: 0,
+      testIdx,
+      testCase: { vars: { input: `test${testIdx + 1}` } },
+      promptId: 'test-prompt',
+      provider: { id: `provider-${providerIdx + 1}`, label: `Provider ${providerIdx + 1}` },
+      prompt: { raw: 'Test prompt', label: 'Test prompt' },
+      vars: { input: `test${testIdx + 1}` },
+      response: {
+        output: `response-${providerIdx}-${testIdx}`,
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      },
+      error: null,
+      failureReason: ResultFailureReason.NONE,
+      success: true,
+      score: 1,
+      latencyMs: 100,
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'Pass',
+        namedScores: {},
+        tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        componentResults: [],
+      },
+      namedScores: {},
+      cost: 0.001,
+      metadata: {},
+    };
+  }
+
   async function createEvalWithResults(numProviders: number, numTests: number) {
     const providers = Array.from({ length: numProviders }, (_, i) => ({ id: `provider-${i + 1}` }));
     const tests = Array.from({ length: numTests }, (_, i) => ({ vars: { input: `test${i + 1}` } }));
@@ -44,36 +78,7 @@ describe('evalPerformance', () => {
     // Add results for each provider × test combination
     for (let providerIdx = 0; providerIdx < numProviders; providerIdx++) {
       for (let testIdx = 0; testIdx < numTests; testIdx++) {
-        await eval_.addResult({
-          description: `test-${providerIdx}-${testIdx}`,
-          promptIdx: 0,
-          testIdx,
-          testCase: { vars: { input: `test${testIdx + 1}` } },
-          promptId: 'test-prompt',
-          provider: { id: `provider-${providerIdx + 1}`, label: `Provider ${providerIdx + 1}` },
-          prompt: { raw: 'Test prompt', label: 'Test prompt' },
-          vars: { input: `test${testIdx + 1}` },
-          response: {
-            output: `response-${providerIdx}-${testIdx}`,
-            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-          },
-          error: null,
-          failureReason: ResultFailureReason.NONE,
-          success: true,
-          score: 1,
-          latencyMs: 100,
-          gradingResult: {
-            pass: true,
-            score: 1,
-            reason: 'Pass',
-            namedScores: {},
-            tokensUsed: { total: 10, prompt: 5, completion: 5, cached: 0 },
-            componentResults: [],
-          },
-          namedScores: {},
-          cost: 0.001,
-          metadata: {},
-        });
+        await eval_.addResult(createEvaluateResult(providerIdx, testIdx));
       }
     }
 
@@ -126,6 +131,22 @@ describe('evalPerformance', () => {
       const count3 = await getCachedResultsCount(eval_.id);
       expect(count3).toBe(1);
     });
+
+    it('should refresh cached distinct count if a result is inserted', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'provider-1' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test1' } }],
+        },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      await eval_.addResult(createEvaluateResult(0, 0));
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+    });
   });
 
   describe('getTotalResultRowCount', () => {
@@ -168,6 +189,40 @@ describe('evalPerformance', () => {
       clearCountCache(eval_.id);
       const count3 = await getTotalResultRowCount(eval_.id);
       expect(count3).toBe(1);
+    });
+
+    it('should refresh cached total row count if results are inserted in bulk', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'provider-1' }, { id: 'provider-2' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test1' } }, { vars: { input: 'test2' } }],
+        },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(0);
+
+      await EvalResult.createManyFromEvaluateResult(
+        [createEvaluateResult(0, 0), createEvaluateResult(1, 0), createEvaluateResult(0, 1)],
+        eval_.id,
+      );
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(3);
+    });
+
+    it('should refresh cached counts if an eval is deleted', async () => {
+      const { eval_ } = await createEvalWithResults(1, 2);
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(2);
+
+      await eval_.delete();
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(0);
     });
   });
 
