@@ -204,6 +204,87 @@ describe('evalCommand', () => {
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
   });
 
+  it('should merge runtime tags over config tags', async () => {
+    const cmdObj = {
+      table: false,
+      write: false,
+      tags: {
+        env: 'ci',
+        run: '123',
+      },
+    };
+    const config = {
+      prompts: [],
+      providers: [],
+      tags: {
+        env: 'local',
+        suite: 'smoke',
+      },
+    } as UnifiedConfig;
+    let capturedEvalRecord: Eval | undefined;
+    let capturedTestSuite: TestSuite | undefined;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        tags: config.tags,
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (testSuite, evalRecord) => {
+      capturedTestSuite = testSuite as TestSuite;
+      capturedEvalRecord = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    const expectedTags = {
+      env: 'ci',
+      run: '123',
+      suite: 'smoke',
+    };
+    expect(capturedEvalRecord?.config.tags).toEqual(expectedTags);
+    expect(capturedTestSuite?.tags).toEqual(expectedTags);
+  });
+
+  it('should parse repeated --tag options from Commander', async () => {
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: defaultConfig,
+      testSuite: {
+        prompts: [],
+        providers: [],
+        defaultTest: {},
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      'eval',
+      '--no-table',
+      '--no-write',
+      '--tag',
+      'skill-version=1.2.3',
+      '--tag',
+      'run-id=abc123',
+    ]);
+
+    expect(vi.mocked(resolveConfigs).mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({
+        tags: {
+          'run-id': 'abc123',
+          'skill-version': '1.2.3',
+        },
+      }),
+    );
+  });
+
   it('should load cloud eval config when config is a single UUID', async () => {
     const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
     const cloudConfig = {

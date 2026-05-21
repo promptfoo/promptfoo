@@ -75,6 +75,34 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
+function collectKeyValueOption(
+  optionName: string,
+  value: string,
+  previous: Record<string, string> | undefined,
+): Record<string, string> {
+  const separatorIndex = value.indexOf('=');
+  const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
+  const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
+
+  if (!key || val === undefined) {
+    throw new Error(`${optionName} must be specified in key=value format.`);
+  }
+
+  return { ...previous, [key]: val };
+}
+
+function runtimeTagsForEval(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+): Record<string, string> | undefined {
+  const tags = {
+    ...(commandLineOptions?.tags || {}),
+    ...(cmdObj.tags || {}),
+  };
+
+  return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
 export class EvalRunError extends Error {
   readonly exitCode: number;
 
@@ -617,6 +645,14 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
+    const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
+    if (runtimeTags) {
+      config.tags = { ...(config.tags || {}), ...runtimeTags };
+      testSuite.tags = { ...(testSuite.tags || {}), ...runtimeTags };
+      if (cliState.config) {
+        cliState.config.tags = { ...(cliState.config.tags || {}), ...runtimeTags };
+      }
+    }
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
@@ -1125,14 +1161,17 @@ export function evalCommand(
     .option(
       '--var <key=value>',
       'Set a variable in key=value format',
-      (value, previous) => {
-        const [key, val] = value.split('=');
-        if (!key || val === undefined) {
-          throw new Error('--var must be specified in key=value format.');
-        }
-        return { ...previous, [key]: val };
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--var', value, previous);
       },
       {},
+    )
+    .option(
+      '--tag <key=value>',
+      'Set an eval tag in key=value format. Can be specified multiple times; CLI tags override config tags.',
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--tag', value, previous);
+      },
     )
 
     // Execution control
@@ -1231,7 +1270,11 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        validatedOpts = EvalCommandSchema.parse(opts);
+        const optsWithAliases = {
+          ...opts,
+          tags: (opts as EvalCommandOptions & { tag?: Record<string, string> }).tag ?? opts.tags,
+        };
+        validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
         Invalid command options:
