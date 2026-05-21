@@ -1890,6 +1890,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.persistentConnectionLifecycleCleanup = null;
     this.persistentConnection = null;
     this.connectionReady = null;
+    // Realtime item IDs are scoped to the socket session. Reusing them after a
+    // reconnect makes conversation.item.create point at a missing item.
+    this.previousItemId = null;
+    this.assistantMessageIds = [];
   }
 
   // Treat CONNECTING/OPEN as live; CLOSING/CLOSED (or undefined readyState on
@@ -2073,6 +2077,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       setTimeout(() => {
         logger.error('WebSocket response timed out');
         this.resetAudioState();
+        // Detach our listeners and drop the socket. A timed-out turn leaves an
+        // unanswered response on the shared connection; without teardown the
+        // stale handler keeps firing for every later turn's events, recreating
+        // the event-interleaving bug this provider was hardened against.
+        if (cleanupMessageHandler) {
+          cleanupMessageHandler();
+        }
+        const conn = this.persistentConnection;
+        this.tearDownPersistentConnection('response timeout');
+        conn?.close();
         reject(new Error('WebSocket response timed out'));
       }, this.config.websocketTimeout || 30000);
 
@@ -2454,22 +2468,33 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
     }
 
-    sendEvent({
-      type: 'session.update',
-      session: await this.getRealtimeSessionConfig(realtimeToolConfig),
-    });
+    try {
+      sendEvent({
+        type: 'session.update',
+        session: await this.getRealtimeSessionConfig(realtimeToolConfig),
+      });
 
-    // Create a conversation item with the user's prompt. Use the snapshot
-    // taken before any await so a concurrent turn cannot mutate the anchor.
-    sendEvent({
-      type: 'conversation.item.create',
-      previous_item_id: previousItemIdAtTurnStart,
-      item: {
-        type: 'message',
-        role: 'user',
-        content: promptContent,
-      },
-    });
+      // Create a conversation item with the user's prompt. Use the snapshot
+      // taken before any await so a concurrent turn cannot mutate the anchor.
+      sendEvent({
+        type: 'conversation.item.create',
+        previous_item_id: previousItemIdAtTurnStart,
+        item: {
+          type: 'message',
+          role: 'user',
+          content: promptContent,
+        },
+      });
+    } catch (error) {
+      // Setup can fail after the request timeout starts but before any turn
+      // listener clears it. Do not let that stale timeout tear down a later
+      // persistent socket after the failed call has already returned.
+      clearRequestTimeout();
+      if (cleanupMessageHandler) {
+        cleanupMessageHandler();
+      }
+      throw error;
+    }
   }
 
   // Add cleanup method to close WebSocket connections
@@ -2487,8 +2512,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // a re-used provider instance can open a fresh socket on the next turn.
       this.persistentConnection.close();
       this.tearDownPersistentConnection('cleanup() called');
-      this.previousItemId = null;
-      this.assistantMessageIds = [];
     }
   }
 }
