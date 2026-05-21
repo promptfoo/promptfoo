@@ -131,6 +131,45 @@ describe('importCommand', () => {
       expect(await Eval.findById(evalId)).toBeUndefined();
       expect(process.exitCode).toBe(1);
     });
+
+    it('reports a schema mismatch for valid JSONL that is not an OpenAI Evals export', async () => {
+      // Every line is valid JSON, so the whole-file JSON.parse fails but the
+      // JSONL path succeeds. The error must describe the schema mismatch
+      // rather than re-throw the misleading whole-file JSON parse error.
+      const filePath = path.join(__dirname, `temp-bad-jsonl-${Date.now()}.json`);
+      fs.writeFileSync(filePath, ['{"foo":1}', '{"bar":2}'].join('\n'));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringMatching(/parsed as JSONL but line 1 is not a valid OpenAI Evals row/),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('imports successfully when evaluationCreatedAt is corrupt', async () => {
+      // Regression: a present-but-unparseable timestamp reached
+      // createEvalId().toISOString() and crashed mid-import with an opaque
+      // "Invalid time value".
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+      sampleData.metadata.evaluationCreatedAt = 'this-is-not-a-date';
+      const filePath = path.join(__dirname, `temp-bad-date-${Date.now()}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(sampleData));
+      tempFilePath = filePath;
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', filePath]);
+
+      expect(logger.error).not.toHaveBeenCalledWith(expect.stringMatching(/Invalid time value/));
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/unparseable metadata\.evaluationCreatedAt/),
+      );
+      expect(process.exitCode).not.toBe(1);
+      expect(await Eval.findById(sampleData.evalId)).toBeDefined();
+    });
   });
 
   describe('with real sample file', () => {
