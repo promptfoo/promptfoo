@@ -4541,23 +4541,25 @@ class Evaluator {
           }
         }
 
-        this.evalRecord.setSchedulerMetrics({
-          minConcurrency:
-            this.concurrencyTracker.min === Infinity
-              ? this.concurrencyTracker.initial
-              : this.concurrencyTracker.min,
-          maxConcurrency: this.concurrencyTracker.max || this.concurrencyTracker.initial,
-          finalConcurrency:
-            minFinalConcurrency === Infinity
-              ? this.concurrencyTracker.initial
-              : minFinalConcurrency,
-          rateLimitHits: totalRateLimitHits,
-          retriedRequests: totalRetries,
-          concurrencyReduced: this.concurrencyTracker.wasReduced,
-        });
+        if (this.concurrencyTracker.initial > 0) {
+          this.evalRecord.setSchedulerMetrics({
+            minConcurrency:
+              this.concurrencyTracker.min === Infinity
+                ? this.concurrencyTracker.initial
+                : this.concurrencyTracker.min,
+            maxConcurrency: this.concurrencyTracker.max || this.concurrencyTracker.initial,
+            finalConcurrency:
+              minFinalConcurrency === Infinity
+                ? this.concurrencyTracker.initial
+                : minFinalConcurrency,
+            rateLimitHits: totalRateLimitHits,
+            retriedRequests: totalRetries,
+            concurrencyReduced: this.concurrencyTracker.wasReduced,
+          });
 
-        if (this.evalRecord.persisted) {
-          await this.evalRecord.save();
+          if (this.evalRecord.persisted) {
+            await this.evalRecord.save();
+          }
         }
       }
 
