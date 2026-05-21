@@ -171,6 +171,10 @@ describe('OpenAIRealtimeConnection', () => {
   });
 
   describe('configureSession', () => {
+    it('should reject session configuration before connecting', async () => {
+      await expect(connection.configureSession()).rejects.toThrow('not connected');
+    });
+
     it('should use the Realtime GA session update shape', async () => {
       (connection as any).state = 'connected';
       const sendSpy = vi.spyOn(connection as any, 'send');
@@ -196,6 +200,35 @@ describe('OpenAIRealtimeConnection', () => {
       });
 
       connection.emit('session_configured');
+      await configurePromise;
+    });
+
+    it.each([
+      ['g711_ulaw', { type: 'audio/pcmu' }],
+      ['g711_alaw', { type: 'audio/pcma' }],
+    ] as const)('should map %s session audio formats', async (audioFormat, format) => {
+      const mappedConnection = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat,
+        sampleRate: undefined,
+        turnDetection: undefined,
+      });
+      (mappedConnection as any).state = 'connected';
+      const sendSpy = vi.spyOn(mappedConnection as any, 'send');
+
+      const configurePromise = mappedConnection.configureSession();
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session: expect.objectContaining({
+            audio: expect.objectContaining({
+              input: expect.objectContaining({ format, turn_detection: null }),
+              output: expect.objectContaining({ format }),
+            }),
+          }),
+        }),
+      );
+
+      mappedConnection.emit('session_configured');
       await configurePromise;
     });
   });
@@ -233,6 +266,32 @@ describe('OpenAIRealtimeConnection', () => {
       connection.clearAudioBuffer();
 
       expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ready audio controls', () => {
+    it('should send audio and response controls when ready', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send');
+      (connection as any).setReady();
+
+      connection.sendAudio({
+        data: 'base64audio',
+        format: 'pcm16',
+        sampleRate: 24000,
+        timestamp: 0,
+      });
+      connection.commitAudio();
+      connection.requestResponse();
+      connection.clearAudioBuffer();
+      connection.cancelResponse();
+
+      expect(sendSpy.mock.calls.map(([message]) => message)).toEqual([
+        { type: 'input_audio_buffer.append', audio: 'base64audio' },
+        { type: 'input_audio_buffer.commit' },
+        { type: 'response.create' },
+        { type: 'input_audio_buffer.clear' },
+        { type: 'response.cancel' },
+      ]);
     });
   });
 
@@ -384,6 +443,45 @@ describe('OpenAIRealtimeConnection', () => {
       expect(handler.mock.calls[0][0].message).toBe('Something went wrong');
     });
 
+    it('should cover lifecycle and fallback realtime messages', () => {
+      const errorHandler = vi.fn();
+      const transcriptDone = vi.fn();
+      const inputTranscript = vi.fn();
+      connection.on('error', errorHandler);
+      connection.on('transcript_done', transcriptDone);
+      connection.on('input_transcript', inputTranscript);
+
+      for (const type of [
+        'input_audio_buffer.committed',
+        'input_audio_buffer.cleared',
+        'response.created',
+        'response.done',
+        'response.output_item.added',
+        'response.output_item.done',
+        'response.content_part.added',
+        'response.content_part.done',
+        'conversation.item.created',
+        'rate_limits.updated',
+        'custom.event',
+      ]) {
+        (connection as any).handleMessage(JSON.stringify({ type, rate_limits: [] }));
+      }
+
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'response.output_audio_transcript.done' }),
+      );
+      (connection as any).handleMessage(
+        JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed' }),
+      );
+      (connection as any).handleMessage(JSON.stringify({ type: 'error', error: {} }));
+
+      expect(transcriptDone).toHaveBeenCalledWith('');
+      expect(inputTranscript).toHaveBeenCalledWith('');
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Unknown OpenAI Realtime error' }),
+      );
+    });
+
     it('should handle invalid JSON gracefully', () => {
       const errorHandler = vi.fn();
       connection.on('error', errorHandler);
@@ -446,6 +544,19 @@ describe('OpenAIRealtimeConnection', () => {
 
       expect(connection.getState()).toBe('disconnected');
       expect(ws.close).toHaveBeenCalled();
+    });
+
+    it('should surface socket errors after an established connection', async () => {
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      const connectPromise = connection.connect();
+      const ws = mockWsInstances[mockWsInstances.length - 1];
+      ws.simulateOpen();
+      await connectPromise;
+
+      ws.simulateError(new Error('after open'));
+      expect(errorHandler).toHaveBeenCalledWith(expect.objectContaining({ message: 'after open' }));
     });
   });
 });
