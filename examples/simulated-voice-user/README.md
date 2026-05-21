@@ -35,20 +35,20 @@ npx promptfoo@latest eval
 
 ### Target Agent Settings
 
-| Option           | Description                             | Default                   |
-| ---------------- | --------------------------------------- | ------------------------- |
-| `targetProvider` | Voice API provider (`openai`, `google`) | `openai`                  |
-| `targetModel`    | Model to use                            | `gpt-4o-realtime-preview` |
-| `targetVoice`    | Voice for the agent                     | `alloy`                   |
+| Option           | Description                             | Default        |
+| ---------------- | --------------------------------------- | -------------- |
+| `targetProvider` | Voice API provider (`openai`, `google`) | `openai`       |
+| `targetModel`    | Model to use                            | `gpt-realtime` |
+| `targetVoice`    | Voice for the agent                     | `alloy`        |
 
 ### Simulated User Settings
 
-| Option                  | Description                         | Default                   |
-| ----------------------- | ----------------------------------- | ------------------------- |
-| `simulatedUserProvider` | Voice API provider                  | `openai`                  |
-| `simulatedUserModel`    | Model for simulated user            | `gpt-4o-realtime-preview` |
-| `simulatedUserVoice`    | Voice for simulated user            | `echo`                    |
-| `instructions`          | Goal/persona for the simulated user | Required                  |
+| Option                  | Description                         | Default        |
+| ----------------------- | ----------------------------------- | -------------- |
+| `simulatedUserProvider` | Voice API provider                  | `openai`       |
+| `simulatedUserModel`    | Model for simulated user            | `gpt-realtime` |
+| `simulatedUserVoice`    | Voice for simulated user            | `echo`         |
+| `instructions`          | Goal/persona for the simulated user | Required       |
 
 ### Conversation Settings
 

@@ -8,6 +8,7 @@
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { calculateDuration } from '../audioBuffer';
 import { BaseVoiceConnection, waitForEvent } from './base';
 
 import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
@@ -19,6 +20,20 @@ const DEFAULT_AUDIO_FORMAT: AudioFormat = 'pcm16';
 const DEFAULT_SAMPLE_RATE = 24000;
 const CONNECTION_TIMEOUT_MS = 15000;
 
+type GoogleServerContent = {
+  modelTurn?: {
+    parts?: Array<{ text?: string; inlineData?: { mimeType?: string; data?: string } }>;
+  };
+  outputTranscription?: { text?: string };
+  inputTranscription?: { text?: string };
+  turnComplete?: boolean;
+  generationComplete?: boolean;
+};
+
+type GoogleRealtimeInput = {
+  mediaChunks?: Array<{ mimeType?: string; data?: string }>;
+};
+
 /**
  * Google Live API WebSocket connection.
  *
@@ -28,6 +43,8 @@ const CONNECTION_TIMEOUT_MS = 15000;
 export class GoogleLiveConnection extends BaseVoiceConnection {
   private model: string;
   private apiVersion: string;
+  private cumulativeAudioPositionMs = 0;
+  private accumulatedTranscript = '';
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -230,13 +247,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
         this.handleJsonMessage(msgString);
       } catch {
         // Binary audio data
-        const audioData = data.toString('base64');
-        this.emit('audio_delta', {
-          data: audioData,
-          timestamp: Date.now(),
-          format: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
-          sampleRate: this.config.sampleRate || DEFAULT_SAMPLE_RATE,
-        });
+        this.emitAudioDelta(data.toString('base64'));
       }
       return;
     }
@@ -256,22 +267,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    // Determine message type for logging
-    const messageType = msg.setupComplete
-      ? 'setupComplete'
-      : msg.serverContent?.modelTurn
-        ? 'modelTurn'
-        : msg.serverContent?.turnComplete
-          ? 'turnComplete'
-          : msg.serverContent?.generationComplete
-            ? 'generationComplete'
-            : msg.toolCall
-              ? 'toolCall'
-              : msg.error
-                ? 'error'
-                : 'unknown';
-
-    logger.debug('[GoogleLive] Received message:', { type: messageType });
+    logger.debug('[GoogleLive] Received message:', { type: this.getMessageType(msg) });
 
     // Setup complete
     if (msg.setupComplete) {
@@ -289,75 +285,103 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    // Server content
-    const serverContent = msg.serverContent as {
-      modelTurn?: {
-        parts?: Array<{ text?: string; inlineData?: { mimeType?: string; data?: string } }>;
-      };
-      outputTranscription?: { text?: string };
-      inputTranscription?: { text?: string };
-      turnComplete?: boolean;
-      generationComplete?: boolean;
-    };
+    this.handleServerContent(msg.serverContent as GoogleServerContent | undefined);
+    this.handleRealtimeInput(msg.realtimeInput as GoogleRealtimeInput | undefined);
+  }
 
-    if (serverContent) {
-      // Model turn with content
-      if (serverContent.modelTurn?.parts) {
-        for (const part of serverContent.modelTurn.parts) {
-          if (part.text) {
-            this.emit('transcript_delta', part.text);
-          }
-          if (part.inlineData?.mimeType?.includes('audio')) {
-            this.emit('audio_delta', {
-              data: part.inlineData.data || '',
-              timestamp: Date.now(),
-              format: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
-              sampleRate: this.config.sampleRate || DEFAULT_SAMPLE_RATE,
-            });
-          }
-        }
+  private getMessageType(msg: RealtimeMessage): string {
+    if (msg.setupComplete) {
+      return 'setupComplete';
+    }
+    if (msg.serverContent?.modelTurn) {
+      return 'modelTurn';
+    }
+    if (msg.serverContent?.turnComplete) {
+      return 'turnComplete';
+    }
+    if (msg.serverContent?.generationComplete) {
+      return 'generationComplete';
+    }
+    if (msg.toolCall) {
+      return 'toolCall';
+    }
+    if (msg.error) {
+      return 'error';
+    }
+    return 'unknown';
+  }
+
+  private handleServerContent(serverContent?: GoogleServerContent): void {
+    if (!serverContent) {
+      return;
+    }
+
+    for (const part of serverContent.modelTurn?.parts || []) {
+      if (part.text) {
+        this.appendTranscript(part.text);
       }
-
-      // Output transcription (what the model said)
-      if (serverContent.outputTranscription?.text) {
-        this.emit('transcript_delta', serverContent.outputTranscription.text);
-      }
-
-      // Input transcription (what the user said)
-      if (serverContent.inputTranscription?.text) {
-        this.emit('input_transcript', serverContent.inputTranscription.text);
-      }
-
-      // Turn complete
-      if (serverContent.turnComplete) {
-        logger.debug('[GoogleLive] Turn complete');
-        this.emit('audio_done');
-        this.emit('speech_stopped');
-      }
-
-      // Generation complete
-      if (serverContent.generationComplete) {
-        logger.debug('[GoogleLive] Generation complete');
-        this.emit('audio_done');
+      if (part.inlineData?.mimeType?.includes('audio')) {
+        this.emitAudioDelta(part.inlineData.data || '');
       }
     }
 
-    // Realtime input (audio chunks from server)
-    const realtimeInput = msg.realtimeInput as {
-      mediaChunks?: Array<{ mimeType?: string; data?: string }>;
-    };
-    if (realtimeInput?.mediaChunks) {
-      for (const chunk of realtimeInput.mediaChunks) {
-        if (chunk.mimeType?.includes('audio') && chunk.data) {
-          this.emit('audio_delta', {
-            data: chunk.data,
-            timestamp: Date.now(),
-            format: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
-            sampleRate: this.config.sampleRate || DEFAULT_SAMPLE_RATE,
-          });
-        }
+    if (serverContent.outputTranscription?.text) {
+      this.appendTranscript(serverContent.outputTranscription.text);
+    }
+
+    if (serverContent.inputTranscription?.text) {
+      this.emit('input_transcript', serverContent.inputTranscription.text);
+    }
+
+    if (serverContent.turnComplete) {
+      logger.debug('[GoogleLive] Turn complete');
+      this.finishTranscript();
+      this.emit('audio_done');
+      this.emit('speech_stopped');
+    }
+
+    if (serverContent.generationComplete) {
+      logger.debug('[GoogleLive] Generation complete');
+      this.finishTranscript();
+      this.emit('audio_done');
+    }
+  }
+
+  private handleRealtimeInput(realtimeInput?: GoogleRealtimeInput): void {
+    for (const chunk of realtimeInput?.mediaChunks || []) {
+      if (chunk.mimeType?.includes('audio') && chunk.data) {
+        this.emitAudioDelta(chunk.data);
       }
     }
+  }
+
+  private emitAudioDelta(data: string): void {
+    const format = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
+    const sampleRate = this.config.sampleRate || DEFAULT_SAMPLE_RATE;
+    const duration = calculateDuration(Buffer.from(data, 'base64').length, sampleRate, format);
+
+    this.emit('audio_delta', {
+      data,
+      timestamp: this.cumulativeAudioPositionMs,
+      duration,
+      format,
+      sampleRate,
+    });
+    this.cumulativeAudioPositionMs += duration;
+  }
+
+  private appendTranscript(delta: string): void {
+    this.accumulatedTranscript += delta;
+    this.emit('transcript_delta', delta);
+  }
+
+  private finishTranscript(): void {
+    if (!this.accumulatedTranscript) {
+      return;
+    }
+
+    this.emit('transcript_done', this.accumulatedTranscript);
+    this.accumulatedTranscript = '';
   }
 
   /**

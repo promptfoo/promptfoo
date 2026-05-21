@@ -98,6 +98,7 @@ providers:
 | [Web Browser](./browser.md)                             | Custom - Automate web browser interactions                       | `browser`                                                                                                             |
 | [Sequence](./sequence.md)                               | Custom - Multi-prompt sequencing                                 | `sequence` with config.inputs array                                                                                   |
 | [Simulated User](./simulated-user.md)                   | Custom - Conversation simulator                                  | `promptfoo:simulated-user`                                                                                            |
+| [Simulated Voice User](./simulated-voice-user.md)       | Custom - Voice conversation simulator                            | `promptfoo:simulated-voice-user`                                                                                      |
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
 | [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-1.0` |
 

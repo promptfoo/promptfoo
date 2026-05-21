@@ -317,6 +317,36 @@ export interface StereoTurn {
   timestamp: number;
 }
 
+function placeStereoChunks(
+  stereoBuffer: Buffer,
+  chunks: AudioChunk[],
+  startTime: number,
+  totalSamples: number,
+  sampleRate: number,
+  channelOffset: number,
+): void {
+  const bytesPerSample = 2; // PCM16
+  const bytesPerFrame = 4; // Stereo: 2 bytes x 2 channels
+
+  for (const chunk of chunks) {
+    const pcmData = base64ToBuffer(chunk.data);
+    const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
+    const numSamples = pcmData.length / bytesPerSample;
+
+    for (let i = 0; i < numSamples; i++) {
+      const sampleIndex = startPosition + i;
+      if (
+        sampleIndex >= 0 &&
+        sampleIndex < totalSamples &&
+        i * bytesPerSample + 1 < pcmData.length
+      ) {
+        const sample = pcmData.readInt16LE(i * bytesPerSample);
+        stereoBuffer.writeInt16LE(sample, sampleIndex * bytesPerFrame + channelOffset);
+      }
+    }
+  }
+}
+
 /**
  * Create a time-aligned stereo WAV from two AudioBuffers.
  * Left channel = agent, Right channel = user.
@@ -388,51 +418,8 @@ export function createStereoWav(
   // Allocate stereo buffer (initialized to silence)
   const stereoBuffer = Buffer.alloc(totalSamples * bytesPerFrame);
 
-  // Place each agent chunk at its timestamp position (left channel)
-  for (const chunk of agentChunks) {
-    if (chunk.timestamp === undefined) {
-      continue;
-    }
-
-    const pcmData = base64ToBuffer(chunk.data);
-    const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
-    const numSamples = pcmData.length / bytesPerSample;
-
-    for (let i = 0; i < numSamples; i++) {
-      const sampleIndex = startPosition + i;
-      if (
-        sampleIndex >= 0 &&
-        sampleIndex < totalSamples &&
-        i * bytesPerSample + 1 < pcmData.length
-      ) {
-        const sample = pcmData.readInt16LE(i * bytesPerSample);
-        stereoBuffer.writeInt16LE(sample, sampleIndex * bytesPerFrame); // left channel
-      }
-    }
-  }
-
-  // Place each user chunk at its timestamp position (right channel)
-  for (const chunk of userChunks) {
-    if (chunk.timestamp === undefined) {
-      continue;
-    }
-
-    const pcmData = base64ToBuffer(chunk.data);
-    const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
-    const numSamples = pcmData.length / bytesPerSample;
-
-    for (let i = 0; i < numSamples; i++) {
-      const sampleIndex = startPosition + i;
-      if (
-        sampleIndex >= 0 &&
-        sampleIndex < totalSamples &&
-        i * bytesPerSample + 1 < pcmData.length
-      ) {
-        const sample = pcmData.readInt16LE(i * bytesPerSample);
-        stereoBuffer.writeInt16LE(sample, sampleIndex * bytesPerFrame + 2); // right channel
-      }
-    }
-  }
+  placeStereoChunks(stereoBuffer, agentChunks, startTime, totalSamples, sampleRate, 0);
+  placeStereoChunks(stereoBuffer, userChunks, startTime, totalSamples, sampleRate, 2);
 
   return pcm16ToWav(stereoBuffer, sampleRate, 2);
 }

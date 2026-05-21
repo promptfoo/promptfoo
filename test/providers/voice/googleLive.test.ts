@@ -121,7 +121,6 @@ describe('GoogleLiveConnection', () => {
     it('should connect successfully with API key', async () => {
       const connectPromise = connection.connect();
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const ws = mockWsInstances[mockWsInstances.length - 1];
       expect(ws).toBeDefined();
 
@@ -137,7 +136,6 @@ describe('GoogleLiveConnection', () => {
 
       const connectPromise = connection.connect();
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const ws = mockWsInstances[mockWsInstances.length - 1];
 
       ws.simulateError(new Error('Connection failed'));
@@ -224,6 +222,38 @@ describe('GoogleLiveConnection', () => {
       );
     });
 
+    it('should emit audio with a relative timeline for mixed provider playback', () => {
+      const handler = vi.fn();
+      const audioData = Buffer.alloc(4800).toString('base64');
+      connection.on('audio_delta', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          serverContent: {
+            modelTurn: {
+              parts: [{ inlineData: { mimeType: 'audio/pcm', data: audioData } }],
+            },
+          },
+        }),
+      );
+      (connection as any).handleMessage(
+        JSON.stringify({
+          realtimeInput: {
+            mediaChunks: [{ mimeType: 'audio/pcm', data: audioData }],
+          },
+        }),
+      );
+
+      expect(handler).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ timestamp: 0, duration: 100 }),
+      );
+      expect(handler).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ timestamp: 100, duration: 100 }),
+      );
+    });
+
     it('should emit transcript_delta for text content', () => {
       const handler = vi.fn();
       connection.on('transcript_delta', handler);
@@ -249,6 +279,28 @@ describe('GoogleLiveConnection', () => {
         JSON.stringify({
           serverContent: {
             outputTranscription: { text: 'Model said this' },
+          },
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith('Model said this');
+    });
+
+    it('should emit a completed transcript at the end of a turn', () => {
+      const handler = vi.fn();
+      connection.on('transcript_done', handler);
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          serverContent: {
+            outputTranscription: { text: 'Model said this' },
+          },
+        }),
+      );
+      (connection as any).handleMessage(
+        JSON.stringify({
+          serverContent: {
+            turnComplete: true,
           },
         }),
       );
@@ -408,7 +460,6 @@ describe('GoogleLiveConnection', () => {
   describe('disconnect', () => {
     it('should reset state on disconnect', async () => {
       const connectPromise = connection.connect();
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const ws = mockWsInstances[mockWsInstances.length - 1];
       ws.simulateOpen();
       await connectPromise;

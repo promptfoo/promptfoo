@@ -57,9 +57,9 @@ type SimulatedVoiceUserProviderOptions = ProviderOptions & {
  *       instructions: "You are a customer calling to check your account balance."
  *       maxTurns: 5
  *       targetProvider: openai
- *       targetModel: gpt-4o-realtime-preview
+ *       targetModel: gpt-realtime
  *       simulatedUserProvider: openai
- *       simulatedUserModel: gpt-4o-realtime-preview
+ *       simulatedUserModel: gpt-realtime
  * ```
  */
 export class SimulatedVoiceUser implements ApiProvider {
@@ -106,12 +106,14 @@ export class SimulatedVoiceUser implements ApiProvider {
     return {
       provider: this.voiceConfig.targetProvider || 'openai',
       model: this.voiceConfig.targetModel,
-      apiKey: this.voiceConfig.targetApiKey || getEnvString('OPENAI_API_KEY'),
+      apiKey: this.voiceConfig.targetApiKey,
       voice: this.voiceConfig.targetVoice || 'alloy',
       instructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
-      turnDetection: this.buildTurnDetectionConfig(),
+      // The orchestrator commits routed audio and requests each response itself.
+      // Leaving VAD on here creates duplicate target responses for the same turn.
+      turnDetection: undefined,
     };
   }
 
@@ -125,7 +127,7 @@ export class SimulatedVoiceUser implements ApiProvider {
     return {
       provider: this.voiceConfig.simulatedUserProvider || 'openai',
       model: this.voiceConfig.simulatedUserModel,
-      apiKey: this.voiceConfig.simulatedUserApiKey || getEnvString('OPENAI_API_KEY'),
+      apiKey: this.voiceConfig.simulatedUserApiKey,
       voice: this.voiceConfig.simulatedUserVoice || 'echo',
       instructions: simulatedUserInstructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,

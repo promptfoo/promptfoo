@@ -339,7 +339,7 @@ export class NovaSonicConnection extends EventEmitter {
     );
 
     // Start processing responses in background - this also triggers input consumption
-    this.processResponses();
+    void this.processResponses();
 
     // Wait for the iterator to actually start being consumed by AWS SDK
     // This ensures events are being sent before we return
@@ -580,7 +580,7 @@ export class NovaSonicConnection extends EventEmitter {
   /**
    * Send an event to the queue.
    */
-  private async sendEvent(event: NovaSonicEvent): Promise<void> {
+  private sendEvent(event: NovaSonicEvent): void {
     if (!this.session?.isActive) {
       logger.warn('[NovaSonic] Cannot send event: session not active');
       return;

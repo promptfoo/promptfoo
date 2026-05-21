@@ -80,7 +80,7 @@ describe('OpenAIRealtimeConnection', () => {
 
     config = {
       provider: 'openai',
-      model: 'gpt-4o-realtime-preview',
+      model: 'gpt-realtime',
       voice: 'alloy',
       instructions: 'You are a helpful assistant.',
       audioFormat: 'pcm16',
@@ -130,8 +130,6 @@ describe('OpenAIRealtimeConnection', () => {
     it('should connect successfully with API key', async () => {
       const connectPromise = connection.connect();
 
-      // Wait for WebSocket to be created
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const ws = mockWsInstances[mockWsInstances.length - 1];
       expect(ws).toBeDefined();
 
@@ -149,7 +147,6 @@ describe('OpenAIRealtimeConnection', () => {
 
       const connectPromise = connection.connect();
 
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const ws = mockWsInstances[mockWsInstances.length - 1];
 
       // Simulate error during connection
@@ -170,6 +167,36 @@ describe('OpenAIRealtimeConnection', () => {
       });
 
       expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('configureSession', () => {
+    it('should use the Realtime GA session update shape', async () => {
+      (connection as any).state = 'connected';
+      const sendSpy = vi.spyOn(connection as any, 'send');
+
+      const configurePromise = connection.configureSession();
+
+      expect(sendSpy).toHaveBeenCalledWith({
+        type: 'session.update',
+        session: expect.objectContaining({
+          type: 'realtime',
+          output_modalities: ['audio'],
+          audio: {
+            input: expect.objectContaining({
+              format: { type: 'audio/pcm', rate: 24000 },
+              transcription: { model: 'whisper-1' },
+            }),
+            output: {
+              format: { type: 'audio/pcm', rate: 24000 },
+              voice: 'alloy',
+            },
+          },
+        }),
+      });
+
+      connection.emit('session_configured');
+      await configurePromise;
     });
   });
 
@@ -240,13 +267,13 @@ describe('OpenAIRealtimeConnection', () => {
       expect(connection.getSessionId()).toBe('updated-session-id');
     });
 
-    it('should emit audio_delta on response.audio.delta', () => {
+    it('should emit audio_delta on response.output_audio.delta', () => {
       const handler = vi.fn();
       connection.on('audio_delta', handler);
 
       (connection as any).handleMessage(
         JSON.stringify({
-          type: 'response.audio.delta',
+          type: 'response.output_audio.delta',
           delta: 'base64audiodata',
         }),
       );
@@ -261,26 +288,26 @@ describe('OpenAIRealtimeConnection', () => {
       );
     });
 
-    it('should emit audio_done on response.audio.done', () => {
+    it('should emit audio_done on response.output_audio.done', () => {
       const handler = vi.fn();
       connection.on('audio_done', handler);
 
       (connection as any).handleMessage(
         JSON.stringify({
-          type: 'response.audio.done',
+          type: 'response.output_audio.done',
         }),
       );
 
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
-    it('should emit transcript_delta on response.audio_transcript.delta', () => {
+    it('should emit transcript_delta on response.output_audio_transcript.delta', () => {
       const handler = vi.fn();
       connection.on('transcript_delta', handler);
 
       (connection as any).handleMessage(
         JSON.stringify({
-          type: 'response.audio_transcript.delta',
+          type: 'response.output_audio_transcript.delta',
           delta: 'Hello ',
         }),
       );
@@ -288,13 +315,13 @@ describe('OpenAIRealtimeConnection', () => {
       expect(handler).toHaveBeenCalledWith('Hello ');
     });
 
-    it('should emit transcript_done on response.audio_transcript.done', () => {
+    it('should emit transcript_done on response.output_audio_transcript.done', () => {
       const handler = vi.fn();
       connection.on('transcript_done', handler);
 
       (connection as any).handleMessage(
         JSON.stringify({
-          type: 'response.audio_transcript.done',
+          type: 'response.output_audio_transcript.done',
           transcript: 'Hello world',
         }),
       );
@@ -408,7 +435,6 @@ describe('OpenAIRealtimeConnection', () => {
     it('should reset state on disconnect', async () => {
       // Connect first
       const connectPromise = connection.connect();
-      await new Promise((resolve) => setTimeout(resolve, 10));
       const ws = mockWsInstances[mockWsInstances.length - 1];
       ws.simulateOpen();
       await connectPromise;

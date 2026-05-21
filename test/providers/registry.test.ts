@@ -152,6 +152,19 @@ describe('Provider Registry', () => {
       expect(result.isRefusal).toBe(false);
     });
 
+    it('should handle the simulated voice user provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('promptfoo:simulated-voice-user'));
+      expect(factory).toBeDefined();
+
+      const provider = await factory!.create(
+        'promptfoo:simulated-voice-user',
+        mockProviderOptions,
+        mockContext,
+      );
+      expect(provider.id()).toBe(mockProviderOptions.id);
+      expect(provider.toString()).toBe('[SimulatedVoiceUser test-provider]');
+    });
+
     it('fails fast for xAI embedding aliases since xAI has no public embeddings API', async () => {
       const factory = providerMap.find((f) => f.test('xai:embedding:v1'));
       expect(factory).toBeDefined();

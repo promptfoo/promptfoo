@@ -187,14 +187,14 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         this.on('conversation_complete', onComplete);
 
         // Initiate the conversation
-        if (this.config.targetSpeaksFirst !== false) {
-          // Target speaks first (default) - request greeting from target
-          this.targetConnection?.requestResponse();
-        } else {
+        if (this.config.targetSpeaksFirst === false) {
           // Simulated user speaks first - request opening from simulated user
           // This is useful when target doesn't support "speak first" mode (e.g., Nova Sonic)
           logger.debug('[Orchestrator] Simulated user speaks first mode');
           this.simulatedUserConnection?.requestResponse();
+        } else {
+          // Target speaks first (default) - request greeting from target
+          this.targetConnection?.requestResponse();
         }
       });
     } catch (error) {
@@ -296,13 +296,13 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       // Check for stop marker
       if (this.transcript.hasStopMarker()) {
         logger.debug('[Orchestrator] Stop marker detected in target speech');
-        this.completeConversation('goal_achieved');
+        void this.completeConversation('goal_achieved');
       }
 
       // Check turn limit
       if (this.turnCount >= (this.config.maxTurns || DEFAULT_MAX_TURNS)) {
         logger.debug('[Orchestrator] Max turns reached');
-        this.completeConversation('max_turns');
+        void this.completeConversation('max_turns');
       }
     });
 
@@ -323,13 +323,13 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.targetConnection.on('error', (error: Error) => {
       logger.error('[Orchestrator] Target connection error:', { error });
       this.emit('error', error);
-      this.completeConversation('error');
+      void this.completeConversation('error');
     });
 
     this.targetConnection.on('close', () => {
       logger.debug('[Orchestrator] Target connection closed');
       if (this.state === 'active') {
-        this.completeConversation('error');
+        void this.completeConversation('error');
       }
     });
   }
@@ -410,13 +410,13 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       // Check for stop marker
       if (this.transcript.hasStopMarker()) {
         logger.debug('[Orchestrator] Stop marker detected in simulated user speech');
-        this.completeConversation('goal_achieved');
+        void this.completeConversation('goal_achieved');
       }
 
       // Check turn limit
       if (this.turnCount >= (this.config.maxTurns || DEFAULT_MAX_TURNS)) {
         logger.debug('[Orchestrator] Max turns reached');
-        this.completeConversation('max_turns');
+        void this.completeConversation('max_turns');
       }
     });
 
@@ -435,13 +435,13 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     this.simulatedUserConnection.on('error', (error: Error) => {
       logger.error('[Orchestrator] Simulated user connection error:', { error });
       this.emit('error', error);
-      this.completeConversation('error');
+      void this.completeConversation('error');
     });
 
     this.simulatedUserConnection.on('close', () => {
       logger.debug('[Orchestrator] Simulated user connection closed');
       if (this.state === 'active') {
-        this.completeConversation('error');
+        void this.completeConversation('error');
       }
     });
   }
@@ -477,7 +477,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     this.conversationTimeout = setTimeout(() => {
       logger.warn('[Orchestrator] Conversation timeout reached');
-      this.completeConversation('timeout');
+      void this.completeConversation('timeout');
     }, this.config.timeoutMs || DEFAULT_TIMEOUT_MS);
   }
 

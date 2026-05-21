@@ -18,12 +18,12 @@ providers:
 
       # Target agent settings (the agent being tested)
       targetProvider: openai
-      targetModel: gpt-4o-realtime-preview
+      targetModel: gpt-realtime
       targetVoice: alloy
 
       # Simulated user voice settings
       simulatedUserProvider: openai
-      simulatedUserModel: gpt-4o-realtime-preview
+      simulatedUserModel: gpt-realtime
       simulatedUserVoice: echo
 
       # Audio settings

@@ -157,7 +157,7 @@ export type VoiceProviderType = 'openai' | 'google' | 'bedrock';
 export interface VoiceProviderConfig {
   /** Provider type */
   provider: VoiceProviderType | string;
-  /** Model to use (e.g., 'gpt-4o-realtime-preview') */
+  /** Model to use (e.g., 'gpt-realtime') */
   model?: string;
   /** Voice ID */
   voice?: string;
@@ -313,18 +313,25 @@ export interface RealtimeMessage {
 export interface SessionUpdateMessage extends RealtimeMessage {
   type: 'session.update';
   session: {
-    modalities: string[];
+    type: 'realtime';
+    output_modalities: Array<'text' | 'audio'>;
     instructions: string;
-    voice: string;
-    input_audio_format: AudioFormat;
-    output_audio_format: AudioFormat;
-    input_audio_transcription?: { model: string };
-    turn_detection?: {
-      type: 'server_vad';
-      threshold?: number;
-      prefix_padding_ms?: number;
-      silence_duration_ms?: number;
-    } | null;
+    audio: {
+      input: {
+        format: { type: 'audio/pcm'; rate: number } | { type: 'audio/pcmu' | 'audio/pcma' };
+        transcription?: { model: string };
+        turn_detection?: {
+          type: 'server_vad';
+          threshold?: number;
+          prefix_padding_ms?: number;
+          silence_duration_ms?: number;
+        } | null;
+      };
+      output: {
+        format: { type: 'audio/pcm'; rate: number } | { type: 'audio/pcmu' | 'audio/pcma' };
+        voice?: string;
+      };
+    };
   };
 }
 
@@ -332,7 +339,7 @@ export interface SessionUpdateMessage extends RealtimeMessage {
  * Audio delta message (streaming audio chunk).
  */
 export interface AudioDeltaMessage extends RealtimeMessage {
-  type: 'response.audio.delta' | 'input_audio_buffer.append';
+  type: 'response.output_audio.delta' | 'input_audio_buffer.append';
   delta?: string;
   audio?: string;
 }
@@ -341,7 +348,7 @@ export interface AudioDeltaMessage extends RealtimeMessage {
  * Transcript delta message.
  */
 export interface TranscriptDeltaMessage extends RealtimeMessage {
-  type: 'response.audio_transcript.delta';
+  type: 'response.output_audio_transcript.delta';
   delta: string;
 }
 
@@ -349,7 +356,7 @@ export interface TranscriptDeltaMessage extends RealtimeMessage {
  * Transcript complete message.
  */
 export interface TranscriptDoneMessage extends RealtimeMessage {
-  type: 'response.audio_transcript.done';
+  type: 'response.output_audio_transcript.done';
   text: string;
 }
 

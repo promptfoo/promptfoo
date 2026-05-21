@@ -13,10 +13,21 @@ import { BaseVoiceConnection, waitForEvent } from './base';
 import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
 
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
-const DEFAULT_MODEL = 'gpt-4o-realtime-preview';
+const DEFAULT_MODEL = 'gpt-realtime';
 const DEFAULT_AUDIO_FORMAT: AudioFormat = 'pcm16';
 const DEFAULT_SAMPLE_RATE = 24000;
 const CONNECTION_TIMEOUT_MS = 15000;
+
+function toRealtimeAudioFormat(format: AudioFormat, sampleRate: number) {
+  switch (format) {
+    case 'g711_ulaw':
+      return { type: 'audio/pcmu' as const };
+    case 'g711_alaw':
+      return { type: 'audio/pcma' as const };
+    case 'pcm16':
+      return { type: 'audio/pcm' as const, rate: sampleRate };
+  }
+}
 
 /**
  * OpenAI Realtime API WebSocket connection.
@@ -56,7 +67,6 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       this.ws = new WebSocket(url, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          'OpenAI-Beta': 'realtime=v1',
         },
       });
 
@@ -102,18 +112,29 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         : null;
 
     const audioFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
+    const realtimeAudioFormat = toRealtimeAudioFormat(
+      audioFormat,
+      this.config.sampleRate || DEFAULT_SAMPLE_RATE,
+    );
     const sessionConfig = {
       type: 'session.update',
       session: {
-        modalities: ['text', 'audio'],
+        type: 'realtime',
+        output_modalities: ['audio'],
         instructions: this.config.instructions,
-        voice: this.config.voice,
-        input_audio_format: audioFormat,
-        output_audio_format: audioFormat,
-        input_audio_transcription: {
-          model: 'whisper-1',
+        audio: {
+          input: {
+            format: realtimeAudioFormat,
+            transcription: {
+              model: 'whisper-1',
+            },
+            turn_detection: turnDetectionConfig,
+          },
+          output: {
+            format: realtimeAudioFormat,
+            voice: this.config.voice,
+          },
         },
-        turn_detection: turnDetectionConfig,
       },
     };
 
@@ -168,12 +189,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       return;
     }
 
-    this.send({
-      type: 'response.create',
-      response: {
-        modalities: ['text', 'audio'],
-      },
-    });
+    this.send({ type: 'response.create' });
   }
 
   /**
@@ -228,7 +244,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         break;
 
       // Audio output events
-      case 'response.audio.delta': {
+      case 'response.output_audio.delta': {
         const sampleRate = this.config.sampleRate || DEFAULT_SAMPLE_RATE;
         const audioData = Buffer.from(msg.delta as string, 'base64');
         const bytesPerSample = 2; // PCM16
@@ -252,7 +268,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         break;
       }
 
-      case 'response.audio.done':
+      case 'response.output_audio.done':
         logger.debug('[OpenAIRealtime] Audio done:', {
           voice: this.config.voice,
           cumulativePositionMs: this.cumulativeAudioPositionMs,
@@ -261,11 +277,11 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         break;
 
       // Transcript events
-      case 'response.audio_transcript.delta':
+      case 'response.output_audio_transcript.delta':
         this.emit('transcript_delta', msg.delta as string);
         break;
 
-      case 'response.audio_transcript.done':
+      case 'response.output_audio_transcript.done':
         this.emit('transcript_done', (msg.transcript as string) || '');
         break;
 
