@@ -1,4 +1,5 @@
 import input from '@inquirer/input';
+import search from '@inquirer/search';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
@@ -189,13 +190,24 @@ async function setupTeamContext(
       } else {
         logger.info('');
         try {
-          const answer = await select({
+          const answer = await search({
             message: 'Select a team to use:',
-            choices: organizationTeams.map((team) => ({
-              name: team.name,
-              value: team.id,
-              description: team.slug,
-            })),
+            source: async (input) => {
+              const searchTerm = input?.trim().toLowerCase();
+              const matchingTeams = searchTerm
+                ? organizationTeams.filter(
+                    (team) =>
+                      team.name.toLowerCase().includes(searchTerm) ||
+                      team.slug.toLowerCase().includes(searchTerm),
+                  )
+                : organizationTeams;
+
+              return matchingTeams.map((team) => ({
+                name: team.name,
+                value: team.id,
+                description: team.slug,
+              }));
+            },
           });
           selectedTeam = organizationTeams.find((team) => team.id === answer);
         } catch {
