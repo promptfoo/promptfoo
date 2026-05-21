@@ -2522,6 +2522,45 @@ describe('OpenAI Realtime Provider', () => {
       }
     });
 
+    it('clears a failed setup timeout before a later persistent turn', async () => {
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: { modalities: ['text'], maintainContext: true, websocketTimeout: 50 },
+        });
+        const ctx = { test: { metadata: { conversationId: 'failed-setup' } } } as any;
+
+        const firstWs = createPersistentMockWebSocket();
+        vi.mocked(firstWs.send as Mock).mockImplementationOnce(() => {
+          throw new Error('session update send failed');
+        });
+        provider.persistentConnection = firstWs;
+
+        const failedTurn = await provider.callApi('fail during setup', ctx);
+        expect(failedTurn.error).toMatch(/session update send failed/i);
+        provider.cleanup();
+
+        const nextWs = createPersistentMockWebSocket();
+        provider.persistentConnection = nextWs;
+
+        const laterTurn = provider.callApi('succeed after setup failure', ctx);
+        await flushMicrotasks();
+        const handler = lastMessageHandler();
+        emitUserItem(handler, 'u-later');
+        emitOutputTextDone(handler, 'later turn succeeded');
+        emitResponseDone(handler);
+
+        const result = await laterTurn;
+        expect(result.output).toBe('later turn succeeded');
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(nextWs.close).not.toHaveBeenCalled();
+        provider.cleanup();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('rejects connectionReady and clears state when the socket closes before OPEN', async () => {
       // Regression: openPersistentConnection() only listened for 'error', so
       // a handshake rejection that surfaces as 'close' (without a preceding

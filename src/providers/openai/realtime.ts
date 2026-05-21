@@ -2464,22 +2464,33 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
     }
 
-    sendEvent({
-      type: 'session.update',
-      session: await this.getRealtimeSessionConfig(realtimeToolConfig),
-    });
+    try {
+      sendEvent({
+        type: 'session.update',
+        session: await this.getRealtimeSessionConfig(realtimeToolConfig),
+      });
 
-    // Create a conversation item with the user's prompt. Use the snapshot
-    // taken before any await so a concurrent turn cannot mutate the anchor.
-    sendEvent({
-      type: 'conversation.item.create',
-      previous_item_id: previousItemIdAtTurnStart,
-      item: {
-        type: 'message',
-        role: 'user',
-        content: promptContent,
-      },
-    });
+      // Create a conversation item with the user's prompt. Use the snapshot
+      // taken before any await so a concurrent turn cannot mutate the anchor.
+      sendEvent({
+        type: 'conversation.item.create',
+        previous_item_id: previousItemIdAtTurnStart,
+        item: {
+          type: 'message',
+          role: 'user',
+          content: promptContent,
+        },
+      });
+    } catch (error) {
+      // Setup can fail after the request timeout starts but before any turn
+      // listener clears it. Do not let that stale timeout tear down a later
+      // persistent socket after the failed call has already returned.
+      clearRequestTimeout();
+      if (cleanupMessageHandler) {
+        cleanupMessageHandler();
+      }
+      throw error;
+    }
   }
 
   // Add cleanup method to close WebSocket connections
