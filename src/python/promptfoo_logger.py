@@ -47,6 +47,7 @@ class PromptfooLogger:
                 sys.stderr.write("[promptfoo_logger] failed to emit log\n")
                 sys.stderr.flush()
             except Exception:
+                # Logging must never break user hook execution.
                 pass
 
     def _log(
