@@ -1,6 +1,6 @@
 ---
 sidebar_label: Tuning Engines
-description: "Use Tuning Engines as an OpenAI-compatible gateway for governed model routing, access control, and usage-aware evaluations."
+description: 'Use Tuning Engines as an OpenAI-compatible gateway for governed model routing, access control, and usage-aware evaluations.'
 ---
 
 # Tuning Engines
@@ -32,11 +32,11 @@ providers:
       max_tokens: 500
 
 prompts:
-  - "Write a concise release note for: {{feature}}"
+  - 'Write a concise release note for: {{feature}}'
 
 tests:
   - vars:
-      feature: "governed model routing"
+      feature: 'governed model routing'
 ```
 
 ## Compare routed models
