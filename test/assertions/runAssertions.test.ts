@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderMetricName, runAssertions } from '../../src/assertions/index';
+import { renderMetricName, runAssertion, runAssertions } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';
@@ -218,6 +218,65 @@ describe('runAssertions', () => {
       originalScore: 1,
       provider: 'openai:gpt-4o-mini',
       pattern: 'openai:gpt-4o-mini',
+    });
+  });
+
+  it('should apply expected failures when runAssertion is called directly', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: {
+        type: 'equals',
+        value: 'Expected output',
+        xfail: 'openai:*',
+      },
+      test: {},
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      metadata: {
+        xfail: {
+          expected: true,
+          originalPass: false,
+          provider: 'openai:gpt-4o-mini',
+          pattern: 'openai:*',
+        },
+      },
+    });
+  });
+
+  it('should fail direct runAssertion calls when expected failures unexpectedly pass', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: {
+        type: 'equals',
+        value: 'Expected output',
+        xfail: 'openai:*',
+      },
+      test: {},
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
+      metadata: {
+        xfail: {
+          expected: true,
+          originalPass: true,
+          provider: 'openai:gpt-4o-mini',
+          pattern: 'openai:*',
+        },
+      },
     });
   });
 

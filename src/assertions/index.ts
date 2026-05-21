@@ -564,6 +564,8 @@ export async function runAssertion({
   traceId?: string;
   traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  const applyXFail = (result: GradingResult) => applyProviderXFail(assertion, result, provider);
+
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -640,12 +642,12 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
+          return applyXFail({
             pass: false,
             score: 0,
             reason: (error as Error).message,
             assertion,
-          };
+          });
         }
       } else if (filePath.endsWith('.rb')) {
         try {
@@ -658,12 +660,12 @@ export async function runAssertion({
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
+          return applyXFail({
             pass: false,
             score: 0,
             reason: (error as Error).message,
             assertion,
-          };
+          });
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -778,7 +780,7 @@ export async function runAssertion({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams);
+    return applyXFail(await handleRedteam(assertionParams));
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
@@ -798,13 +800,13 @@ export async function runAssertion({
 
     // If weight is 0, treat this as a metric-only assertion that can't fail
     if (assertion.weight === 0) {
-      return {
+      return applyXFail({
         ...result,
         pass: true, // Force pass for weight=0 assertions
-      };
+      });
     }
 
-    return result;
+    return applyXFail(result);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
@@ -850,7 +852,7 @@ export async function runAssertion({
  * console.log(`All passed: ${result.pass}`);
  * console.log(`Average score: ${result.score}`);
  * result.componentResults.forEach((r) => {
- *   console.log(`  ${r.assertion?.type}: ${r.pass ? '?' : '?'} (${r.score})`);
+ *   console.log(`  ${r.assertion?.type}: ${r.pass ? '✓' : '✗'} (${r.score})`);
  * });
  * ```
  *
@@ -938,22 +940,18 @@ export async function runAssertions({
       return;
     }
 
-    const result = applyProviderXFail(
-      assertion,
-      await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertion,
-        test,
-        vars,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-        traceData: preloadedTraceData,
-      }),
+    const result = await runAssertion({
+      prompt,
       provider,
-    );
+      providerResponse,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+    });
 
     assertResult.addResult({
       index,
