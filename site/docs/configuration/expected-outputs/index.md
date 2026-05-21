@@ -76,7 +76,7 @@ tests:
           reason: 'Provider does not include warranty duration yet'
 ```
 
-`xfail` can also be `true`, a single provider pattern, or an array of provider patterns. Patterns match provider ids or labels and support `*` and `?`; use `providers: '*'` to match every provider while keeping a reason.
+`xfail` can also be `true`, a single provider pattern, or an array of provider patterns. Patterns match provider ids or labels and support `*` and `?`; use `providers: '*'` to match every provider while keeping a reason. `xfail` is not supported on comparison assertions such as `select-best` and `max-score`.
 
 ## Grouping assertions via Assertion Sets
 

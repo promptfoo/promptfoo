@@ -550,7 +550,7 @@ export interface GradingResult {
     renderedGradingPrompt?: string;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
-    // must not flip such results to a pass ? a grader error is not evidence
+    // must not flip such results to a pass — a grader error is not evidence
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
@@ -701,41 +701,55 @@ const AssertionXFailSchema = z.union([
 ]);
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
-export const AssertionSchema = z.object({
-  // Type of assertion
-  type: AssertionTypeSchema,
+export const AssertionSchema = z
+  .object({
+    // Type of assertion
+    type: AssertionTypeSchema,
 
-  // The expected value, if applicable
-  value: z.custom<AssertionValue>().optional(),
+    // The expected value, if applicable
+    value: z.custom<AssertionValue>().optional(),
 
-  // An external mapping of arbitrary strings to values that is passed
-  // to the assertion for custom asserts
-  config: z.record(z.string(), z.any()).optional(),
+    // An external mapping of arbitrary strings to values that is passed
+    // to the assertion for custom asserts
+    config: z.record(z.string(), z.any()).optional(),
 
-  // The threshold value, only applicable for similarity (cosine distance)
-  threshold: z.number().optional(),
+    // The threshold value, only applicable for similarity (cosine distance)
+    threshold: z.number().optional(),
 
-  // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
-  weight: z.number().optional(),
+    // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
+    weight: z.number().optional(),
 
-  // Some assertions (similarity, llm-rubric) require an LLM provider
-  provider: z.custom<GradingConfig['provider']>().optional(),
+    // Some assertions (similarity, llm-rubric) require an LLM provider
+    provider: z.custom<GradingConfig['provider']>().optional(),
 
-  // Override the grading rubric
-  rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
+    // Override the grading rubric
+    rubricPrompt: z.custom<GradingConfig['rubricPrompt']>().optional(),
 
-  // Tag this assertion result as a named metric
-  metric: z.string().optional(),
+    // Tag this assertion result as a named metric
+    metric: z.string().optional(),
 
-  // Process the output before running the assertion
-  transform: StringOrFunctionSchema.optional(),
+    // Process the output before running the assertion
+    transform: StringOrFunctionSchema.optional(),
 
-  // Extract context from the output using a transform
-  contextTransform: StringOrFunctionSchema.optional(),
+    // Extract context from the output using a transform
+    contextTransform: StringOrFunctionSchema.optional(),
 
-  // Mark this assertion as expected to fail for matching providers
-  xfail: AssertionXFailSchema.optional(),
-});
+    // Mark this assertion as expected to fail for matching providers
+    xfail: AssertionXFailSchema.optional(),
+  })
+  .superRefine((assertion, ctx) => {
+    if (
+      assertion.xfail !== undefined &&
+      typeof assertion.type === 'string' &&
+      (assertion.type.startsWith('select-') || assertion.type === 'max-score')
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['xfail'],
+        message: `xfail is not supported for ${assertion.type} assertions`,
+      });
+    }
+  });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 

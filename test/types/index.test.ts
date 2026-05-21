@@ -93,6 +93,18 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('should reject xfail on comparison assertion types', () => {
+    const assertions = [
+      { type: 'select-best', value: 'best criteria', xfail: 'openai:*' },
+      { type: 'max-score', xfail: true },
+    ];
+
+    assertions.forEach((assertion) => {
+      const result = AssertionSchema.safeParse(assertion);
+      expect(result.success).toBe(false);
+    });
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 
