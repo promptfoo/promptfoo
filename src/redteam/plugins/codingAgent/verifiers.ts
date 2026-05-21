@@ -564,6 +564,30 @@ function coerceToolPayload(value: unknown): string | undefined {
   return undefined;
 }
 
+const SHELL_TOOL_NAMES = new Set([
+  'bash',
+  'exec',
+  'exec_command',
+  'execute_command',
+  'run_shell_command',
+  'shell',
+  'shell_command',
+  'terminal',
+]);
+
+function isShellToolName(toolName: string): boolean {
+  return SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase());
+}
+
+function getToolCommand(toolInput: unknown): string | undefined {
+  if (typeof toolInput === 'string') {
+    return getString(toolInput);
+  }
+
+  const inputObject = getObject(toolInput);
+  return inputObject ? (getString(inputObject.command) ?? getString(inputObject.cmd)) : undefined;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -699,6 +723,143 @@ async function evidenceFromConfiguredFiles(
   return evidence;
 }
 
+const TOOL_INPUT_ITEM_TYPES = new Set([
+  'dynamic_tool_call',
+  'mcp_tool_call',
+  'tool_call',
+  'tool_use',
+]);
+const TOOL_OUTPUT_ITEM_TYPES = new Set([
+  'dynamic_tool_call',
+  'mcp_tool_call',
+  'tool_output',
+  'tool_result',
+]);
+
+function providerRawAgentMessageEvidence(
+  itemObject: Record<string, unknown>,
+  itemNumber: number,
+): TargetEvidence | undefined {
+  const text = getString(itemObject.text);
+  return text
+    ? {
+        evidenceSource: 'agent-response',
+        location: `provider raw item ${itemNumber} agent message`,
+        text,
+      }
+    : undefined;
+}
+
+function providerRawCommandEvidence(
+  itemObject: Record<string, unknown>,
+  itemNumber: number,
+): TargetEvidence[] {
+  const evidence: TargetEvidence[] = [];
+  const command = getString(itemObject.command);
+  const commandOutput = getString(itemObject.aggregated_output);
+
+  if (command) {
+    evidence.push({
+      evidenceSource: 'command',
+      location: `provider raw item ${itemNumber} command`,
+      text: command,
+    });
+  }
+  if (commandOutput) {
+    evidence.push({
+      evidenceSource: 'command-output',
+      location: `provider raw item ${itemNumber} command output`,
+      text: commandOutput,
+    });
+  }
+
+  return evidence;
+}
+
+function providerRawToolName(itemObject: Record<string, unknown>): string {
+  return getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
+}
+
+function providerRawToolInputEvidence(
+  itemObject: Record<string, unknown>,
+  itemNumber: number,
+): TargetEvidence | undefined {
+  const toolName = providerRawToolName(itemObject);
+  const rawToolInput =
+    itemObject.input ??
+    itemObject.arguments ??
+    itemObject.args ??
+    itemObject.content ??
+    itemObject.text;
+  const toolCommand = isShellToolName(toolName) ? getToolCommand(rawToolInput) : undefined;
+  const toolInput = toolCommand ?? coerceToolPayload(rawToolInput);
+
+  return toolInput
+    ? {
+        evidenceSource: toolCommand ? 'command' : 'artifact-file',
+        location: `provider raw item ${itemNumber} ${toolName} input`,
+        text: toolInput,
+      }
+    : undefined;
+}
+
+function providerRawToolOutputEvidence(
+  itemObject: Record<string, unknown>,
+  itemNumber: number,
+): TargetEvidence | undefined {
+  const toolName = providerRawToolName(itemObject);
+  const toolOutput = coerceToolPayload(
+    itemObject.output ??
+      itemObject.result ??
+      itemObject.text ??
+      itemObject.content ??
+      itemObject.content_items ??
+      itemObject.contentItems,
+  );
+
+  return toolOutput
+    ? {
+        evidenceSource: 'command-output',
+        location: `provider raw item ${itemNumber} ${toolName} output`,
+        text: toolOutput,
+      }
+    : undefined;
+}
+
+function evidenceFromProviderRawItem(
+  itemObject: Record<string, unknown>,
+  itemNumber: number,
+): TargetEvidence[] {
+  const type = getString(itemObject.type);
+  if (!type) {
+    return [];
+  }
+
+  const evidence: TargetEvidence[] = [];
+  const agentMessageEvidence =
+    type === 'agent_message' ? providerRawAgentMessageEvidence(itemObject, itemNumber) : undefined;
+  if (agentMessageEvidence) {
+    evidence.push(agentMessageEvidence);
+  }
+  if (type === 'command_execution') {
+    evidence.push(...providerRawCommandEvidence(itemObject, itemNumber));
+  }
+  const toolInputEvidence = TOOL_INPUT_ITEM_TYPES.has(type)
+    ? providerRawToolInputEvidence(itemObject, itemNumber)
+    : undefined;
+  if (toolInputEvidence) {
+    evidence.push(toolInputEvidence);
+  }
+  const toolOutputEvidence = TOOL_OUTPUT_ITEM_TYPES.has(type)
+    ? providerRawToolOutputEvidence(itemObject, itemNumber)
+    : undefined;
+  if (toolOutputEvidence) {
+    evidence.push(toolOutputEvidence);
+  }
+
+  return evidence;
+}
+
 function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
   const parsed = parseProviderRaw(raw);
   const object = getObject(parsed);
@@ -719,72 +880,8 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
   const items = Array.isArray(object.items) ? object.items : [];
   items.forEach((item, index) => {
     const itemObject = getObject(item);
-    if (!itemObject) {
-      return;
-    }
-
-    const type = getString(itemObject.type);
-    if (type === 'agent_message') {
-      const text = getString(itemObject.text);
-      if (text) {
-        evidence.push({
-          evidenceSource: 'agent-response',
-          location: `provider raw item ${index + 1} agent message`,
-          text,
-        });
-      }
-    }
-
-    if (type === 'command_execution') {
-      const command = getString(itemObject.command);
-      const commandOutput = getString(itemObject.aggregated_output);
-      if (command) {
-        evidence.push({
-          evidenceSource: 'command',
-          location: `provider raw item ${index + 1} command`,
-          text: command,
-        });
-      }
-      if (commandOutput) {
-        evidence.push({
-          evidenceSource: 'command-output',
-          location: `provider raw item ${index + 1} command output`,
-          text: commandOutput,
-        });
-      }
-    }
-
-    if (type === 'tool_use' || type === 'tool_call') {
-      // Generic tool invocations (Write/Edit/Read/MCP) that aren't shell
-      // commands. Provider wrappers should surface these when the underlying
-      // agent writes files via file-edit tools rather than Bash heredocs;
-      // without this, deterministic verifiers only see the final assistant
-      // text and miss vulnerable code delivered through tool inputs.
-      const toolName = getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
-      const toolInput = coerceToolPayload(
-        itemObject.input ?? itemObject.content ?? itemObject.text,
-      );
-      if (toolInput) {
-        evidence.push({
-          evidenceSource: 'artifact-file',
-          location: `provider raw item ${index + 1} ${toolName} input`,
-          text: toolInput,
-        });
-      }
-    }
-
-    if (type === 'tool_result' || type === 'tool_output') {
-      const toolName = getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
-      const toolOutput = coerceToolPayload(
-        itemObject.output ?? itemObject.text ?? itemObject.content,
-      );
-      if (toolOutput) {
-        evidence.push({
-          evidenceSource: 'command-output',
-          location: `provider raw item ${index + 1} ${toolName} output`,
-          text: toolOutput,
-        });
-      }
+    if (itemObject) {
+      evidence.push(...evidenceFromProviderRawItem(itemObject, index + 1));
     }
   });
 
