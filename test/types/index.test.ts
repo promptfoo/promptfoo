@@ -53,6 +53,46 @@ describe('AssertionSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('should validate assertion xfail configurations', () => {
+    const assertions = [
+      { type: 'equals', value: 'expected value', xfail: true },
+      { type: 'equals', value: 'expected value', xfail: 'openai:*' },
+      { type: 'equals', value: 'expected value', xfail: ['openai:*', 'anthropic:*'] },
+      {
+        type: 'equals',
+        value: 'expected value',
+        xfail: {
+          providers: 'openai:gpt-4o-mini',
+          reason: 'Known provider-specific mismatch',
+        },
+      },
+      {
+        type: 'equals',
+        value: 'expected value',
+        xfail: {
+          providers: ['openai:*', 'anthropic:*'],
+        },
+      },
+    ];
+
+    assertions.forEach((assertion) => {
+      const result = AssertionSchema.safeParse(assertion);
+      expect(result.success).toBe(true);
+    });
+  });
+
+  it('should reject xfail objects without providers', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'equals',
+      value: 'expected value',
+      xfail: {
+        reason: 'Missing provider scope',
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 

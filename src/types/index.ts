@@ -550,7 +550,7 @@ export interface GradingResult {
     renderedGradingPrompt?: string;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real
     // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
-    // must not flip such results to a pass — a grader error is not evidence
+    // must not flip such results to a pass ? a grader error is not evidence
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
@@ -689,6 +689,19 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const AssertionXFailProviderSchema = z.union([z.string(), z.array(z.string())]);
+
+export const AssertionXFailSchema = z.union([
+  z.boolean(),
+  AssertionXFailProviderSchema,
+  z.object({
+    providers: AssertionXFailProviderSchema,
+    reason: z.string().optional(),
+  }),
+]);
+
+export type AssertionXFail = z.infer<typeof AssertionXFailSchema>;
+
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
   // Type of assertion
@@ -721,6 +734,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Mark this assertion as expected to fail for matching providers
+  xfail: AssertionXFailSchema.optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
