@@ -140,7 +140,10 @@ export function createApp() {
   let cachedOpenApiDocument: ReturnType<typeof createServerOpenApiDocument> | undefined;
   app.get('/api/openapi.json', (_req: Request, res: Response): void => {
     if (!cachedOpenApiDocument) {
-      cachedOpenApiDocument = createServerOpenApiDocument();
+      cachedOpenApiDocument = createServerOpenApiDocument({
+        serverDescription: 'Current local Promptfoo server',
+        serverUrl: '/',
+      });
     }
     res.json(cachedOpenApiDocument);
   });

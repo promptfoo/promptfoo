@@ -160,6 +160,15 @@ describe('server OpenAPI generation', () => {
     ).toEqual(expect.objectContaining({ pattern: '^[a-f0-9]{64}$/i', type: 'string' }));
   });
 
+  it('uses the default local server URL for generated static documents', () => {
+    expect(createServerOpenApiDocument().servers).toEqual([
+      {
+        description: 'Default local Promptfoo server',
+        url: 'http://localhost:15500',
+      },
+    ]);
+  });
+
   it('emits representative inline DTO schemas', () => {
     const document = createServerOpenApiDocument();
     const paths = document.paths ?? {};
@@ -199,6 +208,12 @@ describe('server OpenAPI generation', () => {
     expect(response.headers['content-type']).toMatch(/application\/json/);
     expect(response.body.openapi).toBe('3.1.0');
     expect(response.body.info?.title).toBe('Promptfoo Local Server API');
+    expect(response.body.servers).toEqual([
+      {
+        description: 'Current local Promptfoo server',
+        url: '/',
+      },
+    ]);
     expect(Object.keys(response.body.paths ?? {})).toContain('/api/openapi.json');
     expect(Object.keys(response.body.paths ?? {}).length).toBeGreaterThan(0);
   });

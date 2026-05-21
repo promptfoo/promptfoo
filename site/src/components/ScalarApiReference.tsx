@@ -25,6 +25,7 @@ type ScalarWindow = Window & {
 type ScalarApiReferenceProps = {
   description: string;
   heading: string;
+  showTestRequestButton?: boolean;
   specUrl: string;
   summary: ReactNode;
   title: string;
@@ -40,6 +41,7 @@ function getScalarTheme() {
 export default function ScalarApiReference({
   description,
   heading,
+  showTestRequestButton = true,
   specUrl,
   summary,
   title,
@@ -66,6 +68,7 @@ export default function ScalarApiReference({
 
       destroyReference();
       scalarReference = scalar.createApiReference(`#${SCALAR_CONTAINER_ID}`, {
+        hideTestRequestButton: !showTestRequestButton,
         theme: getScalarTheme(),
         url: specUrl,
       });
@@ -117,7 +120,7 @@ export default function ScalarApiReference({
       script.removeEventListener('error', handleError);
       destroyReference();
     };
-  }, [specUrl]);
+  }, [showTestRequestButton, specUrl]);
 
   // Scalar's light theme does not match the site palette, so use alternate for light mode.
   useEffect(() => {

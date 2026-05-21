@@ -1255,10 +1255,14 @@ export function createServerOpenApiRegistry() {
 }
 
 type CreateServerOpenApiDocumentOptions = {
+  serverDescription?: string;
+  serverUrl?: string;
   version?: string;
 };
 
 export function createServerOpenApiDocument({
+  serverDescription = 'Default local Promptfoo server',
+  serverUrl = 'http://localhost:15500',
   version = VERSION,
 }: CreateServerOpenApiDocumentOptions = {}) {
   const { registry } = createServerOpenApiRegistry();
@@ -1277,8 +1281,8 @@ export function createServerOpenApiDocument({
     },
     servers: [
       {
-        url: 'http://localhost:15500',
-        description: 'Default local Promptfoo server',
+        url: serverUrl,
+        description: serverDescription,
       },
     ],
   });
