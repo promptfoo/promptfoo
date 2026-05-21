@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -17,6 +17,7 @@
       "**/*.grit",
       "**/*.mjs",
       "**/*.cjs",
+      "!!.codex",
       "!!drizzle",
       "!!src/app/src/polyfills",
       "!!**/node_modules",
@@ -328,6 +329,7 @@
         "src/redteam/**/*",
         "src/util/**/*",
         "src/commands/**/*",
+        "src/contracts/**/*",
         "src/types/**/*",
         "src/tracing/**/*"
       ],

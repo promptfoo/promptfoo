@@ -74,6 +74,11 @@ export interface MCPConfig {
   enabled: boolean;
   server?: MCPServerConfig;
   servers?: MCPServerConfig[];
+  transformResponse?: string | Function;
+  /**
+   * @deprecated Use transformResponse instead.
+   */
+  responseParser?: string | Function;
   /**
    * Request timeout in milliseconds for MCP operations.
    * Defaults to 60000 (60 seconds) if not specified.
@@ -116,5 +121,9 @@ export interface MCPTool {
 
 export interface MCPToolResult {
   content: string;
+  /** Set when the SDK call itself threw (transport, timeout, auth failure). */
   error?: string;
+  /** Set when the tool resolved with a protocol-level `isError: true` result. */
+  isError?: true;
+  raw?: unknown;
 }

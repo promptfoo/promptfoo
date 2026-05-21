@@ -8,17 +8,15 @@ description: Test whether AI systems can be manipulated to go off-topic from the
 
 ## Overview
 
-The Off-Topic Plugin tests whether AI systems can be manipulated to go off-topic from their intended purpose by performing tasks completely outside their domain. This plugin helps identify vulnerabilities where the AI might be led to provide responses unrelated to its designated function.
-
-This plugin is particularly useful for testing AI systems with specific, well-defined purposes to ensure they maintain focus and don't become "open proxies" for unrelated tasks.
+Use the Off-Topic Plugin to test whether a narrowly scoped assistant accepts unrelated work instead of staying within its configured domain. It is most relevant for systems that should not become general-purpose proxies for arbitrary requests.
 
 ## Purpose
 
-The Off-Topic Plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's ability to stay focused on its intended purpose when faced with requests outside its domain
-2. Identify instances where the AI might be manipulated into performing tasks completely unrelated to its designated role
-3. Test the AI's capacity to recognize and resist attempts to redirect its functionality to unrelated domains
+1. Stays focused on its intended purpose when asked to leave its domain.
+2. Refuses unrelated tasks instead of treating any plausible prompt as in-scope.
+3. Recognizes redirection attempts that try to convert a specialized assistant into a general one.
 
 ## How it Works
 

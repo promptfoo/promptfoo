@@ -5,11 +5,13 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
 import { prepareComments } from '../../src/codeScan/util/github';
+import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -19,6 +21,7 @@ import {
   type PullRequestContext,
   type ScanResponse,
 } from '../../src/types/codeScan';
+import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
 import { getGitHubContext, getPRFiles } from './github';
 
@@ -30,6 +33,7 @@ interface ActionInputs {
   guidanceFile: string;
   githubToken: string;
   enableForkPrs: boolean;
+  sarifOutputPath: string | undefined;
 }
 
 interface PullRequestForkPayload {
@@ -58,10 +62,23 @@ function getActionInputs(): ActionInputs {
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
     enableForkPrs: core.getBooleanInput('enable-fork-prs'),
+    // core.getInput returns '' when unset; normalize so a falsy check at the call site
+    // doesn't have to special-case the empty-string sentinel.
+    sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
   };
 }
 
-function createScanEnv(): Record<string, string> {
+const SUBPROCESS_ENV_EXCLUSIONS = [
+  'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
+  'ACTIONS_ID_TOKEN_REQUEST_URL',
+  'GH_TOKEN',
+  'GITHUB_OIDC_TOKEN',
+  'GITHUB_TOKEN',
+  'INPUT_GITHUB-TOKEN',
+  'INPUT_GITHUB_TOKEN',
+] as const;
+
+function createSubprocessEnv(): Record<string, string> {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => {
       return typeof entry[1] === 'string';
@@ -71,6 +88,18 @@ function createScanEnv(): Record<string, string> {
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
 
+  for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
+    delete env[key];
+  }
+
+  return env;
+}
+
+function createScanEnv(oidcToken: string | undefined): Record<string, string> {
+  const env = createSubprocessEnv();
+  if (oidcToken) {
+    env.GITHUB_OIDC_TOKEN = oidcToken;
+  }
   return env;
 }
 
@@ -133,18 +162,17 @@ function shouldSkipForkPullRequest(enableForkPrs: boolean): boolean {
   return !enableForkPrs && isPullRequestFromFork();
 }
 
-async function authenticateWithOidc(): Promise<void> {
+async function authenticateWithOidc(): Promise<string | undefined> {
   try {
-    const oidcToken = await core.getIDToken('promptfoo');
+    const oidcToken = await getGitHubOIDCToken('promptfoo');
     core.info('🔐 Got OIDC token for server authentication');
-
-    // Set as environment variable for CLI to use
-    Object.assign(process.env, { GITHUB_OIDC_TOKEN: oidcToken });
+    return oidcToken;
   } catch (error) {
     // OIDC tokens are not available for fork PRs (GitHub security restriction)
     // For fork PRs, the server will use PR-based authentication instead
     core.info(`OIDC token not available: ${formatError(error)}`);
     core.info('For fork PRs, this is expected. Authentication will use PR context instead.');
+    return undefined;
   }
 }
 
@@ -253,17 +281,21 @@ function parseScanOutput(scanOutput: string): ScanResponse {
   }
 }
 
-async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undefined> {
-  const scanEnv = createScanEnv();
+async function runPromptfooScan(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+): Promise<ScanResponse | undefined> {
+  const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
-  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: scanEnv });
+  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: installEnv });
   core.info('✅ Promptfoo installed successfully');
 
   core.info('🚀 Running promptfoo code-scans run...');
 
   let scanOutput = '';
   let scanError = '';
+  const scanEnv = createScanEnv(oidcToken);
 
   const exitCode = await exec.exec('promptfoo', cliArgs, {
     env: scanEnv,
@@ -294,11 +326,14 @@ async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undef
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(cliArgs: string[]): Promise<ScanResponse | undefined> {
+function getScanResponse(
+  cliArgs: string[],
+  oidcToken: string | undefined,
+): Promise<ScanResponse | undefined> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
-  return runPromptfooScan(cliArgs);
+  return runPromptfooScan(cliArgs, oidcToken);
 }
 
 function buildCommentBody(comment: Comment): string {
@@ -402,6 +437,141 @@ async function postFallbackComments(
   }
 }
 
+// The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
+// importing it transitively pulls src/logger.ts (and the winston stack) into this bundle,
+// adding ~800KB to every action download. The inline check below covers the same threat
+// model — path-traversal via `..` plus symlink escape via post-mkdir realpath — without
+// the bundle cost.
+function isPathWithinOrEqualTo(child: string, parent: string): boolean {
+  // Case-sensitive comparison. Both `child` and `parent` are produced by path.resolve on
+  // the same workspace prefix in real use, so casing always matches. An earlier version
+  // lowercased on darwin/win32 to handle hypothetical case-mismatched user input, but
+  // that opened a bypass on case-sensitive APFS volumes (where /Path/A and /path/a are
+  // distinct on disk yet would compare equal here). The post-mkdir realpath check in
+  // writeSarifFile canonicalizes against the actual filesystem, which is the right place
+  // to handle case folding if the underlying volume does it.
+  const pWithSep = parent.endsWith(path.sep) ? parent : parent + path.sep;
+  return child === parent || child.startsWith(pWithSep);
+}
+
+function resolveSarifOutputPath(rawPath: string): string {
+  // getActionInputs normalizes empty/whitespace input to undefined and the call site
+  // skips emitSarifOutput entirely in that case, so we don't repeat the empty check here.
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+  const resolved = path.resolve(workspace, rawPath);
+  if (resolved === workspace || !isPathWithinOrEqualTo(resolved, workspace)) {
+    throw new Error(
+      `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
+    );
+  }
+  return resolved;
+}
+
+function serializeSarif(scanResponse: ScanResponse): string {
+  // Trailing newline for POSIX-text-file friendliness; some downstream tools require it.
+  return `${JSON.stringify(scanResponseToSarif(scanResponse), null, 2)}\n`;
+}
+
+// Walk up from `p` until realpathSync resolves successfully, returning the canonical
+// path of the deepest existing ancestor. Used to detect symlinks anywhere in the parent
+// chain *before* mkdir -p has a chance to follow them out of the workspace.
+function realpathDeepestExisting(p: string): string {
+  let current = p;
+  while (true) {
+    try {
+      return fs.realpathSync(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        throw error;
+      }
+      const next = path.dirname(current);
+      if (next === current) {
+        throw new Error(`No existing ancestor for "${p}"`);
+      }
+      current = next;
+    }
+  }
+}
+
+function lstatOrNull(p: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(p);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function writeSarifFile(resolved: string, body: string): void {
+  const parent = path.dirname(resolved);
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+
+  // Defense before mkdir: if any existing ancestor of `parent` is a symlink that
+  // resolves outside the workspace, mkdir -p would follow it and create directories
+  // outside the sandbox. Refuse before mutating the filesystem.
+  const realWorkspace = fs.realpathSync(workspace);
+  const realAncestor = realpathDeepestExisting(parent);
+  if (!isPathWithinOrEqualTo(realAncestor, realWorkspace)) {
+    throw new Error(
+      `sarif-output-path "${resolved}" resolves outside GITHUB_WORKSPACE via symlink; refusing to write`,
+    );
+  }
+
+  fs.mkdirSync(parent, { recursive: true });
+
+  // Defense before write: if `resolved` already exists as a symlink, refuse —
+  // writeFileSync follows symlinks and would write through to the link target.
+  if (lstatOrNull(resolved)?.isSymbolicLink()) {
+    throw new Error(
+      `sarif-output-path "${resolved}" is an existing symlink; refusing to overwrite`,
+    );
+  }
+
+  // Close the TOCTOU window between the lstat check and the write: on POSIX, opening with
+  // O_NOFOLLOW makes the call fail atomically if `resolved` was raced into a symlink. On
+  // Windows O_NOFOLLOW is not exposed, so we fall back to plain writeFileSync (the lstat
+  // check above is the only defense there — acceptable given the Actions threat model).
+  const noFollow = (fs.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW;
+  if (typeof noFollow === 'number') {
+    const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow;
+    const fd = fs.openSync(resolved, flags, 0o644);
+    try {
+      fs.writeSync(fd, body);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } else {
+    fs.writeFileSync(resolved, body);
+  }
+}
+
+function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
+  // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
+  let resolved: string;
+  try {
+    resolved = resolveSarifOutputPath(rawPath);
+  } catch (error) {
+    core.warning(formatError(error));
+    return;
+  }
+
+  try {
+    writeSarifFile(resolved, serializeSarif(scanResponse));
+    core.setOutput('sarif-path', resolved);
+    core.info(`📝 Wrote SARIF output to ${resolved}`);
+  } catch (error) {
+    core.warning(`Failed to write SARIF output to "${resolved}": ${formatError(error)}`);
+  }
+}
+
+function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInputs): void {
+  if (inputs.sarifOutputPath) {
+    emitSarifOutput(scanResponse, inputs.sarifOutputPath);
+  }
+}
+
 async function handleScanResponse(
   scanResponse: ScanResponse,
   inputs: ActionInputs,
@@ -409,6 +579,8 @@ async function handleScanResponse(
 ): Promise<void> {
   const { comments, commentsPosted, review } = scanResponse;
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+  emitConfiguredSarifOutput(scanResponse, inputs);
 
   if ((comments.length > 0 || review) && commentsPosted === false) {
     await postFallbackComments(
@@ -484,7 +656,7 @@ async function runCodeScan(): Promise<void> {
 
   core.info('✅ Not a setup PR - proceeding with security scan');
 
-  await authenticateWithOidc();
+  const oidcToken = await authenticateWithOidc();
 
   const finalConfigPath = resolveConfigPath(inputs.configPath, inputs.minimumSeverity, guidance);
 
@@ -493,7 +665,7 @@ async function runCodeScan(): Promise<void> {
     await fetchBaseBranch(baseBranch);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
-    const scanResponse = await getScanResponse(cliArgs);
+    const scanResponse = await getScanResponse(cliArgs, oidcToken);
 
     if (!scanResponse) {
       return;
