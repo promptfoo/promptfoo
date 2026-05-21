@@ -79,6 +79,15 @@ describe('collectBlobHashes', () => {
     expect([...collectBlobHashes(value, { maxDepth: 2 })]).toEqual([HASH_A]);
   });
 
+  it('does not overflow the stack on deeply nested input', () => {
+    let node: unknown = uri(HASH_A);
+    for (let depth = 0; depth < 50_000; depth += 1) {
+      node = { child: node };
+    }
+    // maxDepth bounds recursion long before the call stack is exhausted.
+    expect(() => collectBlobHashes(node, { maxDepth: 64 })).not.toThrow();
+  });
+
   it('honors maxStringLength while still scanning blob-scheme-prefixed strings', () => {
     const buried = { output: `${'x'.repeat(200)} ${uri(HASH_A)}` };
     const prefixed = { output: `${uri(HASH_B)}${'y'.repeat(200)}` };
