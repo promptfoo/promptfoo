@@ -43,6 +43,10 @@ function mergeMetadata(
   };
 }
 
+function isUnexpectedXFailPass(result: GradingResult): boolean {
+  return result.metadata?.xfail?.expected === true && result.metadata.xfail.originalPass === true;
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -66,6 +70,7 @@ export class AssertionsResult {
   private namedScoreWeights: Record<string, number> = {};
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
+  private unexpectedXFailPassReason: string | undefined;
 
   constructor({
     threshold,
@@ -102,6 +107,9 @@ export class AssertionsResult {
 
     if (isRedteamGuardrail && !result.pass) {
       this.failedContentSafetyChecks = true;
+    }
+    if (isUnexpectedXFailPass(result)) {
+      this.unexpectedXFailPassReason = result.reason;
     }
 
     if (metric) {
@@ -166,6 +174,10 @@ export class AssertionsResult {
       pass = true;
       reason = GUARDRAIL_BLOCKED_REASON;
     }
+    if (this.unexpectedXFailPassReason) {
+      pass = false;
+      reason = this.unexpectedXFailPassReason;
+    }
 
     // Flatten nested component results, and copy the assertion into the child results.
     const flattenedComponentResults = this.componentResults.flatMap((result) => {
@@ -223,6 +235,10 @@ export class AssertionsResult {
             metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
           }),
         };
+        if (this.unexpectedXFailPassReason && this.result.pass) {
+          this.result.pass = false;
+          this.result.reason = this.unexpectedXFailPassReason;
+        }
       } catch (err) {
         this.result.pass = false;
         this.result.score = 0;

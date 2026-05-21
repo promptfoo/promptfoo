@@ -429,8 +429,10 @@ function getProviderXFailMatch(
   }
 
   const identifiers = getProviderIdentifiers(provider);
-  const pattern = patterns.find((pattern) =>
-    identifiers.some((identifier) => providerIdentifierMatches(pattern, identifier)),
+  const pattern = patterns.find(
+    (pattern) =>
+      pattern === '*' ||
+      identifiers.some((identifier) => providerIdentifierMatches(pattern, identifier)),
   );
 
   return pattern ? { provider: getProviderDisplayName(provider), pattern, reason } : undefined;
@@ -442,6 +444,9 @@ function applyProviderXFail(
   provider?: ApiProvider,
 ): GradingResult {
   if (assertion.weight === 0) {
+    return result;
+  }
+  if (result.metadata?.graderError === true) {
     return result;
   }
 
