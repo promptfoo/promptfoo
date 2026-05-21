@@ -13,6 +13,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
+import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -38,6 +39,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { EnvOverrides } from '../../types/env';
 import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { AnthropicMessageOptions } from './types';
+
+const DEFAULT_MAX_MCP_TOOL_CALLS = 8;
 
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
@@ -110,6 +113,123 @@ function getMessagesResponseMetadata(response: Anthropic.Messages.Message) {
   };
 }
 
+function getMaxMcpToolCalls(config: AnthropicMessageOptions): number {
+  if (config.max_tool_calls == null) {
+    return DEFAULT_MAX_MCP_TOOL_CALLS;
+  }
+
+  if (!Number.isFinite(config.max_tool_calls) || config.max_tool_calls < 1) {
+    return DEFAULT_MAX_MCP_TOOL_CALLS;
+  }
+
+  return Math.floor(config.max_tool_calls);
+}
+
+function getMcpContinuationParams(
+  params: Anthropic.Messages.MessageCreateParams,
+  messages: Anthropic.Messages.MessageCreateParams['messages'],
+): Anthropic.Messages.MessageCreateParams {
+  if (params.tool_choice?.type === 'any' || params.tool_choice?.type === 'tool') {
+    const { tool_choice: _toolChoice, ...continuationParams } = params;
+    return { ...continuationParams, messages };
+  }
+
+  return { ...params, messages };
+}
+
+function normalizeMcpToolContent(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data: unknown }).data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
+function coerceMcpToolInput(input: unknown): Record<string, unknown> {
+  if (input == null || input === '') {
+    return {};
+  }
+  if (typeof input === 'string') {
+    const parsed = JSON.parse(input);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+  }
+  return typeof input === 'object' && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : {};
+}
+
+function mergeAnthropicUsage(
+  messages: Anthropic.Messages.Message[],
+): Anthropic.Messages.Message['usage'] | undefined {
+  const usageEntries = messages.map((message) => message.usage).filter((usage) => usage != null);
+
+  if (usageEntries.length === 0) {
+    return undefined;
+  }
+
+  const [firstUsage, ...remainingUsageEntries] = usageEntries;
+
+  return remainingUsageEntries.reduce<NonNullable<Anthropic.Messages.Message['usage']>>(
+    (acc, usage) => ({
+      ...usage,
+      input_tokens: acc.input_tokens + (usage.input_tokens ?? 0),
+      output_tokens: acc.output_tokens + (usage.output_tokens ?? 0),
+      cache_creation_input_tokens:
+        (acc.cache_creation_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
+      cache_read_input_tokens:
+        (acc.cache_read_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+    }),
+    firstUsage,
+  );
+}
+
+function withMergedAnthropicUsage(
+  response: Anthropic.Messages.Message,
+  responses: Anthropic.Messages.Message[],
+): Anthropic.Messages.Message {
+  const usage = mergeAnthropicUsage(responses);
+  return usage ? { ...response, usage } : response;
+}
+
+function getAnthropicCostFromMessage(
+  modelName: string,
+  config: AnthropicMessageOptions,
+  message: Anthropic.Messages.Message,
+): number | undefined {
+  return calculateAnthropicCost(
+    modelName,
+    config,
+    message.usage?.input_tokens,
+    message.usage?.output_tokens,
+    message.usage?.cache_read_input_tokens ?? undefined,
+    message.usage?.cache_creation_input_tokens ?? undefined,
+  );
+}
+
 export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
@@ -151,6 +271,143 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       await this.initializationPromise;
       await this.mcpClient.cleanup();
       this.mcpClient = null;
+    }
+  }
+
+  private async resolveMcpToolUse({
+    config,
+    headers,
+    initialResponse,
+    params,
+    shouldStream,
+  }: {
+    config: AnthropicMessageOptions;
+    headers: Record<string, string>;
+    initialResponse: Anthropic.Messages.Message;
+    params: Anthropic.Messages.MessageCreateParams;
+    shouldStream: boolean;
+  }): Promise<{ error?: string; response: Anthropic.Messages.Message }> {
+    if (!this.mcpClient) {
+      return { response: initialResponse };
+    }
+
+    const mcpToolNames = new Set(this.mcpClient.getAllTools().map((tool) => tool.name));
+    if (mcpToolNames.size === 0) {
+      return { response: initialResponse };
+    }
+
+    let response = initialResponse;
+    const responses = [initialResponse];
+    let messages = params.messages;
+    const maxToolCalls = getMaxMcpToolCalls(config);
+    let executedMcpToolCalls = 0;
+
+    for (let iteration = 0; iteration < maxToolCalls; iteration++) {
+      const responseToolUses = response.content.filter(
+        (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
+      );
+      const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
+
+      if (toolUses.length === 0) {
+        return { response: withMergedAnthropicUsage(response, responses) };
+      }
+
+      if (toolUses.length !== responseToolUses.length) {
+        logger.warn(
+          'Skipping Anthropic MCP continuation because the response mixes MCP and non-MCP tool_use blocks.',
+        );
+        return { response: withMergedAnthropicUsage(response, responses) };
+      }
+
+      if (executedMcpToolCalls + toolUses.length > maxToolCalls) {
+        return {
+          response: withMergedAnthropicUsage(response, responses),
+          error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+        };
+      }
+
+      executedMcpToolCalls += toolUses.length;
+      const toolResultBlocks = await Promise.all(
+        toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse)),
+      );
+
+      messages = [
+        ...messages,
+        {
+          role: 'assistant',
+          content: response.content as Anthropic.Messages.ContentBlockParam[],
+        },
+        {
+          role: 'user',
+          content: toolResultBlocks,
+        },
+      ];
+
+      const nextParams = getMcpContinuationParams(params, messages);
+
+      if (shouldStream) {
+        const stream = await this.anthropic.messages.stream(nextParams, {
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        });
+        response = await stream.finalMessage();
+      } else {
+        response = (await this.anthropic.messages.create(nextParams, {
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        })) as Anthropic.Messages.Message;
+      }
+
+      logger.debug('Anthropic Messages API MCP follow-up response', {
+        response: getMessagesResponseMetadata(response),
+      });
+      responses.push(response);
+    }
+
+    const unresolvedToolUses = response.content.filter(
+      (block) => block.type === 'tool_use' && mcpToolNames.has(block.name),
+    );
+
+    return {
+      response: withMergedAnthropicUsage(response, responses),
+      ...(unresolvedToolUses.length > 0
+        ? {
+            error: `Anthropic MCP tool execution exceeded max_tool_calls=${maxToolCalls}. Increase provider config.max_tool_calls if this evaluation legitimately needs more tool calls.`,
+          }
+        : {}),
+    };
+  }
+
+  private async callMcpToolForAnthropic(
+    toolUse: Anthropic.Messages.ToolUseBlock,
+  ): Promise<Anthropic.Messages.ToolResultBlockParam> {
+    try {
+      const result = await this.mcpClient!.callTool(
+        toolUse.name,
+        coerceMcpToolInput(toolUse.input),
+      );
+
+      if (isMcpErrorResult(result)) {
+        return {
+          type: 'tool_result',
+          tool_use_id: toolUse.id,
+          content: `MCP Tool Error (${toolUse.name}): ${getMcpErrorMessage(result)}`,
+          is_error: true,
+        };
+      }
+
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: normalizeMcpToolContent(result.content),
+      };
+    } catch (error) {
+      return {
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: `MCP Tool Error (${toolUse.name}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        is_error: true,
+      };
     }
   }
 
@@ -482,8 +739,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
+    const shouldUseResponseCache = isCacheEnabled() && config.mcp?.enabled !== true;
 
-    if (isCacheEnabled()) {
+    if (shouldUseResponseCache) {
       // Try to get the cached response
       const cachedResponse = await cache.get<string | undefined>(cacheKey);
       if (cachedResponse) {
@@ -516,14 +774,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               guardrails: { flagged: true, reason: cachedRefusalDetails },
             }),
             ...(reasoning && { reasoning }),
-            cost: calculateAnthropicCost(
-              this.modelName,
-              config,
-              parsedCachedResponse.usage?.input_tokens,
-              parsedCachedResponse.usage?.output_tokens,
-              parsedCachedResponse.usage?.cache_read_input_tokens ?? undefined,
-              parsedCachedResponse.usage?.cache_creation_input_tokens ?? undefined,
-            ),
+            cost: getAnthropicCostFromMessage(this.modelName, config, parsedCachedResponse),
             cached: true,
           };
         } catch {
@@ -536,113 +787,81 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    const requestOptions =
+      Object.keys(headers).length > 0 ? ({ headers } as { headers: Record<string, string> }) : {};
+
     try {
+      let initialMessage: Anthropic.Messages.Message;
       if (shouldStream) {
-        // Handle streaming request
-        const stream = await this.anthropic.messages.stream(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        });
-
-        // Wait for the stream to complete and get the final message
-        const finalMessage = await stream.finalMessage();
+        const stream = await this.anthropic.messages.stream(params, requestOptions);
+        initialMessage = await stream.finalMessage();
         logger.debug(`Anthropic Messages API streaming complete`, {
-          finalMessage: getMessagesResponseMetadata(finalMessage),
+          finalMessage: getMessagesResponseMetadata(initialMessage),
         });
-
-        if (isCacheEnabled()) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(finalMessage));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-
-        const finishReason = normalizeFinishReason(finalMessage.stop_reason);
-        let output = outputFromMessage(finalMessage, config.showThinking ?? true);
-        const reasoning =
-          config.showThinking === false ? undefined : extractReasoningFromMessage(finalMessage);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        const refusalDetails = getRefusalDetails(finalMessage);
-        if (refusalDetails) {
-          logger.warn(refusalDetails);
-        }
-
-        return {
-          output,
-          tokenUsage: getTokenUsage(finalMessage, false),
-          ...(finishReason && { finishReason }),
-          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-          ...(reasoning && { reasoning }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            finalMessage.usage?.input_tokens,
-            finalMessage.usage?.output_tokens,
-            finalMessage.usage?.cache_read_input_tokens ?? undefined,
-            finalMessage.usage?.cache_creation_input_tokens ?? undefined,
-          ),
-        };
       } else {
-        // Handle non-streaming request
-        const response = (await this.anthropic.messages.create(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        })) as Anthropic.Messages.Message;
+        initialMessage = (await this.anthropic.messages.create(
+          params,
+          requestOptions,
+        )) as Anthropic.Messages.Message;
         logger.debug(`Anthropic Messages API response`, {
-          response: getMessagesResponseMetadata(response),
+          response: getMessagesResponseMetadata(initialMessage),
         });
+      }
 
-        if (isCacheEnabled()) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(response));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
+      const { error, response: resolvedMessage } = await this.resolveMcpToolUse({
+        config,
+        headers,
+        initialResponse: initialMessage,
+        params,
+        shouldStream,
+      });
 
-        const finishReason = normalizeFinishReason(response.stop_reason);
-        let output = outputFromMessage(response, config.showThinking ?? true);
-        const reasoning =
-          config.showThinking === false ? undefined : extractReasoningFromMessage(response);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        const refusalDetails = getRefusalDetails(response);
-        if (refusalDetails) {
-          logger.warn(refusalDetails);
-        }
-
+      if (error) {
+        // max_tool_calls was exceeded — tokens were still spent across the loop,
+        // so surface the cost alongside the error so it doesn't disappear from
+        // eval cost tracking.
         return {
-          output,
-          tokenUsage: getTokenUsage(response, false),
-          ...(finishReason && { finishReason }),
-          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-          ...(reasoning && { reasoning }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            response.usage?.input_tokens,
-            response.usage?.output_tokens,
-            response.usage?.cache_read_input_tokens ?? undefined,
-            response.usage?.cache_creation_input_tokens ?? undefined,
-          ),
+          error,
+          tokenUsage: getTokenUsage(resolvedMessage, false),
+          cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
         };
       }
+
+      if (shouldUseResponseCache) {
+        try {
+          await cache.set(cacheKey, JSON.stringify(resolvedMessage));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+
+      const finishReason = normalizeFinishReason(resolvedMessage.stop_reason);
+      let output = outputFromMessage(resolvedMessage, config.showThinking ?? true);
+      const reasoning =
+        config.showThinking === false ? undefined : extractReasoningFromMessage(resolvedMessage);
+
+      // Handle structured JSON output parsing
+      if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
+        try {
+          output = JSON.parse(output);
+        } catch (error) {
+          logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+        }
+      }
+
+      const refusalDetails = getRefusalDetails(resolvedMessage);
+      if (refusalDetails) {
+        logger.warn(refusalDetails);
+      }
+
+      return {
+        output,
+        tokenUsage: getTokenUsage(resolvedMessage, false),
+        ...(finishReason && { finishReason }),
+        ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
+        ...(reasoning && { reasoning }),
+        cost: getAnthropicCostFromMessage(this.modelName, config, resolvedMessage),
+      };
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,

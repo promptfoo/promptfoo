@@ -889,6 +889,66 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
+    it.each([
+      {
+        label: 'isError result',
+        callToolResult: { content: 'Path traversal not allowed', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): Path traversal not allowed',
+      },
+      {
+        label: 'thrown error surfaced via the error field',
+        callToolResult: { content: '', error: 'Connection refused' },
+        expectedOutput: 'MCP Tool Error (read_file): Connection refused',
+      },
+      {
+        label: 'error result without content',
+        callToolResult: { content: '', isError: true },
+        expectedOutput: 'MCP Tool Error (read_file): Tool returned an error result',
+      },
+    ])('should surface MCP tool error results in chat tool callbacks ($label)', async ({
+      callToolResult,
+      expectedOutput,
+    }) => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    function: {
+                      name: 'read_file',
+                      arguments: '{"path":"../../../etc/passwd"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue(callToolResult),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const result = await provider.callApi('Read the file');
+
+      expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
+        path: '../../../etc/passwd',
+      });
+      expect(result.output).toBe(expectedOutput);
+    });
+
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
         data: {

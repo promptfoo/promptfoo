@@ -743,8 +743,8 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should return MCP tool errors', async () => {
       mcpMocks.mockCallTool.mockResolvedValueOnce({
-        content: '',
-        error: 'MCP server failed',
+        content: 'MCP server failed',
+        isError: true,
       });
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
