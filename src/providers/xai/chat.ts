@@ -483,9 +483,8 @@ export function calculateXAICost(
   completionTokens?: number,
   reasoningTokens?: number,
 ): number | undefined {
-  // `completionTokens` is the completion count exclusive of reasoning (callers
-  // pass it that way); xAI bills reasoning at the same per-token rate, so a
-  // response that is all reasoning still has a real, billable output cost.
+  // xAI reports reasoning separately from completion tokens and bills both at
+  // the output rate. Reasoning-only responses still have billable output.
   const billableOutputTokens = (completionTokens ?? 0) + (reasoningTokens ?? 0);
   if (!promptTokens || billableOutputTokens <= 0) {
     return undefined;
@@ -682,18 +681,11 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         // is not reachable here. Fall back to local pricing math, which
         // includes reasoning tokens at the output rate.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
-        // `completion` is completion_tokens, which already includes reasoning
-        // tokens; calculateXAICost adds reasoning back, so pass completion
-        // exclusive of reasoning to avoid billing it twice.
-        const completionTokens =
-          typeof response.tokenUsage.completion === 'number'
-            ? Math.max(response.tokenUsage.completion - reasoningTokens, 0)
-            : response.tokenUsage.completion;
         response.cost = calculateXAICost(
           this.modelName,
           this.config || {},
           response.tokenUsage.prompt,
-          completionTokens,
+          response.tokenUsage.completion,
           reasoningTokens,
         );
       }
