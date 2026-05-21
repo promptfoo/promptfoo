@@ -421,8 +421,10 @@ export class ResponsesProcessor {
   }
 
   private processMcpCall(item: any): Promise<{ content?: string; mcpError?: string }> {
-    if (item.error) {
-      const message = formatMcpToolError(item.name, String(item.error));
+    // A hosted mcp_call can fail with `status: 'failed'` and no `error` string.
+    if (item.error || item.status === 'failed') {
+      const detail = item.error ? String(item.error) : `tool call ${item.status}`;
+      const message = formatMcpToolError(item.name, detail);
       return Promise.resolve({ content: message, mcpError: message });
     }
     return Promise.resolve({ content: formatMcpToolResult(item.name, item.output) });

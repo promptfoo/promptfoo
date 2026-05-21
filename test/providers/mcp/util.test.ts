@@ -122,11 +122,13 @@ describe('normalizeMcpContent', () => {
     expect(normalizeMcpContent(['raw', 42, null, undefined])).toBe('raw\n42\nnull\nundefined');
   });
 
-  it('does not throw on circular content', () => {
+  it('degrades gracefully on circular content instead of throwing', () => {
     const circular: any = { a: 1 };
     circular.self = circular;
     expect(() => normalizeMcpContent([{ type: 'json', json: circular }])).not.toThrow();
-    expect(() => normalizeMcpContent(circular)).not.toThrow();
+    const result = normalizeMcpContent(circular);
+    expect(typeof result).toBe('string');
+    expect(result).not.toContain('[object Object]');
   });
 });
 

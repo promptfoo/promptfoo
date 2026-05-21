@@ -39,7 +39,8 @@ export function isMcpErrorResult(result: MCPToolResult): boolean {
  * to a generic message for tools that signal `isError` without any detail.
  */
 export function getMcpErrorMessage(result: MCPToolResult): string {
-  return result.error || result.content || 'Tool returned an error result';
+  const message = (result.error || result.content || '').trim();
+  return message || 'Tool returned an error result';
 }
 
 /**
@@ -57,11 +58,11 @@ export function formatMcpToolError(name: string, message: string): string {
 
 /**
  * Format a successful MCP tool result into the shared `MCP Tool Result (...)`
- * string. `content` is expected to be already normalized — `MCPClient.callTool`
- * applies `normalizeMcpContent` before the result reaches callers.
+ * string, normalizing `content` so non-string payloads never render as
+ * `[object Object]`.
  */
-export function formatMcpToolResult(name: string, content: string): string {
-  return `MCP Tool Result (${name}): ${content}`;
+export function formatMcpToolResult(name: string, content: unknown): string {
+  return `MCP Tool Result (${name}): ${normalizeMcpContent(content)}`;
 }
 
 /**

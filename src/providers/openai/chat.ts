@@ -733,7 +733,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             }
           }
         }
-        if (hasSuccessfulCallback && results.length > 0) {
+        // Surface results when a callback succeeded, or when an MCP tool
+        // errored — even if a later regular callback then threw and broke
+        // the loop, the MCP failure must still reach ProviderResponse.error.
+        if ((hasSuccessfulCallback || mcpErrors.length > 0) && results.length > 0) {
           const mcpError = joinMcpErrors(mcpErrors);
           return {
             output: results.join('\n'),

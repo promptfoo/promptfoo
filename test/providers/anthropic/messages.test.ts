@@ -1908,6 +1908,54 @@ describe('AnthropicMessagesProvider', () => {
       ]);
     });
 
+    it('surfaces a streaming MCP tool error on ProviderResponse.error', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          stream: true,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({
+        content: 'lookup failed',
+        isError: true,
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'stream')
+        .mockResolvedValueOnce({
+          finalMessage: vi.fn().mockResolvedValue({
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_stream_err',
+                name: 'search_companies',
+                input: { query: 'solar' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message),
+        } as any)
+        .mockResolvedValueOnce({
+          finalMessage: vi.fn().mockResolvedValue({
+            content: [{ type: 'text', text: 'I could not complete that lookup.' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message),
+        } as any);
+
+      const result = await provider.callApi('Find solar companies');
+
+      expect(result.output).toBe('I could not complete that lookup.');
+      expect(result.error).toBe('MCP Tool Error (search_companies): lookup failed');
+    });
+
     it('returns a streaming error once further MCP execution exceeds max_tool_calls', async () => {
       provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
