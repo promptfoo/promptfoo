@@ -2362,7 +2362,20 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       typeof item.aggregatedOutput === 'string' &&
       !aggregatedOutput.startsWith(item.aggregatedOutput)
     ) {
-      return item;
+      // The streamed deltas and the SDK's completed-item aggregate diverged
+      // (neither is a prefix of the other). Rather than silently discarding
+      // streamed output, keep whichever captured more and log the mismatch.
+      const useStreamed = aggregatedOutput.length > item.aggregatedOutput.length;
+      logger.debug(
+        '[CodexAppServer] commandExecution output deltas diverged from the SDK aggregate',
+        {
+          itemId: item.id,
+          streamedLength: aggregatedOutput.length,
+          sdkLength: item.aggregatedOutput.length,
+          kept: useStreamed ? 'streamed' : 'sdk',
+        },
+      );
+      return useStreamed ? { ...item, aggregatedOutput } : item;
     }
 
     return {

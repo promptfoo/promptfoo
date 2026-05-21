@@ -3660,6 +3660,88 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('keeps the longer streamed output when the SDK aggregate diverges', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with divergent output');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_divergent' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_divergent', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_divergent',
+        turnId: 'turn_divergent',
+        itemId: 'cmd_divergent',
+        delta: 'streamed line one\nstreamed line two',
+      },
+    });
+    // The SDK reports a completed-item aggregate that is neither a prefix of
+    // nor prefixed by the streamed deltas, and is shorter. The streamed output
+    // must not be silently discarded in favor of this truncated value.
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_divergent',
+        turnId: 'turn_divergent',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_divergent',
+          command: 'printf "..."',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'truncated',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_divergent',
+        turnId: 'turn_divergent',
+        itemId: 'msg_divergent',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_divergent',
+        turn: { id: 'turn_divergent', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'streamed line one\nstreamed line two',
+        }),
+      ]),
+    );
+  });
+
   it('continues completed command output when later deltas extend an existing aggregate', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
