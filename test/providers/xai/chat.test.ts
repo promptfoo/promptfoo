@@ -699,6 +699,12 @@ describe('xAI Chat Provider', () => {
       // 500 input @ 0.30/M + 200 reasoning @ 0.50/M = 0.00015 + 0.0001
       expect(cost).toBeCloseTo(0.00025, 10);
     });
+
+    it('bills output when input tokens are reported as zero', () => {
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 0, 200, 50);
+      // 0 input @ 0.30/M + 250 output @ 0.50/M.
+      expect(cost).toBeCloseTo(0.000125, 10);
+    });
   });
 
   describe('Model constants and configuration', () => {

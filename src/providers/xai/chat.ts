@@ -486,7 +486,7 @@ export function calculateXAICost(
   // xAI reports reasoning separately from completion tokens and bills both at
   // the output rate. Reasoning-only responses still have billable output.
   const billableOutputTokens = (completionTokens ?? 0) + (reasoningTokens ?? 0);
-  if (!promptTokens || billableOutputTokens <= 0) {
+  if (promptTokens == null || billableOutputTokens <= 0) {
     return undefined;
   }
 
