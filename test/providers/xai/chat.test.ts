@@ -690,6 +690,15 @@ describe('xAI Chat Provider', () => {
       // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
       expect(withReasoning).toBeCloseTo(0.0005, 10);
     });
+
+    it('bills a reasoning-only response (no other completion tokens)', () => {
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. A turn whose entire
+      // output is reasoning still has a real cost — the reasoning tokens are
+      // billed at the output rate even though completionTokens is 0.
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 500, 0, 200);
+      // 500 input @ 0.30/M + 200 reasoning @ 0.50/M = 0.00015 + 0.0001
+      expect(cost).toBeCloseTo(0.00025, 10);
+    });
   });
 
   describe('Model constants and configuration', () => {

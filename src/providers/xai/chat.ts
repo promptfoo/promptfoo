@@ -483,7 +483,11 @@ export function calculateXAICost(
   completionTokens?: number,
   reasoningTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  // `completionTokens` is the completion count exclusive of reasoning (callers
+  // pass it that way); xAI bills reasoning at the same per-token rate, so a
+  // response that is all reasoning still has a real, billable output cost.
+  const billableOutputTokens = (completionTokens ?? 0) + (reasoningTokens ?? 0);
+  if (!promptTokens || billableOutputTokens <= 0) {
     return undefined;
   }
 
@@ -498,11 +502,6 @@ export function calculateXAICost(
 
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-
-  // xAI bills reasoning tokens at the same per-token rate as completion tokens.
-  // `completionTokens` must be the completion count exclusive of reasoning —
-  // callers pass it that way — and reasoning is added back here.
-  const billableOutputTokens = completionTokens + (reasoningTokens ?? 0);
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * billableOutputTokens;
