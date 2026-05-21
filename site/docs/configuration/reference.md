@@ -846,6 +846,10 @@ interface ProviderResponse {
 }
 ```
 
+If a provider returns an `error` after usage details are available, keep `cost`, `tokenUsage`,
+and `metadata` on the same response. Promptfoo preserves those fields for structured results
+and accounting on provider error rows.
+
 ### ProviderEmbeddingResponse
 
 ProviderEmbeddingResponse is an object that represents the response from a provider's embedding API. It includes the embedding from the provider, any error that occurred, and information about token usage.
