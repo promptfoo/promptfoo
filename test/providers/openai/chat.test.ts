@@ -2892,6 +2892,42 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockGetCache).not.toHaveBeenCalled();
     });
 
+    it('should surface MCP tool error results in streaming mode', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","function":{"name":"read_file"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"path\\":\\"../../../etc/passwd\\"}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({
+          content: 'Path traversal not allowed',
+          isError: true,
+        }),
+      };
+      (provider as any).mcpClient = mcpClient;
+
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Read the file' }]),
+      );
+
+      expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
+        path: '../../../etc/passwd',
+      });
+      expect(result.output).toBe('MCP Tool Error (read_file): Path traversal not allowed');
+      expect(mockGetCache).not.toHaveBeenCalled();
+    });
+
     it('should handle streaming API error response', async () => {
       mockFetchWithProxy.mockResolvedValue({
         ok: false,
