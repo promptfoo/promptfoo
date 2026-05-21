@@ -157,6 +157,11 @@ interface NpmExecCall {
   options?: { env?: Record<string, string> };
 }
 
+interface PromptfooAndNpmExecCalls {
+  npmInstall: NpmExecCall;
+  promptfoo: PromptfooExecCall;
+}
+
 function setupMocks() {
   mocks.github.context.eventName = 'pull_request';
   mocks.github.context.repo = {
@@ -287,6 +292,40 @@ async function importActionAndGetNpmInstallCall(): Promise<NpmExecCall> {
   };
 }
 
+async function importActionAndGetPromptfooAndNpmCalls(): Promise<PromptfooAndNpmExecCalls> {
+  await import('../../code-scan-action/src/main');
+
+  const calls = await vi.waitFor(() => {
+    const promptfooCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) => command === 'promptfoo' && Array.isArray(args),
+    );
+    const npmCall = mocks.exec.exec.mock.calls.find(
+      ([command, args]) =>
+        command === 'npm' &&
+        Array.isArray(args) &&
+        args[0] === 'install' &&
+        args[1] === '-g' &&
+        args[2] === 'promptfoo',
+    );
+
+    if (!promptfooCall || !Array.isArray(promptfooCall[1]) || !npmCall) {
+      throw new Error('expected promptfoo and npm install exec calls not found');
+    }
+
+    return { npmCall, promptfooCall };
+  });
+
+  return {
+    npmInstall: {
+      options: calls.npmCall[2] as NpmExecCall['options'],
+    },
+    promptfoo: {
+      args: calls.promptfooCall[1],
+      options: calls.promptfooCall[2] as PromptfooExecCall['options'],
+    },
+  };
+}
+
 function expectCliArg(args: string[], name: string, value: string): void {
   const argIndex = args.indexOf(name);
   expect(argIndex).toBeGreaterThan(-1);
@@ -395,40 +434,32 @@ describe('code-scan-action main', () => {
       expectSanitizedExecEnv(options);
     });
 
-    it('should pass only the freshly minted OIDC token to the promptfoo scan command', async () => {
+    it('should pass the OIDC token only to the scan command if token minting succeeds', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'main' });
       mockInheritedActionAuthEnv();
 
-      const { options } = await importActionAndGetPromptfooCall();
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
 
-      expectSanitizedExecEnv(options);
-      expectNoActionAuthEnv(options);
-      expect(options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
+      expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectNoActionAuthEnv(npmInstall.options);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBe('fake-oidc-token');
+      expectNoActionAuthEnv(promptfoo.options);
       expect(process.env.GITHUB_OIDC_TOKEN).toBe('stale-oidc-token');
     });
 
-    it('should keep action auth env out of npm install', async () => {
+    it('should not pass stale OIDC credentials to subprocesses if token minting fails', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'main' });
       mockInheritedActionAuthEnv();
+      mocks.core.getIDToken.mockRejectedValue(new Error('OIDC not configured'));
 
-      const { options } = await importActionAndGetNpmInstallCall();
+      const { npmInstall, promptfoo } = await importActionAndGetPromptfooAndNpmCalls();
 
-      expectSanitizedExecEnv(options);
-      expectNoActionAuthEnv(options);
-      expect(options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
-    });
-
-    it('should not reuse a stale OIDC token when OIDC minting fails', async () => {
-      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
-      mockInheritedActionAuthEnv();
-      mocks.core.getIDToken.mockRejectedValue(new Error('OIDC is unavailable'));
-
-      const { options } = await importActionAndGetPromptfooCall();
-
-      expectNoActionAuthEnv(options);
-      expect(options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expect(npmInstall.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectNoActionAuthEnv(npmInstall.options);
+      expect(promptfoo.options?.env?.GITHUB_OIDC_TOKEN).toBeUndefined();
+      expectNoActionAuthEnv(promptfoo.options);
       expect(mocks.core.info).toHaveBeenCalledWith(
-        'OIDC token not available: Failed to get GitHub OIDC token: OIDC is unavailable',
+        'OIDC token not available: Failed to get GitHub OIDC token: OIDC not configured',
       );
     });
   });

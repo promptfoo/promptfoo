@@ -940,6 +940,11 @@ describe('Output Flag Tests', () => {
 
     // The eval should still complete and write to the output file
     expect(fs.existsSync(outputPath)).toBe(true);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+    expect(parsed.results.results).toHaveLength(1);
+    expect(parsed.results.results[0].response.output).toContain('Hello World');
   });
 });
 
