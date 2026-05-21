@@ -94,7 +94,7 @@ export const PluginConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
-  // Include safe prompts for testing over-blocking (openai-guardrails plugin)
+  // Include safe dataset samples for testing over-blocking.
   includeSafe: z.boolean().optional(),
 
   // Coding agent deterministic fixture fields
