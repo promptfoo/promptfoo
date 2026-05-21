@@ -41,6 +41,9 @@ def _init_tracing():
     """Initialize OpenTelemetry tracing if enabled and packages are available."""
     global _tracer, _tracing_enabled
 
+    if _tracing_enabled and _tracer is not None:
+        return
+
     if os.getenv("PROMPTFOO_ENABLE_OTEL", "").lower() not in ("true", "1", "yes"):
         return
 
@@ -53,8 +56,10 @@ def _init_tracing():
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
         # Get endpoint from environment or use default Promptfoo OTLP receiver
-        base_endpoint = os.getenv(
-            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"
+        base_endpoint = (
+            os.getenv("PROMPTFOO_OTEL_ENDPOINT")
+            or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+            or "http://localhost:4318"
         )
         endpoint = f"{base_endpoint.rstrip('/')}/v1/traces"
 
@@ -79,6 +84,33 @@ def _init_tracing():
             file=sys.stderr,
             flush=True,
         )
+
+
+def _ensure_tracing_for_context(context_arg):
+    """
+    Lazily enable tracing for workers that were started before the first traced
+    call. Python workers are persistent, so startup env alone is not enough when
+    a provider handles an untraced call before a traced one.
+    """
+    if _tracing_enabled and _tracer is not None:
+        return
+
+    if not isinstance(context_arg, dict) or not context_arg.get("traceparent"):
+        return
+
+    endpoint = (
+        os.getenv("PROMPTFOO_OTEL_ENDPOINT")
+        or os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        or context_arg.get("otelExporterOtlpEndpoint")
+    )
+    if not endpoint:
+        return
+
+    os.environ["PROMPTFOO_ENABLE_OTEL"] = "true"
+    if not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
+        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+
+    _init_tracing()
 
 
 # Initialize tracing at module load
@@ -191,10 +223,6 @@ def _traced_call(method_callable, args, function_name):
     """
     global _tracer, _tracing_enabled
 
-    # Fast path: if tracing not enabled, just call the method
-    if not _tracing_enabled or _tracer is None:
-        return call_method(method_callable, args)
-
     # Extract traceparent from context (3rd argument for call_api)
     traceparent = None
     context_arg = None
@@ -202,6 +230,12 @@ def _traced_call(method_callable, args, function_name):
         context_arg = args[2]
         if isinstance(context_arg, dict):
             traceparent = context_arg.get("traceparent")
+
+    _ensure_tracing_for_context(context_arg)
+
+    # Fast path: if tracing not enabled, just call the method
+    if not _tracing_enabled or _tracer is None:
+        return call_method(method_callable, args)
 
     # If no traceparent, fall back to untraced call
     if not traceparent:
@@ -221,7 +255,7 @@ def _traced_call(method_callable, args, function_name):
             span_name, context=parent_ctx, kind=SpanKind.CLIENT
         ) as span:
             # Set GenAI semantic convention attributes
-            span.set_attribute("gen_ai.system", "python")
+            span.set_attribute("gen_ai.provider.name", "python")
             span.set_attribute("gen_ai.operation.name", function_name)
 
             # Set request attributes from prompt (1st arg)
@@ -246,7 +280,10 @@ def _traced_call(method_callable, args, function_name):
                 if context_arg.get("evaluationId"):
                     span.set_attribute("promptfoo.eval.id", context_arg["evaluationId"])
                 if context_arg.get("testCaseId"):
-                    span.set_attribute("promptfoo.test.id", context_arg["testCaseId"])
+                    # New canonical key (used by Promptfoo receiver/UI)
+                    span.set_attribute(
+                        "promptfoo.test.case.id", context_arg["testCaseId"]
+                    )
 
             try:
                 # Execute the user's function

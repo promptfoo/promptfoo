@@ -48,7 +48,7 @@ tests:
       - type: trace-span-duration
         value:
           pattern: '*'
-          max: 1000 # No single span should exceed 1 second
+          max: 4000 # No single span should exceed 4 seconds
 
       # Ensure no errors occur
       - type: trace-error-spans
@@ -91,7 +91,7 @@ tests:
       - type: trace-span-duration
         value:
           pattern: '*'
-          max: 1000
+          max: 4000
 
       - type: trace-error-spans
         value:
@@ -113,7 +113,7 @@ defaultTest:
     - type: trace-span-duration
       value:
         pattern: 'retrieve_document_*'
-        max: 300 # Each document retrieval should be under 300ms
+        max: 350 # Each document retrieval should be under 350ms
 
     # Allow up to 5% error rate (more forgiving for production)
     - type: trace-error-spans

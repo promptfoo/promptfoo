@@ -36,6 +36,16 @@ provider.register();
 // Get a tracer
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
+async function flushSpans() {
+  try {
+    console.log('[Provider] Flushing spans...');
+    await spanProcessor.forceFlush();
+    console.log('[Provider] Spans exported successfully');
+  } catch (error) {
+    console.error('[Provider] Failed to flush spans:', error.message);
+  }
+}
+
 // Fixed helper function that properly manages span lifecycle
 async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
   let span;
@@ -109,7 +119,11 @@ class SimpleTracedProvider {
         });
 
         // Run our operations within the parent context
-        return context.with(parentCtx, () => this._tracedCallApi(prompt, promptfooContext));
+        const result = await context.with(parentCtx, () =>
+          this._tracedCallApi(prompt, promptfooContext),
+        );
+        await flushSpans();
+        return result;
       }
     }
 
@@ -368,15 +382,6 @@ class SimpleTracedProvider {
           documents_used: documents.length,
           reasoning_steps: 3,
         });
-
-        // Force flush to ensure spans are sent
-        try {
-          console.log('[Provider] Flushing spans...');
-          await spanProcessor.forceFlush();
-          console.log('[Provider] Spans exported successfully');
-        } catch (error) {
-          console.error('[Provider] Failed to flush spans:', error.message);
-        }
 
         return {
           output: response.text,

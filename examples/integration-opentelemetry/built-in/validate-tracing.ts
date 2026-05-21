@@ -93,11 +93,11 @@ async function validateProvider(
     const span = spans[0];
 
     // Validate GenAI attributes
-    const system = span.attributes[GenAIAttributes.SYSTEM];
+    const providerNameAttr = span.attributes[GenAIAttributes.PROVIDER_NAME];
     results.push({
-      name: `${providerName}: gen_ai.system`,
-      passed: !!system,
-      message: system ? `Value: ${system}` : 'Missing attribute',
+      name: `${providerName}: gen_ai.provider.name`,
+      passed: !!providerNameAttr,
+      message: providerNameAttr ? `Value: ${providerNameAttr}` : 'Missing attribute',
     });
 
     const opName = span.attributes[GenAIAttributes.OPERATION_NAME];

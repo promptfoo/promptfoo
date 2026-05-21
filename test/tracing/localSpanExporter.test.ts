@@ -230,7 +230,7 @@ describe('LocalSpanExporter', () => {
     it('should include span attributes', async () => {
       const span = createMockSpan({
         attributes: {
-          'gen_ai.system': 'openai',
+          'gen_ai.provider.name': 'openai',
           'gen_ai.request.model': 'gpt-4',
           'gen_ai.usage.input_tokens': 100,
         },
@@ -244,7 +244,7 @@ describe('LocalSpanExporter', () => {
         [
           expect.objectContaining({
             attributes: {
-              'gen_ai.system': 'openai',
+              'gen_ai.provider.name': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
             },

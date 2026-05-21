@@ -4,6 +4,7 @@ import {
   generateTraceContextIfNeeded,
   generateTraceId,
   generateTraceparent,
+  getLocalOtlpHttpEndpoint,
   isOtlpReceiverStarted,
   isTracingEnabled,
   resetTracingState,
@@ -44,7 +45,7 @@ describe('evaluatorTracing', () => {
     mockStartOTLPReceiver.mockResolvedValue(undefined);
     resetTracingState();
     // Reset environment variables
-    mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: undefined });
+    mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: undefined });
   });
 
   describe('generateTraceId', () => {
@@ -125,7 +126,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should generate trace context when tracing is enabled via environment', async () => {
-      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+      mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: 'true' });
       const test: TestCase = {
         vars: { foo: 'bar' },
       };
@@ -172,8 +173,8 @@ describe('evaluatorTracing', () => {
       expect(isTracingEnabled(test)).toBe(true);
     });
 
-    it('should return true when environment variable is set', () => {
-      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+    it('should return true when PROMPTFOO_OTEL_ENABLED is set', () => {
+      mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: 'true' });
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(true);
     });
@@ -216,6 +217,94 @@ describe('evaluatorTracing', () => {
   describe('isOtlpReceiverStarted', () => {
     it('should return false initially', () => {
       expect(isOtlpReceiverStarted()).toBe(false);
+    });
+  });
+
+  describe('getLocalOtlpHttpEndpoint', () => {
+    it('should return the default local HTTP receiver endpoint', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://127.0.0.1:4318');
+    });
+
+    it('should convert wildcard bind hosts into a connectable loopback endpoint', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44329,
+              host: '0.0.0.0',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://127.0.0.1:44329');
+    });
+
+    it('should bracket IPv6 receiver hosts for endpoint URLs', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44330,
+              host: '::1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://[::1]:44330');
+    });
+
+    it('should convert IPv6 wildcard bind hosts into IPv6 loopback endpoints', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44331,
+              host: '::',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://[::1]:44331');
+    });
+
+    it('should return undefined when the local HTTP receiver is disabled', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: false,
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBeUndefined();
     });
   });
 

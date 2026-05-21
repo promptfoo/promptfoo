@@ -36,13 +36,13 @@ Navigate to the Traces tab to see detailed span information.
 
 ## Configuration
 
-Tracing is enabled by default. Configure via environment variables:
+Tracing is enabled when you set `tracing.enabled: true` in your config or set `PROMPTFOO_OTEL_ENABLED=true`.
 
 | Variable                      | Default     | Description                            |
 | ----------------------------- | ----------- | -------------------------------------- |
-| `PROMPTFOO_DISABLE_TRACING`   | `false`     | Set to `true` to disable tracing       |
+| `PROMPTFOO_OTEL_ENABLED`      | `false`     | Enable OpenTelemetry tracing           |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | -           | Export traces to external OTLP backend |
-| `OTEL_SERVICE_NAME`           | `promptfoo` | Service name in traces                 |
+| `PROMPTFOO_OTEL_SERVICE_NAME` | `promptfoo` | Service name in traces                 |
 
 ## Viewing Traces Externally
 
@@ -80,7 +80,7 @@ Each LLM call span includes:
 
 ### GenAI Semantic Conventions
 
-- `gen_ai.system` - Provider system (openai, anthropic, etc.)
+- `gen_ai.provider.name` - Provider name (openai, anthropic, azure.ai.openai, aws.bedrock, etc.)
 - `gen_ai.operation.name` - Operation type (chat, completion, embedding)
 - `gen_ai.request.model` - Requested model name
 - `gen_ai.request.max_tokens` - Max tokens setting

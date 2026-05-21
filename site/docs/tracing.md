@@ -62,7 +62,7 @@ Each provider call creates a span with these attributes:
 
 **Request Attributes:**
 
-- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
+- `gen_ai.provider.name` - Provider name (e.g., "openai", "anthropic", "azure.ai.openai", "aws.bedrock")
 - `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
@@ -94,7 +94,7 @@ When calling OpenAI's GPT-4:
 
 ```
 Span: chat gpt-4
-├─ gen_ai.system: openai
+├─ gen_ai.provider.name: openai
 ├─ gen_ai.operation.name: chat
 ├─ gen_ai.request.model: gpt-4
 ├─ gen_ai.request.max_tokens: 1000
@@ -246,7 +246,7 @@ tracing:
     http:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
-      # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
+      # host: '127.0.0.1'  # Optional - defaults to localhost; use '0.0.0.0' only when remote clients must connect
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
 ```
 
@@ -267,13 +267,13 @@ You can also configure tracing via environment variables:
 
 ```bash
 # Enable tracing
-export PROMPTFOO_TRACING_ENABLED=true
+export PROMPTFOO_OTEL_ENABLED=true
 
 # Configure OTLP endpoint (for providers)
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 
 # Set service name
-export OTEL_SERVICE_NAME="my-rag-application"
+export PROMPTFOO_OTEL_SERVICE_NAME="my-rag-application"
 
 # Authentication headers (if needed)
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"

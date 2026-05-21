@@ -34,6 +34,7 @@ export class PythonWorker {
     private pythonPath?: string,
     private timeout: number = getRequestTimeoutMs(),
     private onReady?: () => void,
+    private envOverrides?: Record<string, string>,
   ) {}
 
   async initialize(): Promise<void> {
@@ -49,11 +50,25 @@ export class PythonWorker {
       typeof this.pythonPath === 'string',
     );
 
+    // python-shell expects a plain object; keep only defined env vars and apply overrides.
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value === 'string') {
+        env[key] = value;
+      }
+    }
+    if (this.envOverrides) {
+      for (const [key, value] of Object.entries(this.envOverrides)) {
+        env[key] = value;
+      }
+    }
+
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
+      env,
     });
 
     // Listen for READY signal
@@ -197,6 +212,25 @@ export class PythonWorker {
       )
     ) {
       this.writeStderrLog('error', line);
+      return;
+    }
+
+    if (trimmedStart.startsWith('[PythonProvider] OpenTelemetry tracing enabled')) {
+      this.writeStderrLog('debug', line);
+      return;
+    }
+
+    if (
+      trimmedStart.startsWith('[PythonProvider] OpenTelemetry packages not installed') ||
+      trimmedStart.startsWith('[PythonProvider] Failed to initialize tracing') ||
+      trimmedStart.startsWith('[PythonProvider] Tracing error')
+    ) {
+      this.writeStderrLog('warn', line);
+      return;
+    }
+
+    if (isPythonWarningStderr(trimmedStart)) {
+      this.writeStderrLog('warn', line);
       return;
     }
 
@@ -419,4 +453,10 @@ export class PythonWorker {
       this.shuttingDown = false;
     }
   }
+}
+
+function isPythonWarningStderr(message: string): boolean {
+  return (
+    /\b(?:\w+Warning|Warning):/.test(message) || message.trimStart().startsWith('warnings.warn(')
+  );
 }

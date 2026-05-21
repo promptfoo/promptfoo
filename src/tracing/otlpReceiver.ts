@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import express from 'express';
 import logger from '../logger';
+import { PromptfooAttributes } from './genaiTracer';
 import {
   bytesToHex,
   type DecodedAttribute,
@@ -404,8 +405,9 @@ export class OTLPReceiver {
   }
 
   private recordTraceInfo(traceInfoById: Map<string, TraceInfo>, trace: ParsedTrace): void {
-    const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-    const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+    const attrs = trace.span.attributes ?? {};
+    const evaluationId = attrs[PromptfooAttributes.EVAL_ID] as string | undefined;
+    const testCaseId = attrs[PromptfooAttributes.TEST_CASE_ID] as string | undefined;
     const info = traceInfoById.get(trace.traceId) ?? {};
 
     if (evaluationId) {

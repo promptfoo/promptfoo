@@ -6,6 +6,7 @@ import {
   run,
   startTraceExportLoop,
 } from '@openai/agents';
+import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import {
   loadAgentDefinition,
@@ -147,7 +148,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const tracingEnabled =
       this.agentConfig.tracing === true ||
       context?.test?.metadata?.tracingEnabled === true ||
-      process.env.PROMPTFOO_TRACING_ENABLED === 'true';
+      getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
 
     if (!tracingEnabled) {
       logger.debug('[AgentsProvider] Tracing not enabled');

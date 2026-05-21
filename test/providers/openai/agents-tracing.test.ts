@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
+import { PromptfooAttributes } from '../../../src/tracing/genaiTracer';
 
 function getAttributes(span: any): Record<string, unknown> {
   return Object.fromEntries(
@@ -51,9 +52,9 @@ describe('OTLPTracingExporter', () => {
     const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
     expect(span.name).toBe('tool lookup_order');
     expect(getAttributes(span)).toMatchObject({
-      'evaluation.id': 'eval-1',
       'openai.agents.span_type': 'function',
-      'test.case.id': 'case-1',
+      [PromptfooAttributes.EVAL_ID]: 'eval-1',
+      [PromptfooAttributes.TEST_CASE_ID]: 'case-1',
       'tool.arguments': '{"order_id":"123"}',
       'tool.name': 'lookup_order',
       'tool.output': '{"status":"shipped"}',
