@@ -1,0 +1,65 @@
+---
+sidebar_label: Tuning Engines
+description: "Use Tuning Engines as an OpenAI-compatible gateway for governed model routing, access control, and usage-aware evaluations."
+---
+
+# Tuning Engines
+
+[Tuning Engines](https://app.tuningengines.com/docs) exposes an OpenAI-compatible inference gateway for model routing, governed access, tenant-scoped inference keys, usage tracking, and agent/tool registry workflows.
+
+Use promptfoo's OpenAI provider with `apiBaseUrl` pointed at the Tuning Engines gateway.
+
+## Setup
+
+1. Create a Tuning Engines inference key.
+2. Set the `TUNING_ENGINES_API_KEY` environment variable.
+3. Use a model alias that is available to your Tuning Engines tenant or inference role.
+
+```bash
+export TUNING_ENGINES_API_KEY="sk-te-..."
+```
+
+## Chat completions
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: openai:chat:your-model-alias
+    config:
+      apiBaseUrl: https://api.tuningengines.com/v1
+      apiKeyEnvar: TUNING_ENGINES_API_KEY
+      temperature: 0.2
+      max_tokens: 500
+
+prompts:
+  - "Write a concise release note for: {{feature}}"
+
+tests:
+  - vars:
+      feature: "governed model routing"
+```
+
+## Compare routed models
+
+You can evaluate multiple Tuning Engines model aliases side by side, including aliases backed by different providers or routing policies.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:fast-support-model
+    label: tuning-engines-fast
+    config:
+      apiBaseUrl: https://api.tuningengines.com/v1
+      apiKeyEnvar: TUNING_ENGINES_API_KEY
+
+  - id: openai:chat:high-quality-model
+    label: tuning-engines-quality
+    config:
+      apiBaseUrl: https://api.tuningengines.com/v1
+      apiKeyEnvar: TUNING_ENGINES_API_KEY
+```
+
+## Notes
+
+- Tuning Engines model availability is controlled by tenant catalog configuration and inference roles.
+- If a model alias is restricted for a key or user, promptfoo receives the gateway's authorization error.
+- For OpenAI-compatible behavior details, see the [OpenAI provider documentation](./openai.md).
