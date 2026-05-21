@@ -642,12 +642,12 @@ export async function runAssertion({
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return applyXFail({
+          return {
             pass: false,
             score: 0,
             reason: (error as Error).message,
             assertion,
-          });
+          };
         }
       } else if (filePath.endsWith('.rb')) {
         try {
@@ -660,12 +660,12 @@ export async function runAssertion({
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return applyXFail({
+          return {
             pass: false,
             score: 0,
             reason: (error as Error).message,
             assertion,
-          });
+          };
         }
       } else {
         renderedValue = processFileReference(renderedValue);
