@@ -240,6 +240,7 @@ async function aggregateNamedScores(
       END
     ) as weight_entries
       ON weight_entries.key = score_entries.key
+      AND weight_entries.type IN ('integer', 'real')
     WHERE ${whereSql}
       AND named_scores IS NOT NULL
       AND json_valid(named_scores)
@@ -286,11 +287,31 @@ function parseJsonObject<T extends object>(value: unknown): T | undefined {
   }
 }
 
-function hasNamedScoreWeight(
+function hasValidNamedScoreWeight(
   gradingResult: GradingResult | undefined,
   metricName: string,
 ): boolean {
-  return Object.prototype.hasOwnProperty.call(gradingResult?.namedScoreWeights ?? {}, metricName);
+  const weight = gradingResult?.namedScoreWeights?.[metricName];
+  return typeof weight === 'number' && Number.isFinite(weight);
+}
+
+function withOnlyValidNamedScoreWeights(
+  gradingResult: GradingResult | undefined,
+): GradingResult | undefined {
+  if (!gradingResult?.namedScoreWeights) {
+    return gradingResult;
+  }
+
+  const validWeights = Object.fromEntries(
+    Object.entries(gradingResult.namedScoreWeights).filter(
+      ([, weight]) => typeof weight === 'number' && Number.isFinite(weight),
+    ),
+  );
+
+  return {
+    ...gradingResult,
+    namedScoreWeights: validWeights,
+  };
 }
 
 async function aggregateUnweightedNamedScores(
@@ -323,6 +344,7 @@ async function aggregateUnweightedNamedScores(
         ) as weight_entries
           ON weight_entries.key = score_entries.key
         WHERE weight_entries.key IS NULL
+          OR weight_entries.type NOT IN ('integer', 'real')
       )
   `;
 
@@ -345,13 +367,14 @@ async function aggregateUnweightedNamedScores(
     }
 
     const gradingResult = parseJsonObject<GradingResult>(row.grading_result);
+    const gradingResultWithValidWeights = withOnlyValidNamedScoreWeights(gradingResult);
     const testCase = parseJsonObject<{ vars?: Vars }>(row.test_case);
 
     for (const [metricName, metricValue] of Object.entries(namedScores)) {
       if (
         typeof metricValue !== 'number' ||
         !Number.isFinite(metricValue) ||
-        hasNamedScoreWeight(gradingResult, metricName)
+        hasValidNamedScoreWeight(gradingResult, metricName)
       ) {
         continue;
       }
@@ -359,7 +382,7 @@ async function aggregateUnweightedNamedScores(
       accumulateNamedMetric(metrics[idx], {
         metricName,
         metricValue,
-        gradingResult,
+        gradingResult: gradingResultWithValidWeights,
         testVars: testCase?.vars || {},
       });
     }
