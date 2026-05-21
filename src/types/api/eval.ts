@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BULK_RATING_CONSTANTS } from '../../services/bulkGrade/types';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -285,6 +286,71 @@ export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
+// POST /api/eval/:evalId/results/bulk-rating
+
+export const BulkRatingParamsSchema = z.object({
+  evalId: z.string().min(1),
+});
+
+export const BulkRatingRequestSchema = z.object({
+  pass: z.boolean(),
+  reason: z.string().max(BULK_RATING_CONSTANTS.MAX_REASON_LENGTH),
+  filterMode: EvalResultsFilterMode,
+  filters: z.array(z.string()).optional(),
+  searchQuery: z.string().optional(),
+  confirmBulk: z.boolean().optional(),
+});
+
+export const BulkRatingResponseSchema = z.object({
+  success: z.boolean(),
+  matched: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  error: z.string().optional(),
+});
+
+const BulkRatingFiltersQuerySchema = z
+  .union([z.string(), z.array(z.string())])
+  .transform((value, ctx) => {
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every((filter) => typeof filter === 'string')) {
+        return parsed;
+      }
+    } catch {
+      // handled below
+    }
+
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Invalid filters JSON',
+    });
+    return z.NEVER;
+  })
+  .optional();
+
+// GET /api/eval/:evalId/results/bulk-rating/preview
+
+export const BulkRatingPreviewQuerySchema = z.object({
+  filterMode: EvalResultsFilterMode.prefault('all'),
+  filters: BulkRatingFiltersQuerySchema,
+  searchQuery: z.string().optional(),
+});
+
+export const BulkRatingPreviewResponseSchema = z.object({
+  count: z.number().int().nonnegative(),
+});
+
+export type BulkRatingParams = z.infer<typeof BulkRatingParamsSchema>;
+export type BulkRatingRequest = z.infer<typeof BulkRatingRequestSchema>;
+export type BulkRatingResponse = z.infer<typeof BulkRatingResponseSchema>;
+export type BulkRatingPreviewQuery = z.infer<typeof BulkRatingPreviewQuerySchema>;
+export type BulkRatingPreviewResponse = z.infer<typeof BulkRatingPreviewResponseSchema>;
+
 // POST /api/eval (save eval to database)
 
 export const SaveEvalRequestSchema = z
@@ -383,6 +449,16 @@ export const EvalSchemas = {
     Params: SubmitRatingParamsSchema,
     Request: SubmitRatingRequestSchema,
     Response: SubmitRatingResponseSchema,
+  },
+  BulkRating: {
+    Params: BulkRatingParamsSchema,
+    Request: BulkRatingRequestSchema,
+    Response: BulkRatingResponseSchema,
+  },
+  BulkRatingPreview: {
+    Params: BulkRatingParamsSchema,
+    Query: BulkRatingPreviewQuerySchema,
+    Response: BulkRatingPreviewResponseSchema,
   },
   Save: {
     Request: SaveEvalRequestSchema,

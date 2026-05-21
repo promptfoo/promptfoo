@@ -507,6 +507,19 @@ const smokeCases: SmokeCase[] = [
   },
   {
     method: 'post',
+    openApiPath: '/api/eval/{evalId}/results/bulk-rating',
+    path: '/api/eval/eval-1/results/bulk-rating',
+    body: {},
+    expectedStatus: 400,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/eval/{evalId}/results/bulk-rating/preview',
+    path: '/api/eval/eval-1/results/bulk-rating/preview?filterMode=invalid-mode',
+    expectedStatus: 400,
+  },
+  {
+    method: 'post',
     openApiPath: '/api/eval',
     path: '/api/eval',
     body: {},

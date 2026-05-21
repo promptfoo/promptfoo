@@ -6,6 +6,7 @@ import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import { bulkGradeService, evalLockManager } from '../../services/bulkGrade';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -723,6 +724,13 @@ evalRouter.post(
         return;
       }
 
+      if (evalLockManager.isLocked(eval_.id)) {
+        res.status(409).json({
+          error: 'A bulk rating operation is in progress for this eval. Please wait and try again.',
+        });
+        return;
+      }
+
       // Capture the current state before we change it
       const hasExistingManualOverride = Boolean(
         result.gradingResult?.componentResults?.some(
@@ -785,6 +793,104 @@ evalRouter.post(
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
+    }
+  },
+);
+
+evalRouter.post(
+  '/:evalId/results/bulk-rating',
+  async (req: Request, res: Response): Promise<void> => {
+    const paramsResult = EvalSchemas.BulkRating.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({
+        success: false,
+        matched: 0,
+        updated: 0,
+        skipped: 0,
+        error: `Invalid request params: ${z.prettifyError(paramsResult.error)}`,
+      });
+      return;
+    }
+
+    const bodyResult = EvalSchemas.BulkRating.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({
+        success: false,
+        matched: 0,
+        updated: 0,
+        skipped: 0,
+        error: `Invalid request: ${z.prettifyError(bodyResult.error)}`,
+      });
+      return;
+    }
+
+    try {
+      const result = await bulkGradeService.bulkManualRating(
+        paramsResult.data.evalId,
+        bodyResult.data,
+      );
+      const response = EvalSchemas.BulkRating.Response.parse(result);
+
+      if (!result.success) {
+        const status =
+          result.error === 'Eval not found'
+            ? 404
+            : result.error?.includes('in progress')
+              ? 409
+              : result.error?.includes('confirmBulk') || result.error?.includes('maximum length')
+                ? 400
+                : 500;
+        res.status(status).json(response);
+        return;
+      }
+
+      res.json(response);
+    } catch (error) {
+      sendError(res, 500, 'Failed to bulk rate results', error);
+    }
+  },
+);
+
+evalRouter.get(
+  '/:evalId/results/bulk-rating/preview',
+  async (req: Request, res: Response): Promise<void> => {
+    const paramsResult = EvalSchemas.BulkRatingPreview.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      res
+        .status(400)
+        .json({ error: `Invalid request params: ${z.prettifyError(paramsResult.error)}` });
+      return;
+    }
+
+    const queryResult = EvalSchemas.BulkRatingPreview.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      const hasFilterModeError = queryResult.error.issues.some((issue) =>
+        issue.path.includes('filterMode'),
+      );
+      const hasFiltersError = queryResult.error.issues.some((issue) =>
+        issue.path.includes('filters'),
+      );
+      const prefix = hasFiltersError
+        ? 'Invalid filters'
+        : hasFilterModeError
+          ? 'Invalid filterMode'
+          : 'Invalid query';
+      res.status(400).json({ error: `${prefix}: ${z.prettifyError(queryResult.error)}` });
+      return;
+    }
+
+    try {
+      const { evalId } = paramsResult.data;
+      const { filterMode, filters, searchQuery } = queryResult.data;
+      const count = await bulkGradeService.getFilteredResultsCount(
+        evalId,
+        filterMode,
+        filters,
+        searchQuery,
+      );
+      res.json(EvalSchemas.BulkRatingPreview.Response.parse({ count }));
+    } catch (error) {
+      sendError(res, 500, 'Failed to preview bulk rating results', error);
     }
   },
 );

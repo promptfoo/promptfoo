@@ -23,9 +23,21 @@ import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import {
+  BarChart,
+  CheckSquare,
+  Copy,
+  Edit,
+  Eye,
+  Play,
+  Settings,
+  Share,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
+import { BulkRatingDialog } from './BulkRatingDialog';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
 import ConfigModal from './ConfigModal';
@@ -258,6 +270,7 @@ export default function ResultsView({
     userRatedResultsCount,
     filters,
     removeFilter,
+    fetchEvalData,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -365,6 +378,7 @@ export default function ResultsView({
 
   // State for download dialog
   const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
+  const [bulkRatingDialogOpen, setBulkRatingDialogOpen] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;
@@ -780,6 +794,10 @@ export default function ResultsView({
         <Eye className="size-4 mr-2" />
         View YAML
       </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => setBulkRatingDialogOpen(true)} disabled={!evalId}>
+        <CheckSquare className="size-4 mr-2" />
+        Bulk rate
+      </DropdownMenuItem>
       <DownloadMenuItem onClick={() => setDownloadDialogOpen(true)} />
       <DropdownMenuItem onClick={() => setCopyDialogOpen(true)}>
         <Copy className="size-4 mr-2" />
@@ -1014,6 +1032,23 @@ export default function ResultsView({
         showSizeWarning={totalResultsCount > 10000}
         itemCount={totalResultsCount}
         itemLabel="results"
+      />
+      <BulkRatingDialog
+        open={bulkRatingDialogOpen}
+        onClose={() => setBulkRatingDialogOpen(false)}
+        evalId={evalId}
+        filterMode={filterMode}
+        filters={
+          filters.appliedCount > 0
+            ? Object.values(filters.values).map((filter) => JSON.stringify(filter))
+            : undefined
+        }
+        searchQuery={debouncedSearchText || undefined}
+        onSuccess={() => {
+          if (evalId) {
+            fetchEvalData(evalId, { filterMode, searchText: debouncedSearchText });
+          }
+        }}
       />
 
       {/* Delete confirmation dialog */}
