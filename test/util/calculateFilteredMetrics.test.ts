@@ -314,6 +314,63 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScoreWeights?.relevance).toBe(1);
     });
 
+    it('should fall back to rendered assertion counts if named score weights are absent', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { suffix: 'alpha' } },
+        promptId: 'legacy-named-score-test',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: { suffix: 'alpha' },
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.8,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.8,
+          reason: 'legacy metric without stored weights',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'first assertion',
+              assertion: { type: 'contains', value: 'alpha', metric: 'accuracy:{{ suffix }}' },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'second assertion',
+              assertion: { type: 'contains', value: 'missing', metric: 'accuracy:{{ suffix }}' },
+            },
+          ],
+        },
+        namedScores: { 'accuracy:alpha': 0.8 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores['accuracy:alpha']).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount['accuracy:alpha']).toBe(2);
+      expect(metrics[0].namedScoreWeights?.['accuracy:alpha']).toBe(2);
+    });
+
     it('should aggregate weighted named scores using grading result denominators', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,

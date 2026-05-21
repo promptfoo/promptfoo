@@ -26,8 +26,9 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
+import { accumulateNamedMetric } from './namedMetrics';
 
-import type { PromptMetrics } from '../types/index';
+import type { GradingResult, PromptMetrics, Vars } from '../types/index';
 
 export interface FilteredMetricsOptions {
   evalId: string;
@@ -216,27 +217,20 @@ async function aggregateNamedScores(
   // Use SQLite's json_each to parse JSON in database. When newer results include
   // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
   // multiply them back into weighted totals before aggregating prompt metrics.
+  //
+  // Entries without stored weights need the same assertion-count fallback as
+  // accumulateNamedMetric(), including template-rendered metric names, so those
+  // rows are handled in JavaScript below.
   const query = sql`
     SELECT
       prompt_idx,
       score_entries.key as metric_name,
-      SUM(
-        CASE
-          WHEN weight_entries.value IS NOT NULL THEN
-            CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)
-          ELSE CAST(score_entries.value AS REAL)
-        END
-      ) as metric_sum,
+      SUM(CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)) as metric_sum,
       COUNT(*) as metric_count,
-      SUM(
-        CASE
-          WHEN weight_entries.value IS NOT NULL THEN CAST(weight_entries.value AS REAL)
-          ELSE 1
-        END
-      ) as metric_weight_total
+      SUM(CAST(weight_entries.value AS REAL)) as metric_weight_total
     FROM eval_results
     JOIN json_each(eval_results.named_scores) as score_entries
-    LEFT JOIN json_each(
+    JOIN json_each(
       CASE
         WHEN grading_result IS NOT NULL
           AND json_valid(grading_result)
@@ -268,6 +262,106 @@ async function aggregateNamedScores(
       metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
       metrics[idx].namedScoreWeights ||= {};
       metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
+    }
+  }
+
+  await aggregateUnweightedNamedScores(metrics, whereSql);
+}
+
+function parseJsonObject<T extends object>(value: unknown): T | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value === 'object') {
+    return value as T;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? (parsed as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function hasNamedScoreWeight(
+  gradingResult: GradingResult | undefined,
+  metricName: string,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(gradingResult?.namedScoreWeights ?? {}, metricName);
+}
+
+async function aggregateUnweightedNamedScores(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+): Promise<void> {
+  const db = getDb();
+
+  const query = sql`
+    SELECT
+      prompt_idx,
+      named_scores,
+      grading_result,
+      test_case
+    FROM eval_results
+    WHERE ${whereSql}
+      AND named_scores IS NOT NULL
+      AND json_valid(named_scores)
+      AND EXISTS (
+        SELECT 1
+        FROM json_each(eval_results.named_scores) as score_entries
+        LEFT JOIN json_each(
+          CASE
+            WHEN grading_result IS NOT NULL
+              AND json_valid(grading_result)
+              AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
+            THEN json_extract(grading_result, '$.namedScoreWeights')
+            ELSE json('{}')
+          END
+        ) as weight_entries
+          ON weight_entries.key = score_entries.key
+        WHERE weight_entries.key IS NULL
+      )
+  `;
+
+  const results = (await db.all(query)) as Array<{
+    prompt_idx: number;
+    named_scores: unknown;
+    grading_result: unknown;
+    test_case: unknown;
+  }>;
+
+  for (const row of results) {
+    const idx = row.prompt_idx;
+    if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
+      continue;
+    }
+
+    const namedScores = parseJsonObject<Record<string, unknown>>(row.named_scores);
+    if (!namedScores) {
+      continue;
+    }
+
+    const gradingResult = parseJsonObject<GradingResult>(row.grading_result);
+    const testCase = parseJsonObject<{ vars?: Vars }>(row.test_case);
+
+    for (const [metricName, metricValue] of Object.entries(namedScores)) {
+      if (
+        typeof metricValue !== 'number' ||
+        !Number.isFinite(metricValue) ||
+        hasNamedScoreWeight(gradingResult, metricName)
+      ) {
+        continue;
+      }
+
+      accumulateNamedMetric(metrics[idx], {
+        metricName,
+        metricValue,
+        gradingResult,
+        testVars: testCase?.vars || {},
+      });
     }
   }
 }
