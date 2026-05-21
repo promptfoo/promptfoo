@@ -698,6 +698,48 @@ describe('runAssertions', () => {
       });
     });
 
+    it('fails unexpected xfail passes inside assert-set despite parent thresholds', async () => {
+      const output = 'Expected output';
+      const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+      const test: AtomicTestCase = {
+        threshold: 0.5,
+        assert: [
+          {
+            type: 'assert-set',
+            threshold: 0.5,
+            assert: [
+              {
+                type: 'equals',
+                value: output,
+                xfail: 'openai:*',
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+              },
+            ],
+          },
+          {
+            type: 'contains',
+            value: 'Expected',
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0.75,
+        reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
+      });
+    });
+
     it('assert-set with metric', async () => {
       const metric = 'The best metric';
       const output = 'Expected output';

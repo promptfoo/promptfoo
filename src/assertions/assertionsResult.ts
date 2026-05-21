@@ -47,6 +47,13 @@ function isUnexpectedXFailPass(result: GradingResult): boolean {
   return result.metadata?.xfail?.expected === true && result.metadata.xfail.originalPass === true;
 }
 
+function getUnexpectedXFailPassReason(result: GradingResult): string | undefined {
+  if (isUnexpectedXFailPass(result)) {
+    return result.reason;
+  }
+  return result.componentResults?.map(getUnexpectedXFailPassReason).find(Boolean);
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -108,8 +115,9 @@ export class AssertionsResult {
     if (isRedteamGuardrail && !result.pass) {
       this.failedContentSafetyChecks = true;
     }
-    if (isUnexpectedXFailPass(result)) {
-      this.unexpectedXFailPassReason = result.reason;
+    const unexpectedXFailPassReason = getUnexpectedXFailPassReason(result);
+    if (unexpectedXFailPassReason) {
+      this.unexpectedXFailPassReason = unexpectedXFailPassReason;
     }
 
     if (metric) {
