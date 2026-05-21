@@ -25,6 +25,7 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import {
   ENERGY_PUC_MARKETS,
   ENERGY_PUC_PLUGINS,
+  type EnergyPucMarketActorType,
   getAllowedEnergyPucActorTypes,
   getDefaultEnergyPucActorType,
   getEnergyPucActorTypeLabel,
@@ -129,7 +130,10 @@ export default function PluginConfigDialog({
     });
   };
 
-  const handleMarketActorTypeChange = (market: string, marketActorType: string) => {
+  const handleMarketActorTypeChange = (
+    market: string,
+    marketActorType: EnergyPucMarketActorType,
+  ) => {
     setLocalConfig((prev) => {
       const marketSelections = getEnergyPucMarketSelections(prev as Record<string, unknown>).map(
         (selection) =>
@@ -316,9 +320,15 @@ export default function PluginConfigDialog({
                           </Label>
                           <Select
                             value={actorType}
-                            onValueChange={(marketActorType: string) =>
-                              handleMarketActorTypeChange(market.value, marketActorType)
-                            }
+                            onValueChange={(marketActorType) => {
+                              const actorType = actorTypes.find(
+                                (option) => option === marketActorType,
+                              );
+
+                              if (actorType) {
+                                handleMarketActorTypeChange(market.value, actorType);
+                              }
+                            }}
                           >
                             <SelectTrigger id={`energy-puc-market-actor-type-${market.value}`}>
                               <SelectValue placeholder="Select actor type" />

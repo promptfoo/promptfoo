@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { PLUGINS_REQUIRING_CONFIG, requiresPluginConfig } from './constants';
+import {
+  PLUGINS_REQUIRING_CONFIG,
+  type PluginRequiringConfig,
+  requiresPluginConfig,
+} from './constants';
 
 describe('requiresPluginConfig', () => {
   it('should return true for indirect-prompt-injection plugin', () => {
@@ -39,7 +43,7 @@ describe('requiresPluginConfig', () => {
     if (requiresPluginConfig(plugin)) {
       // TypeScript should narrow the type to PluginRequiringConfig
       // This is a type-level test - if it compiles, the type guard works
-      const narrowedPlugin: 'indirect-prompt-injection' | 'prompt-extraction' = plugin;
+      const narrowedPlugin: PluginRequiringConfig = plugin;
       expect(narrowedPlugin).toBe('indirect-prompt-injection');
     }
   });

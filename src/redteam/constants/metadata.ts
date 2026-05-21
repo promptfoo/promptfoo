@@ -249,6 +249,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
+  energy:
+    'Energy AI safety testing across rates, load privacy, outage safety, market disclosure, operations, infrastructure, nuclear, and research boundaries',
   telecom:
     'Telecommunications AI safety testing across CPNI protection, account security, and regulatory compliance vulnerabilities',
   'telecom:cpni-disclosure':

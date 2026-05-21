@@ -833,49 +833,49 @@ redteam:
 
 ### Utilities PUC Coverage by ISO / Regulator Pack
 
-| ISO / RTO footprint | Included regulator pack | Offer eligibility | Variable-rate savings | Fixed-rate benchmark | Product scope | Medical Baseline | Payment plan / restoration |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `CAISO` | `ca-cpuc` | Not currently available | Not currently available | Not currently available | Not currently available | Supported | Supported |
-| `ERCOT` | `tx-puct` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `ISO-NE` | `ct-pura` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `ISO-NE` | `ma-dpu` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `ISO-NE` | `me-puc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `ISO-NE` | `nh-doe` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `ISO-NE` | `ri-dpuc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `ISO-NE` | `vt-puc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `ar-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `il-icc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `ia-iuc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `in-iurc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `ky-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `mi-mpsc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `mn-puc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `mo-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `ms-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `MISO` | `wi-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `ks-kcc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `ok-cc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `ne-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `nd-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `nm-prc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `sd-puc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `mt-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `SPP` | `wy-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `NYISO` | `ny-dps` | Supported | Supported | Supported | Supported | Not currently available | Not currently available |
-| `PJM` | `dc-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `de-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `il-icc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `in-iurc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `ky-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `md-psc` | Supported | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available |
-| `PJM` | `mi-mpsc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `nc-uc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `nj-bpu` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `oh-puco` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `pa-puc` | Supported | Not currently available | Supported | Supported | Not currently available | Not currently available |
-| `PJM` | `tn-tpuc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `va-scc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
-| `PJM` | `wv-psc` | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported |
+| ISO / RTO footprint | Included regulator pack | Offer eligibility       | Variable-rate savings   | Fixed-rate benchmark    | Product scope           | Medical Baseline        | Payment plan / restoration |
+| ------------------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- | ----------------------- | -------------------------- |
+| `CAISO`             | `ca-cpuc`               | Not currently available | Not currently available | Not currently available | Not currently available | Supported               | Supported                  |
+| `ERCOT`             | `tx-puct`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `ISO-NE`            | `ct-pura`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `ISO-NE`            | `ma-dpu`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `ISO-NE`            | `me-puc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `ISO-NE`            | `nh-doe`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `ISO-NE`            | `ri-dpuc`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `ISO-NE`            | `vt-puc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `ar-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `il-icc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `ia-iuc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `in-iurc`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `ky-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `mi-mpsc`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `mn-puc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `mo-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `ms-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `MISO`              | `wi-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `ks-kcc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `ok-cc`                 | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `ne-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `nd-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `nm-prc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `sd-puc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `mt-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `SPP`               | `wy-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `NYISO`             | `ny-dps`                | Supported               | Supported               | Supported               | Supported               | Not currently available | Not currently available    |
+| `PJM`               | `dc-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `de-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `il-icc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `in-iurc`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `ky-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `md-psc`                | Supported               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available    |
+| `PJM`               | `mi-mpsc`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `nc-uc`                 | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `nj-bpu`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `oh-puco`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `pa-puc`                | Supported               | Not currently available | Supported               | Supported               | Not currently available | Not currently available    |
+| `PJM`               | `tn-tpuc`               | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `va-scc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
+| `PJM`               | `wv-psc`                | Not currently available | Not currently available | Not currently available | Not currently available | Not currently available | Supported                  |
 
 Read this matrix as `ISO / RTO footprint -> regulator pack -> plugin coverage` for the current shipped release. Testing still materializes one plugin entry per selected regulator pack, and grading remains tied to that pack's rule text. A regulator pack may appear under more than one ISO / RTO row when the underlying state spans multiple wholesale-market footprints; that repeated listing does not create duplicate graders. “Not currently available” means that no shipped rule profile exists for that plugin-market combination today. The matrix is intentionally limited to the regulator packs that ship in this ISO / RTO-centered first wave, not to every regional coordination context that may matter in later Utilities PUC expansions.
 
@@ -1159,18 +1159,18 @@ When implementing Energy red-teaming:
 
 Energy plugin coverage often maps to multiple governance areas:
 
-| Governance Area                                          | Relevant Plugins                                                       |
-| -------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Customer tariffs, programs, and assistance               | `energy:rates-programs-grounding`, `energy:protected-customer-process` |
+| Governance Area                                                                                                                                                        | Relevant Plugins                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Customer tariffs, programs, and assistance                                                                                                                             | `energy:rates-programs-grounding`, `energy:protected-customer-process`                                                                                                                                                                                            |
 | Utilities PUC offer eligibility, market-specific price protections, product-scope integrity, Medical Baseline claims, and payment-plan / service-restoration integrity | `energy:puc-offer-eligibility-gate`, `energy:puc-variable-rate-savings-protection`, `energy:puc-fixed-rate-benchmark-cap`, `energy:puc-product-scope-integrity`, `energy:puc-medical-baseline-integrity`, `energy:puc-payment-plan-service-restoration-integrity` |
-| Customer privacy and smart-meter data                    | `energy:usage-load-privacy`                                            |
-| Public safety and outage communications                  | `energy:hazard-outage-misinformation`                                  |
-| Sustainability and environmental claims                  | `energy:green-claims-programs`                                         |
-| Market-sensitive and commercial information              | `energy:market-sensitive-disclosure`                                   |
-| Critical infrastructure information protection           | `energy:sensitive-infrastructure-disclosure`                           |
-| Operations, work management, and tool integrity          | `energy:operations-workflow-integrity`                                 |
-| Nuclear procedure and regulatory boundaries              | `energy:nuclear-safety-boundary`                                       |
-| Controlled research, export review, and proprietary data | `energy:controlled-research-boundary`                                  |
+| Customer privacy and smart-meter data                                                                                                                                  | `energy:usage-load-privacy`                                                                                                                                                                                                                                       |
+| Public safety and outage communications                                                                                                                                | `energy:hazard-outage-misinformation`                                                                                                                                                                                                                             |
+| Sustainability and environmental claims                                                                                                                                | `energy:green-claims-programs`                                                                                                                                                                                                                                    |
+| Market-sensitive and commercial information                                                                                                                            | `energy:market-sensitive-disclosure`                                                                                                                                                                                                                              |
+| Critical infrastructure information protection                                                                                                                         | `energy:sensitive-infrastructure-disclosure`                                                                                                                                                                                                                      |
+| Operations, work management, and tool integrity                                                                                                                        | `energy:operations-workflow-integrity`                                                                                                                                                                                                                            |
+| Nuclear procedure and regulatory boundaries                                                                                                                            | `energy:nuclear-safety-boundary`                                                                                                                                                                                                                                  |
+| Controlled research, export review, and proprietary data                                                                                                               | `energy:controlled-research-boundary`                                                                                                                                                                                                                             |
 
 ## Getting Help
 

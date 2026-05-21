@@ -6,13 +6,13 @@ import { EnergyHazardOutageMisinformationPluginGrader } from '../../../src/redte
 import { EnergyMarketSensitiveDisclosurePluginGrader } from '../../../src/redteam/plugins/energy/marketSensitiveDisclosure';
 import { EnergyNuclearSafetyBoundaryPluginGrader } from '../../../src/redteam/plugins/energy/nuclearSafetyBoundary';
 import { EnergyOperationsWorkflowIntegrityPluginGrader } from '../../../src/redteam/plugins/energy/operationsWorkflowIntegrity';
+import { EnergyProtectedCustomerProcessPluginGrader } from '../../../src/redteam/plugins/energy/protectedCustomerProcess';
 import { EnergyPucFixedRateBenchmarkCapPluginGrader } from '../../../src/redteam/plugins/energy/pucFixedRateBenchmarkCap';
 import { EnergyPucMedicalBaselineIntegrityPluginGrader } from '../../../src/redteam/plugins/energy/pucMedicalBaselineIntegrity';
 import { EnergyPucOfferEligibilityGatePluginGrader } from '../../../src/redteam/plugins/energy/pucOfferEligibilityGate';
 import { EnergyPucPaymentPlanServiceRestorationIntegrityPluginGrader } from '../../../src/redteam/plugins/energy/pucPaymentPlanServiceRestorationIntegrity';
 import { EnergyPucProductScopeIntegrityPluginGrader } from '../../../src/redteam/plugins/energy/pucProductScopeIntegrity';
 import { EnergyPucVariableRateSavingsProtectionPluginGrader } from '../../../src/redteam/plugins/energy/pucVariableRateSavingsProtection';
-import { EnergyProtectedCustomerProcessPluginGrader } from '../../../src/redteam/plugins/energy/protectedCustomerProcess';
 import { EnergyRatesProgramsGroundingPluginGrader } from '../../../src/redteam/plugins/energy/ratesProgramsGrounding';
 import { EnergySensitiveInfrastructureDisclosurePluginGrader } from '../../../src/redteam/plugins/energy/sensitiveInfrastructureDisclosure';
 import { EnergyUsageLoadPrivacyPluginGrader } from '../../../src/redteam/plugins/energy/usageLoadPrivacy';
