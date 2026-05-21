@@ -7,6 +7,7 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
+import { ResultFailureReason } from '../../src/types';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -257,6 +258,7 @@ describe('eval routes', () => {
 
       const results = await eval_.getResults();
       const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
       invariant(result.id, 'Result ID is required');
       const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
       invariant(originalMetrics, 'Prompt metrics are required');
@@ -345,6 +347,86 @@ describe('eval routes', () => {
       expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount);
       expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
       expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
+    });
+
+    it('should ignore malformed component result entries if updating assertion metrics', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const originalMetrics = structuredClone(eval_.prompts[result.promptIdx].metrics);
+      invariant(originalMetrics, 'Prompt metrics are required');
+
+      const ratingPayload = structuredClone(result.gradingResult ?? {}) as any;
+      ratingPayload.pass = true;
+      ratingPayload.score = 0.5;
+      ratingPayload.componentResults = [
+        null,
+        'bad component',
+        { pass: 'false', score: 0 },
+        { pass: 1, score: 1 },
+        { pass: true, score: 1 },
+        { pass: false, score: 0 },
+      ];
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(ratingPayload);
+
+      expect(res.status).toBe(200);
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.score).toBeCloseTo(originalMetrics.score - 0.5);
+      expect(updatedMetrics?.assertPassCount).toBe(originalMetrics.assertPassCount);
+      expect(updatedMetrics?.assertFailCount).toBe(originalMetrics.assertFailCount + 1);
+      expect(updatedMetrics?.testPassCount).toBe(originalMetrics.testPassCount);
+      expect(updatedMetrics?.testFailCount).toBe(originalMetrics.testFailCount);
+    });
+
+    it('should count a manual fail as a failure if an error result was previously rated as passing', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+
+      result.failureReason = ResultFailureReason.ERROR;
+      await result.save();
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt.metrics, 'Prompt metrics are required');
+      prompt.metrics.testFailCount -= 1;
+      prompt.metrics.testErrorCount += 1;
+      await eval_.save();
+
+      const passRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(passRes.status).toBe(200);
+
+      const passedResult = await EvalResult.findById(result.id);
+      invariant(passedResult, 'Passed result is required');
+      expect(passedResult.failureReason).toBe(ResultFailureReason.NONE);
+
+      const failRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(passedResult, false));
+      expect(failRes.status).toBe(200);
+
+      const failedResult = await EvalResult.findById(result.id);
+      invariant(failedResult, 'Failed result is required');
+      expect(failedResult.failureReason).toBe(ResultFailureReason.ASSERT);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.testPassCount).toBe(1);
+      expect(updatedMetrics?.testFailCount).toBe(1);
+      expect(updatedMetrics?.testErrorCount).toBe(0);
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {

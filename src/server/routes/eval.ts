@@ -45,11 +45,21 @@ function countGradingAssertions(gradingResult: GradingResult | null | undefined)
   pass: number;
   fail: number;
 } {
-  return (gradingResult?.componentResults || []).reduce(
-    (counts, componentResult) => {
-      if (componentResult.pass) {
+  const componentResults = gradingResult?.componentResults;
+  if (!Array.isArray(componentResults)) {
+    return { pass: 0, fail: 0 };
+  }
+
+  return componentResults.reduce(
+    (counts, componentResult: unknown) => {
+      if (!componentResult || typeof componentResult !== 'object') {
+        return counts;
+      }
+
+      const { pass } = componentResult as { pass?: unknown };
+      if (pass === true) {
         counts.pass += 1;
-      } else {
+      } else if (pass === false) {
         counts.fail += 1;
       }
       return counts;
@@ -782,6 +792,9 @@ evalRouter.post(
       result.gradingResult = gradingResult;
       result.success = gradingResult.pass;
       result.score = gradingResult.score;
+      result.failureReason = gradingResult.pass
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT;
 
       // Update the prompt metrics
       const prompt = eval_.prompts[result.promptIdx];
