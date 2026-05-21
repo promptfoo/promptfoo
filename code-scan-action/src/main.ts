@@ -21,6 +21,7 @@ import {
   type PullRequestContext,
   type ScanResponse,
 } from '../../src/types/codeScan';
+import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
 import { getGitHubContext, getPRFiles } from './github';
 
@@ -67,7 +68,17 @@ function getActionInputs(): ActionInputs {
   };
 }
 
-function createBaseSubprocessEnv(): Record<string, string> {
+const SUBPROCESS_ENV_EXCLUSIONS = [
+  'ACTIONS_ID_TOKEN_REQUEST_TOKEN',
+  'ACTIONS_ID_TOKEN_REQUEST_URL',
+  'GH_TOKEN',
+  'GITHUB_OIDC_TOKEN',
+  'GITHUB_TOKEN',
+  'INPUT_GITHUB-TOKEN',
+  'INPUT_GITHUB_TOKEN',
+] as const;
+
+function createSubprocessEnv(): Record<string, string> {
   const env = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => {
       return typeof entry[1] === 'string';
@@ -76,22 +87,19 @@ function createBaseSubprocessEnv(): Record<string, string> {
 
   delete env.NPM_CONFIG_BEFORE;
   delete env.npm_config_before;
-  delete env.GITHUB_OIDC_TOKEN;
-  delete env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-  delete env.ACTIONS_ID_TOKEN_REQUEST_URL;
-  delete env['INPUT_GITHUB-TOKEN'];
-  delete env.INPUT_GITHUB_TOKEN;
+
+  for (const key of SUBPROCESS_ENV_EXCLUSIONS) {
+    delete env[key];
+  }
 
   return env;
 }
 
 function createScanEnv(oidcToken: string | undefined): Record<string, string> {
-  const env = createBaseSubprocessEnv();
-
+  const env = createSubprocessEnv();
   if (oidcToken) {
     env.GITHUB_OIDC_TOKEN = oidcToken;
   }
-
   return env;
 }
 
@@ -156,7 +164,7 @@ function shouldSkipForkPullRequest(enableForkPrs: boolean): boolean {
 
 async function authenticateWithOidc(): Promise<string | undefined> {
   try {
-    const oidcToken = await core.getIDToken('promptfoo');
+    const oidcToken = await getGitHubOIDCToken('promptfoo');
     core.info('🔐 Got OIDC token for server authentication');
     return oidcToken;
   } catch (error) {
@@ -277,8 +285,7 @@ async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
 ): Promise<ScanResponse | undefined> {
-  const installEnv = createBaseSubprocessEnv();
-  const scanEnv = createScanEnv(oidcToken);
+  const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
   await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: installEnv });
@@ -288,6 +295,7 @@ async function runPromptfooScan(
 
   let scanOutput = '';
   let scanError = '';
+  const scanEnv = createScanEnv(oidcToken);
 
   const exitCode = await exec.exec('promptfoo', cliArgs, {
     env: scanEnv,

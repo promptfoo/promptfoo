@@ -946,6 +946,39 @@ describe('Output Flag Tests', () => {
     expect(parsed.results.results).toHaveLength(1);
     expect(parsed.results.results[0].response.output).toContain('Hello World');
   });
+
+  it('1.11.4 - --tag merges and overrides config tags', () => {
+    const configPath = path.join(CONFIGS_DIR, 'tag-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'tag-output.json');
+
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--tag',
+        'build=cli-build',
+        '--tag',
+        'run-id=ci-123',
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.config.tags).toEqual({
+      build: 'cli-build',
+      team: 'evals',
+      source: 'smoke-default',
+      'run-id': 'ci-123',
+    });
+  });
 });
 
 describe('History-Based Filter Tests', () => {
