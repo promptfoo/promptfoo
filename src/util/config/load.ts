@@ -622,18 +622,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
           ? config.outputPath
           : [],
     ),
-    commandLineOptions: configs.reduce<NonNullable<UnifiedConfig['commandLineOptions']>>(
-      (prev, curr) => {
-        const next = curr.commandLineOptions;
-        const mergedTags =
-          prev.tag || next?.tag ? { ...(prev.tag || {}), ...(next?.tag || {}) } : undefined;
-
-        return {
-          ...prev,
-          ...next,
-          ...(mergedTags ? { tag: mergedTags } : {}),
-        };
-      },
+    commandLineOptions: configs.reduce(
+      (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
       {},
     ),
     extensions,
@@ -729,14 +719,8 @@ export async function resolveConfigs(
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
-  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
-  const configTags = fileConfig.tags || defaultConfig.tags;
-  const configuredTags = commandLineOptions?.tag;
-  const resolvedConfigTags = configuredTags
-    ? { ...(configTags || {}), ...configuredTags }
-    : configTags;
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
-    tags: cmdObj.tag ? { ...(resolvedConfigTags || {}), ...cmdObj.tag } : resolvedConfigTags,
+    tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
     providers: fileConfig.providers || defaultConfig.providers || [],
@@ -964,6 +948,9 @@ export async function resolveConfigs(
   );
 
   cliState.config = config;
+
+  // Extract commandLineOptions from either explicit config files or default config
+  let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
 
   // Resolve relative envPath(s) against the config file directory
   if (commandLineOptions?.envPath && basePath) {

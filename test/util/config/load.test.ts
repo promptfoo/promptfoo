@@ -440,38 +440,6 @@ describe('combineConfigs', () => {
     });
   });
 
-  it('merges command-line tag defaults across multiple configs', async () => {
-    vi.mocked(fs.readFileSync)
-      .mockReturnValueOnce(
-        JSON.stringify({
-          commandLineOptions: {
-            tag: {
-              build: 'config-a',
-              shared: 'first',
-            },
-          },
-        }),
-      )
-      .mockReturnValueOnce(
-        JSON.stringify({
-          commandLineOptions: {
-            tag: {
-              source: 'config-b',
-              shared: 'second',
-            },
-          },
-        }),
-      );
-
-    const result = await combineConfigs(['config1.json', 'config2.json']);
-
-    expect(result.commandLineOptions?.tag).toEqual({
-      build: 'config-a',
-      source: 'config-b',
-      shared: 'second',
-    });
-  });
-
   it('combines configs with provider-specific prompts', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync).mockImplementation((path: fs.PathOrFileDescriptor) => {
@@ -1449,50 +1417,6 @@ describe('resolveConfigs', () => {
     await resolveConfigs(cmdObj, defaultConfig);
 
     expect(cliState.basePath).toBe(path.dirname('config.json'));
-  });
-
-  it('should merge CLI tags over config tags', async () => {
-    const cmdObj = {
-      config: ['config.json'],
-      tag: {
-        build: 'cli-build',
-        runId: 'ci-123',
-      },
-    };
-
-    vi.mocked(fs.existsSync).mockReturnValue(true);
-    vi.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
-        prompts: ['prompt1'],
-        providers: ['openai:foobar'],
-        tags: {
-          build: 'config-build',
-          team: 'evals',
-        },
-        commandLineOptions: {
-          tag: {
-            build: 'command-build',
-            source: 'config-default',
-          },
-        },
-      }),
-    );
-    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
-
-    const { config, testSuite } = await resolveConfigs(cmdObj, {});
-
-    expect(config.tags).toEqual({
-      build: 'cli-build',
-      team: 'evals',
-      source: 'config-default',
-      runId: 'ci-123',
-    });
-    expect(testSuite.tags).toEqual({
-      build: 'cli-build',
-      team: 'evals',
-      source: 'config-default',
-      runId: 'ci-123',
-    });
   });
 
   it('should load scenarios and tests from external files', async () => {

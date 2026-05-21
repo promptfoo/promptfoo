@@ -3282,7 +3282,7 @@
             "type": "string"
           }
         },
-        "tag": {
+        "tags": {
           "type": "object",
           "propertyNames": {
             "type": "string"

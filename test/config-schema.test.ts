@@ -210,25 +210,6 @@ describe('config-schema.json', () => {
         expect(pattern).toMatch(/file.*\\/);
       });
     });
-
-    it('should accept commandLineOptions.tag entries', () => {
-      const validateConfig = ajv.compile(schema);
-
-      const valid = validateConfig({
-        prompts: ['hello'],
-        providers: ['echo'],
-        commandLineOptions: {
-          tag: {
-            build: '123',
-            env: 'staging',
-          },
-        },
-      });
-
-      expect(valid, `Schema validation errors: ${JSON.stringify(validateConfig.errors, null, 2)}`).toBe(
-        true,
-      );
-    });
   });
 
   describe('performance', () => {

@@ -75,6 +75,34 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
+function collectKeyValueOption(
+  optionName: string,
+  value: string,
+  previous: Record<string, string> | undefined,
+): Record<string, string> {
+  const separatorIndex = value.indexOf('=');
+  const key = separatorIndex === -1 ? '' : value.slice(0, separatorIndex);
+  const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
+
+  if (!key || val === undefined) {
+    throw new Error(`${optionName} must be specified in key=value format.`);
+  }
+
+  return { ...previous, [key]: val };
+}
+
+function runtimeTagsForEval(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+): Record<string, string> | undefined {
+  const tags = {
+    ...(commandLineOptions?.tags || {}),
+    ...(cmdObj.tags || {}),
+  };
+
+  return Object.keys(tags).length > 0 ? tags : undefined;
+}
+
 export class EvalRunError extends Error {
   readonly exitCode: number;
 
@@ -268,15 +296,17 @@ export async function doEval(
         isCliInvocation,
       );
     }
-    if (resumeRaw && cmdObj.tag) {
+
+    const hasRuntimeTags = Boolean(cmdObj.tags && Object.keys(cmdObj.tags).length > 0);
+    if (resumeRaw && hasRuntimeTags) {
       return failEvalRun(
-        'Cannot use --tag with --resume. Resume functionality preserves the original evaluation tags.',
+        'Cannot use --tag with --resume. Resumed evaluations keep their original tags.',
         isCliInvocation,
       );
     }
-    if (retryErrors && cmdObj.tag) {
+    if (retryErrors && hasRuntimeTags) {
       return failEvalRun(
-        'Cannot use --tag with --retry-errors. Retry functionality preserves the original evaluation tags.',
+        'Cannot use --tag with --retry-errors. Retried evaluations keep their original tags.',
         isCliInvocation,
       );
     }
@@ -629,6 +659,14 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
+    const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
+    if (runtimeTags) {
+      config.tags = { ...(config.tags || {}), ...runtimeTags };
+      testSuite.tags = { ...(testSuite.tags || {}), ...runtimeTags };
+      if (cliState.config) {
+        cliState.config.tags = { ...(cliState.config.tags || {}), ...runtimeTags };
+      }
+    }
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
@@ -774,8 +812,11 @@ export async function doEval(
       return ret;
     }
 
-    // Clear results from memory to avoid memory issues
-    evalRecord.clearResults();
+    // Persisted evals can reload results later. No-write evals only have the
+    // in-memory results left for table and output rendering.
+    if (evalRecord.persisted) {
+      evalRecord.clearResults();
+    }
 
     // Determine sharing using shared utility (DRY - same logic as retry command)
     const wantsToShare = shouldShareResults({
@@ -1137,24 +1178,16 @@ export function evalCommand(
     .option(
       '--var <key=value>',
       'Set a variable in key=value format',
-      (value, previous) => {
-        const [key, val] = value.split('=');
-        if (!key || val === undefined) {
-          throw new Error('--var must be specified in key=value format.');
-        }
-        return { ...previous, [key]: val };
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--var', value, previous);
       },
       {},
     )
     .option(
       '--tag <key=value>',
-      'Set a tag in key=value format. Can be specified multiple times.',
-      (value, previous: Record<string, string> | undefined) => {
-        const [key, ...valueParts] = value.split('=');
-        if (!key || valueParts.length === 0) {
-          throw new Error('--tag must be specified in key=value format.');
-        }
-        return { ...(previous || {}), [key]: valueParts.join('=') };
+      'Set an eval tag in key=value format. Can be specified multiple times; CLI tags override config tags.',
+      (value: string, previous: Record<string, string> | undefined) => {
+        return collectKeyValueOption('--tag', value, previous);
       },
     )
 
@@ -1254,7 +1287,11 @@ export function evalCommand(
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
-        validatedOpts = EvalCommandSchema.parse(opts);
+        const optsWithAliases = {
+          ...opts,
+          tags: (opts as EvalCommandOptions & { tag?: Record<string, string> }).tag ?? opts.tags,
+        };
+        validatedOpts = EvalCommandSchema.parse(optsWithAliases);
       } catch (err) {
         logger.error(dedent`
         Invalid command options:

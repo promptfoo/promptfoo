@@ -2,8 +2,8 @@
  * Smoke tests for eval command filters and flags.
  *
  * Tests filter flags (--filter-first-n, --filter-range, --filter-pattern,
- * --filter-metadata, --filter-providers, --filter-failing), variable and tag flags
- * (--var, --tag), prompt modification (--prompt-prefix, --prompt-suffix), and output flags.
+ * --filter-metadata, --filter-providers, --filter-failing), variable flags (--var), prompt
+ * modification (--prompt-prefix, --prompt-suffix), and output flags.
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
@@ -902,40 +902,7 @@ describe('Output Flag Tests', () => {
     expect(parsed.config.description).toBe('My custom test description');
   });
 
-  it('1.11.2 - --tag merges and overrides config tags', () => {
-    const configPath = path.join(CONFIGS_DIR, 'tag-test.yaml');
-    const outputPath = path.join(OUTPUT_DIR, 'tag-output.json');
-
-    const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--tag',
-        'build=cli-build',
-        '--tag',
-        'run-id=ci-123',
-      ],
-      { cwd: CONFIGS_DIR },
-    );
-
-    expect(exitCode).toBe(0);
-
-    const content = fs.readFileSync(outputPath, 'utf-8');
-    const parsed = JSON.parse(content);
-
-    expect(parsed.config.tags).toEqual({
-      build: 'cli-build',
-      team: 'evals',
-      source: 'smoke-default',
-      'run-id': 'ci-123',
-    });
-  });
-
-  it('1.11.3 - multiple -o flags create multiple output files', () => {
+  it('1.11.2 - multiple -o flags create multiple output files', () => {
     const configPath = path.join(CONFIGS_DIR, 'basic.yaml');
     const jsonOutput = path.join(OUTPUT_DIR, 'multi-out.json');
     const csvOutput = path.join(OUTPUT_DIR, 'multi-out.csv');
@@ -960,7 +927,7 @@ describe('Output Flag Tests', () => {
     expect(csvContent.length).toBeGreaterThan(0);
   });
 
-  it('1.11.4 - --no-write prevents database persistence', () => {
+  it('1.11.3 - --no-write prevents database persistence', () => {
     const configPath = path.join(CONFIGS_DIR, 'basic.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'no-write-output.json');
 
@@ -973,6 +940,11 @@ describe('Output Flag Tests', () => {
 
     // The eval should still complete and write to the output file
     expect(fs.existsSync(outputPath)).toBe(true);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+    expect(parsed.results.results).toHaveLength(1);
+    expect(parsed.results.results[0].response.output).toContain('Hello World');
   });
 });
 

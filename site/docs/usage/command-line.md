@@ -49,7 +49,7 @@ The `promptfoo` command line utility includes these command groups:
   - `validate config`
   - `validate target`
 - `feedback <message>` - Send feedback to the Promptfoo developers.
-- `import <filepath>` - Import an eval file from JSON format.
+- `import <filepath>` - Import a Promptfoo eval JSON export or OpenAI Evals dashboard JSONL export.
 - `export` - Export eval records or logs.
   - `export eval <evalId>`
   - `export logs`
@@ -134,16 +134,20 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--share`                            | Create a shareable URL                                                                                   |
 | `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
 | `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
+| `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                         |
 | `--table`                            | Output table in CLI                                                                                      |
 | `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                              |
 | `-t, --tests <path>`                 | Path to CSV with test cases                                                                              |
-| `--tag <key=value>`                  | Set an eval tag in key=value format. Can be specified multiple times.                                    |
 | `--var <key=value>`                  | Set a variable in key=value format                                                                       |
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
 
-Eval tags merge in this order: top-level config `tags`, then `commandLineOptions.tag`, then repeated CLI `--tag` flags. Later sources override earlier values when they reuse the same key.
+Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
+
+```sh
+promptfoo eval --tag env=ci --tag run-id=$CI_RUN_ID
+```
 
 For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 
@@ -170,7 +174,6 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
-- `--tag` cannot be combined with `--resume`; resumed evals keep their original tags.
 
 ### Retry Errors
 
@@ -181,7 +184,6 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 - The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
 - **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
-- `--tag` cannot be combined with `--retry-errors`; retried evals keep their original tags.
 - Uses the original eval's configuration and runtime options to ensure consistency.
 
 ## `promptfoo init [directory]`
@@ -443,19 +445,24 @@ Unlike `--filter-errors-only` which creates a new eval, `promptfoo retry` update
 
 ## `promptfoo import <filepath>`
 
-Import an eval file from JSON format.
+Import a Promptfoo eval file from JSON format, or import an OpenAI Evals dashboard
+`eval_items_*.jsonl` export.
 
 | Option     | Description                                                                          |
 | ---------- | ------------------------------------------------------------------------------------ |
 | `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval) |
 | `--force`  | Replace an existing eval with the same ID                                            |
 
-When importing an eval, the following data is preserved from the export:
+When importing a Promptfoo eval export, the following data is preserved:
 
 - **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
 - **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
 - **Author** - The original author is always preserved (even with `--new-id` or `--force`)
-- **Config, results, and all test data** - Fully preserved
+- **Config, results, prompts, variables, runtime options, and durations** - Preserved for current exports. Config secrets are redacted during export.
+- **Traces** - Preserved for current exports with sensitive trace attributes redacted by the trace store.
+- **Referenced blob media** - Restored when the export includes embedded media assets. Create a portable export with `promptfoo export eval <evalId> --include-media`.
+
+Older exports that do not include newer parity fields still import normally. Local relationships such as tags, dataset links, cache entries, and share state are not reconstructed from an eval export.
 
 If an eval with the same ID already exists, the import will fail with an error unless you specify `--new-id` (to create a duplicate with a new ID) or `--force` (to replace the existing eval).
 
@@ -472,6 +479,33 @@ promptfoo import --new-id my-eval.json
 promptfoo import --force my-eval.json
 ```
 
+OpenAI Evals dashboard exports such as `eval_items_*.jsonl` are imported as historical
+Promptfoo eval records. Promptfoo keeps each OpenAI source item under `vars.item` and
+preserves raw source item data, grader values, available pass/fail states, and grader
+samples in imported result metadata. When the export includes OpenAI `sample` data,
+Promptfoo also preserves it and surfaces available model output, errors, and token usage on
+the imported result. Grader rows with scores but no pass/fail states stay score-only:
+Promptfoo preserves the grader scores without turning the missing pass state into a failed
+assertion. If an export includes multiple OpenAI runs, Promptfoo imports them as prompt
+columns in one eval and aligns them on both the OpenAI data-source index and source item
+content. Rows with the same run-local index but different source items stay separate.
+
+For source fidelity, imported results keep the raw dashboard output-item row with its
+dashboard field names at `metadata.openai.outputItem`. The stored Promptfoo config records
+the dashboard import format and imported run IDs in `metadata.openaiEvalsImport`.
+
+The dashboard JSONL contains output-item rows, not the OpenAI eval definition, data-source
+config, run config, or testing-criteria definitions. It only keeps grader results keyed by
+grader name. The import is for historical results; it does not infer Promptfoo assertions
+or reconstruct a runnable Promptfoo config from the OpenAI eval.
+
+This import path supports the dashboard JSONL export, not the OpenAI API output-items list
+response.
+
+```sh
+promptfoo import eval_items_OutputDataItemStatusParam.ALL.jsonl
+```
+
 ## `promptfoo export`
 
 Export eval records or logs.
@@ -480,9 +514,16 @@ Export eval records or logs.
 
 Export an eval record to JSON format. To export the most recent, use `latest`.
 
-| Option                    | Description                                 |
-| ------------------------- | ------------------------------------------- |
-| `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+| Option                    | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| `-o, --output <filepath>` | File to write. Writes to stdout by default.             |
+| `--include-media`         | Embed referenced blob media bytes for portable imports. |
+
+Exports always redact config secrets before writing. Media bytes are opt-in because they can make the export much larger and may contain sensitive user content. Without `--include-media`, blob references remain in the exported results and resolve only when the target Promptfoo data directory already has the referenced blobs.
+
+:::warning
+Eval exports can still contain user data in prompts, outputs, variables, traces, and opt-in media. Inspect an export before sharing it.
+:::
 
 ### `promptfoo export logs`
 
