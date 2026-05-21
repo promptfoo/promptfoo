@@ -187,6 +187,12 @@ export const winstonLogger = winston.createLogger({
   transports: [
     new winston.transports.Console({
       level: getEnvString('LOG_LEVEL', 'info'),
+      // Commands that print a machine-readable payload (SARIF/JSON) to stdout
+      // set PROMPTFOO_LOG_TO_STDERR so log lines are routed to stderr and
+      // cannot corrupt that payload.
+      ...(getEnvBool('PROMPTFOO_LOG_TO_STDERR', false)
+        ? { stderrLevels: Object.keys(LOG_LEVELS) }
+        : {}),
       format: winston.format.combine(winston.format.simple(), consoleFormatter),
     }),
   ],
