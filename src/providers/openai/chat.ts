@@ -23,6 +23,7 @@ import {
 } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import {
   getRequestTimeoutMs,
   parseChatPrompt,
@@ -595,8 +596,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const args = functionCall.arguments || functionCall.function?.arguments || '{}';
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
       const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
-      if (mcpResult?.error) {
-        return `MCP Tool Error (${functionName}): ${mcpResult.error}`;
+      if (isMcpErrorResult(mcpResult)) {
+        return `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`;
       }
       return `MCP Tool Result (${functionName}): ${normalizeMcpContent(mcpResult?.content)}`;
     } catch (error) {
