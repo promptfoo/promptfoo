@@ -41,7 +41,13 @@ import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { getHumanRating } from './utils';
+import {
+  buildEvalOutputPromptHash,
+  getHumanRating,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -1236,6 +1242,7 @@ export interface EvalOutputCellProps {
   output: EvaluateTableOutput;
   maxTextLength: number;
   rowIndex: number;
+  rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -1265,6 +1272,7 @@ function EvalOutputCell({
   output,
   maxTextLength,
   rowIndex,
+  rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
   firstOutput,
@@ -1295,6 +1303,7 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
@@ -1305,11 +1314,27 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
+  React.useEffect(() => {
+    const hashTarget = parseEvalOutputPromptHash(locationHash);
+    if (!hashTarget) {
+      setOpen(false);
+      return;
+    }
+
+    setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
+  }, [locationHash, rowIndex, promptIndex]);
+
+  const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
+
   const handlePromptOpen = () => {
     setOpen(true);
+    setEvalDetailsHash(promptDetailsHash, rowPositionIndex);
   };
   const handlePromptClose = () => {
     setOpen(false);
+    if (locationHash === promptDetailsHash) {
+      setEvalDetailsHash('');
+    }
   };
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -1488,7 +1513,10 @@ function EvalOutputCell({
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
-    url.searchParams.set('rowId', String(rowIndex + 1));
+    // Keep `rowId` as the filtered result position so pagination can reopen the
+    // right page, while the hash keeps the stable test/prompt identity for the dialog.
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
+    url.hash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
     navigator.clipboard
       .writeText(url.toString())
