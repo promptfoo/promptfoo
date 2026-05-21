@@ -297,6 +297,20 @@ export async function doEval(
       );
     }
 
+    const hasRuntimeTags = Boolean(cmdObj.tags && Object.keys(cmdObj.tags).length > 0);
+    if (resumeRaw && hasRuntimeTags) {
+      return failEvalRun(
+        'Cannot use --tag with --resume. Resumed evaluations keep their original tags.',
+        isCliInvocation,
+      );
+    }
+    if (retryErrors && hasRuntimeTags) {
+      return failEvalRun(
+        'Cannot use --tag with --retry-errors. Retried evaluations keep their original tags.',
+        isCliInvocation,
+      );
+    }
+
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
     let resumeEval: Eval | undefined;
     const resumeId =
