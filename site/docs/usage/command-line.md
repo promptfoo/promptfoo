@@ -451,7 +451,11 @@ When importing a Promptfoo eval export, the following data is preserved:
 - **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
 - **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
 - **Author** - The original author is always preserved (even with `--new-id` or `--force`)
-- **Config, results, and all test data** - Fully preserved
+- **Config, results, prompts, variables, runtime options, and durations** - Preserved for current exports. Config secrets are redacted during export.
+- **Traces** - Preserved for current exports with sensitive trace attributes redacted by the trace store.
+- **Referenced blob media** - Restored when the export includes embedded media assets. Create a portable export with `promptfoo export eval <evalId> --include-media`.
+
+Older exports that do not include newer parity fields still import normally. Local relationships such as tags, dataset links, cache entries, and share state are not reconstructed from an eval export.
 
 If an eval with the same ID already exists, the import will fail with an error unless you specify `--new-id` (to create a duplicate with a new ID) or `--force` (to replace the existing eval).
 
@@ -503,9 +507,16 @@ Export eval records or logs.
 
 Export an eval record to JSON format. To export the most recent, use `latest`.
 
-| Option                    | Description                                 |
-| ------------------------- | ------------------------------------------- |
-| `-o, --output <filepath>` | File to write. Writes to stdout by default. |
+| Option                    | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| `-o, --output <filepath>` | File to write. Writes to stdout by default.             |
+| `--include-media`         | Embed referenced blob media bytes for portable imports. |
+
+Exports always redact config secrets before writing. Media bytes are opt-in because they can make the export much larger and may contain sensitive user content. Without `--include-media`, blob references remain in the exported results and resolve only when the target Promptfoo data directory already has the referenced blobs.
+
+:::warning
+Eval exports can still contain user data in prompts, outputs, variables, traces, and opt-in media. Inspect an export before sharing it.
+:::
 
 ### `promptfoo export logs`
 

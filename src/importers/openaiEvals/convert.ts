@@ -12,8 +12,9 @@ import {
 } from '../../types/index';
 import { sha256 } from '../../util/createHash';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import type { OpenAIEvalsImportResult, OpenAIEvalsJsonlRow, OpenAISample } from './types';
 import { isRecord } from './validation';
+
+import type { OpenAIEvalsImportResult, OpenAIEvalsJsonlRow, OpenAISample } from './types';
 
 const OPENAI_EVALS_PROVIDER_PREFIX = 'openai-evals';
 const OPENAI_EVALS_IMPORT_FORMAT = 'dashboard-output-items-jsonl';
@@ -119,9 +120,7 @@ function getOpenAIOutput(sample: OpenAISample): unknown {
     return undefined;
   }
   if (!Array.isArray(sample.outputs)) {
-    logger.debug(
-      `[openaiEvals] Dropping non-array outputs: ${JSON.stringify(sample.outputs)}`,
-    );
+    logger.debug(`[openaiEvals] Dropping non-array outputs: ${JSON.stringify(sample.outputs)}`);
     return undefined;
   }
 

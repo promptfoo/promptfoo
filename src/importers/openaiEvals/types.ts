@@ -1,8 +1,4 @@
-import type {
-  AtomicTestCase,
-  CompletedPrompt,
-  EvaluateResult,
-} from '../../types/index';
+import type { AtomicTestCase, CompletedPrompt, EvaluateResult } from '../../types/index';
 
 export interface OpenAIEvalsJsonlRow {
   run_id: string;
