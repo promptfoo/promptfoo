@@ -40,21 +40,21 @@ The following providers have built-in instrumentation:
 
 | Provider                                       | Automatic Tracing |
 | ---------------------------------------------- | ----------------- |
-| OpenAI                                         | ✓                 |
-| Anthropic                                      | ✓                 |
-| Azure OpenAI                                   | ✓                 |
-| AWS Bedrock                                    | ✓                 |
-| Google Vertex AI                               | ✓                 |
-| Ollama                                         | ✓                 |
-| Mistral                                        | ✓                 |
-| Cohere                                         | ✓                 |
-| Huggingface                                    | ✓                 |
-| IBM Watsonx                                    | ✓                 |
-| HTTP                                           | ✓                 |
-| OpenRouter                                     | ✓                 |
-| Replicate                                      | ✓                 |
-| OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited)     |
-| Cloudflare AI                                  | ✓ (inherited)     |
+| OpenAI                                         | ?                 |
+| Anthropic                                      | ?                 |
+| Azure OpenAI                                   | ?                 |
+| AWS Bedrock                                    | ?                 |
+| Google Vertex AI                               | ?                 |
+| Ollama                                         | ?                 |
+| Mistral                                        | ?                 |
+| Cohere                                         | ?                 |
+| Huggingface                                    | ?                 |
+| IBM Watsonx                                    | ?                 |
+| HTTP                                           | ?                 |
+| OpenRouter                                     | ?                 |
+| Replicate                                      | ?                 |
+| OpenAI-compatible (Deepseek, Perplexity, etc.) | ? (inherited)     |
+| Cloudflare AI                                  | ? (inherited)     |
 
 ### GenAI Span Attributes
 
@@ -94,17 +94,17 @@ When calling OpenAI's GPT-4:
 
 ```
 Span: chat gpt-4
-├─ gen_ai.system: openai
-├─ gen_ai.operation.name: chat
-├─ gen_ai.request.model: gpt-4
-├─ gen_ai.request.max_tokens: 1000
-├─ gen_ai.request.temperature: 0.7
-├─ gen_ai.usage.input_tokens: 150
-├─ gen_ai.usage.output_tokens: 85
-├─ gen_ai.usage.total_tokens: 235
-├─ gen_ai.response.finish_reasons: ["stop"]
-├─ promptfoo.provider.id: openai:chat:gpt-4
-└─ promptfoo.test.index: 0
+?? gen_ai.system: openai
+?? gen_ai.operation.name: chat
+?? gen_ai.request.model: gpt-4
+?? gen_ai.request.max_tokens: 1000
+?? gen_ai.request.temperature: 0.7
+?? gen_ai.usage.input_tokens: 150
+?? gen_ai.usage.output_tokens: 85
+?? gen_ai.usage.total_tokens: 235
+?? gen_ai.response.finish_reasons: ["stop"]
+?? promptfoo.provider.id: openai:chat:gpt-4
+?? promptfoo.test.index: 0
 ```
 
 ## Quick Start
@@ -201,7 +201,7 @@ After running an evaluation, view traces in the web UI:
    promptfoo view
    ```
 
-3. Click the magnifying glass (🔎) icon on any test result
+3. Click the magnifying glass (??) icon on any test result
 4. Scroll to the "Trace Timeline" section
 
 ### 4. Assert on Traced Workflows
@@ -234,6 +234,8 @@ tests:
 ```
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+
+Provider-scoped [`xfail`](/docs/configuration/expected-outputs/#expected-provider-failures) applies to trajectory assertions the same way it applies to other assertions.
 
 ## Configuration Reference
 
@@ -369,9 +371,9 @@ The web UI displays traces as a hierarchical timeline showing:
 
 ```
 [Root Span: provider.call (500ms)]
-  ├─[Retrieve Documents (100ms)]
-  ├─[Prepare Context (50ms)]
-  └─[LLM Generation (300ms)]
+  ??[Retrieve Documents (100ms)]
+  ??[Prepare Context (50ms)]
+  ??[LLM Generation (300ms)]
 ```
 
 Each bar's width represents its duration relative to the total trace time. Hover over any span to see:
@@ -628,7 +630,7 @@ When red team tracing is enabled, adversarial strategies receive visibility into
 Example trace summary provided to an attacker:
 
 ```
-Trace 0af76519 • 5 spans
+Trace 0af76519 ? 5 spans
 
 Execution Flow:
 1. [1.2s] llm.generate (client) | model=gpt-4
@@ -637,9 +639,9 @@ Execution Flow:
 4. [50ms] guardrail.check (internal) | ERROR: Rate limit exceeded
 
 Key Observations:
-• Guardrail content-filter decision: blocked
-• Tool call search via "tool.database_query"
-• Error span "guardrail.check": Rate limit exceeded
+? Guardrail content-filter decision: blocked
+? Tool call search via "tool.database_query"
+? Error span "guardrail.check": Rate limit exceeded
 ```
 
 The attacker can now craft a follow-up attack that:
