@@ -762,8 +762,11 @@ export async function doEval(
       return ret;
     }
 
-    // Clear results from memory to avoid memory issues
-    evalRecord.clearResults();
+    // Persisted evals can reload results later. No-write evals only have the
+    // in-memory results left for table and output rendering.
+    if (evalRecord.persisted) {
+      evalRecord.clearResults();
+    }
 
     // Determine sharing using shared utility (DRY - same logic as retry command)
     const wantsToShare = shouldShareResults({
