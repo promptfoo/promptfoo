@@ -41,6 +41,7 @@ The `promptfoo` command line utility includes these command groups:
   - `logs [file]`
   - `logs list`
 - `mcp` - Start a Model Context Protocol (MCP) server to expose promptfoo tools to AI agents and development environments.
+- `optimize` - Improve one configured prompt against one configured provider.
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show [id]` - Show details of a specific resource (eval, prompt, or dataset).
 - `delete <id>` - Delete an eval by ID; accepts `latest` or `all`.
@@ -134,6 +135,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--share`                            | Create a shareable URL                                                                                   |
 | `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
 | `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
+| `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                         |
 | `--table`                            | Output table in CLI                                                                                      |
 | `--table-cell-max-length <number>`   | Truncate console table cells to this length                                                              |
 | `-t, --tests <path>`                 | Path to CSV with test cases                                                                              |
@@ -141,6 +143,12 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
+
+Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
+
+```sh
+promptfoo eval --tag env=ci --tag run-id=$CI_RUN_ID
+```
 
 For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 
@@ -158,6 +166,33 @@ Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3`
 When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+
+## `promptfoo optimize`
+
+Improve one configured prompt against one configured provider. The optimizer runs a baseline eval, proposes prompt candidates from observed failures and prior scores, evaluates those candidates, and prints the strongest prompt it found.
+
+```sh
+promptfoo optimize
+promptfoo optimize -c path/to/promptfooconfig.yaml
+promptfoo optimize --prompt-index 1 --provider-index 0
+promptfoo optimize --validation-split 0.2
+```
+
+The default config is loaded implicitly when `-c` is omitted. Optimization
+targets one resolved prompt/provider pair at a time.
+
+| Option                          | Description                                                                                                  | Default                |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| `-c, --config <path>`           | Path to the configuration file                                                                               | `promptfooconfig.yaml` |
+| `--prompt-index <index>`        | Zero-based resolved prompt index to optimize                                                                 | `0`                    |
+| `--provider-index <index>`      | Zero-based resolved provider index to optimize against                                                       | `0`                    |
+| `--validation-split <fraction>` | Hold out up to half of the configured test cases for validation scoring while search uses the remaining set. | none                   |
+
+When `--validation-split` is omitted, optimization uses the full eval set and
+may overfit to the configured cases.
+
+See [Prompt Optimization](/docs/usage/prompt-optimization) for workflow guidance,
+target selection details, and validation split recommendations.
 
 ### Pause and Resume
 
