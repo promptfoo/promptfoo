@@ -42,6 +42,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -92,36 +93,6 @@ function isSchedulerMetrics(raw: unknown): raw is SchedulerMetrics {
     Number.isFinite(metrics.retriedRequests) &&
     typeof metrics.concurrencyReduced === 'boolean'
   );
-}
-
-/**
- * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
- * Removes non-serializable fields like AbortSignal, functions, and symbols.
- */
-function sanitizeRuntimeOptions(
-  options?: Partial<import('../types').EvaluateOptions>,
-): Partial<import('../types').EvaluateOptions> | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const sanitized = { ...options };
-
-  // Remove known non-serializable fields
-  delete sanitized.abortSignal;
-
-  // Remove any function or symbol values
-  for (const key in sanitized) {
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-    const value = (sanitized as any)[key];
-    if (typeof value === 'function' || typeof value === 'symbol') {
-      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-      delete (sanitized as any)[key];
-    }
-  }
-
-  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
@@ -502,6 +473,9 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
       completedPrompts?: CompletedPrompt[];
+      durationMs?: number;
+      generationDurationMs?: number;
+      evaluationDurationMs?: number;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -514,6 +488,16 @@ export default class Eval {
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
+    const durationResults = {
+      ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
+      ...(opts?.generationDurationMs !== undefined && {
+        generationDurationMs: opts.generationDurationMs,
+      }),
+      ...(opts?.evaluationDurationMs !== undefined && {
+        evaluationDurationMs: opts.evaluationDurationMs,
+      }),
+    };
+
     db.transaction(() => {
       db.insert(evalsTable)
         .values({
@@ -522,7 +506,7 @@ export default class Eval {
           author,
           description: config.description,
           config,
-          results: {},
+          results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
@@ -611,6 +595,9 @@ export default class Eval {
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+      durationMs: opts?.durationMs,
+      generationDurationMs: opts?.generationDurationMs,
+      evaluationDurationMs: opts?.evaluationDurationMs,
     });
   }
 

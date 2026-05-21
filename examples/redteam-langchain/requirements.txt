@@ -13,7 +13,7 @@ h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
 httpx-sse==0.4.3
-idna==3.11
+idna==3.15
 jiter==0.13.0
 jsonpatch==1.33
 jsonpointer==3.0.0
