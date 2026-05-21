@@ -17,6 +17,7 @@ import type { RedteamGradingContext } from '../grading/types';
 const PLUGIN_ID = 'promptfoo:redteam:aegis';
 export const DATASET_PATH =
   'huggingface://datasets/nvidia/Aegis-AI-Content-Safety-Dataset-1.0?split=train';
+const INCLUDE_SAFE_FETCH_FLOOR = 5_000;
 
 interface AegisVars {
   text: string;
@@ -30,6 +31,16 @@ interface AegisRecord {
   [key: string]: any;
 }
 
+function getAegisLabel(record: { vars?: { labels_0?: unknown } }): string {
+  const label = record.vars?.labels_0;
+  return typeof label === 'string' ? label.trim().toLowerCase() : '';
+}
+
+function isUnsafeAegisLabel(label: string): boolean {
+  // Unsafe Aegis rows use risk-category labels; only safe rows have the literal "Safe" label.
+  return label.length > 0 && label !== 'safe';
+}
+
 export async function fetchDataset(limit: number, includeSafe = false): Promise<TestCase[]> {
   try {
     if (limit <= 0) {
@@ -40,9 +51,9 @@ export async function fetchDataset(limit: number, includeSafe = false): Promise<
     // The Aegis dataset has unsafe prompts appearing much later in the dataset,
     // so we fetch a large number of records to ensure we get both types
     if (includeSafe) {
-      // Fetch a large portion of the dataset (up to 5000 records) to find both types
-      // The dataset has ~10,798 total records, with unsafe prompts appearing later
-      const fetchLimit = Math.max(5000, limit * 100);
+      // Fetch enough rows for a representative safe/unsafe mix without loading the
+      // full dataset for ordinary scan sizes.
+      const fetchLimit = Math.max(INCLUDE_SAFE_FETCH_FLOOR, limit * 100);
 
       logger.debug(`[aegis] Fetching ${fetchLimit} records to find balanced safe/unsafe split`);
 
@@ -58,17 +69,11 @@ export async function fetchDataset(limit: number, includeSafe = false): Promise<
         ) {
           return false;
         }
-        const label = String(r.vars.labels_0 || '').toLowerCase();
-        return label === 'safe' || label === 'unsafe' || label === 'needs_caution';
+        return getAegisLabel(r).length > 0;
       });
 
-      const safeRecords = filtered.filter(
-        (r) => String(r.vars!.labels_0 || '').toLowerCase() === 'safe',
-      );
-      const unsafeRecords = filtered.filter((r) => {
-        const label = String(r.vars!.labels_0 || '').toLowerCase();
-        return label === 'unsafe' || label === 'needs_caution';
-      });
+      const safeRecords = filtered.filter((r) => getAegisLabel(r) === 'safe');
+      const unsafeRecords = filtered.filter((r) => isUnsafeAegisLabel(getAegisLabel(r)));
 
       logger.info(
         `[aegis] Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe prompts from ${records.length} fetched records`,
@@ -110,8 +115,7 @@ export async function fetchDataset(limit: number, includeSafe = false): Promise<
       ) {
         return false;
       }
-      const label = String(r.vars.labels_0 || '').toLowerCase();
-      return label === 'unsafe' || label === 'needs_caution';
+      return isUnsafeAegisLabel(getAegisLabel(r));
     });
 
     return filtered.slice(0, limit).map(

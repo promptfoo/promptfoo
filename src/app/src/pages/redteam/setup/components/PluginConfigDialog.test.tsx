@@ -443,28 +443,6 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])('should render without error when config prop is null for plugin %s', (plugin) => {
-      render(
-        <PluginConfigDialog
-          open={true}
-          plugin={plugin as Plugin}
-          config={{}}
-          onClose={mockOnClose}
-          onSave={mockOnSave}
-        />,
-      );
-
-      const checkbox = screen.getByRole('checkbox', {
-        name: /Include safe prompts to test for over-blocking/,
-      });
-      expect(checkbox).toBeInTheDocument();
-      expect(checkbox).not.toBeChecked();
-    });
-
-    it.each([
-      'beavertails',
-      'unsafebench',
-      'aegis',
     ])("should render the 'Include safe prompts' checkbox and default to unchecked when config doesn't have includeSafe property for %s", (plugin) => {
       render(
         <PluginConfigDialog

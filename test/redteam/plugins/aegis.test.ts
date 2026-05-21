@@ -89,7 +89,11 @@ describe('fetchDataset', () => {
   it('should fetch and filter dataset', async () => {
     const mockTestCases: TestCase[] = [
       {
-        vars: { text: 'hello', text_type: 'user_message', labels_0: 'unsafe' },
+        vars: {
+          text: 'hello',
+          text_type: 'user_message',
+          labels_0: 'Guns and Illegal Weapons',
+        },
       },
       { vars: { text: 'ignore me', text_type: 'llm_response' } },
     ];
@@ -99,13 +103,34 @@ describe('fetchDataset', () => {
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 5);
     expect(result).toHaveLength(1);
     expect(result[0].vars?.text).toBe('hello');
-    expect(result[0].vars?.labels_0).toBe('unsafe');
+    expect(result[0].vars?.labels_0).toBe('Guns and Illegal Weapons');
   });
 
   it('should handle errors', async () => {
     vi.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('fail'));
     const result = await fetchDataset(2);
     expect(result).toEqual([]);
+  });
+
+  it('should fetch enough rows for a balanced safe and unsafe sample', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+      { vars: { text: 'safe prompt', text_type: 'user_message', labels_0: 'safe' } },
+      {
+        vars: {
+          text: 'unsafe prompt',
+          text_type: 'user_message',
+          labels_0: 'Criminal Planning/Confessions',
+        },
+      },
+    ]);
+
+    const result = await fetchDataset(2, true);
+
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 5000);
+    expect(result.map((record) => record.vars?.labels_0).sort()).toEqual([
+      'Criminal Planning/Confessions',
+      'safe',
+    ]);
   });
 
   it('should handle invalid records', async () => {
