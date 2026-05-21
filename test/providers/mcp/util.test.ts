@@ -5,6 +5,7 @@ import {
   getAuthHeaders,
   getAuthQueryParams,
   getMcpErrorMessage,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
   isMcpToolNameFilter,
   joinMcpErrors,
@@ -77,6 +78,16 @@ describe('joinMcpErrors', () => {
 
   it('joins multiple error messages with a separator', () => {
     expect(joinMcpErrors(['first failed', 'second failed'])).toBe('first failed; second failed');
+  });
+});
+
+describe('getThrownMcpErrorMessage', () => {
+  it('uses a plain thrown object message when present', () => {
+    expect(getThrownMcpErrorMessage({ message: 'connection lost' })).toBe('connection lost');
+  });
+
+  it('serializes thrown objects without message text', () => {
+    expect(getThrownMcpErrorMessage({ code: 'ECONNRESET' })).toBe('{"code":"ECONNRESET"}');
   });
 });
 

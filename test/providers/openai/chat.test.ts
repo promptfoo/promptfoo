@@ -971,7 +971,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
       const mcpClient = {
         getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
-        callTool: vi.fn().mockRejectedValue(new Error('connection lost')),
+        callTool: vi.fn().mockRejectedValue({ message: 'connection lost' }),
       };
       (provider as any).mcpClient = mcpClient;
 

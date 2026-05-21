@@ -25,6 +25,7 @@ import {
   formatMcpToolError,
   formatMcpToolResult,
   getMcpErrorMessage,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
   joinMcpErrors,
 } from '../mcp/util';
@@ -703,11 +704,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
-                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                const message = formatMcpToolError(
-                  functionName,
-                  error instanceof Error ? error.message : String(error),
-                );
+                const errorMessage = getThrownMcpErrorMessage(error);
+                logger.debug(`MCP tool execution failed for ${functionName}: ${errorMessage}`);
+                const message = formatMcpToolError(functionName, errorMessage);
                 results.push(message);
                 mcpErrors.push(message);
                 hasSuccessfulCallback = true;

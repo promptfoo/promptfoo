@@ -44,6 +44,25 @@ export function getMcpErrorMessage(result: MCPToolResult): string {
 }
 
 /**
+ * Resolve a readable message from a value thrown while executing an MCP tool.
+ * MCP clients can throw plain objects, so `String(error)` is not enough here.
+ */
+export function getThrownMcpErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  return normalizeMcpContent(error) || String(error);
+}
+
+/**
  * Join MCP tool error messages into a single `ProviderResponse.error` string,
  * or `undefined` when there were no errors.
  */

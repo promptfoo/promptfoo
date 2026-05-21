@@ -32,6 +32,7 @@ import {
   formatMcpToolError,
   formatMcpToolResult,
   getMcpErrorMessage,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
   joinMcpErrors,
 } from '../mcp/util';
@@ -1397,7 +1398,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return { output: formatMcpToolResult(name, mcpResult.content) };
     } catch (err) {
       logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
-      const msg = formatMcpToolError(name, errorMessage(err));
+      const msg = formatMcpToolError(name, getThrownMcpErrorMessage(err));
       return { output: msg, error: msg };
     }
   }

@@ -8,6 +8,7 @@ import {
   formatMcpToolError,
   formatMcpToolResult,
   getMcpErrorMessage,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
 } from './mcp/util';
 
@@ -268,7 +269,7 @@ export class FunctionCallbackHandler {
 
       return { output: formatMcpToolResult(toolName, result.content), isError: false };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = getThrownMcpErrorMessage(error);
       logger.debug(`MCP tool execution failed for ${toolName}: ${errorMessage}`);
       return {
         output: formatMcpToolError(toolName, errorMessage),

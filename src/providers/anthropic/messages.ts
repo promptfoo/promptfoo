@@ -16,6 +16,7 @@ import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import {
   formatMcpToolError,
   getMcpErrorMessage,
+  getThrownMcpErrorMessage,
   isMcpErrorResult,
   joinMcpErrors,
 } from '../mcp/util';
@@ -287,7 +288,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
       // Return the model's initial response (which may contain tool_use
       // blocks) unchanged rather than treating unexecuted tools as an error.
-      return { response: initialResponse };
+      return { kind: 'ok', response: initialResponse };
     }
 
     let response = initialResponse;
@@ -405,10 +406,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return {
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: formatMcpToolError(
-          toolUse.name,
-          error instanceof Error ? error.message : String(error),
-        ),
+        content: formatMcpToolError(toolUse.name, getThrownMcpErrorMessage(error)),
         is_error: true,
       };
     }

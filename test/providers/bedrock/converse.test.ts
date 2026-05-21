@@ -731,7 +731,7 @@ describe('AwsBedrockConverseProvider', () => {
     });
 
     it('should propagate thrown MCP errors into ProviderResponse.error', async () => {
-      mcpMocks.mockCallTool.mockRejectedValueOnce(new Error('connection refused'));
+      mcpMocks.mockCallTool.mockRejectedValueOnce({ message: 'connection refused' });
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
