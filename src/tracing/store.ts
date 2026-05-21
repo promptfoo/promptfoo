@@ -202,7 +202,8 @@ export class TraceStore {
           testCaseId: trace.testCaseId,
           metadata: trace.metadata,
         })
-        .onConflictDoNothing({ target: tracesTable.traceId });
+        .onConflictDoNothing({ target: tracesTable.traceId })
+        .run();
       logger.debug(`[TraceStore] Successfully created or found existing trace ${trace.traceId}`);
     } catch (error) {
       logger.error(`[TraceStore] Failed to create trace: ${error}`);
@@ -261,7 +262,11 @@ export class TraceStore {
         };
       });
 
-      await db.insert(spansTable).values(spanRecords);
+      if (spanRecords.length === 0) {
+        return { stored: true };
+      }
+
+      await db.insert(spansTable).values(spanRecords).run();
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
@@ -361,7 +366,7 @@ export class TraceStore {
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
       // Delete old traces (spans will be cascade deleted due to foreign key)
-      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
+      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime)).run();
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {

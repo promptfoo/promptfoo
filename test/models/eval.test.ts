@@ -11,10 +11,10 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
+import { type Prompt, ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
-
-import type { Prompt } from '../../src/types/index';
 
 vi.mock('../../src/globalConfig/accounts', async () => {
   const actual = await vi.importActual('../../src/globalConfig/accounts');
@@ -96,6 +96,45 @@ describe('evaluator', () => {
       ]);
 
       expect(updateSignalFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setResults', () => {
+    it('should persist result rows when replacing results on a persisted eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const result = new EvalResult({
+        id: 'set-results-row',
+        evalId: eval_.id,
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { state: 'colorado' } },
+        prompt: {
+          raw: 'What is the capital of colorado?',
+          label: 'What is the capital of {{state}}?',
+        },
+        provider: { id: 'test-provider' },
+        response: { output: 'Denver' },
+        gradingResult: null,
+        namedScores: {},
+        metadata: {},
+        success: true,
+        score: 1,
+        latencyMs: 12,
+        cost: 0,
+        failureReason: ResultFailureReason.NONE,
+      });
+
+      await eval_.setResults([result]);
+
+      const persistedResults = await EvalResult.findManyByEvalId(eval_.id);
+      expect(persistedResults).toHaveLength(1);
+      expect(persistedResults[0]).toEqual(
+        expect.objectContaining({
+          evalId: eval_.id,
+          promptIdx: 0,
+          response: expect.objectContaining({ output: 'Denver' }),
+        }),
+      );
     });
   });
 

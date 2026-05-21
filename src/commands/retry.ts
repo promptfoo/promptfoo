@@ -67,7 +67,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   const db = await getDb();
 
   // Use batch delete with inArray for better performance
-  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds));
+  await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds)).run();
 
   logger.debug(`Deleted ${resultIds.length} error results from database`);
 }

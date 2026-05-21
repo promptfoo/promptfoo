@@ -1244,9 +1244,12 @@ export default class Eval {
 
   async setResults(results: EvalResult[]) {
     this.results = results;
-    if (this.persisted) {
+    if (this.persisted && results.length > 0) {
       const db = await getDb();
-      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+      await db
+        .insert(evalResultsTable)
+        .values(results.map((r) => ({ ...r, evalId: this.id })))
+        .run();
     }
     this._resultsLoaded = true;
   }

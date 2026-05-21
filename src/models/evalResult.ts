@@ -616,7 +616,8 @@ export default class EvalResult {
       await db
         .update(evalResultsTable)
         .set({ ...this, updatedAt: getCurrentTimestamp() })
-        .where(eq(evalResultsTable.id, this.id));
+        .where(eq(evalResultsTable.id, this.id))
+        .run();
     } else {
       const result = await db.insert(evalResultsTable).values(this).returning();
       this.id = result[0].id;
