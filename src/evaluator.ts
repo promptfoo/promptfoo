@@ -1450,10 +1450,12 @@ async function runEvalInternal({
         testIdx,
         testCase: test,
         promptId: prompt.id || '',
-        metadata: {
-          ...ret?.metadata,
-          ...metadata,
-        },
+        metadata: ret
+          ? {
+              ...ret.metadata,
+              errorContext: metadata.errorContext,
+            }
+          : metadata,
         cost: ret?.cost,
         tokenUsage: ret?.tokenUsage,
         response: ret?.response,

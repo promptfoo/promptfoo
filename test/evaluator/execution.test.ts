@@ -413,7 +413,11 @@ describeEvaluator('evaluator execution control', () => {
         output: 'Test output',
         cost: 0.05,
         tokenUsage: { total: 100, prompt: 80, completion: 20, cached: 0, numRequests: 1 },
-        metadata: { numTurns: 5 },
+        metadata: {
+          numTurns: 5,
+          sessionId: 'provider-session',
+          tags: ['provider-tag'],
+        },
       }),
     };
 
@@ -422,6 +426,11 @@ describeEvaluator('evaluator execution control', () => {
       prompts: [toPrompt('Test prompt')],
       tests: [
         {
+          metadata: {
+            numTurns: 1,
+            sessionId: 'test-session',
+            tags: ['test-tag'],
+          },
           options: {
             transform: 'output + " postprocessed"',
           },
@@ -441,12 +450,23 @@ describeEvaluator('evaluator execution control', () => {
       expect.objectContaining({
         error: expect.stringContaining('transform failed'),
         cost: 0.05,
-        metadata: expect.objectContaining({ numTurns: 5 }),
+        metadata: expect.objectContaining({
+          numTurns: 5,
+          sessionId: 'provider-session',
+          tags: ['provider-tag'],
+          errorContext: expect.objectContaining({
+            providerId: 'test-provider-transform-error-metrics',
+          }),
+        }),
         response: expect.objectContaining({
           output: 'Test output',
           cost: 0.05,
           tokenUsage: expect.objectContaining({ total: 100, prompt: 80, completion: 20 }),
-          metadata: expect.objectContaining({ numTurns: 5 }),
+          metadata: expect.objectContaining({
+            numTurns: 5,
+            sessionId: 'provider-session',
+            tags: ['provider-tag'],
+          }),
         }),
       }),
     );
