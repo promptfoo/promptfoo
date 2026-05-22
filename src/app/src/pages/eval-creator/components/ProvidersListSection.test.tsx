@@ -19,6 +19,13 @@ describe('ProvidersListSection', () => {
     vi.clearAllMocks();
   });
 
+  it('explains providers before users configure the first one', () => {
+    render(<ProvidersListSection providers={[]} onChange={onChange} />);
+
+    expect(screen.getByText(/providers are the models, agents, or endpoints/i)).toBeInTheDocument();
+    expect(screen.getByText(/add more later to compare outputs/i)).toBeInTheDocument();
+  });
+
   it('asks for confirmation before deleting a provider', async () => {
     const user = userEvent.setup();
     render(<ProvidersListSection providers={providers} onChange={onChange} />);

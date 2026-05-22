@@ -129,6 +129,8 @@ describe('AddProviderDialog layout', () => {
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
+    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/a provider is a model, agent, or endpoint/i)).toBeInTheDocument();
   });
 
   it('resets the scroll position when moving into provider configuration', async () => {
@@ -151,6 +153,25 @@ describe('AddProviderDialog layout', () => {
     expect(nextScrollBody).toBeDefined();
     expect(nextScrollBody).not.toBe(scrollBody);
     expect(nextScrollBody).toHaveProperty('scrollTop', 0);
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/add more providers later to compare outputs/i)).toBeInTheDocument();
+  });
+
+  it('uses focused copy without add-flow steps when editing a provider', () => {
+    render(
+      <AddProviderDialog
+        open
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        initialProvider={{ id: 'openai:gpt-5.5' }}
+      />,
+    );
+
+    expect(screen.getByText('Edit Provider')).toBeInTheDocument();
+    expect(
+      screen.getByText(/update the connection and model settings used for this evaluation/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Step \d of 2/)).not.toBeInTheDocument();
   });
 
   it('requires valid provider configuration before saving and keeps recovery available', async () => {

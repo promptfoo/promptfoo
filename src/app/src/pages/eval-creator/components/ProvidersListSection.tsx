@@ -159,7 +159,8 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           <Card className="p-8 text-center bg-muted/30 border-dashed">
             <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
             <p className="text-xs text-muted-foreground">
-              Add AI models, HTTP endpoints, Python scripts, or other providers to evaluate.
+              Providers are the models, agents, or endpoints your prompts and test cases run
+              against. Add one to get started; add more later to compare outputs.
             </p>
           </Card>
         </div>
