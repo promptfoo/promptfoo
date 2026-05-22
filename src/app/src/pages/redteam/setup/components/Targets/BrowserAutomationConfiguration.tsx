@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
+import { Textarea } from '@app/components/ui/textarea';
 import { Plus, Trash2 } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
@@ -21,6 +22,7 @@ interface BrowserStep {
     url?: string;
     selector?: string;
     text?: string;
+    script?: string;
     path?: string;
     ms?: number;
     fullPage?: boolean;
@@ -237,7 +239,11 @@ const BrowserAutomationConfiguration = ({
                   step.action === 'extract') && (
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`step-${index}-selector`}>Selector</Label>
+                      <Label htmlFor={`step-${index}-selector`}>
+                        {step.action === 'extract'
+                          ? 'CSS Selector (optional with script)'
+                          : 'Selector'}
+                      </Label>
                       <Input
                         id={`step-${index}-selector`}
                         value={step.args?.selector || ''}
@@ -328,23 +334,49 @@ const BrowserAutomationConfiguration = ({
                 )}
 
                 {step.action === 'extract' && (
-                  <div className="mt-4 space-y-2">
-                    <Label htmlFor={`step-${index}-var-name`}>Variable Name</Label>
-                    <Input
-                      id={`step-${index}-var-name`}
-                      value={step.name || ''}
-                      onChange={(e) => {
-                        const newSteps = [...(selectedTarget.config.steps || [])];
-                        newSteps[index] = { ...step, name: e.target.value };
-                        updateCustomTarget('steps', newSteps);
-                      }}
-                      placeholder="searchResults"
-                      {...getStepErrorProps(index, 'name')}
-                    />
-                    <BrowserFieldError
-                      id={getStepErrorId(index, 'name')}
-                      error={getStepError(index, 'name')}
-                    />
+                  <div className="mt-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor={`step-${index}-var-name`}>Variable Name</Label>
+                      <Input
+                        id={`step-${index}-var-name`}
+                        value={step.name || ''}
+                        onChange={(e) => {
+                          const newSteps = [...(selectedTarget.config.steps || [])];
+                          newSteps[index] = { ...step, name: e.target.value };
+                          updateCustomTarget('steps', newSteps);
+                        }}
+                        placeholder="searchResults"
+                        {...getStepErrorProps(index, 'name')}
+                      />
+                      <BrowserFieldError
+                        id={getStepErrorId(index, 'name')}
+                        error={getStepError(index, 'name')}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor={`step-${index}-script`}>
+                        JavaScript Extraction Script (advanced)
+                      </Label>
+                      <Textarea
+                        id={`step-${index}-script`}
+                        value={step.args?.script || ''}
+                        onChange={(e) => {
+                          const newSteps = [...(selectedTarget.config.steps || [])];
+                          newSteps[index] = {
+                            ...step,
+                            args: { ...step.args, script: e.target.value || undefined },
+                          };
+                          updateCustomTarget('steps', newSteps);
+                        }}
+                        placeholder="return document.querySelector('.result')?.textContent;"
+                        aria-describedby={`step-${index}-script-help`}
+                      />
+                      <HelperText id={`step-${index}-script-help`} className="text-sm">
+                        Optional. Runs in the target page context and takes priority over the CSS
+                        selector when provided.
+                      </HelperText>
+                    </div>
                   </div>
                 )}
 

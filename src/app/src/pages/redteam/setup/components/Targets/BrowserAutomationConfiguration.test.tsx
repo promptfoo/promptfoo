@@ -1,5 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
@@ -105,5 +105,38 @@ describe('BrowserAutomationConfiguration', () => {
     expect(screen.getByLabelText('Screenshot File Path')).toHaveAccessibleDescription(
       'Step 1: enter a screenshot file path.',
     );
+  });
+
+  it('discloses and saves advanced extraction scripts within extract steps', () => {
+    const updateCustomTarget = vi.fn();
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([
+          {
+            action: 'extract',
+            args: { selector: '.result', script: 'return document.title;' },
+            name: 'result',
+          },
+        ])}
+        updateCustomTarget={updateCustomTarget}
+      />,
+    );
+
+    const script = screen.getByLabelText('JavaScript Extraction Script (advanced)');
+    expect(screen.getByLabelText('CSS Selector (optional with script)')).toHaveValue('.result');
+    expect(script).toHaveValue('return document.title;');
+    expect(script).toHaveAccessibleDescription(
+      /Runs in the target page context and takes priority over the CSS selector/i,
+    );
+
+    fireEvent.change(script, { target: { value: 'return document.body.innerText;' } });
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('steps', [
+      {
+        action: 'extract',
+        args: { selector: '.result', script: 'return document.body.innerText;' },
+        name: 'result',
+      },
+    ]);
   });
 });
