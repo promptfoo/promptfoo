@@ -7,6 +7,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 
+import type { ProviderOptions } from '../../types';
+
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
 }));
@@ -30,6 +32,33 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => (
 
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(ui, { wrapper: Wrapper });
+};
+
+const ControlledHttpConfiguration = ({ initialTarget }: { initialTarget: ProviderOptions }) => {
+  const [selectedTarget, setSelectedTarget] = React.useState(initialTarget);
+  const [bodyError, setBodyError] = React.useState<string | React.ReactNode | null>(null);
+  const [urlError, setUrlError] = React.useState<string | null>(null);
+
+  const updateCustomTarget = (field: string, value: unknown) => {
+    if (field !== 'config') {
+      throw new Error(`Mode transitions must replace config atomically, received: ${field}`);
+    }
+    setSelectedTarget((currentTarget) => ({
+      ...currentTarget,
+      config: value as ProviderOptions['config'],
+    }));
+  };
+
+  return (
+    <HttpEndpointConfiguration
+      selectedTarget={selectedTarget}
+      updateCustomTarget={updateCustomTarget}
+      bodyError={bodyError}
+      setBodyError={setBodyError}
+      urlError={urlError}
+      setUrlError={setUrlError}
+    />
+  );
 };
 
 describe('HttpEndpointConfiguration - Header Field Layout', () => {
@@ -127,6 +156,62 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(methodTrigger).toHaveClass('w-full', 'sm:w-24', 'sm:shrink-0');
     expect(urlInput).toHaveClass('min-w-0', 'flex-1');
     expect(urlInput).toBeRequired();
+  });
+
+  it('switches between structured and raw HTTP setup without leaving inactive fields behind', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <ControlledHttpConfiguration
+        initialTarget={defaultProps.selectedTarget as ProviderOptions}
+      />,
+    );
+
+    await user.click(screen.getByRole('switch', { name: 'Use Raw HTTP Request' }));
+
+    expect(
+      (screen.getByRole('textbox', { name: 'Raw HTTP request' }) as HTMLTextAreaElement).value,
+    ).toContain('{{prompt}}');
+    expect(screen.queryByPlaceholderText('https://example.com/api/chat')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('switch', { name: 'Use Raw HTTP Request' }));
+
+    expect(screen.getByPlaceholderText('https://example.com/api/chat')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Raw HTTP request' })).not.toBeInTheDocument();
+  });
+
+  it('applies generated structured setup when editing an existing raw request', async () => {
+    const user = userEvent.setup();
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'http',
+        config: {
+          url: 'https://generated.example.com/chat',
+          method: 'POST',
+          body: '{"message":"{{prompt}}"}',
+        },
+      }),
+    } as Response);
+
+    renderWithProviders(
+      <ControlledHttpConfiguration
+        initialTarget={{
+          id: 'http',
+          config: { request: 'POST /chat HTTP/1.1\n\n{"message":"{{prompt}}"}' },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await user.click(await screen.findByRole('button', { name: 'Apply Configuration' }));
+
+    expect(screen.getByPlaceholderText('https://example.com/api/chat')).toHaveValue(
+      'https://generated.example.com/chat',
+    );
+    expect(screen.queryByRole('textbox', { name: 'Raw HTTP request' })).not.toBeInTheDocument();
   });
 
   it('keeps generated configuration actions visible while the dialog body scrolls independently', async () => {

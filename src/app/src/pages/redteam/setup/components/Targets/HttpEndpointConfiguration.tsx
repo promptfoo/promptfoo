@@ -76,6 +76,12 @@ interface GeneratedConfig {
   };
 }
 
+const getGeneratedCommonConfig = (config: GeneratedConfig['config']) => ({
+  transformRequest: config.transformRequest,
+  transformResponse: config.transformResponse,
+  sessionParser: config.sessionParser,
+});
+
 function applyTextAreaErrorAttributes(
   textarea: HTMLTextAreaElement | null,
   error: React.ReactNode | null,
@@ -404,36 +410,33 @@ Content-Type: application/json
   }, []);
 
   const resetState = useCallback(
-    (isRawMode: boolean) => {
+    (isRawMode: boolean, configOverrides: Partial<ProviderOptions['config']> = {}) => {
       setBodyError(null);
       setUrlError(null);
+      const nextConfig = { ...selectedTarget.config };
 
       if (isRawMode) {
-        // Reset to empty raw request
-        updateCustomTarget('request', '');
-
-        // Clear structured mode fields
-        updateCustomTarget('url', undefined);
-        updateCustomTarget('method', undefined);
-        updateCustomTarget('headers', undefined);
-        updateCustomTarget('body', undefined);
+        delete nextConfig.url;
+        delete nextConfig.method;
+        delete nextConfig.headers;
+        delete nextConfig.body;
+        updateCustomTarget('config', { ...nextConfig, request: '', ...configOverrides });
       } else {
-        // Reset to empty structured fields
         setHeaders([]);
         setRequestBody('');
-
-        // Clear raw request
-        updateCustomTarget('request', undefined);
-
-        // Reset structured fields
-        updateCustomTarget('url', '');
-        updateCustomTarget('method', 'POST');
-        updateCustomTarget('headers', {});
-        updateCustomTarget('body', '');
-        updateCustomTarget('useHttps', false);
+        delete nextConfig.request;
+        updateCustomTarget('config', {
+          ...nextConfig,
+          url: '',
+          method: 'POST',
+          headers: {},
+          body: '',
+          useHttps: false,
+          ...configOverrides,
+        });
       }
     },
-    [updateCustomTarget, setBodyError, setUrlError],
+    [selectedTarget.config, updateCustomTarget, setBodyError, setUrlError],
   );
 
   // Header management
@@ -593,45 +596,36 @@ ${exampleRequest}`;
     }
   };
 
-  const handleApply = () => {
-    if (generatedConfig) {
-      if (generatedConfig.config.request) {
-        resetState(true);
-        updateCustomTarget('request', generatedConfig.config.request);
-      } else {
-        resetState(false);
-        if (generatedConfig.config.url) {
-          updateCustomTarget('url', generatedConfig.config.url);
-        }
-        if (generatedConfig.config.method) {
-          updateCustomTarget('method', generatedConfig.config.method);
-        }
-        if (generatedConfig.config.headers) {
-          updateCustomTarget('headers', generatedConfig.config.headers);
-          setHeaders(
-            Object.entries(generatedConfig.config.headers).map(([key, value]) => ({
-              key,
-              value: String(value),
-            })),
-          );
-        }
-        if (generatedConfig.config.body) {
-          // First update the internal state
-          const formattedBody =
-            typeof generatedConfig.config.body === 'string'
-              ? generatedConfig.config.body
-              : JSON.stringify(generatedConfig.config.body, null, 2);
-          setRequestBody(formattedBody);
+  const applyGeneratedStructuredConfig = (config: GeneratedConfig['config']) => {
+    const body = config.body ?? '';
+    resetState(false, {
+      ...getGeneratedCommonConfig(config),
+      url: config.url ?? '',
+      method: config.method ?? 'POST',
+      headers: config.headers ?? {},
+      body,
+    });
+    setHeaders(
+      Object.entries(config.headers ?? {}).map(([key, value]) => ({
+        key,
+        value: String(value),
+      })),
+    );
+    setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+  };
 
-          // Then update the target config with the original value
-          updateCustomTarget('body', generatedConfig.config.body);
-        }
-      }
-      updateCustomTarget('transformRequest', generatedConfig.config.transformRequest);
-      updateCustomTarget('transformResponse', generatedConfig.config.transformResponse);
-      updateCustomTarget('sessionParser', generatedConfig.config.sessionParser);
-      setConfigDialogOpen(false);
+  const handleApply = () => {
+    if (!generatedConfig) {
+      return;
     }
+
+    const { config } = generatedConfig;
+    if (config.request) {
+      resetState(true, { ...getGeneratedCommonConfig(config), request: config.request });
+    } else {
+      applyGeneratedStructuredConfig(config);
+    }
+    setConfigDialogOpen(false);
   };
 
   const handlePostmanImport = (config: {
@@ -640,11 +634,12 @@ ${exampleRequest}`;
     headers: Record<string, string>;
     body: string;
   }) => {
-    // Apply the configuration
-    resetState(false);
-    updateCustomTarget('url', config.url);
-    updateCustomTarget('method', config.method);
-    updateCustomTarget('headers', config.headers);
+    resetState(false, {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      body: config.body || '',
+    });
     setHeaders(
       Object.entries(config.headers).map(([key, value]) => ({
         key,
@@ -654,7 +649,6 @@ ${exampleRequest}`;
 
     if (config.body) {
       setRequestBody(config.body);
-      updateCustomTarget('body', config.body);
     }
   };
 
@@ -666,10 +660,7 @@ ${exampleRequest}`;
             id="use-raw-request"
             checked={Boolean(selectedTarget.config.request)}
             onCheckedChange={(checked) => {
-              resetState(checked);
-              if (checked) {
-                updateCustomTarget('request', exampleRequest);
-              }
+              resetState(checked, checked ? { request: exampleRequest } : {});
             }}
           />
           <Label htmlFor="use-raw-request">Use Raw HTTP Request</Label>
