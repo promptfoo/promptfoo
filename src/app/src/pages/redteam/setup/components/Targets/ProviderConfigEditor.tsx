@@ -72,6 +72,7 @@ interface ProviderValidationResult {
   errors: ValidationError[];
   foundationFieldErrors: FoundationModelFieldErrors;
   agentIdError: string | null;
+  customIdError: string | null;
 }
 
 const hasConfiguredInputs = (provider: ProviderOptions): boolean =>
@@ -175,7 +176,7 @@ function validateFoundationModelProvider(
     errors.push(foundationFieldErrors.topP);
   }
 
-  return { errors, foundationFieldErrors, agentIdError: null };
+  return { errors, foundationFieldErrors, agentIdError: null, customIdError: null };
 }
 
 function validateHttpProvider(
@@ -207,16 +208,25 @@ function validateAgentProvider(provider: ProviderOptions): string[] {
   return usesExamplePath(provider.id) ? ['Replace the example path with your agent file path'] : [];
 }
 
+function getCustomProviderIdError(provider: ProviderOptions): string | null {
+  if (!provider.id || provider.id.trim() === '') {
+    return 'Provider ID is required';
+  }
+  if (usesExamplePath(provider.id)) {
+    return 'Replace the example path with your provider file path';
+  }
+
+  return null;
+}
+
 function validateCustomProvider(
   provider: ProviderOptions,
   bodyError: React.ReactNode | null,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
-  if (!provider.id || provider.id.trim() === '') {
-    errors.push('Provider ID is required');
-  }
-  if (usesExamplePath(provider.id)) {
-    errors.push('Replace the example path with your provider file path');
+  const idError = getCustomProviderIdError(provider);
+  if (idError) {
+    errors.push(idError);
   }
   if (bodyError) {
     errors.push(bodyError);
@@ -235,6 +245,7 @@ function getProviderValidationResult(
     errors: [],
     foundationFieldErrors: {},
     agentIdError: null,
+    customIdError: null,
   };
   if (providerType === 'http') {
     result.errors = validateHttpProvider(provider, bodyError, validateUrl);
@@ -248,6 +259,7 @@ function getProviderValidationResult(
     result.errors = validateAgentProvider(provider);
     result.agentIdError = typeof result.errors[0] === 'string' ? result.errors[0] : null;
   } else if (['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
+    result.customIdError = getCustomProviderIdError(provider);
     result.errors = validateCustomProvider(provider, bodyError);
   }
   if (extensionErrors) {
@@ -282,6 +294,7 @@ function ProviderConfigEditor({
     {},
   );
   const [agentIdError, setAgentIdError] = useState<string | null>(null);
+  const [customIdError, setCustomIdError] = useState<string | null>(null);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -310,6 +323,7 @@ function ProviderConfigEditor({
 
     if (field === 'id') {
       setAgentIdError(null);
+      setCustomIdError(null);
       updatedTarget.id = value as string;
       if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
@@ -374,6 +388,7 @@ function ProviderConfigEditor({
       errors,
       foundationFieldErrors: nextFoundationFieldErrors,
       agentIdError: nextAgentIdError,
+      customIdError: nextCustomIdError,
     } = getProviderValidationResult(
       provider,
       providerType,
@@ -383,6 +398,7 @@ function ProviderConfigEditor({
     );
     setFoundationFieldErrors(nextFoundationFieldErrors);
     setAgentIdError(nextAgentIdError);
+    setCustomIdError(nextCustomIdError);
     const hasErrors = errors.length > 0;
     if (setError) {
       const stringErrors = errors.filter((e): e is string => typeof e === 'string');
@@ -418,6 +434,8 @@ function ProviderConfigEditor({
           bodyError={bodyError}
           setBodyError={setBodyError}
           providerType={providerType}
+          mode={mode}
+          idError={customIdError}
         />
       )}
 
@@ -477,6 +495,8 @@ function ProviderConfigEditor({
           bodyError={bodyError}
           setBodyError={setBodyError}
           providerType={providerType}
+          mode={mode}
+          idError={customIdError}
         />
       )}
 
@@ -492,6 +512,8 @@ function ProviderConfigEditor({
           bodyError={bodyError}
           setBodyError={setBodyError}
           providerType={providerType}
+          mode={mode}
+          idError={customIdError}
         />
       )}
 
@@ -507,6 +529,8 @@ function ProviderConfigEditor({
           bodyError={bodyError}
           setBodyError={setBodyError}
           providerType={providerType}
+          mode={mode}
+          idError={customIdError}
         />
       )}
 
@@ -531,6 +555,8 @@ function ProviderConfigEditor({
           bodyError={bodyError}
           setBodyError={setBodyError}
           providerType={providerType}
+          mode={mode}
+          idError={customIdError}
         />
       )}
 

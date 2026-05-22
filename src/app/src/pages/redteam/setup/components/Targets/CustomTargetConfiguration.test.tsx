@@ -23,6 +23,49 @@ const render = (ui: React.ReactElement) => {
 };
 
 describe('CustomTargetConfiguration', () => {
+  it('uses provider terminology and general provider documentation in eval mode', () => {
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        rawConfigJson="{}"
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="custom"
+        mode="eval"
+      />,
+    );
+
+    expect(screen.getByText('Custom Provider Configuration')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Provider ID/i)).toBeInTheDocument();
+    expect(screen.queryByText('Custom Target Configuration')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /provider documentation/i })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/',
+    );
+  });
+
+  it('associates provider ID validation with the required field', () => {
+    render(
+      <CustomTargetConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        rawConfigJson="{}"
+        setRawConfigJson={vi.fn()}
+        bodyError={null}
+        providerType="custom"
+        mode="eval"
+        idError="Provider ID is required"
+      />,
+    );
+
+    const providerId = screen.getByLabelText(/Provider ID/i);
+    expect(providerId).toHaveAttribute('aria-invalid', 'true');
+    expect(providerId).toHaveAccessibleDescription(
+      /A provider identifies the model, script, or endpoint used in this evaluation.*Provider ID is required/,
+    );
+  });
+
   describe('file:// prefix handling', () => {
     it('should add file:// prefix to Python file paths', async () => {
       const user = userEvent.setup();

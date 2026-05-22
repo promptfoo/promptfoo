@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -34,6 +35,8 @@ interface CustomTargetConfigurationProps {
   bodyError: string | React.ReactNode | null;
   setBodyError?: (error: string | React.ReactNode | null) => void;
   providerType?: string;
+  mode?: 'eval' | 'redteam';
+  idError?: string | null;
 }
 
 interface ProviderConfig {
@@ -63,7 +66,10 @@ const highlightJSON = (code: string): string => {
   }
 };
 
-const getProviderConfig = (providerType?: string): ProviderConfig => {
+const getProviderConfig = (
+  providerType?: string,
+  mode: 'eval' | 'redteam' = 'redteam',
+): ProviderConfig => {
   switch (providerType) {
     case 'python':
       return {
@@ -360,6 +366,43 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
 
     // Default fallback for custom and other providers
     default:
+      if (mode === 'eval') {
+        return {
+          title: 'Custom Provider Configuration',
+          icon: <FileCode2 className="size-5 text-primary" />,
+          targetIdLabel: 'Provider ID',
+          targetIdPlaceholder: 'e.g., openai:chat:gpt-4o or ./my-provider.py',
+          helpText: (
+            <>
+              A provider identifies the model, script, or endpoint used in this evaluation. See{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                provider documentation
+              </a>{' '}
+              for supported IDs and custom providers.
+            </>
+          ),
+          docUrl: 'https://www.promptfoo.dev/docs/providers/',
+          examples: {
+            title: 'Provider ID Examples',
+            items: [
+              { code: 'openai:chat:gpt-4o', description: 'OpenAI model' },
+              { code: './provider.py', description: 'Local Python script' },
+              { code: './provider.js:myFunction', description: 'JavaScript with custom function' },
+            ],
+          },
+          configExample: {
+            temperature: 0.7,
+            max_tokens: 1024,
+            apiKey: '{{OPENAI_API_KEY}}',
+          },
+          configDescription: 'Optional JSON configuration (API keys, model parameters, etc.)',
+        };
+      }
       return {
         title: 'Custom Target Configuration',
         icon: <FileCode2 className="size-5 text-primary" />,
@@ -406,13 +449,17 @@ const CustomTargetConfiguration = ({
   bodyError,
   setBodyError,
   providerType,
+  mode = 'redteam',
+  idError,
 }: CustomTargetConfigurationProps) => {
   const configErrorId = React.useId();
+  const targetIdHelpId = React.useId();
+  const targetIdErrorId = React.useId();
   const configEditorContainerRef = React.useRef<HTMLDivElement>(null);
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
 
-  const config = useMemo(() => getProviderConfig(providerType), [providerType]);
+  const config = useMemo(() => getProviderConfig(providerType, mode), [providerType, mode]);
 
   useEffect(() => {
     setTargetId(selectedTarget.id?.replace('file://', '') || '');
@@ -492,8 +539,10 @@ const CustomTargetConfiguration = ({
             value={targetId}
             onChange={handleTargetIdChange}
             placeholder={config.targetIdPlaceholder}
+            aria-invalid={Boolean(idError)}
+            aria-describedby={`${targetIdHelpId}${idError ? ` ${targetIdErrorId}` : ''}`}
           />
-          <p className="text-sm text-muted-foreground">
+          <p id={targetIdHelpId} className="text-sm text-muted-foreground">
             {config.helpText}{' '}
             {providerType && providerType !== 'custom' && (
               <>
@@ -510,6 +559,11 @@ const CustomTargetConfiguration = ({
               </>
             )}
           </p>
+          {idError && (
+            <HelperText id={targetIdErrorId} error>
+              {idError}
+            </HelperText>
+          )}
         </div>
 
         {/* Custom Configuration Section */}

@@ -32,8 +32,17 @@ vi.mock('./WebSocketEndpointConfiguration', () => ({
   default: () => <div data-testid="ws-config" />,
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
-  default: ({ setBodyError }: { setBodyError?: (error: string | null) => void }) => (
-    <div data-testid="custom-config">
+  default: ({
+    setBodyError,
+    idError,
+    mode,
+  }: {
+    setBodyError?: (error: string | null) => void;
+    idError?: string | null;
+    mode?: 'eval' | 'redteam';
+  }) => (
+    <div data-testid="custom-config" data-mode={mode}>
+      {idError}
       <button
         type="button"
         data-testid="set-invalid-custom-config"
@@ -304,6 +313,29 @@ describe('ProviderConfigEditor', () => {
       expect(mockSetError).toHaveBeenCalledWith(
         'Replace the example path with your provider file path',
       );
+    });
+
+    it('surfaces custom provider ID validation in the eval configuration form', async () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: '', config: {} }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="custom"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(await screen.findByText('Provider ID is required')).toBeInTheDocument();
+      expect(screen.getByTestId('custom-config')).toHaveAttribute('data-mode', 'eval');
     });
 
     it('should reject the example Azure deployment name', () => {
