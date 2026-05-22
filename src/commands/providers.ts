@@ -42,7 +42,7 @@ export function providersCommand(program: Command) {
       // Detected credentials section
       logger.info('');
       logger.info(chalk.bold('Detected Credentials:'));
-      // All credentials that getDefaultProvidersWithInfo can detect
+      // All credentials that default-provider introspection can detect
       const allCredentials = [
         'OPENAI_API_KEY',
         'ANTHROPIC_API_KEY',

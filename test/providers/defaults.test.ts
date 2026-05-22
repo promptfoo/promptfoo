@@ -7,8 +7,10 @@ import {
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
+import * as googleAiStudioDefaults from '../../src/providers/google/ai.studio';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
+import * as googleVertexDefaults from '../../src/providers/google/vertex';
 import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
@@ -677,5 +679,46 @@ describe('getDefaultProviderSelectionInfo', () => {
     expect(result.providerSlots.grading?.id).toBe('openai:codex-sdk');
     expect(getCodexDefaultProvidersSpy).not.toHaveBeenCalled();
     getCodexDefaultProvidersSpy.mockRestore();
+  });
+
+  it('should avoid instantiating Google AI Studio providers when only selection info is requested', async () => {
+    mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+    const getGoogleAiStudioProvidersSpy = vi.spyOn(
+      googleAiStudioDefaults,
+      'getGoogleAiStudioProviders',
+    );
+    const getGoogleVertexEmbeddingProviderSpy = vi.spyOn(
+      googleVertexDefaults,
+      'getGoogleVertexEmbeddingProvider',
+    );
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Google AI Studio');
+    expect(result.providerSlots.grading?.id).toBe('google:gemini-2.5-pro');
+    expect(result.providerSlots.embedding?.id).toBe('vertex:gemini-embedding-001');
+    expect(getGoogleAiStudioProvidersSpy).not.toHaveBeenCalled();
+    expect(getGoogleVertexEmbeddingProviderSpy).not.toHaveBeenCalled();
+    getGoogleAiStudioProvidersSpy.mockRestore();
+    getGoogleVertexEmbeddingProviderSpy.mockRestore();
+  });
+
+  it('should avoid instantiating Google Vertex providers when only selection info is requested', async () => {
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(true);
+    const getGoogleVertexProvidersSpy = vi.spyOn(googleVertexDefaults, 'getGoogleVertexProviders');
+    const getGoogleVertexEmbeddingProviderSpy = vi.spyOn(
+      googleVertexDefaults,
+      'getGoogleVertexEmbeddingProvider',
+    );
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Google Vertex');
+    expect(result.providerSlots.grading?.id).toBe('vertex:gemini-2.5-pro');
+    expect(result.providerSlots.embedding?.id).toBe('vertex:gemini-embedding-001');
+    expect(getGoogleVertexProvidersSpy).not.toHaveBeenCalled();
+    expect(getGoogleVertexEmbeddingProviderSpy).not.toHaveBeenCalled();
+    getGoogleVertexProvidersSpy.mockRestore();
+    getGoogleVertexEmbeddingProviderSpy.mockRestore();
   });
 });

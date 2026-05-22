@@ -9,9 +9,14 @@ import {
   DefaultGitHubGradingProvider,
   DefaultGitHubSuggestionsProvider,
 } from './github/defaults';
-import { getGoogleAiStudioProviders } from './google/ai.studio';
+import { DEFAULT_AI_STUDIO_MODEL, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
-import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
+import {
+  DEFAULT_VERTEX_EMBEDDING_MODEL,
+  DEFAULT_VERTEX_MODEL,
+  getGoogleVertexEmbeddingProvider,
+  getGoogleVertexProviders,
+} from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -638,9 +643,9 @@ function getDefaultProviderSlots({
       case 'Anthropic':
         return getAnthropicProviderSlots(selectedProvider);
       case 'Google AI Studio':
-        return getGoogleAiStudioProviderSlots(env, selectedProvider);
+        return getGoogleAiStudioProviderSlots();
       case 'Google Vertex':
-        return getGoogleVertexProviderSlots(env, selectedProvider);
+        return getGoogleVertexProviderSlots();
       case 'Mistral':
         return getMistralProviderSlots(selectedProvider);
       case 'xAI':
@@ -719,36 +724,30 @@ function getAnthropicProviderSlots(
   };
 }
 
-function getGoogleAiStudioProviderSlots(
-  env: EnvOverrides | undefined,
-  selectedProvider: string,
-): DefaultProviderSelectionInfo['providerSlots'] {
-  const providers = getGoogleAiStudioProviders(env);
+function getGoogleAiStudioProviderSlots(): DefaultProviderSelectionInfo['providerSlots'] {
+  const aiStudioSlot = { id: `google:${DEFAULT_AI_STUDIO_MODEL}` };
 
   return {
-    embedding: { id: getProviderId(getGoogleVertexEmbeddingProvider(env)) || selectedProvider },
-    grading: { id: getProviderId(providers.gradingProvider) || selectedProvider },
-    gradingJson: { id: getProviderId(providers.gradingJsonProvider) || selectedProvider },
-    llmRubric: { id: getProviderId(providers.llmRubricProvider) || selectedProvider },
-    moderation: { id: getProviderId(OpenAiModerationProvider) || selectedProvider },
-    suggestions: { id: getProviderId(providers.suggestionsProvider) || selectedProvider },
-    synthesize: { id: getProviderId(providers.synthesizeProvider) || selectedProvider },
+    embedding: { id: `vertex:${DEFAULT_VERTEX_EMBEDDING_MODEL}` },
+    grading: aiStudioSlot,
+    gradingJson: aiStudioSlot,
+    llmRubric: aiStudioSlot,
+    moderation: { id: getProviderId(OpenAiModerationProvider) || 'OpenAI' },
+    suggestions: aiStudioSlot,
+    synthesize: aiStudioSlot,
   };
 }
 
-function getGoogleVertexProviderSlots(
-  env: EnvOverrides | undefined,
-  selectedProvider: string,
-): DefaultProviderSelectionInfo['providerSlots'] {
-  const providers = getGoogleVertexProviders(env);
+function getGoogleVertexProviderSlots(): DefaultProviderSelectionInfo['providerSlots'] {
+  const vertexSlot = { id: `vertex:${DEFAULT_VERTEX_MODEL}` };
 
   return {
-    embedding: { id: getProviderId(providers.embeddingProvider) || selectedProvider },
-    grading: { id: getProviderId(providers.gradingProvider) || selectedProvider },
-    gradingJson: { id: getProviderId(providers.gradingJsonProvider) || selectedProvider },
-    moderation: { id: getProviderId(OpenAiModerationProvider) || selectedProvider },
-    suggestions: { id: getProviderId(providers.suggestionsProvider) || selectedProvider },
-    synthesize: { id: getProviderId(providers.synthesizeProvider) || selectedProvider },
+    embedding: { id: `vertex:${DEFAULT_VERTEX_EMBEDDING_MODEL}` },
+    grading: vertexSlot,
+    gradingJson: vertexSlot,
+    moderation: { id: getProviderId(OpenAiModerationProvider) || 'OpenAI' },
+    suggestions: vertexSlot,
+    synthesize: vertexSlot,
   };
 }
 
