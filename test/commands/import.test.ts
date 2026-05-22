@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { Command } from 'commander';
+import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
 import * as blobRefs from '../../src/blobs/blobRefs';
@@ -374,7 +375,7 @@ describe('importCommand', () => {
         expect(imported.metadata.mimeType).toBe('image/png');
 
         const references = (await getDb().all(
-          `SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = '${hash}'`,
+          sql`SELECT blob_hash, eval_id FROM blob_references WHERE blob_hash = ${hash}`,
         )) as Array<{ blob_hash: string; eval_id: string }>;
         expect(references).toContainEqual({ blob_hash: hash, eval_id: sampleData.evalId });
       } finally {
@@ -465,7 +466,7 @@ describe('importCommand', () => {
         expect(imported.data).toEqual(data);
 
         const references = (await getDb().all(
-          `SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = '${hash}'`,
+          sql`SELECT blob_hash, eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
         )) as Array<{ blob_hash: string; eval_id: string; location: string }>;
         expect(references).toContainEqual({
           blob_hash: hash,
