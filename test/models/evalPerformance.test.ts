@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { deleteErrorResults } from '../../src/commands/retry';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -9,6 +10,7 @@ import {
 } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
+import { deleteAllEvals, deleteEval, deleteEvals } from '../../src/util/database';
 
 describe('evalPerformance', () => {
   beforeAll(async () => {
@@ -220,6 +222,102 @@ describe('evalPerformance', () => {
       expect(await getTotalResultRowCount(eval_.id)).toBe(2);
 
       await eval_.delete();
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(0);
+    });
+  });
+
+  describe('count cache invalidation on delete paths', () => {
+    it('should refresh cached counts after deleteErrorResults', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'provider-1' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test1' } }, { vars: { input: 'test2' } }],
+        },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+      const results = await EvalResult.createManyFromEvaluateResult(
+        [createEvaluateResult(0, 0), createEvaluateResult(0, 1)],
+        eval_.id,
+      );
+
+      // Prime the caches so a stale entry would survive without invalidation.
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(2);
+
+      await deleteErrorResults([results[0].id]);
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(1);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(1);
+    });
+
+    it('should refresh cached counts for every eval spanned by deleteErrorResults', async () => {
+      const evalIds: string[] = [];
+      const resultIds: string[] = [];
+      for (let i = 0; i < 2; i++) {
+        const eval_ = await Eval.create(
+          {
+            providers: [{ id: 'provider-1' }],
+            prompts: ['Test prompt'],
+            tests: [{ vars: { input: 'test1' } }],
+          },
+          [{ raw: 'Test prompt', label: 'Test prompt' }],
+        );
+        const [result] = await EvalResult.createManyFromEvaluateResult(
+          [createEvaluateResult(0, 0)],
+          eval_.id,
+        );
+        evalIds.push(eval_.id);
+        resultIds.push(result.id);
+      }
+
+      // Prime both caches.
+      for (const evalId of evalIds) {
+        expect(await getCachedResultsCount(evalId)).toBe(1);
+      }
+
+      await deleteErrorResults(resultIds);
+
+      for (const evalId of evalIds) {
+        expect(await getCachedResultsCount(evalId)).toBe(0);
+        expect(await getTotalResultRowCount(evalId)).toBe(0);
+      }
+    });
+
+    it('should refresh cached counts after deleteEval', async () => {
+      const { eval_ } = await createEvalWithResults(1, 2);
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(2);
+
+      await deleteEval(eval_.id);
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(0);
+    });
+
+    it('should refresh cached counts for every eval passed to deleteEvals', async () => {
+      const { eval_: evalA } = await createEvalWithResults(1, 2);
+      const { eval_: evalB } = await createEvalWithResults(1, 3);
+
+      expect(await getCachedResultsCount(evalA.id)).toBe(2);
+      expect(await getCachedResultsCount(evalB.id)).toBe(3);
+
+      deleteEvals([evalA.id, evalB.id]);
+
+      expect(await getCachedResultsCount(evalA.id)).toBe(0);
+      expect(await getCachedResultsCount(evalB.id)).toBe(0);
+    });
+
+    it('should refresh cached counts after deleteAllEvals', async () => {
+      const { eval_ } = await createEvalWithResults(1, 2);
+
+      expect(await getCachedResultsCount(eval_.id)).toBe(2);
+      expect(await getTotalResultRowCount(eval_.id)).toBe(2);
+
+      await deleteAllEvals();
 
       expect(await getCachedResultsCount(eval_.id)).toBe(0);
       expect(await getTotalResultRowCount(eval_.id)).toBe(0);
