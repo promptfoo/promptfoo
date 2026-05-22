@@ -2,12 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { makeInlinePolicyIdSync } from '../../src/redteam/plugins/policy/utils';
 import {
-  extractSortKey,
   generateReport,
   getPluginDisplayId,
   getPluginSeverity,
   getStatus,
-  sortReportIds,
 } from '../../src/redteam/report';
 
 // Strip ANSI codes for easier testing
@@ -63,7 +61,7 @@ describe('report', () => {
       expect(result.length).toBeLessThan(60); // Display ID should be reasonable length
     });
 
-    it('should use cloud policy names when provided', () => {
+    it('should include cloud policy id prefixes with policy names', () => {
       const result = getPluginDisplayId({
         id: 'policy',
         config: {
@@ -74,7 +72,26 @@ describe('report', () => {
           },
         },
       });
-      expect(result).toBe('Named cloud policy');
+      expect(result).toBe('policy [123e4567e89b]: Named cloud policy');
+    });
+
+    it('should keep named cloud policies with the same name distinct', () => {
+      const policy = {
+        name: 'Named cloud policy',
+        text: 'Cloud policy text',
+      };
+
+      expect(
+        getPluginDisplayId({
+          id: 'policy',
+          config: { policy: { ...policy, id: '11111111-1111-1111-1111-111111111111' } },
+        }),
+      ).not.toBe(
+        getPluginDisplayId({
+          id: 'policy',
+          config: { policy: { ...policy, id: '22222222-2222-2222-2222-222222222222' } },
+        }),
+      );
     });
 
     it('should use cloud policy id prefixes when no name is provided', () => {
@@ -137,103 +154,6 @@ describe('report', () => {
     });
   });
 
-  describe('extractSortKey', () => {
-    it('should extract policy number from display ID', () => {
-      const [num, lang, base] = extractSortKey('policy #5: "Test policy"');
-      expect(num).toBe(5);
-      expect(lang).toBe('');
-      expect(base).toBe('policy #5: "Test policy"');
-    });
-
-    it('should extract language prefix', () => {
-      const [num, lang, base] = extractSortKey('(Hmong) policy #1: "Test"');
-      expect(num).toBe(1);
-      expect(lang).toBe('Hmong');
-      expect(base).toBe('policy #1: "Test"');
-    });
-
-    it('should extract language suffix', () => {
-      const [num, lang, base] = extractSortKey('jailbreak:meta (Zulu)');
-      expect(num).toBe(0);
-      expect(lang).toBe('Zulu');
-      expect(base).toBe('jailbreak:meta');
-    });
-
-    it('should handle IDs without policy number or language', () => {
-      const [num, lang, base] = extractSortKey('pii:direct');
-      expect(num).toBe(0);
-      expect(lang).toBe('');
-      expect(base).toBe('pii:direct');
-    });
-
-    it('should handle double-digit policy numbers', () => {
-      const [num, lang] = extractSortKey('(Spanish) policy #12: "Test"');
-      expect(num).toBe(12);
-      expect(lang).toBe('Spanish');
-    });
-  });
-
-  describe('sortReportIds', () => {
-    it('should sort policy numbers numerically', () => {
-      const ids = [
-        'policy #10: "Ten"',
-        'policy #2: "Two"',
-        'policy #1: "One"',
-        'policy #12: "Twelve"',
-      ];
-      const sorted = [...ids].sort(sortReportIds);
-      expect(sorted).toEqual([
-        'policy #1: "One"',
-        'policy #2: "Two"',
-        'policy #10: "Ten"',
-        'policy #12: "Twelve"',
-      ]);
-    });
-
-    it('should sort by base ID for non-policy plugins', () => {
-      const ids = ['pii:direct', 'jailbreak', 'harmful:violent'];
-      const sorted = [...ids].sort(sortReportIds);
-      expect(sorted).toEqual(['harmful:violent', 'jailbreak', 'pii:direct']);
-    });
-
-    it('should sort by language after base ID', () => {
-      const ids = [
-        '(Zulu) policy #1: "Test"',
-        '(Hmong) policy #1: "Test"',
-        '(Spanish) policy #1: "Test"',
-      ];
-      const sorted = [...ids].sort(sortReportIds);
-      expect(sorted).toEqual([
-        '(Hmong) policy #1: "Test"',
-        '(Spanish) policy #1: "Test"',
-        '(Zulu) policy #1: "Test"',
-      ]);
-    });
-
-    it('should handle mixed policy and non-policy plugins', () => {
-      const ids = ['pii:direct', 'policy #2: "Two"', 'policy #1: "One"', 'jailbreak'];
-      const sorted = [...ids].sort(sortReportIds);
-      // Policies with numbers come first (sorted numerically), then others (alphabetically)
-      expect(sorted).toEqual(['policy #1: "One"', 'policy #2: "Two"', 'jailbreak', 'pii:direct']);
-    });
-
-    it('should sort multilingual policies correctly', () => {
-      const ids = [
-        '(Zulu) policy #2: "B"',
-        '(Hmong) policy #1: "A"',
-        '(Zulu) policy #1: "A"',
-        '(Hmong) policy #2: "B"',
-      ];
-      const sorted = [...ids].sort(sortReportIds);
-      expect(sorted).toEqual([
-        '(Hmong) policy #1: "A"',
-        '(Zulu) policy #1: "A"',
-        '(Hmong) policy #2: "B"',
-        '(Zulu) policy #2: "B"',
-      ]);
-    });
-  });
-
   describe('generateReport', () => {
     it('should generate a report with plugins and strategies', () => {
       const pluginResults = {
@@ -254,23 +174,18 @@ describe('report', () => {
       expect(cleanReport).toContain('jailbreak:meta');
     });
 
-    it('should sort plugins numerically by policy number', () => {
+    it('should sort plugins by current policy display ids', () => {
       const pluginResults = {
-        'policy #10: "Ten"': { requested: 1, generated: 1 },
-        'policy #2: "Two"': { requested: 1, generated: 1 },
-        'policy #1: "One"': { requested: 1, generated: 1 },
+        'policy [bbbbbbbbbbbb]: Two': { requested: 1, generated: 1 },
+        'policy [aaaaaaaaaaaa]: One': { requested: 1, generated: 1 },
       };
 
       const report = generateReport(pluginResults, {});
       const cleanReport = stripAnsi(report);
 
-      // Find positions of each policy in the report
-      const pos1 = cleanReport.indexOf('policy #1');
-      const pos2 = cleanReport.indexOf('policy #2');
-      const pos10 = cleanReport.indexOf('policy #10');
-
-      expect(pos1).toBeLessThan(pos2);
-      expect(pos2).toBeLessThan(pos10);
+      expect(cleanReport.indexOf('policy [aaaaaaaaaaaa]')).toBeLessThan(
+        cleanReport.indexOf('policy [bbbbbbbbbbbb]'),
+      );
     });
 
     it('should include status for each row', () => {

@@ -44,10 +44,10 @@ export function getPluginDisplayId(plugin: { id: string; config?: Record<string,
   const policyConfig = plugin.config?.policy;
 
   if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
-    if (policyConfig.name) {
-      return String(policyConfig.name);
-    }
     const shortId = String(policyConfig.id).replace(/-/g, '').slice(0, 12);
+    if (policyConfig.name) {
+      return `policy [${shortId}]: ${String(policyConfig.name)}`;
+    }
     const preview = policyConfig.text ? truncateForPreview(String(policyConfig.text)) : '';
     return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
   }
@@ -81,65 +81,6 @@ export function getStatus(requested: number, generated: number): string {
 }
 
 /**
- * Extracts sorting key from a plugin/strategy display ID.
- * Handles formats like "(Hmong) policy #1: ...", "policy #12: ...", "jailbreak:meta (Hmong)"
- * @param id - The display ID to parse.
- * @returns A tuple of [policyNumber, language, baseId] for sorting.
- */
-export function extractSortKey(id: string): [number, string, string] {
-  // Extract language prefix like "(Hmong) " or suffix like " (Hmong)"
-  const langPrefixMatch = id.match(/^\(([^)]+)\)\s*/);
-  const langSuffixMatch = id.match(/\s+\(([^)]+)\)$/);
-  const language = langPrefixMatch?.[1] || langSuffixMatch?.[1] || '';
-
-  // Remove language from ID for base comparison
-  let baseId = id;
-  if (langPrefixMatch) {
-    baseId = id.slice(langPrefixMatch[0].length);
-  }
-  if (langSuffixMatch) {
-    baseId = baseId.slice(0, -langSuffixMatch[0].length);
-  }
-
-  // Extract policy number if present (e.g., "policy #12: ...")
-  const policyMatch = baseId.match(/policy\s*#(\d+)/);
-  const policyNum = policyMatch ? parseInt(policyMatch[1], 10) : 0;
-
-  return [policyNum, language, baseId];
-}
-
-/**
- * Sorts plugin/strategy IDs: by policy number (numeric), then by base ID, then by language.
- * @param a - First ID to compare.
- * @param b - Second ID to compare.
- * @returns Comparison result for sorting.
- */
-export function sortReportIds(a: string, b: string): number {
-  const [aNum, aLang, aBase] = extractSortKey(a);
-  const [bNum, bLang, bBase] = extractSortKey(b);
-
-  // First sort by policy number (0 means no policy number, goes last among policies)
-  if (aNum !== bNum) {
-    if (aNum === 0) {
-      return 1;
-    }
-    if (bNum === 0) {
-      return -1;
-    }
-    return aNum - bNum;
-  }
-
-  // Then sort by base ID (for non-policy plugins)
-  const baseCompare = aBase.localeCompare(bBase);
-  if (baseCompare !== 0) {
-    return baseCompare;
-  }
-
-  // Finally sort by language
-  return aLang.localeCompare(bLang);
-}
-
-/**
  * Generates a formatted report of plugin and strategy results.
  * @param pluginResults - Results from plugin test generation.
  * @param strategyResults - Results from strategy test generation.
@@ -159,13 +100,13 @@ export function generateReport(
   let rowIndex = 1;
 
   Object.entries(pluginResults)
-    .sort((a, b) => sortReportIds(a[0], b[0]))
+    .sort((a, b) => a[0].localeCompare(b[0]))
     .forEach(([id, { requested, generated }]) => {
       table.push([rowIndex++, 'Plugin', id, requested, generated, getStatus(requested, generated)]);
     });
 
   Object.entries(strategyResults)
-    .sort((a, b) => sortReportIds(a[0], b[0]))
+    .sort((a, b) => a[0].localeCompare(b[0]))
     .forEach(([id, { requested, generated }]) => {
       table.push([
         rowIndex++,
