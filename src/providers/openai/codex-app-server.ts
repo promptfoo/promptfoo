@@ -3224,6 +3224,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
             'Codex app-server command output trace attribute',
           ) ?? '';
       }
+      if (typeof item.sdkAggregatedOutput === 'string') {
+        attrs['codex.sdk_output'] =
+          this.sanitizeTraceText(
+            item.sdkAggregatedOutput,
+            'Codex app-server SDK command output trace attribute',
+          ) ?? '';
+      }
     }
     if (item?.type === 'agentMessage' && typeof item.text === 'string') {
       attrs['codex.message'] =

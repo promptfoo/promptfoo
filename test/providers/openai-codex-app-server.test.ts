@@ -3858,6 +3858,23 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('includes preserved SDK command output in trace evidence attributes', () => {
+    const provider = new OpenAICodexAppServerProvider();
+
+    expect(
+      (provider as any).getCompletionAttributesForItem({
+        type: 'commandExecution',
+        status: 'completed',
+        aggregatedOutput: 'streamed output',
+        sdkAggregatedOutput: 'SDK divergent output',
+        exitCode: 0,
+      }),
+    ).toMatchObject({
+      'codex.output': 'streamed output',
+      'codex.sdk_output': 'SDK divergent output',
+    });
+  });
+
   it('continues completed command output when later deltas extend an existing aggregate', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
