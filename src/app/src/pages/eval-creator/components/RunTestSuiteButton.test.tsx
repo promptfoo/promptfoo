@@ -332,6 +332,64 @@ describe('RunTestSuiteButton', () => {
     );
   });
 
+  it('guides recovery when an evaluation job fails without diagnostic logs', async () => {
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: '123' } },
+      {
+        path: '/eval/job/123/',
+        response: { status: 'error', logs: [] },
+      },
+    ]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Evaluation' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await timers.advanceByAsync(1500);
+    });
+
+    const message =
+      'The evaluation failed before results were saved. Review provider settings and test inputs, then try again.';
+    expect(mockShowToast).toHaveBeenCalledWith(`An error occurred: ${message}`, 'error');
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeEnabled();
+  });
+
+  it('preserves diagnostic logs while explaining a failed evaluation job', async () => {
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: '123' } },
+      {
+        path: '/eval/job/123/',
+        response: { status: 'error', logs: ['Provider authentication failed'] },
+      },
+    ]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Evaluation' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await timers.advanceByAsync(1500);
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The evaluation failed before results were saved. Details: Provider authentication failed',
+    );
+  });
+
   it('explains how to recover when evaluation creation is rejected', async () => {
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', ok: false, status: 400 }]);
     useStore.getState().updateConfig({

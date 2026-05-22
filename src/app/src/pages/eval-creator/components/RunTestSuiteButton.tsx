@@ -153,7 +153,12 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
           } else if (progressData.status === 'error') {
             clearPollInterval();
             setIsRunning(false);
-            throw new Error(progressData.logs?.join('\n') || 'Job failed');
+            const failureDetails = progressData.logs?.join('\n').trim();
+            throw new Error(
+              failureDetails
+                ? `The evaluation failed before results were saved. Details:\n${failureDetails}`
+                : 'The evaluation failed before results were saved. Review provider settings and test inputs, then try again.',
+            );
           } else {
             const percent =
               progressData.total === 0
