@@ -109,11 +109,12 @@ const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
 ]);
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
-  { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
+  { models: ['chat-latest', 'gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
 ]);
 
 const FLEX_SUPPORTED_TEXT_MODELS = new Set([
+  'chat-latest',
   'gpt-5.5',
   'gpt-5.5-2026-04-23',
   'gpt-5.5-pro',
@@ -149,7 +150,7 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
 
 const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
-    models: ['gpt-5.5', 'gpt-5.5-2026-04-23'],
+    models: ['chat-latest', 'gpt-5.5', 'gpt-5.5-2026-04-23'],
     rates: { input: perMillion(12.5), cachedInput: perMillion(1.25), output: perMillion(75) },
   },
   {

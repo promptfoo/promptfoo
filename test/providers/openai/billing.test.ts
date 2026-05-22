@@ -146,6 +146,22 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
   });
 
+  it('uses GPT-5.5 service-tier rates for chat-latest', () => {
+    const usage = {
+      input_tokens: 1_000,
+      output_tokens: 100,
+      input_tokens_details: { cached_tokens: 400 },
+    };
+
+    expect(calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' })).toBeCloseTo(
+      (600 * 2.5 + 400 * 0.25 + 100 * 15) / 1e6,
+      10,
+    );
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'priority' }),
+    ).toBeCloseTo((600 * 12.5 + 400 * 1.25 + 100 * 75) / 1e6, 10);
+  });
+
   it('uses current long-context flex rates for supported pro models', () => {
     expect(
       calculateOpenAIUsageCost(
