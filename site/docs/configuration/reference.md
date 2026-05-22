@@ -155,14 +155,14 @@ More details on using assertions, including examples [here](/docs/configuration/
 
 An assertion set groups multiple assertions and can define its own threshold, metric, weight, and shared config.
 
-| Property  | Type                      | Required | Description                                                       |
-| --------- | ------------------------- | -------- | ----------------------------------------------------------------- |
-| type      | `assert-set`              | Yes      | Marks this item as an assertion set                               |
-| assert    | [Assertion](#assertion)[] | Yes      | Assertions in the set                                             |
-| threshold | number                    | No       | Required score for the set                                        |
-| weight    | number                    | No       | Weight of this set compared to other assertions or assertion sets |
-| metric    | string                    | No       | Named metric for the set                                          |
-| config    | Record\<string, any\>     | No       | Shared config passed into every assertion in the set              |
+| Property  | Type                                                           | Required | Description                                                       |
+| --------- | -------------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| type      | `assert-set`                                                   | Yes      | Marks this item as an assertion set                               |
+| assert    | ([Assertion](#assertion) \| [Assertion Set](#assertion-set))[] | Yes      | Assertions or nested assertion sets in the set                    |
+| threshold | number                                                         | No       | Required score for the set                                        |
+| weight    | number                                                         | No       | Weight of this set compared to other assertions or assertion sets |
+| metric    | string                                                         | No       | Named metric for the set                                          |
+| config    | Record\<string, any\>                                          | No       | Shared config passed into every assertion in the set              |
 
 ### CommandLineOptions
 

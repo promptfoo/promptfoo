@@ -1747,6 +1747,26 @@ assert:
         value: key phrase
 ```
 
+Assertion sets can be nested when one grouped requirement belongs inside another:
+
+```yaml
+assert:
+  - type: assert-set
+    metric: quality
+    threshold: 0.8
+    assert:
+      - type: contains
+        value: Bonjour
+      - type: assert-set
+        metric: performance
+        threshold: 0.5
+        assert:
+          - type: cost
+            threshold: 0.001
+          - type: latency
+            threshold: 200
+```
+
 ### Select-Best
 
 The `select-best` assertion compares multiple outputs in the same test case and selects the best one. This requires generating multiple outputs using different prompts or providers.

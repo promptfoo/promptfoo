@@ -134,6 +134,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--repeat <number>`                  | Number of times to run each test                                                                         |
 | `--share`                            | Create a shareable URL                                                                                   |
 | `--no-share`                         | Do not create a shareable URL, this overrides the config file                                            |
+| `--show-assertions`                  | Show detailed assertion tables in CLI eval output                                                        |
 | `--suggest-prompts <number>`         | Generate N new prompts and append them to the prompt list                                                |
 | `--tag <key=value>`                  | Set an eval tag. Can be specified multiple times; CLI tags override config tags.                         |
 | `--table`                            | Output table in CLI                                                                                      |
