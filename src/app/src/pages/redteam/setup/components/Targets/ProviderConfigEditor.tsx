@@ -404,6 +404,12 @@ function validateBrowserStep(step: BrowserStep, index: number, addStepError: Add
   if (step.action === 'screenshot' && !step.args?.path?.trim()) {
     addStepError(index, 'path', `${prefix} enter a screenshot file path.`);
   }
+  if (
+    step.action === 'wait' &&
+    (step.args?.ms === undefined || !Number.isFinite(step.args.ms) || step.args.ms < 0)
+  ) {
+    addStepError(index, 'ms', `${prefix} enter a wait duration of 0 milliseconds or greater.`);
+  }
   if (step.action === 'waitForNewChildren' && !step.args?.parentSelector?.trim()) {
     addStepError(index, 'parentSelector', `${prefix} enter a parent selector.`);
   }

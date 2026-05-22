@@ -170,4 +170,23 @@ describe('BrowserAutomationConfiguration', () => {
     expect(screen.getByLabelText(/Text/)).toBeRequired();
     expect(screen.getByLabelText(/Parent Selector/)).toBeRequired();
   });
+
+  it('requires an explicit wait duration instead of showing an unsaved default', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([{ action: 'wait', args: {} }])}
+        updateCustomTarget={vi.fn()}
+        fieldErrors={{
+          stepErrors: { 0: { ms: 'Step 1: enter a wait duration of 0 milliseconds or greater.' } },
+        }}
+      />,
+    );
+
+    const waitTime = screen.getByLabelText(/Wait Time/);
+    expect(waitTime).toBeRequired();
+    expect(waitTime).toHaveValue(null);
+    expect(waitTime).toHaveAccessibleDescription(
+      /Step 1: enter a wait duration of 0 milliseconds or greater.*Enter 1000 for one second/i,
+    );
+  });
 });

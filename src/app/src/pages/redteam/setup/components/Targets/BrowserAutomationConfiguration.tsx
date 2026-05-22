@@ -45,6 +45,7 @@ export interface BrowserStepFieldErrors {
   name?: string;
   parentSelector?: string;
   path?: string;
+  ms?: string;
   selector?: string;
   text?: string;
   url?: string;
@@ -340,11 +341,16 @@ const BrowserAutomationConfiguration = ({
 
                 {step.action === 'wait' && (
                   <div className="space-y-2">
-                    <Label htmlFor={`step-${index}-wait-time`}>Wait Time (ms)</Label>
+                    <Label htmlFor={`step-${index}-wait-time`}>
+                      Wait Time (ms)
+                      <RequiredIndicator />
+                    </Label>
                     <Input
                       id={`step-${index}-wait-time`}
                       type="number"
-                      value={step.args?.ms || 1000}
+                      required
+                      min={0}
+                      value={step.args?.ms ?? ''}
                       onChange={(e) => {
                         const newSteps = [...(selectedTarget.config.steps || [])];
                         newSteps[index] = {
@@ -353,7 +359,17 @@ const BrowserAutomationConfiguration = ({
                         };
                         updateCustomTarget('steps', newSteps);
                       }}
+                      placeholder="1000"
+                      aria-invalid={Boolean(getStepError(index, 'ms'))}
+                      aria-describedby={`${getStepError(index, 'ms') ? `${getStepErrorId(index, 'ms')} ` : ''}step-${index}-wait-time-help`}
                     />
+                    <BrowserFieldError
+                      id={getStepErrorId(index, 'ms')}
+                      error={getStepError(index, 'ms')}
+                    />
+                    <HelperText id={`step-${index}-wait-time-help`} className="text-sm">
+                      How long to pause before continuing. Enter 1000 for one second.
+                    </HelperText>
                   </div>
                 )}
 

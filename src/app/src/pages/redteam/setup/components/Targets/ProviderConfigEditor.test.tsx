@@ -439,6 +439,35 @@ describe('ProviderConfigEditor', () => {
       expect(validateFn!()).toBe(true);
     });
 
+    it('requires an explicit duration for browser wait steps before saving', () => {
+      const setError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'browser',
+            config: { steps: [{ action: 'wait', args: {} }] },
+          }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="browser"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(setError).toHaveBeenCalledWith(
+        'Step 1: enter a wait duration of 0 milliseconds or greater.',
+      );
+    });
+
     it('should return false from validate() when provider ID contains only whitespace characters for foundation model providers', () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();
