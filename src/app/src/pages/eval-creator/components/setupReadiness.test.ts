@@ -242,6 +242,55 @@ describe('setupReadiness', () => {
       expect(readiness.testCasesWithInvalidAssertions).toEqual([]);
     });
 
+    it('blocks malformed structured trajectory assertions and accepts JSON-shaped values', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Use a search tool'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'trajectory:tool-args-match', value: 'search' }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'trajectory:tool-args-match',
+                  value: { name: 'search', args: { query: 'release notes' } },
+                },
+              ],
+            },
+          ],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
+    it('accepts blank SQL validation settings but rejects non-object settings', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write SQL'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'is-sql' }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'is-sql', value: 'PostgreSQL' }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+    });
+
     it('does not claim an exact base request count for external test files', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

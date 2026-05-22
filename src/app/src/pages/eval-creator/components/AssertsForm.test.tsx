@@ -232,6 +232,50 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('stores structured trajectory matchers as JSON objects required by evaluation', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'trajectory:step-count' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    const valueInput = screen.getByRole('textbox', { name: 'Expected trace data (JSON)' });
+    expect(valueInput).toHaveAccessibleDescription(
+      'Enter JSON with a minimum or maximum trajectory step count.',
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.click(valueInput);
+    await user.paste('{"min": 1}');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:step-count', value: { min: 1 } }]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('allows SQL syntax validation without optional JSON configuration', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'is-sql' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(
+      screen.getByRole('textbox', { name: 'SQL validation settings (JSON, optional)' }),
+    ).toHaveAccessibleDescription(
+      'Optional. Leave blank to validate SQL syntax using the default database parser.',
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
   it('progressively reveals optional JSON schema validation', async () => {
     const user = userEvent.setup();
     initialValues = [{ type: 'is-json' }];

@@ -29,6 +29,26 @@ export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'not-latency',
 ]);
 
+export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-sql',
+  'contains-sql',
+  'not-is-sql',
+  'not-contains-sql',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:step-count',
+  'not-trajectory:tool-args-match',
+  'not-trajectory:tool-sequence',
+  'not-trajectory:step-count',
+]);
+
+const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([
+  'is-sql',
+  'contains-sql',
+  'not-is-sql',
+  'not-contains-sql',
+]);
+
 const REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES = new Set<AssertionType>([
   'contains',
   'icontains',
@@ -73,6 +93,18 @@ const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
   'not-similar:euclidean',
 ]);
 
+const REQUIRED_GOAL_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'trajectory:goal-success',
+  'not-trajectory:goal-success',
+]);
+
+const REQUIRED_MATCHER_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'skill-used',
+  'not-skill-used',
+  'trajectory:tool-used',
+  'not-trajectory:tool-used',
+]);
+
 function hasNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
 }
@@ -81,7 +113,15 @@ function hasNonBlankStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 && value.every(hasNonBlankString);
 }
 
-export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasMatcherName(value: Record<string, unknown>): boolean {
+  return hasNonBlankString(value.name) || hasNonBlankString(value.pattern);
+}
+
+function getThresholdError(assertion: Assertion): string | undefined {
   if (REQUIRED_THRESHOLD_ASSERTION_TYPES.has(assertion.type)) {
     if (
       typeof assertion.threshold !== 'number' ||
@@ -104,6 +144,54 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
     return 'Enter a threshold value of 0 or greater.';
   }
 
+  return undefined;
+}
+
+function getStructuredValueError(assertion: Assertion): string | undefined {
+  if (
+    OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
+    assertion.value !== undefined &&
+    !isRecord(assertion.value)
+  ) {
+    return 'Enter optional SQL validation settings as a JSON object.';
+  }
+
+  if (
+    (assertion.type === 'trajectory:tool-args-match' ||
+      assertion.type === 'not-trajectory:tool-args-match') &&
+    (!isRecord(assertion.value) ||
+      !hasMatcherName(assertion.value) ||
+      (!('args' in assertion.value) && !('arguments' in assertion.value)))
+  ) {
+    return 'Enter JSON with a tool name or pattern and expected args.';
+  }
+
+  if (
+    (assertion.type === 'trajectory:step-count' ||
+      assertion.type === 'not-trajectory:step-count') &&
+    (!isRecord(assertion.value) ||
+      (typeof assertion.value.min !== 'number' && typeof assertion.value.max !== 'number'))
+  ) {
+    return 'Enter JSON with a minimum or maximum trajectory step count.';
+  }
+
+  if (
+    (assertion.type === 'trajectory:tool-sequence' ||
+      assertion.type === 'not-trajectory:tool-sequence') &&
+    !(
+      (Array.isArray(assertion.value) && assertion.value.length > 0) ||
+      (isRecord(assertion.value) &&
+        Array.isArray(assertion.value.steps) &&
+        assertion.value.steps.length > 0)
+    )
+  ) {
+    return 'Enter a non-empty JSON tool sequence.';
+  }
+
+  return undefined;
+}
+
+function getExpectedValueError(assertion: Assertion): string | undefined {
   if (ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type) && !hasNonBlankStringArray(assertion.value)) {
     return 'Enter at least one comma-separated value for this check.';
   }
@@ -139,7 +227,32 @@ export function getRunnableAssertionValueError(assertion: Assertion): string | u
     return 'Enter at least one reference answer for this check.';
   }
 
+  if (
+    REQUIRED_GOAL_VALUE_ASSERTION_TYPES.has(assertion.type) &&
+    !hasNonBlankString(assertion.value) &&
+    !(isRecord(assertion.value) && hasNonBlankString(assertion.value.goal))
+  ) {
+    return 'Enter the goal that the agent should achieve.';
+  }
+
+  if (
+    REQUIRED_MATCHER_VALUE_ASSERTION_TYPES.has(assertion.type) &&
+    !hasNonBlankString(assertion.value) &&
+    !hasNonBlankStringArray(assertion.value) &&
+    !(isRecord(assertion.value) && hasMatcherName(assertion.value))
+  ) {
+    return 'Enter a skill or tool name to match.';
+  }
+
   return undefined;
+}
+
+export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
+  return (
+    getThresholdError(assertion) ||
+    getStructuredValueError(assertion) ||
+    getExpectedValueError(assertion)
+  );
 }
 
 export function getAssertionValueError(assertion: Assertion): string | undefined {
