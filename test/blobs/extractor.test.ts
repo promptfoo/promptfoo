@@ -431,6 +431,44 @@ describe('Cloud blob upload', () => {
     expect(result?.images?.[1].blobRef?.hash).toBe('existing');
   });
 
+  it('should record blob references embedded in output text', async () => {
+    const blobIndexModule = await import('../../src/blobs/index');
+    const mockRecordBlobReference = vi.mocked(blobIndexModule.recordBlobReference);
+    const firstHash = 'a'.repeat(64);
+    const secondHash = 'b'.repeat(64);
+    const response: ProviderResponse = {
+      output:
+        `First promptfoo://blob/${firstHash} repeated promptfoo://blob/${firstHash} ` +
+        `second promptfoo://blob/${secondHash}`,
+    };
+
+    await extractAndStoreBinaryData(response, {
+      evalId: 'eval-mixed-output',
+      testIdx: 1,
+      promptIdx: 2,
+    });
+
+    expect(mockRecordBlobReference).toHaveBeenCalledTimes(2);
+    expect(mockRecordBlobReference).toHaveBeenCalledWith(
+      firstHash,
+      expect.objectContaining({
+        evalId: 'eval-mixed-output',
+        testIdx: 1,
+        promptIdx: 2,
+        location: 'response.output',
+      }),
+    );
+    expect(mockRecordBlobReference).toHaveBeenCalledWith(
+      secondHash,
+      expect.objectContaining({
+        evalId: 'eval-mixed-output',
+        testIdx: 1,
+        promptIdx: 2,
+        location: 'response.output',
+      }),
+    );
+  });
+
   it('should attempt cloud upload for audio data', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(true);
 
