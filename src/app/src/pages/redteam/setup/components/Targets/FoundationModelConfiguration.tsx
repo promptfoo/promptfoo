@@ -291,11 +291,15 @@ const FoundationModelConfiguration = ({
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={bedrockApiMode}
                 onChange={(e) => updateBedrockApiMode(e.target.value as BedrockApiMode)}
+                aria-describedby={`${fieldErrorIdPrefix}-bedrock-api-help`}
               >
                 <option value="invoke">InvokeModel</option>
                 <option value="converse">Converse</option>
               </select>
-              <p className="text-sm text-muted-foreground">
+              <p
+                id={`${fieldErrorIdPrefix}-bedrock-api-help`}
+                className="text-sm text-muted-foreground"
+              >
                 Use Converse for Bedrock-native tool calling and MCP servers. InvokeModel keeps the
                 legacy direct model API.
               </p>
@@ -475,8 +479,12 @@ const FoundationModelConfiguration = ({
                   value={selectedTarget.config?.region ?? ''}
                   onChange={(e) => updateCustomTarget('region', e.target.value || undefined)}
                   placeholder="us-east-1"
+                  aria-describedby={`${fieldErrorIdPrefix}-bedrock-region-help`}
                 />
-                <p className="text-sm text-muted-foreground">
+                <p
+                  id={`${fieldErrorIdPrefix}-bedrock-region-help`}
+                  className="text-sm text-muted-foreground"
+                >
                   Defaults to <code>us-east-1</code> if unset. Set this when using inference
                   profiles or models pinned to a specific region.
                 </p>
@@ -489,8 +497,12 @@ const FoundationModelConfiguration = ({
                   value={selectedTarget.config?.profile ?? ''}
                   onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
                   placeholder="default"
+                  aria-describedby={`${fieldErrorIdPrefix}-bedrock-profile-help`}
                 />
-                <p className="text-sm text-muted-foreground">
+                <p
+                  id={`${fieldErrorIdPrefix}-bedrock-profile-help`}
+                  className="text-sm text-muted-foreground"
+                >
                   Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
                   default credential chain when unset.
                 </p>
@@ -505,8 +517,12 @@ const FoundationModelConfiguration = ({
                     updateCustomTarget('inferenceModelType', e.target.value || undefined)
                   }
                   placeholder="claude, nova, llama, mistral, ..."
+                  aria-describedby={`${fieldErrorIdPrefix}-bedrock-inference-model-type-help`}
                 />
-                <p className="text-sm text-muted-foreground">
+                <p
+                  id={`${fieldErrorIdPrefix}-bedrock-inference-model-type-help`}
+                  className="text-sm text-muted-foreground"
+                >
                   Required when the model ID is an Application Inference Profile ARN. Otherwise
                   inferred from the model ID.
                 </p>

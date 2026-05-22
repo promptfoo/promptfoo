@@ -484,10 +484,39 @@ describe('FoundationModelConfiguration', () => {
 
     expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toHaveValue('invoke');
     expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toBeRequired();
+    expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toHaveAccessibleDescription(
+      /Use Converse for Bedrock-native tool calling and MCP servers/i,
+    );
     expect(screen.getByRole('textbox', { name: 'Model ID' })).toHaveValue(
       'anthropic.claude-3-5-sonnet-20241022-v2:0',
     );
     expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+  });
+
+  it('should associate disclosed Bedrock setting guidance with its fields', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Bedrock Settings/i }));
+
+    expect(screen.getByLabelText('AWS Region')).toHaveAccessibleDescription(
+      /Defaults to us-east-1/i,
+    );
+    expect(screen.getByLabelText('AWS Profile')).toHaveAccessibleDescription(
+      /Falls back to the default credential chain/i,
+    );
+    expect(screen.getByLabelText('Inference Model Type')).toHaveAccessibleDescription(
+      /Required when the model ID is an Application Inference Profile ARN/i,
+    );
   });
 
   it('should switch Bedrock to Converse ids and show MCP configuration', async () => {
