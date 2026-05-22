@@ -97,6 +97,28 @@ describe('runEval', () => {
     );
   });
 
+  it('should warn when a test var collides with a reserved runtime var name', async () => {
+    const logger = (await import('../../src/logger')).default;
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        vars: {
+          __evalId: 'spoofed-eval-id',
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalId'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reserved'));
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {
