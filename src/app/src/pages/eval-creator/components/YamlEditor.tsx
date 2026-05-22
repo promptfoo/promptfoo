@@ -18,7 +18,7 @@ import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import yaml from 'js-yaml';
-import type { UnifiedConfig } from '@promptfoo/types';
+import { INVALID_FULL_CONFIG_YAML_MESSAGE, isFullYamlConfig } from './yamlConfigValidation';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
@@ -33,8 +33,6 @@ const YAML_SCHEMA_COMMENT =
   '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
 const YAML_DOWNLOAD_FILE_NAME = 'promptfooconfig.yaml';
 const EVAL_CLI_COMMAND = `promptfoo eval -c ${YAML_DOWNLOAD_FILE_NAME}`;
-const INVALID_FULL_CONFIG_YAML_MESSAGE =
-  'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.';
 
 // Ensure the schema comment is at the top of YAML content
 const ensureSchemaComment = (yamlContent: string): string => {
@@ -72,8 +70,8 @@ const YamlEditorComponent = ({
       const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
       const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
 
-      if (parsedConfig && typeof parsedConfig === 'object' && !Array.isArray(parsedConfig)) {
-        setConfig(parsedConfig as Partial<UnifiedConfig>);
+      if (isFullYamlConfig(parsedConfig)) {
+        setConfig(parsedConfig);
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');

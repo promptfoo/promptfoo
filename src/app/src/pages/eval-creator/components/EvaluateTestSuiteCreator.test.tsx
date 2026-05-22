@@ -587,7 +587,7 @@ describe('EvaluateTestSuiteCreator', () => {
 
     await waitFor(() => {
       expect(showToastMock).toHaveBeenCalledWith(
-        'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+        expect.stringContaining('Upload a full configuration with top-level fields'),
         'error',
       );
     });
@@ -606,7 +606,31 @@ describe('EvaluateTestSuiteCreator', () => {
 
     await waitFor(() => {
       expect(showToastMock).toHaveBeenCalledWith(
-        'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+        expect.stringContaining('To import individual test cases, use Import CSV or YAML'),
+        'error',
+      );
+    });
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
+  });
+
+  it('should reject a single test case uploaded as a full YAML configuration', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(
+      ['vars:\n  topic: safety\nassert:\n  - type: contains'],
+      'test.yaml',
+      {
+        type: 'application/yaml',
+      },
+    );
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('To import individual test cases, use Import CSV or YAML'),
         'error',
       );
     });

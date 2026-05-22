@@ -147,11 +147,26 @@ describe('YamlEditor', () => {
 
     expect(mockSetConfig).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+      'To import individual test cases, use Import CSV or YAML',
     );
     expect(mockShowToast).toHaveBeenCalledWith(
-      'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+      expect.stringContaining('To import individual test cases, use Import CSV or YAML'),
       'error',
+    );
+  });
+
+  it('rejects a single test case saved as a full YAML configuration', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    await user.clear(editor);
+    await user.type(editor, 'vars:\n  topic: safety\nassert:\n  - type: contains');
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(mockSetConfig).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'To import individual test cases, use Import CSV or YAML',
     );
   });
 

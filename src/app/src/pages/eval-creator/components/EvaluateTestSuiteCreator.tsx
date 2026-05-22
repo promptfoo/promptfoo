@@ -33,14 +33,12 @@ import {
 } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
+import { INVALID_FULL_CONFIG_YAML_MESSAGE, isFullYamlConfig } from './yamlConfigValidation';
 import type { UnifiedConfig } from '@promptfoo/types';
 
 import type { SetupStepId } from './setupReadiness';
 
 type EditorTab = 'ui' | 'yaml';
-
-const INVALID_FULL_CONFIG_YAML_MESSAGE =
-  'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.';
 
 interface SetupStep {
   id: SetupStepId;
@@ -234,8 +232,8 @@ const EvaluateTestSuiteCreator = () => {
         } else {
           try {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
-            if (parsedConfig && typeof parsedConfig === 'object' && !Array.isArray(parsedConfig)) {
-              const importedConfig = parsedConfig as Partial<UnifiedConfig>;
+            if (isFullYamlConfig(parsedConfig)) {
+              const importedConfig = parsedConfig;
 
               if (hasResettableSetup) {
                 setPendingYamlImport({ config: importedConfig, fileName: file.name });
