@@ -22,7 +22,10 @@ describe('Google Vertex default providers', () => {
   });
 
   it('should keep the default Gemini 3.1 provider on the global endpoint', () => {
-    const providers = getGoogleVertexProviders({ VERTEX_REGION: 'us-central1' });
+    const providers = getGoogleVertexProviders({
+      VERTEX_REGION: 'us-central1',
+      VERTEX_API_HOST: 'us-central1-aiplatform.googleapis.com',
+    });
     expect(providers.gradingProvider.getRegion()).toBe('global');
     expect(providers.gradingProvider.getApiHost()).toBe('aiplatform.googleapis.com');
   });
