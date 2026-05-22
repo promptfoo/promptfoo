@@ -129,6 +129,128 @@ const highlightJS = (code: string): string => {
   }
 };
 
+const MISSING_HTTP_URL_MESSAGE =
+  'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).';
+const INVALID_HTTP_URL_MESSAGE =
+  'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+
+function hasMissingStructuredUrl(selectedTarget: ProviderOptions): boolean {
+  if (selectedTarget.config?.request) {
+    return false;
+  }
+
+  const targetUrl = selectedTarget.config?.url;
+  return !targetUrl || targetUrl.trim() === '' || targetUrl === 'http';
+}
+
+function getTargetTestErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Failed to test target configuration';
+  }
+
+  if (error.message.includes('Failed to parse URL') || error.message.includes('Invalid URL')) {
+    return INVALID_HTTP_URL_MESSAGE;
+  }
+
+  return error.message;
+}
+
+function isTargetTestDisabled(selectedTarget: ProviderOptions): boolean {
+  return selectedTarget.config.request
+    ? !selectedTarget.config.request
+    : !selectedTarget.config.url;
+}
+
+function formatJsonError(error: unknown): string {
+  if (!(error instanceof SyntaxError)) {
+    return 'Invalid JSON';
+  }
+  const message = error.message;
+  // Extract position info from various browser formats:
+  // Chrome: "Unexpected token x in JSON at position 123"
+  // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
+  // Safari: "JSON Parse error: Unexpected identifier"
+  const positionMatch = message.match(/position\s+(\d+)/i);
+  const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+
+  if (lineColMatch) {
+    return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+  }
+  if (positionMatch) {
+    const position = parseInt(positionMatch[1], 10);
+    return `Invalid JSON at position ${position}`;
+  }
+  return 'Invalid JSON syntax';
+}
+
+interface RequestBodyFormatToggleProps {
+  requestBody: string;
+  requestBodyType: 'json' | 'text';
+  setBodyError: (error: string | React.ReactNode | null) => void;
+  setRequestBodyType: (type: 'json' | 'text') => void;
+}
+
+function RequestBodyFormatToggle({
+  requestBody,
+  requestBodyType,
+  setBodyError,
+  setRequestBodyType,
+}: RequestBodyFormatToggleProps): React.ReactElement {
+  const handleSelectJson = () => {
+    setRequestBodyType('json');
+    if (!requestBody.trim()) {
+      return;
+    }
+
+    try {
+      JSON.parse(requestBody);
+      setBodyError(null);
+    } catch (error) {
+      setBodyError(formatJsonError(error));
+    }
+  };
+
+  const handleSelectText = () => {
+    setRequestBodyType('text');
+    setBodyError(null);
+  };
+
+  return (
+    <div
+      role="group"
+      aria-label="Request body format"
+      className="flex items-center rounded-md border border-border bg-muted/30 p-0.5"
+    >
+      <button
+        type="button"
+        aria-pressed={requestBodyType === 'json'}
+        onClick={handleSelectJson}
+        className={cn(
+          'rounded px-2 py-1 text-xs font-medium transition-colors',
+          requestBodyType === 'json'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        JSON
+      </button>
+      <button
+        type="button"
+        aria-pressed={requestBodyType === 'text'}
+        onClick={handleSelectText}
+        className={cn(
+          'rounded px-2 py-1 text-xs font-medium transition-colors',
+          requestBodyType === 'text'
+            ? 'bg-background text-foreground shadow-sm'
+            : 'text-muted-foreground hover:text-foreground',
+        )}
+      >
+        Text
+      </button>
+    </div>
+  );
+}
+
 const HttpEndpointConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -206,20 +328,15 @@ Content-Type: application/json
     setIsTestRunning(true);
     setTestResult(null);
 
-    // Validate URL before testing (skip validation for raw request mode)
-    if (!selectedTarget.config?.request) {
-      const targetUrl = selectedTarget.config?.url;
-      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
-        setTestResult({
-          success: false,
-          message:
-            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
-        });
-        setTestDetailsExpanded(true);
-        setIsTestRunning(false);
-        onTargetTested?.(false);
-        return;
-      }
+    if (hasMissingStructuredUrl(selectedTarget)) {
+      setTestResult({
+        success: false,
+        message: MISSING_HTTP_URL_MESSAGE,
+      });
+      setTestDetailsExpanded(true);
+      setIsTestRunning(false);
+      onTargetTested?.(false);
+      return;
     }
 
     try {
@@ -265,21 +382,9 @@ Content-Type: application/json
       }
     } catch (error) {
       console.error('Error testing target:', error);
-      let errorMessage = 'Failed to test target configuration';
-      if (error instanceof Error) {
-        if (
-          error.message.includes('Failed to parse URL') ||
-          error.message.includes('Invalid URL')
-        ) {
-          errorMessage =
-            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
-        } else {
-          errorMessage = error.message;
-        }
-      }
       setTestResult({
         success: false,
-        message: errorMessage,
+        message: getTargetTestErrorMessage(error),
       });
       setTestDetailsExpanded(true);
       onTargetTested?.(false);
@@ -398,28 +503,6 @@ Content-Type: application/json
     },
     [updateCustomTarget],
   );
-
-  const formatJsonError = (error: unknown): string => {
-    if (!(error instanceof SyntaxError)) {
-      return 'Invalid JSON';
-    }
-    const message = error.message;
-    // Extract position info from various browser formats:
-    // Chrome: "Unexpected token x in JSON at position 123"
-    // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
-    // Safari: "JSON Parse error: Unexpected identifier"
-    const positionMatch = message.match(/position\s+(\d+)/i);
-    const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
-
-    if (lineColMatch) {
-      return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
-    }
-    if (positionMatch) {
-      const position = parseInt(positionMatch[1], 10);
-      return `Invalid JSON at position ${position}`;
-    }
-    return 'Invalid JSON syntax';
-  };
 
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
@@ -728,52 +811,12 @@ ${exampleRequest}`;
                 <Label htmlFor="http-request-body" className="font-medium">
                   Request Body
                 </Label>
-                <div
-                  role="group"
-                  aria-label="Request body format"
-                  className="flex items-center rounded-md border border-border bg-muted/30 p-0.5"
-                >
-                  <button
-                    type="button"
-                    aria-pressed={requestBodyType === 'json'}
-                    onClick={() => {
-                      setRequestBodyType('json');
-                      // Re-validate content as JSON
-                      if (requestBody.trim()) {
-                        try {
-                          JSON.parse(requestBody);
-                          setBodyError(null);
-                        } catch (e) {
-                          setBodyError(formatJsonError(e));
-                        }
-                      }
-                    }}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      requestBodyType === 'json'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    JSON
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={requestBodyType === 'text'}
-                    onClick={() => {
-                      setRequestBodyType('text');
-                      setBodyError(null); // Clear any JSON errors when switching to text
-                    }}
-                    className={cn(
-                      'rounded px-2 py-1 text-xs font-medium transition-colors',
-                      requestBodyType === 'text'
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    Text
-                  </button>
-                </div>
+                <RequestBodyFormatToggle
+                  requestBody={requestBody}
+                  requestBodyType={requestBodyType}
+                  setBodyError={setBodyError}
+                  setRequestBodyType={setRequestBodyType}
+                />
               </div>
               {requestBodyType === 'json' && (
                 <Button
@@ -899,11 +942,7 @@ ${exampleRequest}`;
           isTestRunning={isTestRunning}
           testResult={testResult}
           handleTestTarget={handleTestTarget}
-          disabled={
-            selectedTarget.config.request
-              ? !selectedTarget.config.request
-              : !selectedTarget.config.url
-          }
+          disabled={isTargetTestDisabled(selectedTarget)}
           detailsExpanded={testDetailsExpanded}
           onDetailsExpandedChange={setTestDetailsExpanded}
         />
