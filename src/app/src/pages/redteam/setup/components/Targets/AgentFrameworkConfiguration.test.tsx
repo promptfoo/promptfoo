@@ -187,6 +187,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const input = screen.getByRole('textbox', { name: /Python agent file path/i });
+    expect(input).toBeRequired();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAccessibleDescription(
       'Enter a local path beginning with file://, for example file:///workspace/agents/agent.py. Python agent file path is required',

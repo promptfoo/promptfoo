@@ -126,6 +126,7 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(controlsRow).toHaveClass('flex-col', 'sm:flex-row');
     expect(methodTrigger).toHaveClass('w-full', 'sm:w-24', 'sm:shrink-0');
     expect(urlInput).toHaveClass('min-w-0', 'flex-1');
+    expect(urlInput).toBeRequired();
   });
 
   it('keeps generated configuration actions visible while the dialog body scrolls independently', async () => {

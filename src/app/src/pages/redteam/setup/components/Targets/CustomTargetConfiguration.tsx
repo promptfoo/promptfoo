@@ -536,6 +536,7 @@ const CustomTargetConfiguration = ({
           </Label>
           <Input
             id="target-id"
+            required
             value={targetId}
             onChange={handleTargetIdChange}
             placeholder={config.targetIdPlaceholder}

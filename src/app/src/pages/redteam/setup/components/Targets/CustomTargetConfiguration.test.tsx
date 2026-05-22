@@ -60,6 +60,7 @@ describe('CustomTargetConfiguration', () => {
     );
 
     const providerId = screen.getByLabelText(/Provider ID/i);
+    expect(providerId).toBeRequired();
     expect(providerId).toHaveAttribute('aria-invalid', 'true');
     expect(providerId).toHaveAccessibleDescription(
       /A provider identifies the model, script, or endpoint used in this evaluation.*Provider ID is required/,

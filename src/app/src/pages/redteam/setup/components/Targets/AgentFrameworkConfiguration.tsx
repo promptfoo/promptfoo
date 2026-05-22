@@ -174,6 +174,7 @@ export default function AgentFrameworkConfiguration({
           </Label>
           <Input
             id="provider-id"
+            required
             value={selectedTarget.id || ''}
             onChange={(e) => updateCustomTarget('id', e.target.value)}
             placeholder={`file:///path/to/${agentType}_agent.py`}

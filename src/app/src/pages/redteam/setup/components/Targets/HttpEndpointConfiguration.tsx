@@ -754,6 +754,7 @@ ${exampleRequest}`;
                 </Select>
                 <Input
                   id="url"
+                  required
                   value={selectedTarget.config.url}
                   onChange={(e) => updateCustomTarget('url', e.target.value)}
                   aria-invalid={Boolean(urlError)}
