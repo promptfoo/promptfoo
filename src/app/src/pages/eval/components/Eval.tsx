@@ -9,7 +9,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -48,7 +48,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const location = useLocation();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
 
   const {
@@ -138,12 +137,19 @@ export default function Eval({ fetchId }: EvalOptions) {
    */
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
-      navigate({
-        pathname: EVAL_ROUTES.DETAIL(id),
-        search: searchParams.toString(),
-      });
+      // A selected eval has a different result set, so row-scoped deep links from the
+      // previous eval must not carry into it.
+      setEvalDetailsHash('');
+      navigate(
+        buildEvalUrlWithSearchParams(
+          { pathname: EVAL_ROUTES.DETAIL(id), search: window.location.search, hash: '' },
+          (params) => {
+            params.delete('rowId');
+          },
+        ),
+      );
     },
-    [searchParams, navigate],
+    [navigate],
   );
 
   const replaceSearchParams = useCallback(
