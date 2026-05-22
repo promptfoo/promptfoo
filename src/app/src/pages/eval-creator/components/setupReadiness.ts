@@ -1,10 +1,11 @@
+import { getMissingAssertionVariables } from './assertionPrerequisites';
 import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
-import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+import type { AssertionOrSet, ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
 
 export interface SetupIssue {
-  id: 'providers' | 'prompts' | 'tests' | 'variables' | 'assertions';
+  id: 'providers' | 'prompts' | 'tests' | 'variables' | 'assertions' | 'assertionVariables';
   message: string;
   stepId: SetupStepId;
 }
@@ -17,6 +18,7 @@ export interface SetupReadiness {
   testCount: number;
   requiredVariables: string[];
   testCasesMissingVariables: number[];
+  testCasesMissingAssertionVariables: number[];
   testCasesWithInvalidAssertions: number[];
   defaultTestHasInvalidAssertions: boolean;
   plannedBaseRequestCount?: number;
@@ -72,6 +74,12 @@ function hasInvalidAssertionValue(testCase: unknown): boolean {
   }
 
   return Boolean(getFirstRunnableAssertionValueError(testCase.assert));
+}
+
+function getAssertions(testCase: unknown): AssertionOrSet[] {
+  return isRecord(testCase) && Array.isArray(testCase.assert)
+    ? (testCase.assert as AssertionOrSet[])
+    : [];
 }
 
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
@@ -269,6 +277,41 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     });
   }
 
+  const defaultAssertions = getAssertions(config.defaultTest);
+  const assertionVariableIssues = Array.isArray(config.tests)
+    ? config.tests.flatMap((testCase, index) => {
+        if (!isRecord(testCase)) {
+          return [];
+        }
+
+        const testVars = isRecord(testCase.vars) ? testCase.vars : {};
+        const disablesDefaultAsserts =
+          isRecord(testCase.options) && testCase.options.disableDefaultAsserts === true;
+        const assertions = [
+          ...(disablesDefaultAsserts ? [] : defaultAssertions),
+          ...getAssertions(testCase),
+        ];
+        const missingVariables = getMissingAssertionVariables(assertions, {
+          ...defaultVars,
+          ...testVars,
+        });
+        return missingVariables.length > 0 ? [{ index, missingVariables }] : [];
+      })
+    : [];
+  const testCasesMissingAssertionVariables = assertionVariableIssues.map(({ index }) => index);
+
+  if (assertionVariableIssues.length > 0) {
+    const message =
+      assertionVariableIssues.length === 1
+        ? `Test case ${assertionVariableIssues[0].index + 1} is missing ${assertionVariableIssues[0].missingVariables.join(' and ')} values required by context assertions.`
+        : `${assertionVariableIssues.length} test cases are missing values required by context assertions.`;
+    issues.push({
+      id: 'assertionVariables',
+      message,
+      stepId: 3,
+    });
+  }
+
   const testCasesWithInvalidAssertions = Array.isArray(config.tests)
     ? config.tests.flatMap((testCase, index) => (hasInvalidAssertionValue(testCase) ? [index] : []))
     : [];
@@ -299,6 +342,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     testCount,
     requiredVariables,
     testCasesMissingVariables,
+    testCasesMissingAssertionVariables,
     testCasesWithInvalidAssertions,
     defaultTestHasInvalidAssertions,
     plannedBaseRequestCount: Array.isArray(config.tests)

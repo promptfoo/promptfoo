@@ -12,13 +12,18 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import AssertsForm from './AssertsForm';
+import {
+  getMissingAssertionVariables,
+  getRequiredAssertionVariables,
+} from './assertionPrerequisites';
 import VarsForm from './VarsForm';
-import type { Assertion, TestCase } from '@promptfoo/types';
+import type { Assertion, AssertionOrSet, TestCase } from '@promptfoo/types';
 
 interface TestCaseFormProps {
   open: boolean;
   onAdd: (testCase: TestCase, shouldClose: boolean) => void;
   varsList: string[];
+  inheritedAssertions?: AssertionOrSet[];
   initialValues?: TestCase;
   onCancel: () => void;
 }
@@ -31,16 +36,36 @@ const getTestCaseVars = (
   ...Object.fromEntries(varsList.map((variable) => [variable, initialVars?.[variable] ?? ''])),
 });
 
-const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCaseFormProps) => {
+const TestCaseForm = ({
+  open,
+  onAdd,
+  varsList,
+  inheritedAssertions = [],
+  initialValues,
+  onCancel,
+}: TestCaseFormProps) => {
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(() =>
     getTestCaseVars(varsList, initialValues?.vars as Record<string, string> | undefined),
   );
-  const [asserts, setAsserts] = useState(initialValues?.assert || []);
+  const [asserts, setAsserts] = useState<AssertionOrSet[]>(initialValues?.assert || []);
   const [assertsFormKey, setAssertsFormKey] = useState(0);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [addAnotherStatus, setAddAnotherStatus] = useState<string | null>(null);
   const [assertsValid, setAssertsValid] = useState(true);
+  const effectiveInheritedAssertions =
+    initialValues?.options?.disableDefaultAsserts === true ? [] : inheritedAssertions;
+  const effectiveAssertions = [...effectiveInheritedAssertions, ...asserts];
+  const assertionVariables = getRequiredAssertionVariables(effectiveAssertions);
+  const editableVarsList = Array.from(new Set([...varsList, ...assertionVariables]));
+  const missingAssertionVariables = getMissingAssertionVariables(effectiveAssertions, vars);
+  const canSave = assertsValid && missingAssertionVariables.length === 0;
+  const saveHelpIds = [
+    assertsValid ? undefined : 'test-case-assertion-error',
+    missingAssertionVariables.length > 0 ? 'test-case-assertion-variable-error' : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   React.useEffect(() => {
     if (initialValues) {
@@ -77,7 +102,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
   };
 
   const handleAdd = (close: boolean) => {
-    if (!assertsValid) {
+    if (!canSave) {
       return;
     }
 
@@ -144,8 +169,8 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
                 setVars(vars);
                 setAddAnotherStatus(null);
               }}
-              varsList={varsList}
-              initialValues={initialValues?.vars as Record<string, string>}
+              varsList={editableVarsList}
+              initialValues={vars as Record<string, string>}
             />
             <AssertsForm
               key={assertsFormKey}
@@ -175,22 +200,31 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
                 Complete the highlighted assertion values before saving.
               </p>
             )}
+            {missingAssertionVariables.length > 0 && (
+              <p
+                id="test-case-assertion-variable-error"
+                role="alert"
+                className="mr-auto text-left text-sm text-destructive"
+              >
+                Context assertions require values for: {missingAssertionVariables.join(', ')}.
+              </p>
+            )}
             <Button variant="outline" onClick={requestCancel}>
               Cancel
             </Button>
             {!initialValues && (
               <Button
                 variant="secondary"
-                disabled={!assertsValid}
-                aria-describedby={assertsValid ? undefined : 'test-case-assertion-error'}
+                disabled={!canSave}
+                aria-describedby={saveHelpIds || undefined}
                 onClick={() => handleAdd(false)}
               >
                 Add and create another
               </Button>
             )}
             <Button
-              disabled={!assertsValid}
-              aria-describedby={assertsValid ? undefined : 'test-case-assertion-error'}
+              disabled={!canSave}
+              aria-describedby={saveHelpIds || undefined}
               onClick={() => handleAdd(true)}
             >
               {initialValues ? 'Update Test Case' : 'Add Test Case'}

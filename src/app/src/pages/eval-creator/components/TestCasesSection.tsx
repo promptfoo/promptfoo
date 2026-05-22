@@ -23,6 +23,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import { TestCaseSchema } from '@promptfoo/types';
+import { getMissingAssertionVariables } from './assertionPrerequisites';
 import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
@@ -164,6 +165,81 @@ function getStarterExample(varsList: string[]): TestCase {
   };
 }
 
+interface TestCaseIssues {
+  missingPromptVariables: string[];
+  assertionError?: string;
+  missingAssertionVariables: string[];
+}
+
+function getTestCaseIssues(
+  testCase: TestCase,
+  varsList: string[],
+  defaultTest: TestCase | undefined,
+): TestCaseIssues {
+  const testCaseVars = Object.keys(testCase.vars || {});
+  const defaultTestVars = Object.keys(defaultTest?.vars || {});
+  const inheritedAssertions =
+    testCase.options?.disableDefaultAsserts === true ? [] : defaultTest?.assert || [];
+
+  return {
+    missingPromptVariables: varsList.filter(
+      (variable) => !testCaseVars.includes(variable) && !defaultTestVars.includes(variable),
+    ),
+    assertionError: getFirstRunnableAssertionValueError(testCase.assert),
+    missingAssertionVariables: getMissingAssertionVariables(
+      [...inheritedAssertions, ...(testCase.assert || [])],
+      { ...(defaultTest?.vars || {}), ...(testCase.vars || {}) },
+    ),
+  };
+}
+
+function TestCaseIssueIndicator({ issues }: { issues: TestCaseIssues }) {
+  const warningMessages = [
+    issues.missingPromptVariables.length > 0
+      ? `Missing variables: ${issues.missingPromptVariables.join(', ')}`
+      : undefined,
+    issues.assertionError,
+    issues.missingAssertionVariables.length > 0
+      ? `Context assertions need values for: ${issues.missingAssertionVariables.join(', ')}`
+      : undefined,
+  ].filter((message): message is string => Boolean(message));
+
+  if (warningMessages.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent>
+          {warningMessages.map((message, index) => (
+            <React.Fragment key={message}>
+              {index > 0 && <br />}
+              {message}
+            </React.Fragment>
+          ))}
+        </TooltipContent>
+      </Tooltip>
+      {issues.missingPromptVariables.length > 0 && (
+        <span className="sr-only">
+          Missing variables: {issues.missingPromptVariables.join(', ')}.
+        </span>
+      )}
+      {issues.assertionError && (
+        <span className="sr-only">Assertion issue: {issues.assertionError}</span>
+      )}
+      {issues.missingAssertionVariables.length > 0 && (
+        <span className="sr-only">
+          Context assertions need values for: {issues.missingAssertionVariables.join(', ')}.
+        </span>
+      )}
+    </>
+  );
+}
+
 const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
@@ -173,7 +249,6 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     !Array.isArray(config.defaultTest)
       ? (config.defaultTest as TestCase)
       : undefined;
-  const defaultTestVars = Object.keys(defaultTest?.vars || {});
   const canEditInlineTests =
     rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isInlineTestCase));
   const testCases = canEditInlineTests ? ((rawTests || []) as TestCase[]) : [];
@@ -428,14 +503,11 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                 </tr>
               ) : (
                 testCases.map((testCase, index) => {
-                  const testCaseVars = Object.keys(testCase.vars || {});
-                  const missingVars = varsList.filter(
-                    (v) => !testCaseVars.includes(v) && !defaultTestVars.includes(v),
-                  );
-                  const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
-                  const assertionError = getFirstRunnableAssertionValueError(testCase.assert);
-                  const hasAssertionError = Boolean(assertionError);
-                  const hasTestCaseIssue = hasMissingVars || hasAssertionError;
+                  const issues = getTestCaseIssues(testCase, varsList, defaultTest);
+                  const hasTestCaseIssue =
+                    issues.missingPromptVariables.length > 0 ||
+                    Boolean(issues.assertionError) ||
+                    issues.missingAssertionVariables.length > 0;
 
                   return (
                     <tr
@@ -461,26 +533,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                           aria-label={`Open test case ${index + 1} for editing`}
                           className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {hasTestCaseIssue && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {hasMissingVars && <>Missing variables: {missingVars.join(', ')}</>}
-                                {hasMissingVars && hasAssertionError && <br />}
-                                {hasAssertionError && assertionError}
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                          {hasMissingVars && (
-                            <span className="sr-only">
-                              Missing variables: {missingVars.join(', ')}.
-                            </span>
-                          )}
-                          {hasAssertionError && (
-                            <span className="sr-only">Assertion issue: {assertionError}</span>
-                          )}
+                          <TestCaseIssueIndicator issues={issues} />
                           {testCase.description || (
                             <span className="text-muted-foreground italic">
                               Test Case #{index + 1}
@@ -574,6 +627,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
           open={testCaseDialogOpen}
           onAdd={handleAddTestCase}
           varsList={varsList}
+          inheritedAssertions={defaultTest?.assert}
           initialValues={
             editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]
           }

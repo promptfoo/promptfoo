@@ -184,6 +184,44 @@ describe('TestCaseForm', () => {
     expect(addAnotherButton).not.toBeDisabled();
   });
 
+  it('reveals and requires variables needed by selected context assertions', () => {
+    renderComponent({ varsList: [] });
+
+    act(() => {
+      mockAssertsForm.mock.calls[0][0].onAdd([{ type: 'context-faithfulness' }]);
+    });
+
+    expect(mockVarsForm.mock.lastCall?.[0].varsList).toEqual(['query', 'context']);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Context assertions require values for: query, context.',
+    );
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    expect(addButton).toBeDisabled();
+    expect(addButton).toHaveAttribute('aria-describedby', 'test-case-assertion-variable-error');
+
+    act(() => {
+      mockVarsForm.mock.lastCall?.[0].onAdd({
+        query: 'What changed?',
+        context: 'The release includes a new API.',
+      });
+    });
+
+    expect(addButton).not.toBeDisabled();
+  });
+
+  it('reveals and requires variables needed by inherited context assertions', () => {
+    renderComponent({
+      varsList: [],
+      inheritedAssertions: [{ type: 'context-relevance' }],
+    });
+
+    expect(mockVarsForm.mock.lastCall?.[0].varsList).toEqual(['query', 'context']);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Context assertions require values for: query, context.',
+    );
+    expect(screen.getByRole('button', { name: 'Add Test Case' })).toBeDisabled();
+  });
+
   it("should call onAdd with the updated form state and shouldClose=true, then reset the form and call onCancel when the 'Update Test Case' button is clicked in edit mode", async () => {
     const initialValues: TestCase = {
       description: 'Initial description',
@@ -362,7 +400,7 @@ describe('TestCaseForm', () => {
     expect(mockVarsForm).toHaveBeenCalled();
 
     const varsFormProps = mockVarsForm.mock.calls[0][0];
-    expect(varsFormProps.initialValues || {}).toEqual({});
+    expect(varsFormProps.initialValues || {}).toEqual({ var1: '', var2: '' });
 
     expect(mockAssertsForm).toHaveBeenCalled();
     const assertsFormProps = mockAssertsForm.mock.calls[0][0];

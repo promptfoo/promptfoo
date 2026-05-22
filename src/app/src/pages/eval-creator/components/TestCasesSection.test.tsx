@@ -155,6 +155,31 @@ describe('TestCasesSection', () => {
     ).toHaveClass('sr-only');
   });
 
+  it('exposes variables required by context assertions to assistive technology', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Retrieved answer',
+            assert: [{ type: 'context-faithfulness' }],
+            vars: {},
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Context assertions need values for: query, context.')).toHaveClass(
+      'sr-only',
+    );
+  });
+
   it('does not report variables supplied by default test values as missing', () => {
     (useStore as any).mockReturnValue({
       config: {

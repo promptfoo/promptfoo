@@ -150,9 +150,38 @@ describe('setupReadiness', () => {
 
       expect(readiness.isReadyToRun).toBe(true);
       expect(readiness.testCasesMissingVariables).toEqual([]);
+      expect(readiness.testCasesMissingAssertionVariables).toEqual([]);
       expect(readiness.testCasesWithInvalidAssertions).toEqual([]);
       expect(readiness.defaultTestHasInvalidAssertions).toBe(false);
       expect(readiness.plannedBaseRequestCount).toBe(1);
+    });
+
+    it('blocks context assertions until required query and context values are supplied', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Answer using the supplied material'],
+        tests: [{ assert: [{ type: 'context-faithfulness' }], vars: {} }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.testCasesMissingAssertionVariables).toEqual([0]);
+      expect(readiness.issues).toContainEqual({
+        id: 'assertionVariables',
+        message: 'Test case 1 is missing query and context values required by context assertions.',
+        stepId: 3,
+      });
+    });
+
+    it('accepts context assertions with default query values and a context transform', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Answer using retrieved material'],
+        defaultTest: { vars: { query: 'What changed?' } },
+        tests: [{ assert: [{ type: 'context-relevance', contextTransform: 'output' }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.testCasesMissingAssertionVariables).toEqual([]);
     });
 
     it('blocks imported inline tests with incomplete assertion values', () => {
