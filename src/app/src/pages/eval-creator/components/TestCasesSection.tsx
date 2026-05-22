@@ -507,6 +507,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                   variant="secondary"
                   onClick={() => {
                     setTestCases([...testCases, getStarterExample(varsList)]);
+                    showToast(
+                      'Starter test case added. Each test case runs across every prompt and provider.',
+                      'success',
+                    );
                   }}
                 >
                   Add Starter Example

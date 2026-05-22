@@ -226,6 +226,10 @@ describe('TestCasesSection', () => {
         },
       ],
     });
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'Starter test case added. Each test case runs across every prompt and provider.',
+      'success',
+    );
     expect(mockUpdateConfig).not.toHaveBeenCalledWith(
       expect.objectContaining({
         tests: expect.arrayContaining([
