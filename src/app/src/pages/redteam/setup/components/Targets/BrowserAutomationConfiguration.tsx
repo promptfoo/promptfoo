@@ -286,7 +286,7 @@ const BrowserAutomationConfiguration = ({
                     </div>
                     {step.action === 'click' && (
                       <div className="space-y-2">
-                        <Label htmlFor={`step-${index}-optional`}>Optional</Label>
+                        <Label htmlFor={`step-${index}-optional`}>If Element Is Missing</Label>
                         <Select
                           value={String(step.args?.optional || false)}
                           onValueChange={(value) => {
@@ -298,14 +298,20 @@ const BrowserAutomationConfiguration = ({
                             updateCustomTarget('steps', newSteps);
                           }}
                         >
-                          <SelectTrigger id={`step-${index}-optional`}>
+                          <SelectTrigger
+                            id={`step-${index}-optional`}
+                            aria-describedby={`step-${index}-optional-help`}
+                          >
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="true">Yes</SelectItem>
-                            <SelectItem value="false">No</SelectItem>
+                            <SelectItem value="true">Continue evaluation</SelectItem>
+                            <SelectItem value="false">Fail this step</SelectItem>
                           </SelectContent>
                         </Select>
+                        <HelperText id={`step-${index}-optional-help`} className="text-sm">
+                          Continue is useful for UI elements that appear only in some test cases.
+                        </HelperText>
                       </div>
                     )}
                   </div>
@@ -515,7 +521,8 @@ const BrowserAutomationConfiguration = ({
                       <Input
                         id={`step-${index}-delay`}
                         type="number"
-                        value={step.args?.delay || 1000}
+                        min={0}
+                        value={step.args?.delay ?? 1000}
                         onChange={(e) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
                           newSteps[index] = {
@@ -524,14 +531,19 @@ const BrowserAutomationConfiguration = ({
                           };
                           updateCustomTarget('steps', newSteps);
                         }}
+                        aria-describedby={`step-${index}-delay-help`}
                       />
+                      <HelperText id={`step-${index}-delay-help`} className="text-sm">
+                        Wait before counting existing children. Set 0 to start watching immediately.
+                      </HelperText>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor={`step-${index}-timeout`}>Timeout (ms)</Label>
+                      <Label htmlFor={`step-${index}-timeout`}>New Child Timeout (ms)</Label>
                       <Input
                         id={`step-${index}-timeout`}
                         type="number"
-                        value={step.args?.timeout || 30000}
+                        min={0}
+                        value={step.args?.timeout ?? (selectedTarget.config.timeoutMs || 30000)}
                         onChange={(e) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
                           newSteps[index] = {
@@ -540,7 +552,12 @@ const BrowserAutomationConfiguration = ({
                           };
                           updateCustomTarget('steps', newSteps);
                         }}
+                        aria-describedby={`step-${index}-timeout-help`}
                       />
+                      <HelperText id={`step-${index}-timeout-help`} className="text-sm">
+                        Maximum wait for a new child. When unset, this uses the overall Timeout
+                        above.
+                      </HelperText>
                     </div>
                   </div>
                 )}

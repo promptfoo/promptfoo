@@ -171,6 +171,53 @@ describe('BrowserAutomationConfiguration', () => {
     expect(screen.getByLabelText(/Parent Selector/)).toBeRequired();
   });
 
+  it('explains and saves the missing-element behavior for click steps', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([{ action: 'click', args: { selector: '#confirm' } }])}
+        updateCustomTarget={updateCustomTarget}
+      />,
+    );
+
+    expect(screen.getByLabelText('If Element Is Missing')).toHaveAccessibleDescription(
+      /useful for UI elements that appear only in some test cases/i,
+    );
+    await user.click(screen.getByLabelText('If Element Is Missing'));
+    await user.click(screen.getByRole('option', { name: 'Continue evaluation' }));
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('steps', [
+      { action: 'click', args: { selector: '#confirm', optional: true } },
+    ]);
+  });
+
+  it('preserves zero initial delay and describes new-child timing', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={{
+          id: 'browser',
+          config: {
+            timeoutMs: 15000,
+            steps: [
+              { action: 'waitForNewChildren', args: { parentSelector: '#results', delay: 0 } },
+            ],
+          },
+        }}
+        updateCustomTarget={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Initial Delay (ms)')).toHaveValue(0);
+    expect(screen.getByLabelText('Initial Delay (ms)')).toHaveAccessibleDescription(
+      /Set 0 to start watching immediately/i,
+    );
+    expect(screen.getByLabelText('New Child Timeout (ms)')).toHaveValue(15000);
+    expect(screen.getByLabelText('New Child Timeout (ms)')).toHaveAccessibleDescription(
+      /uses the overall Timeout above/i,
+    );
+  });
+
   it('requires an explicit wait duration instead of showing an unsaved default', () => {
     renderWithProviders(
       <BrowserAutomationConfiguration
