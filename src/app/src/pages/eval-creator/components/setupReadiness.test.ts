@@ -344,6 +344,26 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('rejects normalized perplexity score thresholds outside their score range', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'perplexity-score' as const, threshold: 1.1 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'perplexity-score' as const, threshold: 0.5 }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('allows authored LLM rubric assertions that use runtime rubric defaults', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

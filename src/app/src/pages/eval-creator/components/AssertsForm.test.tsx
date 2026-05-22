@@ -48,7 +48,7 @@ describe('AssertsForm', () => {
     expect(valueInputs[1]).toHaveValue('foo, bar');
 
     expect(typeInputs[2]).toHaveTextContent('latency');
-    expect(screen.getByRole('spinbutton', { name: /Threshold/ })).toHaveValue(1000);
+    expect(screen.getByRole('spinbutton', { name: /Maximum latency/ })).toHaveValue(1000);
   });
 
   it('starts new assertions as a deterministic text check that requires an expected value', async () => {
@@ -328,7 +328,7 @@ describe('AssertsForm', () => {
       />,
     );
 
-    const thresholdInput = screen.getByRole('spinbutton', { name: /Threshold/ });
+    const thresholdInput = screen.getByRole('spinbutton', { name: /Maximum latency/ });
     expect(thresholdInput).toHaveAccessibleDescription(
       'Enter a maximum latency in milliseconds, 0 or greater.',
     );
@@ -338,6 +338,31 @@ describe('AssertsForm', () => {
 
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'latency', threshold: 250 }]);
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('explains raw perplexity direction and provider requirements', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'perplexity' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const threshold = screen.getByRole('spinbutton', { name: 'Maximum perplexity' });
+    expect(threshold).toHaveAccessibleDescription(
+      /Lower perplexity is better.*at or below this maximum.*return log probabilities/i,
+    );
+
+    await user.type(threshold, '5');
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'perplexity', threshold: 5 }]);
+  });
+
+  it('constrains normalized perplexity thresholds to their score range', () => {
+    initialValues = [{ type: 'perplexity-score', threshold: 1.1 }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const threshold = screen.getByRole('spinbutton', { name: 'Minimum normalized score' });
+    expect(threshold).toHaveAttribute('max', '1');
+    expect(threshold).toHaveAccessibleDescription(
+      'Enter a normalized score threshold from 0 to 1.',
+    );
   });
 
   it('guides finish reason checks through normalized values and preserves a custom path', async () => {

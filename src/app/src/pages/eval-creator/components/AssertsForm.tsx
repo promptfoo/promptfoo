@@ -247,9 +247,10 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Checks whether traced tool calls occurred in the expected order. This requires trace data.',
   'trajectory:step-count':
     'Counts matching steps in a captured agent trace. This requires trace data.',
-  perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
+  perplexity:
+    'Measures model confidence from returned log probabilities. Only compatible providers expose this metric.',
   'perplexity-score':
-    'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
+    'Reports normalized confidence from returned log probabilities. Only compatible providers expose this metric.',
 };
 
 const getAssertionLabel = (type: AssertionType): string => {
@@ -419,23 +420,64 @@ interface ThresholdFieldProps {
   onChange: (threshold: number | undefined) => void;
 }
 
+function getThresholdFieldCopy(type: AssertionType): {
+  label: string;
+  max?: string;
+  placeholder: string;
+  step: string;
+  help: string;
+} {
+  if (type === 'latency' || type === 'not-latency') {
+    return {
+      label: 'Maximum latency in milliseconds',
+      placeholder: '1000',
+      step: '1',
+      help: 'Maximum duration for each provider response, in milliseconds.',
+    };
+  }
+  if (type === 'cost' || type === 'not-cost') {
+    return {
+      label: 'Maximum cost',
+      placeholder: '0.01',
+      step: 'any',
+      help: 'Maximum estimated cost for each provider response.',
+    };
+  }
+  if (type === 'perplexity-score' || type === 'not-perplexity-score') {
+    return {
+      label: 'Minimum normalized score',
+      max: '1',
+      placeholder: '0.5',
+      step: '0.01',
+      help: 'Optional. Higher normalized scores are better; responses pass at or above this minimum. The provider must return log probabilities.',
+    };
+  }
+
+  return {
+    label: 'Maximum perplexity',
+    placeholder: '5',
+    step: 'any',
+    help: 'Optional. Lower perplexity is better; responses pass at or below this maximum. The provider must return log probabilities.',
+  };
+}
+
 const ThresholdField = ({ assertion, error, index, onChange }: ThresholdFieldProps) => {
-  const isLatency = assertion.type === 'latency' || assertion.type === 'not-latency';
-  const isCost = assertion.type === 'cost' || assertion.type === 'not-cost';
+  const copy = getThresholdFieldCopy(assertion.type);
   const descriptionId = error ? `assert-value-error-${index}` : `assert-threshold-help-${index}`;
 
   return (
     <div className="space-y-2">
       <Label htmlFor={`assert-threshold-${index}`} className="text-sm font-medium">
-        Threshold
+        {copy.label}
         {REQUIRED_THRESHOLD_ASSERTION_TYPES.has(assertion.type) && ' (required)'}
       </Label>
       <Input
         id={`assert-threshold-${index}`}
         type="number"
         min="0"
-        step={isLatency ? '1' : 'any'}
-        placeholder={isLatency ? '1000' : '0.01'}
+        max={copy.max}
+        step={copy.step}
+        placeholder={copy.placeholder}
         value={formatAssertionThreshold(assertion)}
         onChange={(event) => onChange(parseAssertionThreshold(event.target.value))}
         aria-invalid={Boolean(error)}
@@ -447,11 +489,7 @@ const ThresholdField = ({ assertion, error, index, onChange }: ThresholdFieldPro
         </HelperText>
       ) : (
         <p id={descriptionId} className="text-xs text-muted-foreground">
-          {isLatency
-            ? 'Maximum duration for each provider response, in milliseconds.'
-            : isCost
-              ? 'Maximum estimated cost for each provider response.'
-              : 'Optional. Without a threshold, this check reports a metric only.'}
+          {copy.help}
         </p>
       )}
     </div>

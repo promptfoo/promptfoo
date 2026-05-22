@@ -172,6 +172,17 @@ function getThresholdError(assertion: Assertion): string | undefined {
   }
 
   if (
+    (assertion.type === 'perplexity-score' || assertion.type === 'not-perplexity-score') &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0 ||
+      assertion.threshold > 1)
+  ) {
+    return 'Enter a normalized score threshold from 0 to 1.';
+  }
+
+  if (
     THRESHOLD_ASSERTION_TYPES.has(assertion.type) &&
     assertion.threshold !== undefined &&
     (typeof assertion.threshold !== 'number' ||
