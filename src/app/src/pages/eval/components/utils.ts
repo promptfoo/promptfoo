@@ -122,6 +122,8 @@ export function setEvalDetailsHash(hash: string, rowPositionIndex?: number): voi
   const url = new URL(window.location.href);
   if (rowPositionIndex !== undefined) {
     url.searchParams.set('rowId', String(rowPositionIndex + 1));
+  } else if (!next) {
+    url.searchParams.delete('rowId');
   }
   url.hash = next;
   if (url.href === window.location.href) {
