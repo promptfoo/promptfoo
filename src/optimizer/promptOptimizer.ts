@@ -646,6 +646,14 @@ export async function optimizePromptTestSuite(
         createEvaluationOptions(config),
       )
     : undefined;
+  if (baselineValidationEval && baselineValidationEval.results.length === 0) {
+    // The validation split produced no runnable rows (e.g. filters scoped the
+    // held-out tests away). Without held-out evidence the optimizer would adopt
+    // candidates on tied/zeroed validation scores, so fail fast instead.
+    throw new Error(
+      'No eval test cases ran for the validation split — check filters and other test scoping options.',
+    );
+  }
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,

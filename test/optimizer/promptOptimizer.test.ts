@@ -641,6 +641,39 @@ describe('prompt optimizer', () => {
     expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(1);
   });
 
+  it('errors when the validation split produces no runnable tests', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized'),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    // The baseline search eval has rows, but the held-out validation split is
+    // scoped away by filters and schedules zero result rows.
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(evalWith([completedPrompt('Base', 'Base', 0.6)], []))
+      .mockResolvedValueOnce(emptyEval([completedPrompt('Base', 'Base', 0)]));
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Base', label: 'Base' }],
+      tests: [{}, {}, {}, {}, {}],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite, { validationSplit: 0.4 })).rejects.toThrow(
+      'No eval test cases ran for the validation split',
+    );
+    // Fails fast after the baseline search + validation evals, before rounds.
+    expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(2);
+  });
+
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
