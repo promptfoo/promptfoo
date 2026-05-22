@@ -4727,6 +4727,51 @@ describe('ResultsTable default column sizing', () => {
     expect(filteredWidth).toBeLessThan(initialWidth);
   });
 
+  it('resamples metadata widths when live result growth changes the visible row count', () => {
+    let table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          vars: ['ok', 'compact'],
+        },
+      ],
+    };
+    let filteredResultsCount = 1;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const initialHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const initialWidth = Number.parseFloat(initialHeader?.style.width || '0');
+
+    table = mockTable;
+    filteredResultsCount = 2;
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const updatedHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const updatedWidth = Number.parseFloat(updatedHeader?.style.width || '0');
+
+    expect(initialHeader).not.toBeNull();
+    expect(updatedHeader).not.toBeNull();
+    expect(updatedWidth).toBeGreaterThan(initialWidth);
+  });
+
   it('renders matching header and body colgroups for the computed widths', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 

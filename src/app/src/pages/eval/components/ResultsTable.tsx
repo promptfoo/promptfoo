@@ -1850,6 +1850,7 @@ function ResultsTable({
       JSON.stringify({
         evalId,
         pageSize: pagination.pageSize,
+        filteredResultsCount,
         filterMode,
         searchText: debouncedSearchText,
         filters: appliedFiltersString,
@@ -1858,6 +1859,7 @@ function ResultsTable({
     [
       evalId,
       pagination.pageSize,
+      filteredResultsCount,
       filterMode,
       debouncedSearchText,
       appliedFiltersString,
