@@ -37,7 +37,10 @@ describe('RunOptionsSection', () => {
     expect(screen.getByText('Review and run')).toBeInTheDocument();
     expect(screen.getByText(/starts with 6 base requests/)).toBeInTheDocument();
     expect(screen.getByText(/additional model calls and increase cost/)).toBeInTheDocument();
-    expect(screen.getByText(/Required setup is complete/)).toBeInTheDocument();
+    const readyStatus = screen.getByRole('status');
+    expect(readyStatus).toHaveTextContent(/Required setup is complete/);
+    expect(readyStatus).toHaveAttribute('aria-live', 'polite');
+    expect(readyStatus).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('keeps optional settings collapsed until users need them', async () => {
@@ -73,10 +76,12 @@ describe('RunOptionsSection', () => {
 
     render(<RunOptionsSection readiness={incompleteSetup} onChange={vi.fn()} />);
 
-    expect(screen.getByText('Complete these items before running:')).toBeInTheDocument();
-    expect(
-      screen.getByText('Test case 1 is missing values required by your prompts.'),
-    ).toBeInTheDocument();
+    const blockingAlert = screen.getByRole('alert');
+    expect(blockingAlert).toHaveTextContent('Complete these items before running:');
+    expect(blockingAlert).toHaveTextContent(
+      'Test case 1 is missing values required by your prompts.',
+    );
+    expect(blockingAlert).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('keeps an invalid fractional delay visible and blocks launching until it is corrected', async () => {

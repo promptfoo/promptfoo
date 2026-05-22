@@ -247,7 +247,11 @@ export function RunOptionsSection({
           )}
 
           {readiness.issues.length > 0 ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+            <div
+              role="alert"
+              aria-atomic="true"
+              className="rounded-md border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200"
+            >
               <p className="text-sm font-medium">Complete these items before running:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
                 {readiness.issues.map((issue) => (
@@ -256,7 +260,12 @@ export function RunOptionsSection({
               </ul>
             </div>
           ) : (
-            <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
+            >
               <CheckCircle2 className="size-4 shrink-0" />
               Required setup is complete. Start the evaluation when you are ready.
             </div>
