@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../src/cache';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import {
@@ -338,7 +339,6 @@ describe('prompt optimizer', () => {
     await optimizePromptTestSuite(
       {
         evaluateOptions: {
-          cache: true,
           delay: 50,
           maxConcurrency: 1,
           repeat: 2,
@@ -350,7 +350,6 @@ describe('prompt optimizer', () => {
 
     expect(vi.mocked(evaluate).mock.calls[0][2]).toEqual(
       expect.objectContaining({
-        cache: false,
         delay: 50,
         eventSource: 'library',
         maxConcurrency: 1,
@@ -359,6 +358,72 @@ describe('prompt optimizer', () => {
         silent: true,
       }),
     );
+  });
+
+  it('disables provider caching for internal optimizer evals', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    // The optimizer must score the baseline and every candidate from fresh
+    // provider calls. `evaluate()` only consults caching via the
+    // `withCacheEnabled` AsyncLocalStorage, so assert it is invoked while
+    // caching is disabled for each internal eval.
+    const cacheStatesDuringEvaluate: boolean[] = [];
+    vi.mocked(evaluate).mockImplementation(async () => {
+      cacheStatesDuringEvaluate.push(cache.isCacheEnabled());
+      return cacheStatesDuringEvaluate.length === 1 ? baselineEval : candidateEval;
+    });
+
+    const withCacheEnabledSpy = vi.spyOn(cache, 'withCacheEnabled');
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}],
+    };
+
+    // Caching is enabled in the ambient context; the optimizer must still
+    // disable it for every internal eval.
+    expect(cache.isCacheEnabled()).toBe(true);
+
+    await optimizePromptTestSuite({}, testSuite);
+
+    // Caching is restored to its ambient state once the optimizer returns.
+    expect(cache.isCacheEnabled()).toBe(true);
+
+    // Baseline eval + one candidate eval per round.
+    expect(cacheStatesDuringEvaluate.length).toBeGreaterThan(1);
+    expect(cacheStatesDuringEvaluate.every((state) => state === false)).toBe(true);
+    // Every withCacheEnabled call made while optimizing disabled caching.
+    expect(withCacheEnabledSpy).toHaveBeenCalled();
+    expect(
+      withCacheEnabledSpy.mock.calls.every(([enabledOverride]) => enabledOverride === false),
+    ).toBe(true);
+
+    withCacheEnabledSpy.mockRestore();
   });
 
   it('keeps optimized candidates eligible when provider prompt routing uses prompt ids', async () => {
