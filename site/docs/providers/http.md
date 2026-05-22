@@ -1721,7 +1721,7 @@ providers:
       streamFormat: openai-chat # or: openai-responses, anthropic-messages
 ```
 
-**Wire-level proxy (default)** — TTFT fires on the first non-whitespace body byte. Format-agnostic, works on any SSE/chunked endpoint without configuration, but reports earlier than canonical TTFT by ~20ms on OpenAI Chat and ~150ms on OpenAI Responses (the gap is the framing metadata that arrives before the first content token).
+**Wire-level proxy (default)** — TTFT fires on the first non-whitespace body byte. This is format-agnostic and works on any SSE/chunked endpoint without configuration, but may report earlier than canonical TTFT when framing metadata arrives before the first content token.
 
 Add TTFT assertions to your tests:
 

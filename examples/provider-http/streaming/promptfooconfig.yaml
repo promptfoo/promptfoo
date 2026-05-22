@@ -25,7 +25,7 @@ providers:
         stream: true # Enable streaming for TTFT measurement
       # streamFormat selects a built-in content-token detector so TTFT fires
       # on the first model-emitted content delta rather than the leading SSE
-      # framing frame (matches canonical TTFT definitions in ML literature).
+      # framing frame.
       # Omit for the format-agnostic default; use streamFirstTokenPattern
       # instead if your endpoint is not one of the built-in formats.
       streamFormat: openai-chat

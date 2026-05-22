@@ -822,12 +822,12 @@ The `ttft` assertion measures **Time to First Token** (TTFT) for streaming HTTP 
 
 Two measurement modes are supported. Choose one via the provider's `streamFormat` or `streamFirstTokenPattern` config.
 
-| Mode                                                                        | Start event                                      | End event                                       | Typical delta vs canonical                                                         |
-| --------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted content token in the stream | 0 (definition)                                                                     |
-| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body  | Reports earlier than canonical by ~20ms on OpenAI Chat, ~150ms on OpenAI Responses |
+| Mode                                                                        | Start event                                      | End event                                       |
+| --------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
+| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted content token in the stream |
+| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body  |
 
-Canonical TTFT matches the definition used in ML benchmarking literature (vLLM, MLPerf, OpenAI perf docs). The wire-level proxy is format-agnostic and slightly earlier because it fires on SSE framing frames (e.g. `{"delta":{"role":"assistant"}}`, `{"type":"response.created"}`) rather than the first content delta.
+The wire-level proxy is format-agnostic and may report earlier because it fires on SSE framing frames (for example, `{"delta":{"role":"assistant"}}` or `{"type":"response.created"}`) rather than the first content delta.
 
 #### Canonical TTFT (recommended)
 
@@ -851,7 +851,7 @@ assert:
 For endpoints that don't match a built-in preset, provide a regex:
 
 ```yaml
-streamFirstTokenPattern: '"delta":\s*\{[^}]*"content":"[^"]'
+streamFirstTokenPattern: '"delta"\s*:\s*\{[\s\S]*?"content"\s*:\s*"(?!")'
 ```
 
 The regex is matched against the accumulated raw stream text; `streamFirstTokenPattern` takes precedence over `streamFormat` when both are set.
@@ -863,7 +863,7 @@ When `stream: true` is set on the provider, the HTTP provider populates `provide
 | Field                | Definition                                                                       | Notes                                                                                                                                                                             |
 | -------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `timeToFirstToken`   | ms from request dispatch to the first event that matches the configured detector | Canonical when a preset/pattern is set; wire-level otherwise                                                                                                                      |
-| `totalStreamTime`    | ms from first response-body chunk arrival to stream close                        | Excludes the TTFT window                                                                                                                                                          |
+| `totalStreamTime`    | ms from first response-body chunk arrival to stream close                        | Excludes request processing before body bytes arrive; may include framing bytes before the detected content token                                                                 |
 | `completionChars`    | UTF-16 code units in the parsed completion (after `transformResponse`)           | Exact, no heuristic. Use for custom throughput calculations with your own tokenizer.                                                                                              |
 | `tokensPerSecond`    | `Math.ceil(completionChars / 4) / totalStreamTime × 1000`                        | Approximate. Populated only when `multiChunkDelivery === true` and `totalStreamTime ≥ 50ms`. Inaccurate for CJK / code / base64 — prefer `completionChars` with a real tokenizer. |
 | `multiChunkDelivery` | `true` iff the stream delivered more than one network read's worth of bytes      | Does not mean the model emitted multiple tokens — only that the transport flushed incrementally.                                                                                  |
@@ -871,31 +871,6 @@ When `stream: true` is set on the provider, the HTTP provider populates `provide
 #### Caching
 
 Streaming responses are never cached so TTFT always reflects a live network call.
-
-#### Reproducing the framing-gap numbers
-
-`scripts/benchmark-ttft.ts` is a standalone rig that measures both the wire-level proxy and the canonical (content-delta) TTFT on the same stream and reports per-endpoint percentiles. Run:
-
-```bash
-OPENAI_API_KEY=... npx tsx scripts/benchmark-ttft.ts 20
-```
-
-to collect 20 samples per endpoint and print p50/p90/max for each metric.
-
-##### Reference data (n=15 per endpoint, 2026-04-20)
-
-Collected on a residential network, single machine. Raw percentiles from one real run of the benchmark script:
-
-| Endpoint                   | wire TTFT p50 | content TTFT p50 | wire→content gap (mean / p50 / p90 / max) | chars/sec p50 |
-| -------------------------- | ------------- | ---------------- | ----------------------------------------- | ------------- |
-| `chat / gpt-4o-mini`       | 313 ms        | 344 ms           | 26 / 23 / 49 / 68 ms                      | 376           |
-| `chat / gpt-4o`            | 501 ms        | 514 ms           | 20 / 3 / 64 / 123 ms                      | 336           |
-| `responses / gpt-5.4-mini` | 299 ms        | 468 ms           | **186** / 166 / 220 / 397 ms              | 484           |
-| `responses / gpt-5.4`      | 315 ms        | 517 ms           | **208** / 193 / 285 / 308 ms              | 238           |
-
-Key observation: the Responses API emits a burst of metadata events (`response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`) before the first `response.output_text.delta`, so the wire-level proxy reports ~200 ms earlier than canonical TTFT on that endpoint. Use `streamFormat: openai-responses` there. The Chat Completions API emits a single `role` framing frame, so the gap is an order of magnitude smaller (~20 ms).
-
-Your numbers will differ by network. Rerun the benchmark from your target environment if you want absolute SLA thresholds.
 
 #### Use Cases
 

@@ -5,7 +5,6 @@ import {
   firstNonWhitespaceByteDetector,
   MIN_MEANINGFUL_STREAM_WINDOW_MS,
   processStreamingResponse,
-  STREAM_FORMAT_PATTERNS,
 } from '../../src/util/fetch';
 
 async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
@@ -523,6 +522,11 @@ describe('processStreamingResponse', () => {
         expect(detector(buf)).toBe(true);
       });
 
+      it('fires on valid JSON containing formatting whitespace', () => {
+        const buf = 'data: { "choices": [{ "delta": { "content": "Hi" } }] }\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+
       it('does not fire on tool-call framing (no content field)', () => {
         const buf =
           'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"x"}}]}}]}\n\n';
@@ -544,6 +548,12 @@ describe('processStreamingResponse', () => {
         // "content":"X" token, not any key containing "content".
         const buf =
           'data: {"choices":[{"delta":{"role":"assistant","content_filter_results":{"hate":{"filtered":false}}}}]}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('does not fire on an unrelated top-level content field', () => {
+        const buf =
+          'data: {"choices":[{"delta":{"role":"assistant"}}],"content":"metadata only"}\n\n';
         expect(detector(buf)).toBe(false);
       });
 
@@ -588,6 +598,11 @@ describe('processStreamingResponse', () => {
         expect(detector(buf)).toBe(true);
       });
 
+      it('fires on valid JSON containing formatting whitespace', () => {
+        const buf = 'data: { "type": "response.output_text.delta", "delta": "The" }\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+
       it('does not fire on output_text.done (end-of-stream summary)', () => {
         const buf = 'data: {"type":"response.output_text.done","text":"The final text"}\n\n';
         expect(detector(buf)).toBe(false);
@@ -616,6 +631,12 @@ describe('processStreamingResponse', () => {
         expect(detector(buf)).toBe(true);
       });
 
+      it('fires on valid JSON containing formatting whitespace', () => {
+        const buf =
+          'data: { "type": "content_block_delta", "delta": { "type": "text_delta", "text": "Hello" } }\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+
       it('does not fire on input_json_delta (tool-use streaming, not content)', () => {
         const buf =
           'event: content_block_delta\n' +
@@ -637,6 +658,16 @@ describe('processStreamingResponse', () => {
           'data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"Let me think"}}\n\n';
         expect(detector(buf)).toBe(false);
       });
+    });
+
+    it('ignores unexpected JSON event shapes without throwing', () => {
+      const malformedShape = 'data: null\n\ndata: {"choices":{}}\n\ndata: {"delta":null}\n\n';
+
+      for (const format of ['openai-chat', 'openai-responses', 'anthropic-messages'] as const) {
+        const detector = detectorForStreamFormat(format);
+        expect(() => detector(malformedShape)).not.toThrow();
+        expect(detector(malformedShape)).toBe(false);
+      }
     });
 
     it('closes the framing gap on a mocked OpenAI Chat stream', async () => {
@@ -702,10 +733,45 @@ describe('processStreamingResponse', () => {
       expect(presetTtft).toBeGreaterThan(35);
     });
 
-    it('exports STREAM_FORMAT_PATTERNS as a regex map', () => {
-      expect(STREAM_FORMAT_PATTERNS['openai-chat']).toBeInstanceOf(RegExp);
-      expect(STREAM_FORMAT_PATTERNS['openai-responses']).toBeInstanceOf(RegExp);
-      expect(STREAM_FORMAT_PATTERNS['anthropic-messages']).toBeInstanceOf(RegExp);
+    it('waits for a complete SSE data event when JSON is split across chunks', async () => {
+      vi.useFakeTimers();
+
+      const frames = [
+        'data: {"choices":[{"delta":{"cont',
+        'ent":"Hello"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+      let i = 0;
+      const response = {
+        body: {
+          getReader: () => ({
+            read: vi.fn(async () => {
+              if (i >= frames.length) {
+                return { done: true, value: undefined };
+              }
+              return new Promise((resolve) => {
+                setTimeout(
+                  () =>
+                    resolve({
+                      done: false,
+                      value: new TextEncoder().encode(frames[i++]),
+                    }),
+                  20,
+                );
+              });
+            }),
+            releaseLock: vi.fn(),
+          }),
+        },
+      } as unknown as Response;
+
+      const result = await settlePendingTimers(
+        processStreamingResponse(response, Date.now(), {
+          firstTokenDetector: detectorForStreamFormat('openai-chat'),
+        }),
+      );
+
+      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(35);
     });
   });
 });

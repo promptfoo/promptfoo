@@ -677,8 +677,7 @@ export async function fetchWithRetries(
  * body" — a format-agnostic proxy for TTFT. For SSE streams this fires
  * on the first `data: ...` frame, which often carries framing metadata
  * (e.g. OpenAI's `{"delta":{"role":"assistant"}}`) rather than the first
- * model-generated content token. Empirical measurement against OpenAI
- * gpt-4o-mini shows this framing overhead averages ~17ms (max ~48ms).
+ * model-generated content token.
  *
  * For canonical TTFT as defined in ML benchmarking literature (vLLM,
  * MLPerf, OpenAI performance docs) — "time from request dispatch to the
@@ -689,7 +688,9 @@ export async function fetchWithRetries(
  *   firstTokenDetector: (buf) => /"delta":\s*\{[^}]*"content":"[^"]/.test(buf)
  *
  * `totalStreamTime` is from the first read of the response body to stream
- * close — it excludes the TTFT window.
+ * close. It excludes connection/server time before the first body bytes,
+ * but can include protocol metadata received before a content-token detector
+ * fires.
  *
  * `multiChunkDelivery` is true when the transport delivered more than
  * one network chunk (`ReadableStream.getReader().read()` call). It does
@@ -780,19 +781,63 @@ export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedTe
  */
 export type StreamFormat = 'openai-chat' | 'openai-responses' | 'anthropic-messages';
 
-/**
- * Built-in regex patterns for `StreamFormat`. Each pattern matches the first
- * emission of a non-empty content token in the respective SSE protocol.
- *
- * The patterns are deliberately conservative: they require the `"content"` /
- * `"delta"` / `"text"` field to be followed by at least one non-quote byte,
- * so they do not fire on empty-delta framing events (e.g. Anthropic's
- * `{"type":"content_block_start"}`).
- */
-export const STREAM_FORMAT_PATTERNS: Record<StreamFormat, RegExp> = {
-  'openai-chat': /"delta":\s*\{[^}]*"content":"[^"]/,
-  'openai-responses': /"type":\s*"response\.output_text\.delta"[\s\S]*?"delta":"[^"]/,
-  'anthropic-messages': /"type":\s*"text_delta"[\s\S]*?"text":"[^"]/,
+function parseSseDataEvents(accumulatedText: string): unknown[] {
+  return accumulatedText.split(/\r?\n/).flatMap((line) => {
+    if (!line.startsWith('data:')) {
+      return [];
+    }
+
+    const data = line.slice('data:'.length).trim();
+    if (!data || data === '[DONE]') {
+      return [];
+    }
+
+    try {
+      return [JSON.parse(data) as unknown];
+    } catch {
+      // A chunk may end partway through an SSE event. It will be parsed after
+      // the next read supplies the remaining bytes.
+      return [];
+    }
+  });
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+const STREAM_FORMAT_DETECTORS: Record<StreamFormat, FirstTokenDetector> = {
+  'openai-chat': (accumulatedText) =>
+    parseSseDataEvents(accumulatedText).some((event) => {
+      if (!isRecord(event) || !Array.isArray(event.choices)) {
+        return false;
+      }
+      return event.choices.some(
+        (choice) =>
+          isRecord(choice) && isRecord(choice.delta) && isNonEmptyString(choice.delta.content),
+      );
+    }),
+  'openai-responses': (accumulatedText) =>
+    parseSseDataEvents(accumulatedText).some((event) => {
+      return (
+        isRecord(event) &&
+        event.type === 'response.output_text.delta' &&
+        isNonEmptyString(event.delta)
+      );
+    }),
+  'anthropic-messages': (accumulatedText) =>
+    parseSseDataEvents(accumulatedText).some((event) => {
+      return (
+        isRecord(event) &&
+        isRecord(event.delta) &&
+        event.delta.type === 'text_delta' &&
+        isNonEmptyString(event.delta.text)
+      );
+    }),
 };
 
 /**
@@ -801,8 +846,7 @@ export const STREAM_FORMAT_PATTERNS: Record<StreamFormat, RegExp> = {
  * wire-level default.
  */
 export function detectorForStreamFormat(format: StreamFormat): FirstTokenDetector {
-  const pattern = STREAM_FORMAT_PATTERNS[format];
-  return (accumulatedText) => pattern.test(accumulatedText);
+  return STREAM_FORMAT_DETECTORS[format];
 }
 
 /**
