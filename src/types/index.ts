@@ -130,6 +130,7 @@ export const CommandLineOptionsSchema = z.object({
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
   suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
@@ -1408,6 +1409,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1415,6 +1423,10 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state
