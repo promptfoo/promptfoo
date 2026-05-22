@@ -645,6 +645,17 @@ function createRunEvalState({
   };
 }
 
+/**
+ * Builds the reserved `__eval*` runtime vars exposed to prompt and provider
+ * rendering for a single eval step.
+ *
+ * These vars are intentionally kept OUT of the test's persisted `vars`: they are
+ * positional, per-step identifiers (e.g. `__evalStepId` changes for every repeat
+ * and prompt/provider combination) and pollute stored `EvaluateResult.vars`,
+ * model-graded rubric inputs, and filtered re-runs (where `_`-prefixed keys are
+ * treated as runtime vars and restored onto re-run `test.vars`). Callers merge
+ * them into a throwaway render-vars object via {@link buildRenderVars} instead.
+ */
 function getEvalRuntimeVars({
   evalId,
   promptIndex,
@@ -660,6 +671,26 @@ function getEvalRuntimeVars({
     ...(evalId ? { __evalId: evalId } : {}),
     __evalStepId: `test-${testIndex}-prompt-${promptIndex}-repeat-${repeatIndex}`,
     __repeatIndex: repeatIndex,
+  };
+}
+
+/**
+ * Produces the vars object used for prompt/provider rendering: the persisted
+ * test `vars` overlaid with the reserved `__eval*` runtime vars. The runtime
+ * vars take precedence so a user/test var cannot spoof them, and the result is
+ * a fresh object so the runtime keys never leak back into `baseVars` (which is
+ * persisted on the result and passed to graders).
+ */
+function buildRenderVars(
+  baseVars: Vars,
+  runtimeVars: Pick<RunEvalOptions, 'evalId' | 'repeatIndex'> & {
+    promptIndex: number;
+    testIndex: number;
+  },
+): Vars {
+  return {
+    ...baseVars,
+    ...getEvalRuntimeVars(runtimeVars),
   };
 }
 
@@ -717,24 +748,28 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  renderVars,
+  setupVars,
   test,
   testSuite,
-  vars,
 }: {
   filters: RunEvalOptions['nunjucksFilters'];
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  /** Vars used to render the prompt; includes the reserved `__eval*` runtime vars. */
+  renderVars: Vars;
+  /** Vars persisted on `setup`/`EvaluateResult`; excludes the `__eval*` runtime vars. */
+  setupVars: Vars;
   test: AtomicTestCase;
   testSuite?: TestSuite;
-  vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
     ? [getRedteamInjectVar(test, promptForRender, testSuite)]
     : undefined;
   const renderedPrompt = await renderPrompt(
     promptForRender,
-    vars,
+    renderVars,
     filters,
     provider,
     skipRenderVars,
@@ -746,7 +781,12 @@ async function renderRunEvalPrompt({
     ...(promptForRender.config ?? {}),
     ...(test.options ?? {}),
   };
-  const setup = createRunEvalSetup({ provider, prompt: promptForRender, promptConfig, vars });
+  const setup = createRunEvalSetup({
+    provider,
+    prompt: promptForRender,
+    promptConfig,
+    vars: setupVars,
+  });
   setup.prompt.raw = renderedPrompt;
   return {
     renderedJson: tryParseJson(renderedPrompt),
@@ -1337,15 +1377,16 @@ async function runEvalInternal({
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
-  Object.assign(
-    state.vars,
-    getEvalRuntimeVars({
-      evalId,
-      promptIndex,
-      repeatIndex,
-      testIndex,
-    }),
-  );
+  // Reserved `__eval*` runtime vars are exposed to prompt/provider rendering via
+  // a throwaway `renderVars` object only. They are deliberately kept out of
+  // `state.vars` so they are never persisted on `EvaluateResult.vars`, leaked to
+  // model-graded rubrics, or restored onto re-run `test.vars` by filtered re-runs.
+  const renderVars = buildRenderVars(state.vars, {
+    evalId,
+    promptIndex,
+    repeatIndex,
+    testIndex,
+  });
 
   let setup = state.setup;
   let latencyMs = 0;
@@ -1356,9 +1397,10 @@ async function runEvalInternal({
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      renderVars,
+      setupVars: state.vars,
       test,
       testSuite,
-      vars: state.vars,
     });
     setup = rendered.setup;
 
@@ -1379,7 +1421,7 @@ async function runEvalInternal({
       test,
       testIdx: testIndex,
       testSuite,
-      vars: state.vars,
+      vars: renderVars,
     });
     const { response, traceContext } = providerCall;
     latencyMs = providerCall.latencyMs;

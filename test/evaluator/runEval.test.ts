@@ -97,6 +97,114 @@ describe('runEval', () => {
     );
   });
 
+  it('should not persist eval runtime vars on the result', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalId}} {{__evalStepId}} {{__repeatIndex}} {{topic}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: {
+          topic: 'persisted-topic',
+        },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    const result = results[0];
+    // The reserved `__eval*` runtime vars must not leak into the stored result:
+    // they are positional per-step identifiers that pollute persisted vars and
+    // are restored onto re-run `test.vars` by filtered re-runs.
+    expect(result.vars).not.toHaveProperty('__evalId');
+    expect(result.vars).not.toHaveProperty('__evalStepId');
+    expect(result.vars).not.toHaveProperty('__repeatIndex');
+    // Real, user-provided vars must still be persisted.
+    expect(result.vars).toMatchObject({ topic: 'persisted-topic' });
+    // Sanity check: runtime vars are still available for prompt rendering.
+    expect(result.prompt.raw).toBe('eval-runtime-vars test-3-prompt-4-repeat-2 2 persisted-topic');
+  });
+
+  it('should not persist eval runtime vars on the result for the error path', async () => {
+    const failingProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('failing-provider'),
+      callApi: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: failingProvider,
+      prompt: { raw: '{{topic}}', label: 'test-label' },
+      repeatIndex: 2,
+      test: {
+        vars: {
+          topic: 'persisted-topic',
+        },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    const result = results[0];
+    expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.vars).not.toHaveProperty('__evalId');
+    expect(result.vars).not.toHaveProperty('__evalStepId');
+    expect(result.vars).not.toHaveProperty('__repeatIndex');
+    expect(result.vars).toMatchObject({ topic: 'persisted-topic' });
+  });
+
+  it('should not expose eval runtime vars to model-graded assertions', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: { raw: 'User said: {{topic}}', label: 'test-label' },
+      repeatIndex: 2,
+      test: {
+        vars: {
+          topic: 'persisted-topic',
+        },
+        // The rubric references both a real var and the reserved runtime vars.
+        // Nunjucks renders an undefined var as an empty string, so the runtime
+        // values must be absent from the rendered rubric the grader receives.
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'topic={{topic}} evalId={{__evalId}} stepId={{__evalStepId}}',
+          },
+        ],
+        options: { provider: mockGradingApiProviderPasses },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+      isRedteam: false,
+    });
+
+    expect(results[0].success).toBe(true);
+
+    const gradingCalls = vi.mocked(mockGradingApiProviderPasses.callApi).mock.calls;
+    expect(gradingCalls.length).toBeGreaterThan(0);
+    const renderedGradingPrompt = gradingCalls[0]![0];
+    // Real vars still reach the grader...
+    expect(renderedGradingPrompt).toContain('topic=persisted-topic');
+    // ...but the reserved runtime vars do not.
+    expect(renderedGradingPrompt).toContain('evalId=');
+    expect(renderedGradingPrompt).not.toContain('eval-runtime-vars');
+    expect(renderedGradingPrompt).toContain('stepId=');
+    expect(renderedGradingPrompt).not.toContain('test-3-prompt-4-repeat-2');
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {
