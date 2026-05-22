@@ -536,6 +536,60 @@ describe('Eval', () => {
     expect(new URLSearchParams(nextLocation.search).has('filter')).toBe(false);
   });
 
+  it('does not discard an unrelated hash when filters clear without URL filter state', async () => {
+    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
+
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn();
+    });
+
+    const mockFilters = {
+      values: {},
+      appliedCount: 0,
+    };
+    const previousFilters = {
+      values: {
+        filter1: {
+          id: 'filter1',
+          type: 'text',
+          operator: 'contains',
+          value: 'weather',
+        },
+      },
+      appliedCount: 1,
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    const initialUrl = '/eval/test-eval#section';
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters, previousFilters);
+      });
+    }
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#section');
+  });
+
   it('preserves a details hash while rehydrating filters from the URL', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 

@@ -19,7 +19,11 @@ import './Eval.css';
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
-import { buildEvalUrlWithSearchParams, setEvalDetailsHash } from './utils';
+import {
+  buildEvalUrlWithSearchParams,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+} from './utils';
 
 interface EvalOptions {
   /**
@@ -189,7 +193,7 @@ export default function Eval({ fetchId }: EvalOptions) {
             didClearAppliedFilters &&
             (_searchParams.has('filter') ||
               _searchParams.has('rowId') ||
-              Boolean(window.location.hash))
+              parseEvalOutputPromptHash(window.location.hash) !== null)
           ) {
             replaceSearchParams((params) => {
               params.delete('filter');
