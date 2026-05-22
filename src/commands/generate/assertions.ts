@@ -245,7 +245,7 @@ export function generateAssertionsCommand(
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
     // Enhanced generation options
-    .option('--enhanced', 'Use enhanced generation with coverage analysis and validation')
+    .option('--enhanced', 'Use enhanced assertion generation')
     .option('--coverage', 'Enable coverage analysis to map assertions to requirements')
     .option('--validate', 'Validate assertions against sample outputs')
     .option('--negative-tests', 'Generate negative test assertions (should-not patterns)')

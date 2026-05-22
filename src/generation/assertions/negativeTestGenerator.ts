@@ -187,13 +187,13 @@ function generateExposureCheckCode(criteria: string): string {
   // Criteria may contain specific sensitive terms like "API key", "password", etc.
   const criteriaTerms = criteria
     .toLowerCase()
-    .split(/[,;]/)
+    .split(/[,;\n]/)
     .map((t) => t.trim())
     .filter((t) => t.length > 2);
   const criteriaTermsJson = JSON.stringify(criteriaTerms);
 
   return dedent`
-    // Check for sensitive data exposure: ${criteria}
+    // Check for sensitive data exposure.
     // Note: 'output' is passed as the first argument to JavaScript assertions
     const outputStr = String(output || '');
 

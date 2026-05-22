@@ -39,17 +39,42 @@ import type {
 interface GenerateTestCasesDialogProps {
   open: boolean;
   onClose: () => void;
-  onGenerated: (
-    testCases: Array<{ vars: Record<string, string>; description?: string }>,
-    assertions?: Assertion[],
-  ) => void;
+  onGenerated: (testCases: GeneratedTestCase[], assertions?: Assertion[]) => void;
   prompts: GenerationPrompt[];
   existingTests: TestCase[];
+}
+
+interface GeneratedTestCase {
+  vars: Record<string, string>;
+  description?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // Sensible defaults
 const DEFAULT_NUM_PERSONAS = 5;
 const DEFAULT_TESTS_PER_PERSONA = 3;
+
+function toGeneratedTestCases(dataset?: DatasetGenerationResult): GeneratedTestCase[] {
+  if (!dataset) {
+    return [];
+  }
+
+  const coreTestCases = dataset.testCases.map((vars, idx) => ({
+    vars,
+    description: `Generated Test Case #${idx + 1}`,
+  }));
+  const edgeCases = (dataset.edgeCases || []).map((edgeCase, idx) => ({
+    vars: edgeCase.vars,
+    description: edgeCase.description || `Generated Edge Case #${idx + 1}`,
+    metadata: {
+      edgeCase: true,
+      type: edgeCase.type,
+      description: edgeCase.description,
+    },
+  }));
+
+  return [...coreTestCases, ...edgeCases];
+}
 
 export function GenerateTestCasesDialog({
   open,
@@ -101,22 +126,16 @@ export function GenerateTestCasesDialog({
       onComplete: (generationResult) => {
         const isCombinedResult = 'dataset' in generationResult || 'assertions' in generationResult;
 
-        let testCases: Array<{ vars: Record<string, string>; description?: string }>;
+        let testCases: GeneratedTestCase[];
         let assertions: Assertion[] | undefined;
 
         if (isCombinedResult) {
           const combinedResult = generationResult as TestSuiteGenerationResult;
-          testCases = (combinedResult.dataset?.testCases || []).map((tc, idx) => ({
-            vars: tc,
-            description: `Generated Test Case #${idx + 1}`,
-          }));
+          testCases = toGeneratedTestCases(combinedResult.dataset);
           assertions = combinedResult.assertions?.assertions;
         } else {
           const datasetResult = generationResult as DatasetGenerationResult;
-          testCases = datasetResult.testCases.map((tc, idx) => ({
-            vars: tc,
-            description: `Generated Test Case #${idx + 1}`,
-          }));
+          testCases = toGeneratedTestCases(datasetResult);
         }
 
         onGenerated(testCases, assertions);

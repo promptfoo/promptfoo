@@ -43,6 +43,28 @@ interface DatasetGenerateOptions {
   numAssertions?: string;
 }
 
+type GeneratedConfigTest = {
+  vars: Record<string, string>;
+  metadata?: Record<string, unknown>;
+};
+
+function buildGeneratedConfigTests(
+  testCases: Record<string, string>[],
+  edgeCases: Array<{ vars: Record<string, string>; type: string; description: string }> = [],
+): GeneratedConfigTest[] {
+  return [
+    ...testCases.map((vars) => ({ vars })),
+    ...edgeCases.map((edgeCase) => ({
+      vars: edgeCase.vars,
+      metadata: {
+        edgeCase: true,
+        type: edgeCase.type,
+        description: edgeCase.description,
+      },
+    })),
+  ];
+}
+
 export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
   setupEnv(options.envFile);
   if (!options.cache) {
@@ -90,6 +112,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   const numAssertions = Number.parseInt(options.numAssertions || '3', 10);
 
   let results: Record<string, string>[];
+  let configTests: GeneratedConfigTest[] = [];
   let diversityScore: number | undefined;
   let generatedAssertions: Assertion[] | undefined;
 
@@ -135,7 +158,11 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       },
     });
 
-    results = genResult.dataset?.testCases || [];
+    configTests = buildGeneratedConfigTests(
+      genResult.dataset?.testCases || [],
+      genResult.dataset?.edgeCases,
+    );
+    results = configTests.map((test) => test.vars);
     diversityScore = genResult.dataset?.diversity?.score;
     generatedAssertions = genResult.assertions?.assertions;
 
@@ -179,7 +206,8 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
 
     const genResult = await generateDataset(testSuite.prompts, testSuite.tests || [], datasetOpts);
 
-    results = genResult.testCases;
+    configTests = buildGeneratedConfigTests(genResult.testCases, genResult.edgeCases);
+    results = configTests.map((test) => test.vars);
     diversityScore = genResult.diversity?.score;
 
     // Log enhanced generation details
@@ -197,6 +225,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
       provider: options.provider,
     });
+    configTests = buildGeneratedConfigTests(results);
   }
 
   // Build config addition with test cases and optionally assertions
@@ -204,7 +233,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     tests: Array<{ vars: Record<string, string> }>;
     defaultTest?: { assert: Assertion[] };
   } = {
-    tests: results.map((result) => ({ vars: result })),
+    tests: configTests,
   };
   if (generatedAssertions && generatedAssertions.length > 0) {
     configAddition.defaultTest = { assert: generatedAssertions };
@@ -329,7 +358,7 @@ export function generateDatasetCommand(
     .option('--no-cache', 'Do not read or write results to disk cache', false)
     .option('--env-file, --env-path <path>', 'Path to .env file')
     // Enhanced generation options
-    .option('--enhanced', 'Use enhanced generation with concepts, personas, and diversity')
+    .option('--enhanced', 'Use enhanced persona-based dataset generation')
     .option('--edge-cases', 'Include edge case generation (boundary, format, empty, special chars)')
     .option('--diversity', 'Enable diversity measurement and optimization')
     .option('--diversity-target <number>', 'Target diversity score (0-1)', '0.7')

@@ -36,7 +36,7 @@ promptfoo generate dataset
 
 ### How it works
 
-1. **Concept extraction** - Analyzes prompts to identify topics, entities, and constraints
+1. **Concept extraction** - Optionally analyzes prompts to identify topics, entities, and constraints
 2. **Persona generation** - Creates diverse user personas (demographic, behavioral, role-based)
 3. **Test case synthesis** - Generates test cases for each persona
 4. **Edge cases** - Optionally adds boundary conditions and edge cases
@@ -44,15 +44,15 @@ promptfoo generate dataset
 
 ### Options
 
-| Option                         | Description                                                    |
-| ------------------------------ | -------------------------------------------------------------- |
-| `--numPersonas <n>`            | Number of personas (default: 5)                                |
-| `--numTestCasesPerPersona <n>` | Cases per persona (default: 3)                                 |
-| `--enhanced`                   | Use enhanced generation with concepts, personas, and diversity |
-| `--edge-cases`                 | Include edge case generation                                   |
-| `--diversity`                  | Enable diversity measurement and optimization                  |
-| `--diversity-target <n>`       | Target diversity score 0-1 (default: 0.7)                      |
-| `--iterative`                  | Iteratively fill coverage gaps                                 |
+| Option                         | Description                                   |
+| ------------------------------ | --------------------------------------------- |
+| `--numPersonas <n>`            | Number of personas (default: 5)               |
+| `--numTestCasesPerPersona <n>` | Cases per persona (default: 3)                |
+| `--enhanced`                   | Use enhanced persona-based dataset generation |
+| `--edge-cases`                 | Include edge case generation                  |
+| `--diversity`                  | Enable diversity measurement and optimization |
+| `--diversity-target <n>`       | Target diversity score 0-1 (default: 0.7)     |
+| `--iterative`                  | Iteratively fill coverage gaps                |
 
 :::note
 When using `--edge-cases` or `--diversity`, the `--enhanced` mode is automatically enabled.
@@ -97,14 +97,14 @@ Use `--type` to specify the assertion style:
 
 ### Options
 
-| Option                | Description                                                   |
-| --------------------- | ------------------------------------------------------------- |
-| `--type <type>`       | Assertion type: pi, g-eval, llm-rubric                        |
-| `--numAssertions <n>` | Number of assertions to generate (default: 5)                 |
-| `--enhanced`          | Use enhanced generation with coverage analysis and validation |
-| `--coverage`          | Enable coverage analysis to map assertions to requirements    |
-| `--validate`          | Validate assertions against sample outputs                    |
-| `--negative-tests`    | Generate negative test assertions (should-not patterns)       |
+| Option                | Description                                                |
+| --------------------- | ---------------------------------------------------------- |
+| `--type <type>`       | Assertion type: pi, g-eval, llm-rubric                     |
+| `--numAssertions <n>` | Number of assertions to generate (default: 5)              |
+| `--enhanced`          | Use enhanced assertion generation                          |
+| `--coverage`          | Enable coverage analysis to map assertions to requirements |
+| `--validate`          | Validate assertions against sample outputs                 |
+| `--negative-tests`    | Generate negative test assertions (should-not patterns)    |
 
 ### Coverage analysis
 
@@ -176,12 +176,13 @@ These options work with all generate commands:
 Generated test cases are output as YAML:
 
 ```yaml title="tests.yaml"
-- vars:
-    location: 'Tokyo, Japan'
-- vars:
-    location: 'rural Montana'
-- vars:
-    location: '' # edge case: empty input
+tests:
+  - vars:
+      location: 'Tokyo, Japan'
+  - vars:
+      location: 'rural Montana'
+  - vars:
+      location: '' # edge case: empty input
 ```
 
 When generating assertions, they're added to `defaultTest.assert`:

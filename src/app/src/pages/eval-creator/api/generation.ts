@@ -18,7 +18,7 @@ export interface GenerationPrompt {
 
 // Zod schemas for API response validation
 const GenerateJobResponseSchema = z.object({
-  success: z.boolean(),
+  success: z.boolean().optional(),
   data: z
     .object({
       jobId: z.string(),
@@ -41,7 +41,7 @@ const GenerationJobSchema = z.object({
 });
 
 const JobStatusResponseSchema = z.object({
-  success: z.boolean(),
+  success: z.boolean().optional(),
   data: z
     .object({
       job: GenerationJobSchema,
@@ -479,7 +479,7 @@ export interface CoverageAnalysis {
 
 // Zod schemas for synchronous analysis responses
 const ConceptAnalysisResponseSchema = z.object({
-  success: z.boolean(),
+  success: z.boolean().optional(),
   data: z
     .object({
       concepts: ConceptAnalysisSchema,
@@ -489,7 +489,7 @@ const ConceptAnalysisResponseSchema = z.object({
 });
 
 const DiversityMetricsResponseSchema = z.object({
-  success: z.boolean(),
+  success: z.boolean().optional(),
   data: z
     .object({
       diversity: DiversityMetricsSchema,
@@ -499,7 +499,7 @@ const DiversityMetricsResponseSchema = z.object({
 });
 
 const CoverageAnalysisResponseSchema = z.object({
-  success: z.boolean(),
+  success: z.boolean().optional(),
   data: z
     .object({
       coverage: z.unknown(),

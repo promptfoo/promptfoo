@@ -167,6 +167,33 @@ describe('negativeTestGenerator', () => {
     );
   });
 
+  it('keeps generated exposure criteria as JavaScript data instead of comment source', async () => {
+    mockCallApi.mockResolvedValue({
+      output: {
+        assertions: [
+          {
+            type: 'should-not-expose',
+            metric: 'No token leaks',
+            value: 'session token\nreturn { pass: true }',
+          },
+        ],
+      },
+    });
+
+    const assertions = await generateNegativeTests(['Prompt'], mockProvider, {
+      types: ['should-not-expose'],
+      count: 1,
+    });
+    const generatedCode = String(assertions[0].value);
+
+    expect(generatedCode).toContain(
+      'const criteriaTerms = ["session token","return { pass: true }"];',
+    );
+    expect(generatedCode).not.toContain(
+      '// Check for sensitive data exposure: session token\nreturn { pass: true }',
+    );
+  });
+
   it('creates explicit convenience assertions with default and custom metric names', () => {
     expect(createNotContainsAssertion('classified details')).toEqual({
       type: 'not-contains',

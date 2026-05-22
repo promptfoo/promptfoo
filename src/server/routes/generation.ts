@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import {
   analyzeCoverage,
@@ -17,18 +16,15 @@ import {
   jobEventEmitter,
   listJobs,
 } from '../../generation/shared/jobManager';
-import {
-  AssertionGenerationOptionsSchema,
-  DatasetGenerationOptionsSchema,
-  DiversityOptionsSchema,
-  TestSuiteGenerationOptionsSchema,
-} from '../../generation/types';
 import logger from '../../logger';
+import { GenerationSchemas } from '../../types/api/generation';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { JobEvent } from '../../generation/shared/jobManager';
 import type { GenerationJob, GenerationJobType } from '../../generation/types';
 import type { Assertion, Prompt, TestCase } from '../../types';
+import type { GenerationPromptInput } from '../../types/api/generation';
 
 export const generationRouter = Router();
 
@@ -52,71 +48,6 @@ generationRouter.get('/capabilities', (_req: Request, res: Response): void => {
 });
 
 // =============================================================================
-// Request Validation Schemas
-// =============================================================================
-
-const PromptInputSchema = z.object({
-  raw: z.string(),
-  label: z.string().optional(),
-});
-
-const TestCaseInputSchema = z.object({
-  vars: z.record(z.string(), z.any()).optional(),
-  assert: z.array(z.any()).optional(),
-  description: z.string().optional(),
-});
-
-const DatasetGenerateRequestSchema = z.object({
-  prompts: z.array(PromptInputSchema).min(1),
-  tests: z.array(TestCaseInputSchema).optional().default([]),
-  options: DatasetGenerationOptionsSchema.partial().optional(),
-});
-
-const AssertionsGenerateRequestSchema = z.object({
-  prompts: z.array(PromptInputSchema).min(1),
-  tests: z.array(TestCaseInputSchema).optional().default([]),
-  options: AssertionGenerationOptionsSchema.partial().optional(),
-});
-
-const AnalyzeConceptsRequestSchema = z.object({
-  prompts: z.array(z.string()).min(1),
-  options: z
-    .object({
-      maxTopics: z.number().optional(),
-      maxEntities: z.number().optional(),
-    })
-    .optional(),
-});
-
-const MeasureDiversityRequestSchema = z.object({
-  testCases: z.array(z.record(z.string(), z.string())).min(1),
-  options: DiversityOptionsSchema.partial().optional(),
-});
-
-const AnalyzeCoverageRequestSchema = z.object({
-  prompts: z.array(z.string()).min(1),
-  assertions: z.array(z.any()).min(1),
-});
-
-const ValidateAssertionsRequestSchema = z.object({
-  assertions: z.array(z.any()).min(1),
-  samples: z
-    .array(
-      z.object({
-        output: z.string(),
-        expectedPass: z.boolean(),
-      }),
-    )
-    .min(1),
-});
-
-const TestsGenerateRequestSchema = z.object({
-  prompts: z.array(PromptInputSchema).min(1),
-  tests: z.array(TestCaseInputSchema).optional().default([]),
-  options: TestSuiteGenerationOptionsSchema.partial().optional(),
-});
-
-// =============================================================================
 // Dataset Generation Routes
 // =============================================================================
 
@@ -126,14 +57,10 @@ const TestsGenerateRequestSchema = z.object({
  */
 generationRouter.post('/dataset/generate', (req: Request, res: Response): void => {
   try {
-    const parseResult = DatasetGenerateRequestSchema.safeParse(req.body);
+    const parseResult = GenerationSchemas.DatasetGenerate.Request.safeParse(req.body);
 
     if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
+      replyValidationError(res, parseResult.error);
       return;
     }
 
@@ -143,7 +70,7 @@ generationRouter.post('/dataset/generate', (req: Request, res: Response): void =
     const job = createJob('dataset');
 
     // Start generation in background with jobId for streaming
-    generateDataset(prompts as Prompt[], tests as TestCase[], options || {}, {
+    generateDataset(toPrompts(prompts), tests as TestCase[], options || {}, {
       jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
@@ -157,17 +84,16 @@ generationRouter.post('/dataset/generate', (req: Request, res: Response): void =
     })
       .then((result) => {
         completeJob(job.id, result);
-        logger.info(`Dataset generation job ${job.id} completed`);
+        logger.info('Dataset generation job completed', { jobId: job.id });
       })
       .catch((error) => {
-        failJob(job.id, error);
-        logger.error(`Dataset generation job ${job.id} failed: ${error}`);
+        logger.error('Dataset generation job failed', { jobId: job.id, error });
+        failJob(job.id, 'Dataset generation failed');
       });
 
     res.json({ success: true, data: { jobId: job.id } });
   } catch (error) {
-    logger.error(`Dataset generation request failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
+    sendError(res, 500, 'Failed to start dataset generation', error);
   }
 });
 
@@ -198,14 +124,10 @@ generationRouter.post(
   '/dataset/analyze-concepts',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const parseResult = AnalyzeConceptsRequestSchema.safeParse(req.body);
+      const parseResult = GenerationSchemas.AnalyzeConcepts.Request.safeParse(req.body);
 
       if (!parseResult.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid request body',
-          details: parseResult.error.format(),
-        });
+        replyValidationError(res, parseResult.error);
         return;
       }
 
@@ -213,12 +135,11 @@ generationRouter.post(
       const { getDefaultProviders } = await import('../../providers/defaults');
       const provider = (await getDefaultProviders()).synthesizeProvider;
 
-      const concepts = await extractConcepts(prompts, provider, options);
+      const concepts = await extractConcepts(toPromptStrings(prompts), provider, options);
 
       res.json({ success: true, data: { concepts } });
     } catch (error) {
-      logger.error(`Concept analysis failed: ${error}`);
-      res.status(500).json({ success: false, error: String(error) });
+      sendError(res, 500, 'Failed to analyze concepts', error);
     }
   },
 );
@@ -231,14 +152,10 @@ generationRouter.post(
   '/dataset/measure-diversity',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const parseResult = MeasureDiversityRequestSchema.safeParse(req.body);
+      const parseResult = GenerationSchemas.MeasureDiversity.Request.safeParse(req.body);
 
       if (!parseResult.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid request body',
-          details: parseResult.error.format(),
-        });
+        replyValidationError(res, parseResult.error);
         return;
       }
 
@@ -250,8 +167,7 @@ generationRouter.post(
 
       res.json({ success: true, data: { diversity } });
     } catch (error) {
-      logger.error(`Diversity measurement failed: ${error}`);
-      res.status(500).json({ success: false, error: String(error) });
+      sendError(res, 500, 'Failed to measure diversity', error);
     }
   },
 );
@@ -266,14 +182,10 @@ generationRouter.post(
  */
 generationRouter.post('/assertions/generate', (req: Request, res: Response): void => {
   try {
-    const parseResult = AssertionsGenerateRequestSchema.safeParse(req.body);
+    const parseResult = GenerationSchemas.AssertionGenerate.Request.safeParse(req.body);
 
     if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
+      replyValidationError(res, parseResult.error);
       return;
     }
 
@@ -283,7 +195,7 @@ generationRouter.post('/assertions/generate', (req: Request, res: Response): voi
     const job = createJob('assertions');
 
     // Start generation in background with jobId for streaming
-    generateAssertions(prompts as Prompt[], tests as TestCase[], options || {}, {
+    generateAssertions(toPrompts(prompts), tests as TestCase[], options || {}, {
       jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
@@ -297,17 +209,16 @@ generationRouter.post('/assertions/generate', (req: Request, res: Response): voi
     })
       .then((result) => {
         completeJob(job.id, result);
-        logger.info(`Assertion generation job ${job.id} completed`);
+        logger.info('Assertion generation job completed', { jobId: job.id });
       })
       .catch((error) => {
-        failJob(job.id, error);
-        logger.error(`Assertion generation job ${job.id} failed: ${error}`);
+        logger.error('Assertion generation job failed', { jobId: job.id, error });
+        failJob(job.id, 'Assertion generation failed');
       });
 
     res.json({ success: true, data: { jobId: job.id } });
   } catch (error) {
-    logger.error(`Assertion generation request failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
+    sendError(res, 500, 'Failed to start assertion generation', error);
   }
 });
 
@@ -338,14 +249,10 @@ generationRouter.post(
   '/assertions/analyze-coverage',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const parseResult = AnalyzeCoverageRequestSchema.safeParse(req.body);
+      const parseResult = GenerationSchemas.AnalyzeCoverage.Request.safeParse(req.body);
 
       if (!parseResult.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid request body',
-          details: parseResult.error.format(),
-        });
+        replyValidationError(res, parseResult.error);
         return;
       }
 
@@ -353,13 +260,12 @@ generationRouter.post(
       const { getDefaultProviders } = await import('../../providers/defaults');
       const provider = (await getDefaultProviders()).synthesizeProvider;
 
-      const requirements = await extractRequirements(prompts, provider);
+      const requirements = await extractRequirements(toPromptStrings(prompts), provider);
       const coverage = await analyzeCoverage(requirements, assertions as Assertion[]);
 
       res.json({ success: true, data: { coverage } });
     } catch (error) {
-      logger.error(`Coverage analysis failed: ${error}`);
-      res.status(500).json({ success: false, error: String(error) });
+      sendError(res, 500, 'Failed to analyze assertion coverage', error);
     }
   },
 );
@@ -372,14 +278,10 @@ generationRouter.post(
   '/assertions/validate',
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const parseResult = ValidateAssertionsRequestSchema.safeParse(req.body);
+      const parseResult = GenerationSchemas.ValidateAssertions.Request.safeParse(req.body);
 
       if (!parseResult.success) {
-        res.status(400).json({
-          success: false,
-          error: 'Invalid request body',
-          details: parseResult.error.format(),
-        });
+        replyValidationError(res, parseResult.error);
         return;
       }
 
@@ -391,8 +293,7 @@ generationRouter.post(
 
       res.json({ success: true, data: { validation } });
     } catch (error) {
-      logger.error(`Assertion validation failed: ${error}`);
-      res.status(500).json({ success: false, error: String(error) });
+      sendError(res, 500, 'Failed to validate assertions', error);
     }
   },
 );
@@ -407,14 +308,10 @@ generationRouter.post(
  */
 generationRouter.post('/tests/generate', (req: Request, res: Response): void => {
   try {
-    const parseResult = TestsGenerateRequestSchema.safeParse(req.body);
+    const parseResult = GenerationSchemas.TestsGenerate.Request.safeParse(req.body);
 
     if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid request body',
-        details: parseResult.error.format(),
-      });
+      replyValidationError(res, parseResult.error);
       return;
     }
 
@@ -424,7 +321,7 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
     const job = createJob('combined');
 
     // Start generation in background
-    generateTestSuite(prompts as Prompt[], tests as TestCase[], options || {}, {
+    generateTestSuite(toPrompts(prompts), tests as TestCase[], options || {}, {
       jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
@@ -438,17 +335,16 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
     })
       .then((result) => {
         completeJob(job.id, result);
-        logger.info(`Test suite generation job ${job.id} completed`);
+        logger.info('Test suite generation job completed', { jobId: job.id });
       })
       .catch((error) => {
-        failJob(job.id, error);
-        logger.error(`Test suite generation job ${job.id} failed: ${error}`);
+        logger.error('Test suite generation job failed', { jobId: job.id, error });
+        failJob(job.id, 'Test suite generation failed');
       });
 
     res.json({ success: true, data: { jobId: job.id } });
   } catch (error) {
-    logger.error(`Test suite generation request failed: ${error}`);
-    res.status(500).json({ success: false, error: String(error) });
+    sendError(res, 500, 'Failed to start test suite generation', error);
   }
 });
 
@@ -595,6 +491,22 @@ generationRouter.get('/stream/:jobId', (req: Request, res: Response): void => {
 // =============================================================================
 // Helper Functions
 // =============================================================================
+
+function toPrompt(prompt: GenerationPromptInput): Prompt {
+  if (typeof prompt === 'string') {
+    return { raw: prompt, label: prompt };
+  }
+
+  return { raw: prompt.raw, label: prompt.label || prompt.raw };
+}
+
+function toPrompts(prompts: GenerationPromptInput[]): Prompt[] {
+  return prompts.map(toPrompt);
+}
+
+function toPromptStrings(prompts: GenerationPromptInput[]): string[] {
+  return prompts.map((prompt) => (typeof prompt === 'string' ? prompt : prompt.raw));
+}
 
 /**
  * Formats a job for API response.

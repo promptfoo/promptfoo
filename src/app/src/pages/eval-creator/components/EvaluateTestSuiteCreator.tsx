@@ -164,7 +164,7 @@ const EvaluateTestSuiteCreator = () => {
     }
 
     // Single prompt-like object
-    if (typeof prompts === 'object' && prompts !== null && 'raw' in prompts) {
+    if (prompts && typeof prompts === 'object' && 'raw' in prompts) {
       const raw = (prompts as { raw: string }).raw;
       const label = (prompts as { label?: string }).label;
       return [toGenerationPrompt(raw, label)];

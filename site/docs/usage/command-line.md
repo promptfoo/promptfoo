@@ -795,21 +795,21 @@ Display debug information for troubleshooting.
 
 BETA: Generate synthetic test cases based on existing prompts and variables.
 
-| Option                              | Description                                                    | Default              |
-| ----------------------------------- | -------------------------------------------------------------- | -------------------- |
-| `-c, --config <path>`               | Path to the configuration file                                 | promptfooconfig.yaml |
-| `-w, --write`                       | Write the generated test cases directly to the config file     | false                |
-| `-i, --instructions <text>`         | Custom instructions for test case generation                   |                      |
-| `-o, --output <path>`               | Path to write the generated test cases                         | stdout               |
-| `--numPersonas <number>`            | Number of personas to generate                                 | 5                    |
-| `--numTestCasesPerPersona <number>` | Number of test cases per persona                               | 3                    |
-| `--provider <provider>`             | Provider to use for generating test cases                      | default grader       |
-| `--no-cache`                        | Do not read or write results to disk cache                     | false                |
-| `--enhanced`                        | Use enhanced generation with concepts, personas, and diversity | false                |
-| `--edge-cases`                      | Include edge case generation                                   | false                |
-| `--diversity`                       | Enable diversity measurement and optimization                  | false                |
-| `--diversity-target <number>`       | Target diversity score (0-1)                                   | 0.7                  |
-| `--iterative`                       | Iteratively fill coverage gaps                                 | false                |
+| Option                              | Description                                                | Default              |
+| ----------------------------------- | ---------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`               | Path to the configuration file                             | promptfooconfig.yaml |
+| `-w, --write`                       | Write the generated test cases directly to the config file | false                |
+| `-i, --instructions <text>`         | Custom instructions for test case generation               |                      |
+| `-o, --output <path>`               | Path to write the generated test cases                     | stdout               |
+| `--numPersonas <number>`            | Number of personas to generate                             | 5                    |
+| `--numTestCasesPerPersona <number>` | Number of test cases per persona                           | 3                    |
+| `--provider <provider>`             | Provider to use for generating test cases                  | default grader       |
+| `--no-cache`                        | Do not read or write results to disk cache                 | false                |
+| `--enhanced`                        | Use enhanced persona-based dataset generation              | false                |
+| `--edge-cases`                      | Include edge case generation                               | false                |
+| `--diversity`                       | Enable diversity measurement and optimization              | false                |
+| `--diversity-target <number>`       | Target diversity score (0-1)                               | 0.7                  |
+| `--iterative`                       | Iteratively fill coverage gaps                             | false                |
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -846,7 +846,7 @@ When brainstorming assertions:
 | `--numAssertions <number>`  | Number of assertions to generate                                | 5                    |
 | `--provider <provider>`     | Provider to use for generating assertions                       | default grader       |
 | `--no-cache`                | Do not read or write results to disk cache                      | false                |
-| `--enhanced`                | Use enhanced generation with coverage analysis and validation   | false                |
+| `--enhanced`                | Use enhanced assertion generation                               | false                |
 | `--coverage`                | Enable coverage analysis to map assertions to requirements      | false                |
 | `--validate`                | Validate assertions against sample outputs                      | false                |
 | `--negative-tests`          | Generate negative test assertions (should-not patterns)         | false                |

@@ -254,13 +254,18 @@ const TestCasesSection = ({ varsList, prompts = [], onOpenYamlEditor }: TestCase
   };
 
   const handleGeneratedTestCases = (
-    generatedTestCases: Array<{ vars: Record<string, string>; description?: string }>,
+    generatedTestCases: Array<{
+      vars: Record<string, string>;
+      description?: string;
+      metadata?: Record<string, unknown>;
+    }>,
     assertions?: Assertion[],
   ) => {
     // Convert to TestCase format and add to existing test cases
     const newTestCases: TestCase[] = generatedTestCases.map((tc, idx) => ({
       description: tc.description || `Generated Test Case #${testCases.length + idx + 1}`,
       vars: tc.vars,
+      ...(tc.metadata ? { metadata: tc.metadata } : {}),
     }));
     setTestCases([...testCases, ...newTestCases]);
 

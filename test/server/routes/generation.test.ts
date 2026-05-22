@@ -296,12 +296,15 @@ describe('generation routes', () => {
       .get(`/api/generation/dataset/job/${dataset.body.data.jobId}`)
       .expect(200)
       .expect((response) => {
-        expect(response.body.data.job.status).toBe('error');
+        expect(response.body.data.job).toMatchObject({
+          status: 'error',
+          error: 'Dataset generation failed',
+        });
       });
     await api
       .post('/api/generation/dataset/analyze-concepts')
       .send({ prompts: ['Prompt'] })
-      .expect(500);
+      .expect(500, { error: 'Failed to analyze concepts' });
   });
 
   it('covers assertion and combined route failures plus synchronous starter exceptions', async () => {
@@ -324,13 +327,19 @@ describe('generation routes', () => {
       .get(`/api/generation/assertions/job/${assertions.body.data.jobId}`)
       .expect(200)
       .expect((response) => {
-        expect(response.body.data.job.status).toBe('error');
+        expect(response.body.data.job).toMatchObject({
+          status: 'error',
+          error: 'Assertion generation failed',
+        });
       });
     await api
       .get(`/api/generation/tests/job/${combined.body.data.jobId}`)
       .expect(200)
       .expect((response) => {
-        expect(response.body.data.job.status).toBe('error');
+        expect(response.body.data.job).toMatchObject({
+          status: 'error',
+          error: 'Test suite generation failed',
+        });
       });
 
     vi.mocked(generateDataset).mockImplementationOnce(() => {
@@ -346,15 +355,15 @@ describe('generation routes', () => {
     await api
       .post('/api/generation/dataset/generate')
       .send({ prompts: [{ raw: 'Prompt' }] })
-      .expect(500);
+      .expect(500, { error: 'Failed to start dataset generation' });
     await api
       .post('/api/generation/assertions/generate')
       .send({ prompts: [{ raw: 'Prompt' }] })
-      .expect(500);
+      .expect(500, { error: 'Failed to start assertion generation' });
     await api
       .post('/api/generation/tests/generate')
       .send({ prompts: [{ raw: 'Prompt' }] })
-      .expect(500);
+      .expect(500, { error: 'Failed to start test suite generation' });
 
     vi.mocked(analyzeCoverage).mockRejectedValueOnce(new Error('coverage failed'));
     vi.mocked(validateAssertions).mockRejectedValueOnce(new Error('validation failed'));
@@ -362,14 +371,14 @@ describe('generation routes', () => {
     await api
       .post('/api/generation/assertions/analyze-coverage')
       .send({ prompts: ['Prompt'], assertions: [{ type: 'contains', value: 'JSON' }] })
-      .expect(500);
+      .expect(500, { error: 'Failed to analyze assertion coverage' });
     await api
       .post('/api/generation/assertions/validate')
       .send({
         assertions: [{ type: 'contains', value: 'JSON' }],
         samples: [{ output: 'JSON', expectedPass: true }],
       })
-      .expect(500);
+      .expect(500, { error: 'Failed to validate assertions' });
   });
 
   it('streams missing, completed, failed, and live generation jobs', async () => {

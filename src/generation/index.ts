@@ -48,6 +48,12 @@ import type {
 
 export type {
   AssertionGenerateRequest,
+  DatasetGenerateRequest,
+  GenerationPromptInput as PromptInput,
+  GenerationTestCaseInput as TestCaseInput,
+  TestsGenerateRequest,
+} from '../types/api/generation';
+export type {
   // Assertion types
   AssertionGenerationOptions,
   AssertionGenerationResult,
@@ -56,7 +62,6 @@ export type {
   ConceptAnalysis,
   ConceptExtractionOptions,
   CoverageAnalysis,
-  DatasetGenerateRequest,
   DatasetGenerationOptions,
   DatasetGenerationResult,
   DiversityMetrics,
@@ -75,16 +80,12 @@ export type {
   // Callback types
   ProgressCallback,
   ProgressReporterOptions,
-  // API request types
-  PromptInput,
   Requirement,
   RequirementCoverage,
   SampleOutput,
-  TestCaseInput,
   // Combined types
   TestSuiteGenerationOptions,
   TestSuiteGenerationResult,
-  TestsGenerateRequest,
   VariableConstraints,
 } from './types';
 

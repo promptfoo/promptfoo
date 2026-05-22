@@ -209,6 +209,13 @@ describe('GenerateTestCasesDialog', () => {
       completeJob?.({
         dataset: {
           testCases: [{ city: 'Paris' }, { city: 'Berlin' }],
+          edgeCases: [
+            {
+              vars: { city: 'Edge City' },
+              type: 'boundary',
+              description: 'Generated boundary city',
+            },
+          ],
           metadata: { totalGenerated: 2, durationMs: 1, provider: 'dataset' },
         },
         assertions: {
@@ -223,12 +230,55 @@ describe('GenerateTestCasesDialog', () => {
       [
         { vars: { city: 'Paris' }, description: 'Generated Test Case #1' },
         { vars: { city: 'Berlin' }, description: 'Generated Test Case #2' },
+        {
+          vars: { city: 'Edge City' },
+          description: 'Generated boundary city',
+          metadata: {
+            edgeCase: true,
+            type: 'boundary',
+            description: 'Generated boundary city',
+          },
+        },
       ],
       [{ type: 'contains', value: 'city' }],
     );
     expect(mockDisconnectStream).toHaveBeenCalledTimes(1);
     expect(mockReset).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps completed dataset-only edge cases before closing', () => {
+    renderDialog();
+
+    act(() => {
+      completeJob?.({
+        testCases: [{ city: 'Paris' }],
+        edgeCases: [
+          {
+            vars: { city: '' },
+            type: 'empty',
+            description: 'Generated empty city',
+          },
+        ],
+        metadata: { totalGenerated: 2, durationMs: 1, provider: 'dataset' },
+      } as GenerationResult);
+    });
+
+    expect(onGenerated).toHaveBeenCalledWith(
+      [
+        { vars: { city: 'Paris' }, description: 'Generated Test Case #1' },
+        {
+          vars: { city: '' },
+          description: 'Generated empty city',
+          metadata: {
+            edgeCase: true,
+            type: 'empty',
+            description: 'Generated empty city',
+          },
+        },
+      ],
+      undefined,
+    );
   });
 
   it('renders progress, connects the live stream, and cancels cleanly', async () => {
