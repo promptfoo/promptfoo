@@ -1,6 +1,6 @@
 ---
 title: Evaluating Image Generation
-description: How to evaluate and compare LLM-generated images using promptfoo with vision-capable graders
+description: Evaluate and compare model-generated images with Promptfoo using vision-capable graders, inline media data URIs, and rubric prompts for repeatable image evals.
 sidebar_label: Image Generation Evaluation
 sidebar_position: 7
 ---
@@ -85,7 +85,9 @@ The `rubricPrompt` must use [OpenAI chat format](/docs/configuration/chat) with 
 The rubric prompt is rendered with [Nunjucks](/docs/configuration/parameters), so all standard template features work.
 
 :::note
+
 Image grading works with single-image outputs (the default). If your provider config sets `n > 1`, the output will contain multiple images and cannot be used directly in a single `image_url` block.
+
 :::
 
 ## Non-OpenAI Providers

@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto';
 
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
-import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
+import { extractAndStoreBinaryData } from '../../blobs/extractor';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
@@ -600,16 +599,13 @@ export interface BaseRedteamResponse {
 }
 
 /**
- * Externalize large blob payloads in provider responses before they are copied into
- * redteam conversation/history (prevents meta prompts from exploding with base64).
+ * Normalize or externalize media payloads in provider responses before they are
+ * copied into redteam conversation/history.
  */
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
   context?: { evalId?: string; testIdx?: number; promptIdx?: number },
 ): Promise<T> {
-  if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
-    return response;
-  }
   const blobbed = await extractAndStoreBinaryData(response, context);
   return (blobbed as T) || response;
 }

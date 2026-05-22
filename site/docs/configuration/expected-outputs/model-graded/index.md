@@ -445,7 +445,7 @@ tests:
         value: The image shows a cat wearing a top hat
 ```
 
-See the [image evaluation guide](/docs/guides/image-evaluation) for a complete walkthrough with provider comparison examples.
+See the [image eval guide](/docs/guides/image-evaluation) for a complete walkthrough with provider comparison examples.
 
 #### select-best rubric prompt
 

@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
@@ -396,13 +396,11 @@ export default class EvalResult {
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
-      const processedResponse = isBlobStorageEnabled()
-        ? await extractAndStoreBinaryData(result.response, {
-            evalId,
-            testIdx: result.testIdx,
-            promptIdx: result.promptIdx,
-          })
-        : result.response;
+      const processedResponse = await extractAndStoreBinaryData(result.response, {
+        evalId,
+        testIdx: result.testIdx,
+        promptIdx: result.promptIdx,
+      });
       processedResults.push({ ...result, response: processedResponse ?? undefined });
     }
 

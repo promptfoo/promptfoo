@@ -1077,6 +1077,33 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('createManyFromEvaluateResult', () => {
+    it('normalizes inline b64_json image responses before bulk persistence', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
+      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+
+      try {
+        const results = await EvalResult.createManyFromEvaluateResult(
+          [
+            {
+              ...mockEvaluateResult,
+              response: {
+                output: JSON.stringify({ data: [{ b64_json: pngBase64 }] }),
+                isBase64: true,
+                format: 'json',
+              },
+            },
+          ],
+          'test-bulk-inline-image-result',
+        );
+
+        expect(results[0].response?.output).toBe(`data:image/png;base64,${pngBase64}`);
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
+
   describe('getCompletedIndexPairs', () => {
     it('should return all completed pairs by default', async () => {
       const evalId = 'test-completed-pairs-all';

@@ -9,6 +9,7 @@ import {
   BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
   buildGraderResultAssertion,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
@@ -983,6 +984,25 @@ describe('shared redteam provider utilities', () => {
 
     it('returns an empty string for empty history', () => {
       expect(formatRedteamHistoryAsTranscript([])).toBe('');
+    });
+  });
+
+  describe('externalizeResponseForRedteamHistory', () => {
+    it('normalizes inline b64_json image responses when blob storage is disabled', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'true' });
+      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+
+      try {
+        const response = await externalizeResponseForRedteamHistory({
+          output: JSON.stringify({ data: [{ b64_json: pngBase64 }] }),
+          isBase64: true,
+          format: 'json',
+        });
+
+        expect(response.output).toBe(`data:image/png;base64,${pngBase64}`);
+      } finally {
+        restoreEnv();
+      }
     });
   });
 

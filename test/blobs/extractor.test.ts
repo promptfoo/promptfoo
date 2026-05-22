@@ -443,6 +443,29 @@ describe('Cloud blob upload', () => {
     expect(result?.images?.[1].blobRef?.hash).toBe('existing');
   });
 
+  it('should preserve b64_json output when only some images can be stored', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largePngBase64 = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(2000),
+    ]).toString('base64');
+    const tinyPngBase64 = 'iVBORw0KGgo=';
+    const output = JSON.stringify({
+      data: [{ b64_json: largePngBase64 }, { b64_json: tinyPngBase64 }],
+    });
+    const response: ProviderResponse = {
+      output,
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.output).toBe(output);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+  });
+
   it('should record blob references embedded in output text', async () => {
     const blobIndexModule = await import('../../src/blobs/index');
     const mockRecordBlobReference = vi.mocked(blobIndexModule.recordBlobReference);

@@ -406,7 +406,8 @@ async function externalizeMetadataAudio(
  * @internal Exported for testing
  */
 export function detectImageMimeType(b64: string): string {
-  const buffer = Buffer.from(b64.trim(), 'base64');
+  // The longest signature below needs 12 decoded bytes.
+  const buffer = Buffer.from(b64.trim().slice(0, 16), 'base64');
 
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'image/jpeg';
@@ -433,12 +434,10 @@ export function detectImageMimeType(b64: string): string {
   return 'image/png';
 }
 
-function extractB64Items(
-  data: Array<Record<string, unknown>>,
-): Array<{ item: Record<string, unknown>; b64: string }> {
-  return data
-    .filter((item) => item?.b64_json && typeof item.b64_json === 'string')
-    .map((item) => ({ item, b64: item.b64_json as string }));
+function extractB64Items(data: Array<Record<string, unknown>>): string[] {
+  return data.flatMap((item) =>
+    item?.b64_json && typeof item.b64_json === 'string' ? [item.b64_json] : [],
+  );
 }
 
 function setOutputFromUris(next: ProviderResponse, uris: string[]): void {
@@ -465,7 +464,7 @@ async function handleB64JsonOutput(
     }
 
     if (!isBlobStorageEnabled()) {
-      const dataUris = b64Items.map(({ b64 }) => `data:${detectImageMimeType(b64)};base64,${b64}`);
+      const dataUris = b64Items.map((b64) => `data:${detectImageMimeType(b64)};base64,${b64}`);
       setOutputFromUris(next, dataUris);
       logger.debug('[BlobExtractor] Converted b64_json to inline data URI', {
         ...context,
@@ -475,31 +474,34 @@ async function handleB64JsonOutput(
     }
 
     const storedUris: string[] = [];
-    for (const { item, b64 } of b64Items) {
+    for (const b64 of b64Items) {
       const stored = await storeOnce(
         b64,
         detectImageMimeType(b64),
         'response.output.data[].b64_json',
         'image',
       );
-      if (stored) {
-        item.b64_json = stored.uri;
-        storedUris.push(stored.uri);
-        logger.debug('[BlobExtractor] Stored image blob from b64_json', {
+      if (!stored) {
+        logger.debug('[BlobExtractor] Preserving b64_json output after partial blob storage', {
           ...context,
-          hash: stored.hash,
+          storedCount: storedUris.length,
+          totalCount: b64Items.length,
         });
+        return false;
       }
+      storedUris.push(stored.uri);
+      logger.debug('[BlobExtractor] Stored image blob from b64_json', {
+        ...context,
+        hash: stored.hash,
+      });
     }
-    if (storedUris.length > 0) {
-      setOutputFromUris(next, storedUris);
-      next.metadata = {
-        ...(response.metadata || {}),
-        blobUris: storedUris,
-        originalFormat: response.format,
-      };
-      return true;
-    }
+    setOutputFromUris(next, storedUris);
+    next.metadata = {
+      ...(response.metadata || {}),
+      blobUris: storedUris,
+      originalFormat: response.format,
+    };
+    return true;
   } catch (err) {
     logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
       error: err instanceof Error ? err.message : String(err),
@@ -507,6 +509,18 @@ async function handleB64JsonOutput(
     });
   }
   return false;
+}
+
+function hasB64JsonOutput(
+  response: ProviderResponse,
+): response is ProviderResponse & { output: string } {
+  return (
+    typeof response.output === 'string' &&
+    response.output.trim().startsWith('{') &&
+    ((response.isBase64 && response.format === 'json') ||
+      response.output.includes('"b64_json"') ||
+      response.output.includes('b64_json'))
+  );
 }
 
 /**
@@ -637,13 +651,7 @@ export async function extractAndStoreBinaryData(
 
   // OpenAI (and similar) image responses often arrive as JSON strings with b64_json fields.
   // Try to parse and externalize b64_json when it looks like an image payload.
-  if (
-    typeof response.output === 'string' &&
-    response.output.trim().startsWith('{') &&
-    ((response.isBase64 && response.format === 'json') ||
-      response.output.includes('"b64_json"') ||
-      response.output.includes('b64_json'))
-  ) {
+  if (hasB64JsonOutput(response)) {
     const b64Result = await handleB64JsonOutput(response, next, storeOnce, context);
     if (b64Result) {
       mutated = true;
