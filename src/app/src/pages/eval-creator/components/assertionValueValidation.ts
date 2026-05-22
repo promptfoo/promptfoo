@@ -310,6 +310,9 @@ function getRequiredStringValueError(assertion: Assertion): string | undefined {
   if (PI_SCORE_ASSERTION_TYPES.has(assertion.type)) {
     return 'Enter criteria for Pi Labs scoring.';
   }
+  if (assertion.type === 'context-recall' || assertion.type === 'not-context-recall') {
+    return 'Enter the ground truth answer for context recall.';
+  }
   if (assertion.type === 'factuality' || assertion.type === 'not-factuality') {
     return 'Enter the factual reference statement.';
   }

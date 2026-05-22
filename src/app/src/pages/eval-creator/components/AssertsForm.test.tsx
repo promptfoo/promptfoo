@@ -197,6 +197,25 @@ describe('AssertsForm', () => {
     expect(criteria.parentElement?.nextElementSibling).toHaveTextContent(
       'Enter at least one grading criterion for G-Eval.',
     );
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+    ).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('associates rubric score threshold errors only with the threshold input', () => {
+    initialValues = [{ type: 'llm-rubric', threshold: 1.1 }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByRole('textbox', { name: 'Rubric criteria (optional)' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+    ).toHaveAccessibleDescription(/Enter a score threshold from 0 to 1/i);
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+    ).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('preserves imported multi-criterion G-Eval configurations until explicitly replaced', async () => {
@@ -417,6 +436,20 @@ describe('AssertsForm', () => {
     ]);
   });
 
+  it('associates missing text-score references only with the required input', () => {
+    initialValues = [{ type: 'bleu', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByRole('textbox', { name: 'Reference answer (required)' })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    expect(screen.getByRole('spinbutton', { name: 'Score threshold (optional)' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+  });
+
   it('explains the different default threshold for ROUGE-N coverage scoring', () => {
     initialValues = [{ type: 'rouge-n', value: 'Required summary facts' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
@@ -459,6 +492,9 @@ describe('AssertsForm', () => {
     expect(criteria).toHaveAccessibleDescription(
       /Enter criteria for Pi Labs scoring.*Pi Labs receives the prompt and generated output/i,
     );
+    expect(
+      screen.getByRole('spinbutton', { name: 'Passing score threshold (optional)' }),
+    ).toHaveAttribute('aria-invalid', 'false');
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
 
     await user.type(criteria, 'Is the response accurate and concise?');
@@ -502,7 +538,12 @@ describe('AssertsForm', () => {
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
     const groundTruth = screen.getByRole('textbox', { name: 'Ground truth answer (required)' });
-    expect(groundTruth).toHaveAccessibleDescription(/Provide retrieved context.*prompt content/i);
+    expect(groundTruth).toHaveAccessibleDescription(
+      /Enter the ground truth answer for context recall.*Provide retrieved context.*prompt content/i,
+    );
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+    ).toHaveAttribute('aria-invalid', 'false');
     await user.type(groundTruth, 'Paris is the capital of France.');
     await user.type(
       screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),

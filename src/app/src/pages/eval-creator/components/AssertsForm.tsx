@@ -709,7 +709,10 @@ const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueF
       : 'BLEU rewards precision against the reference answer.';
   const helpId = `assert-text-score-help-${index}`;
   const errorId = `assert-value-error-${index}`;
-  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+  const thresholdError = error === 'Enter a score threshold from 0 to 1.' ? error : undefined;
+  const referenceError = thresholdError ? undefined : error;
+  const referenceDescriptionIds = referenceError ? `${errorId} ${helpId}` : helpId;
+  const thresholdDescriptionIds = thresholdError ? `${errorId} ${helpId}` : helpId;
 
   return (
     <div className="space-y-3">
@@ -722,11 +725,16 @@ const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueF
           value={formatAssertionValue(assertion)}
           onChange={(event) => onChange({ ...assertion, value: event.target.value })}
           placeholder="Enter an expected response to compare against..."
-          aria-invalid={Boolean(error)}
-          aria-describedby={descriptionIds}
+          aria-invalid={Boolean(referenceError)}
+          aria-describedby={referenceDescriptionIds}
           className="min-h-20 resize-y"
         />
       </div>
+      {referenceError && (
+        <HelperText id={errorId} error>
+          {referenceError}
+        </HelperText>
+      )}
       <div className="space-y-2">
         <Label htmlFor={`assert-text-score-threshold-${index}`} className="text-sm font-medium">
           Score threshold (optional)
@@ -741,13 +749,13 @@ const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueF
           onChange={(event) =>
             onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
           }
-          aria-invalid={Boolean(error)}
-          aria-describedby={descriptionIds}
+          aria-invalid={Boolean(thresholdError)}
+          aria-describedby={thresholdDescriptionIds}
         />
       </div>
-      {error && (
+      {thresholdError && (
         <HelperText id={errorId} error>
-          {error}
+          {thresholdError}
         </HelperText>
       )}
       <p id={helpId} className="text-xs text-muted-foreground">
@@ -761,7 +769,10 @@ const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueF
 const PiScoreField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
   const helpId = `assert-pi-score-help-${index}`;
   const errorId = `assert-value-error-${index}`;
-  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+  const criteriaError = error === 'Enter criteria for Pi Labs scoring.' ? error : undefined;
+  const thresholdError = criteriaError ? undefined : error;
+  const criteriaDescriptionIds = criteriaError ? `${errorId} ${helpId}` : helpId;
+  const thresholdDescriptionIds = thresholdError ? `${errorId} ${helpId}` : helpId;
 
   return (
     <div className="space-y-3">
@@ -774,11 +785,16 @@ const PiScoreField = ({ assertion, error, index, onChange }: SpecializedValueFie
           value={formatAssertionValue(assertion)}
           onChange={(event) => onChange({ ...assertion, value: event.target.value })}
           placeholder="Is the response accurate and concise?"
-          aria-invalid={Boolean(error)}
-          aria-describedby={descriptionIds}
+          aria-invalid={Boolean(criteriaError)}
+          aria-describedby={criteriaDescriptionIds}
           className="min-h-20 resize-y"
         />
       </div>
+      {criteriaError && (
+        <HelperText id={errorId} error>
+          {criteriaError}
+        </HelperText>
+      )}
       <div className="space-y-2">
         <Label htmlFor={`assert-pi-threshold-${index}`} className="text-sm font-medium">
           Passing score threshold (optional)
@@ -792,13 +808,13 @@ const PiScoreField = ({ assertion, error, index, onChange }: SpecializedValueFie
           onChange={(event) =>
             onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
           }
-          aria-invalid={Boolean(error)}
-          aria-describedby={descriptionIds}
+          aria-invalid={Boolean(thresholdError)}
+          aria-describedby={thresholdDescriptionIds}
         />
       </div>
-      {error && (
+      {thresholdError && (
         <HelperText id={errorId} error>
-          {error}
+          {thresholdError}
         </HelperText>
       )}
       <p id={helpId} className="text-xs text-muted-foreground">
@@ -815,7 +831,11 @@ const RagScoreField = ({ assertion, error, index, onChange }: SpecializedValueFi
   const usesContext = assertion.type.includes('context-');
   const helpId = `assert-rag-score-help-${index}`;
   const errorId = `assert-value-error-${index}`;
-  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+  const groundTruthError =
+    needsGroundTruth && error !== 'Enter a score threshold from 0 to 1.' ? error : undefined;
+  const thresholdError = groundTruthError ? undefined : error;
+  const groundTruthDescriptionIds = groundTruthError ? `${errorId} ${helpId}` : helpId;
+  const thresholdDescriptionIds = thresholdError ? `${errorId} ${helpId}` : helpId;
 
   return (
     <div className="space-y-3">
@@ -829,11 +849,16 @@ const RagScoreField = ({ assertion, error, index, onChange }: SpecializedValueFi
             value={formatAssertionValue(assertion)}
             onChange={(event) => onChange({ ...assertion, value: event.target.value })}
             placeholder="Enter the answer that retrieved context should support..."
-            aria-invalid={Boolean(error)}
-            aria-describedby={descriptionIds}
+            aria-invalid={Boolean(groundTruthError)}
+            aria-describedby={groundTruthDescriptionIds}
             className="min-h-20 resize-y"
           />
         </div>
+      )}
+      {groundTruthError && (
+        <HelperText id={errorId} error>
+          {groundTruthError}
+        </HelperText>
       )}
       <div className="space-y-2">
         <Label htmlFor={`assert-rag-threshold-${index}`} className="text-sm font-medium">
@@ -849,13 +874,13 @@ const RagScoreField = ({ assertion, error, index, onChange }: SpecializedValueFi
           onChange={(event) =>
             onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
           }
-          aria-invalid={Boolean(error)}
-          aria-describedby={descriptionIds}
+          aria-invalid={Boolean(thresholdError)}
+          aria-describedby={thresholdDescriptionIds}
         />
       </div>
-      {error && (
+      {thresholdError && (
         <HelperText id={errorId} error>
-          {error}
+          {thresholdError}
         </HelperText>
       )}
       <p id={helpId} className="text-xs text-muted-foreground">
@@ -886,10 +911,11 @@ const ModelJudgeScoreField = ({
       !Array.isArray(assertion.value));
   const helpId = `assert-model-judge-help-${index}`;
   const errorId = `assert-value-error-${index}`;
-  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
   const criteriaError =
     isGEval && error === 'Enter at least one grading criterion for G-Eval.' ? error : undefined;
   const thresholdError = criteriaError ? undefined : error;
+  const criteriaDescriptionIds = criteriaError ? `${errorId} ${helpId}` : helpId;
+  const thresholdDescriptionIds = thresholdError ? `${errorId} ${helpId}` : helpId;
 
   return (
     <div className="space-y-3">
@@ -923,8 +949,8 @@ const ModelJudgeScoreField = ({
                 ? 'Example: The response is accurate, concise, and well structured.'
                 : 'Example: The response is helpful and accurate.'
             }
-            aria-invalid={Boolean(error)}
-            aria-describedby={descriptionIds}
+            aria-invalid={Boolean(criteriaError)}
+            aria-describedby={criteriaDescriptionIds}
             className="min-h-20 resize-y"
           />
         </div>
@@ -948,8 +974,8 @@ const ModelJudgeScoreField = ({
           onChange={(event) =>
             onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
           }
-          aria-invalid={Boolean(error)}
-          aria-describedby={descriptionIds}
+          aria-invalid={Boolean(thresholdError)}
+          aria-describedby={thresholdDescriptionIds}
         />
       </div>
       {thresholdError && (
