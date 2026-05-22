@@ -1,6 +1,7 @@
 import React from 'react';
 
 import Editor from '@app/components/ui/code-editor';
+import { Label } from '@app/components/ui/label';
 import Prism from '@app/lib/prism';
 import dedent from 'dedent';
 
@@ -42,8 +43,12 @@ const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
         </a>{' '}
         for more details.
       </p>
+      <Label htmlFor="http-status-validation" className="mb-2 block font-medium">
+        Status Validation Expression
+      </Label>
       <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
         <Editor
+          textareaId="http-status-validation"
           value={(selectedTarget.config?.validateStatus as string) || ''}
           onValueChange={(code) => updateCustomTarget('validateStatus', code)}
           highlight={highlightJS}

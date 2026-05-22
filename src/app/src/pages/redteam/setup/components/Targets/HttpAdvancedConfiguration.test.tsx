@@ -67,6 +67,22 @@ describe('HttpAdvancedConfiguration', () => {
     );
   });
 
+  it('labels advanced request transform and status validation editors', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{ id: 'http-provider', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Request Transform' }));
+    expect(screen.getByLabelText('Request Transform Function')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'HTTP Status Code' }));
+    expect(screen.getByLabelText('Status Validation Expression')).toBeInTheDocument();
+  });
+
   describe('Token Estimation Accordion Initial State', () => {
     const testCases: Array<{
       description: string;
