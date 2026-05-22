@@ -4,6 +4,7 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
@@ -267,6 +268,34 @@ describe('evaluateOptions behavior', () => {
       });
 
       expect(options.maxConcurrency).toBe(1); // Should be forced to 1 due to delay
+    });
+
+    it('should cap eval concurrency at redteam.maxConcurrency', async () => {
+      const observedConcurrencyHints: Array<number | undefined> = [];
+      const tempConfig = writeTempConfig(tmpDir, 'test-redteam-maxconcurrency.yaml', {
+        evaluateOptions: {
+          maxConcurrency: 9,
+        },
+        redteam: {
+          maxConcurrency: 3,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+      evaluateMock.mockImplementationOnce(async () => {
+        observedConcurrencyHints.push(cliState.maxConcurrency);
+        return { results: [], summary: {} } as any;
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+        maxConcurrency: 7,
+      });
+
+      expect(options.maxConcurrency).toBe(3);
+      expect(observedConcurrencyHints).toEqual([3]);
+      expect(cliState.maxConcurrency).toBeUndefined();
     });
 
     it('should handle repeat >1 with cache value passed correctly', async () => {

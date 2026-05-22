@@ -233,6 +233,153 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('limits concurrent redteam eval test cases per context', async () => {
+    const activeByContext = new Map<string, number>();
+    const maxActiveByContext = new Map<string, number>();
+    let activeTotal = 0;
+    let maxActiveTotal = 0;
+    let releaseHold: (() => void) | undefined;
+    let resolveStartedThree: (() => void) | undefined;
+    const holdPromise = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const startedThree = new Promise<void>((resolve) => {
+      resolveStartedThree = resolve;
+    });
+
+    const callApi = vi
+      .fn()
+      .mockImplementation(
+        async (_prompt: string, context: { test: { metadata?: { contextId?: string } } }) => {
+          const contextId = String(context.test.metadata?.contextId);
+          const activeForContext = (activeByContext.get(contextId) || 0) + 1;
+          activeByContext.set(contextId, activeForContext);
+          maxActiveByContext.set(
+            contextId,
+            Math.max(maxActiveByContext.get(contextId) || 0, activeForContext),
+          );
+          activeTotal += 1;
+          maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
+
+          if (activeTotal >= 3) {
+            resolveStartedThree?.();
+          }
+
+          try {
+            await holdPromise;
+          } finally {
+            activeByContext.set(contextId, (activeByContext.get(contextId) || 1) - 1);
+            activeTotal -= 1;
+          }
+
+          return {
+            output: 'ok',
+            tokenUsage: createEmptyTokenUsage(),
+          };
+        },
+      );
+
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi,
+    };
+    const tests = [
+      ...Array.from({ length: 3 }, (_, idx) => ({
+        vars: { question: `Alice ${idx + 1}` },
+        metadata: { contextId: 'alice' },
+      })),
+      ...Array.from({ length: 3 }, (_, idx) => ({
+        vars: { question: `Bob ${idx + 1}` },
+        metadata: { contextId: 'bob' },
+      })),
+    ];
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{ question }}')],
+      redteam: {
+        contexts: [
+          { id: 'alice', purpose: 'Alice context', maxConcurrency: 1 },
+          { id: 'bob', purpose: 'Bob context', maxConcurrency: 2 },
+        ],
+      },
+      tests,
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    const evaluationPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 3 });
+    await startedThree;
+
+    expect(maxActiveByContext.get('alice')).toBe(1);
+    expect(maxActiveByContext.get('bob')).toBe(2);
+    expect(maxActiveTotal).toBe(3);
+    releaseHold?.();
+    await evaluationPromise;
+
+    expect(callApi).toHaveBeenCalledTimes(6);
+  });
+
+  it('uses redteam maxConcurrency as the global eval ceiling', async () => {
+    let activeTotal = 0;
+    let maxActiveTotal = 0;
+    let releaseHold: (() => void) | undefined;
+    let resolveStartedTwo: (() => void) | undefined;
+    const holdPromise = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const startedTwo = new Promise<void>((resolve) => {
+      resolveStartedTwo = resolve;
+    });
+    const callApi = vi.fn().mockImplementation(async () => {
+      activeTotal += 1;
+      maxActiveTotal = Math.max(maxActiveTotal, activeTotal);
+      if (activeTotal >= 2) {
+        resolveStartedTwo?.();
+      }
+
+      try {
+        await holdPromise;
+      } finally {
+        activeTotal -= 1;
+      }
+
+      return {
+        output: 'ok',
+        tokenUsage: createEmptyTokenUsage(),
+      };
+    });
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi,
+    };
+    const contextIds = ['one', 'two', 'three', 'four'];
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{ question }}')],
+      redteam: {
+        maxConcurrency: 2,
+        contexts: contextIds.map((id) => ({
+          id,
+          purpose: `${id} context`,
+          maxConcurrency: 4,
+        })),
+      },
+      tests: contextIds.map((contextId) => ({
+        vars: { question: contextId },
+        metadata: { contextId },
+      })),
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    const evaluationPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 4 });
+    await startedTwo;
+
+    expect(maxActiveTotal).toBe(2);
+    releaseHold?.();
+    await evaluationPromise;
+
+    expect(callApi).toHaveBeenCalledTimes(4);
+  });
+
   it('propagates prior turn output into _conversation on the next serial call', async () => {
     const { callApi } = await runConcurrencyProbe(
       '{% if _conversation and _conversation|length > 0 %}prior={{ _conversation[0].response.output }} {% endif %}now={{ question }}',

@@ -2710,6 +2710,66 @@ describe('doGenerateRedteam', () => {
   });
 
   describe('contexts support', () => {
+    it('should reject invalid context-specific maxConcurrency before generation', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [{ id: 'invalid-limit', maxConcurrency: 0 }],
+          },
+        },
+      });
+
+      await expect(
+        doGenerateRedteam({
+          output: 'output.yaml',
+          config: 'config.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: true,
+        }),
+      ).rejects.toThrow('Invalid redteam configuration');
+      expect(synthesize).not.toHaveBeenCalled();
+    });
+
+    it('should reject duplicate context IDs before generation', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [{ id: 'duplicate' }, { id: 'duplicate' }],
+          },
+        },
+      });
+
+      await expect(
+        doGenerateRedteam({
+          output: 'output.yaml',
+          config: 'config.yaml',
+          cache: true,
+          defaultConfig: {},
+          write: true,
+        }),
+      ).rejects.toThrow('Invalid redteam configuration');
+      expect(synthesize).not.toHaveBeenCalled();
+    });
+
     it('should render standalone root purpose templates with defaultTest vars and preserve the authored template', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',

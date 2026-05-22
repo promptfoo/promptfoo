@@ -50,7 +50,7 @@ redteam:
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
-  contexts: Array<{ id: string, purpose?: string, vars?: Record<string, string> }>
+  contexts: Array<{ id: string, purpose?: string, maxConcurrency?: number, vars?: Record<string, string> }>
   language: string | string[]
   testGenerationInstructions: string
   graderExamples: Array<object>
@@ -74,7 +74,7 @@ redteam:
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks                         |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                                            |
 | `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                                             |
-| `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                                                |
+| `maxConcurrency`             | `number`                  | Maximum number of concurrent generation requests and eval test cases                                    | 4                                                |
 | `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                                                |
 
 For multi-input testing, define `inputs` on the target/provider rather than under `redteam`. Promptfoo automatically stores the combined payload in `__prompt` for internal use, so you should not set `injectVar` or create a manual `prompt` field just to support multi-input configs. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) for end-to-end examples.
@@ -670,11 +670,12 @@ Use contexts when you need to test:
 
 Each context has:
 
-| Field     | Type                     | Description                                                                                                                              |
-| --------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`      | `string`                 | Unique identifier for the context                                                                                                        |
-| `purpose` | `string`                 | Optional context-specific purpose that guides attack generation and grading. Blank or omitted values inherit the root `redteam.purpose`. |
-| `vars`    | `Record<string, string>` | Optional variables passed to your [custom provider script](/docs/providers/custom-script/)                                               |
+| Field            | Type                     | Description                                                                                                                              |
+| ---------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | `string`                 | Unique identifier for the context                                                                                                        |
+| `purpose`        | `string`                 | Optional context-specific purpose that guides attack generation and grading. Blank or omitted values inherit the root `redteam.purpose`. |
+| `maxConcurrency` | `number`                 | Optional maximum number of concurrent eval test cases for this context. Also limited by `redteam.maxConcurrency`.                        |
+| `vars`           | `Record<string, string>` | Optional variables passed to your [custom provider script](/docs/providers/custom-script/)                                               |
 
 #### Example: Testing a Customer Support Chatbot
 
@@ -703,6 +704,8 @@ redteam:
 ```
 
 When contexts are defined, promptfoo generates tests for each context separately. A non-empty context `purpose` overrides the root `redteam.purpose` for both attack generation and grading. If a context `purpose` is omitted or blank, it inherits the root purpose instead.
+
+During eval, `maxConcurrency` can be set per context to limit concurrent target requests for a single user or state. The global `redteam.maxConcurrency` still applies as an overall ceiling across all contexts.
 
 The `vars` are merged into each test case and passed to your provider, allowing your [custom provider script](/docs/providers/custom-script/) to set up the appropriate test environment (e.g., loading a specific session, setting user permissions).
 

@@ -49,6 +49,7 @@ import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
+import { RedteamConfigSchema } from '../validators/redteam';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
@@ -427,6 +428,18 @@ export async function doEval(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    if (config.redteam) {
+      const parsedRedteamConfig = RedteamConfigSchema.safeParse(config.redteam);
+      if (!parsedRedteamConfig.success) {
+        throw new EvalRunError(
+          `Invalid redteam configuration:\n${z.prettifyError(parsedRedteamConfig.error)}`,
+          1,
+        );
+      }
+      config.redteam = parsedRedteamConfig.data;
+      testSuite.redteam = parsedRedteamConfig.data;
+    }
+
     // Phase 2: Load environment from config files if not already set via CLI
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
@@ -494,6 +507,17 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
+    const redteamMaxConcurrency = config.redteam?.maxConcurrency;
+    const redteamEvalMaxConcurrency =
+      typeof redteamMaxConcurrency === 'number' &&
+      Number.isInteger(redteamMaxConcurrency) &&
+      redteamMaxConcurrency > 0
+        ? redteamMaxConcurrency
+        : undefined;
+    if (redteamEvalMaxConcurrency !== undefined) {
+      maxConcurrency = Math.min(maxConcurrency, redteamEvalMaxConcurrency);
+    }
+
     if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
@@ -512,15 +536,16 @@ export async function doEval(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency);
 
+    let providerMaxConcurrencyHint: number | undefined;
     if (delay > 0) {
       maxConcurrency = 1;
       // Also limit Python workers to 1 when delay is set (no point having more workers than concurrency)
-      cliState.maxConcurrency = 1;
+      providerMaxConcurrencyHint = 1;
       logger.info(
         `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
       );
-    } else if (explicitMaxConcurrency !== undefined) {
-      cliState.maxConcurrency = explicitMaxConcurrency;
+    } else if (explicitMaxConcurrency !== undefined || redteamEvalMaxConcurrency !== undefined) {
+      providerMaxConcurrencyHint = maxConcurrency;
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
@@ -765,6 +790,9 @@ export async function doEval(
     // Run the evaluation!!!!!!
     let ret;
     try {
+      if (providerMaxConcurrencyHint !== undefined) {
+        cliState.maxConcurrency = providerMaxConcurrencyHint;
+      }
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
@@ -797,6 +825,9 @@ export async function doEval(
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
+      if (providerMaxConcurrencyHint !== undefined) {
+        cliState.maxConcurrency = undefined;
+      }
     }
 
     // Clear resume flag after run completes
