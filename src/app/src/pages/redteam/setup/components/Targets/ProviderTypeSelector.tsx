@@ -1126,6 +1126,7 @@ export default function ProviderTypeSelector({
           <button
             type="button"
             onClick={() => setSelectedTag(undefined)}
+            aria-pressed={selectedTag === undefined}
             className={cn(
               'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -1141,6 +1142,7 @@ export default function ProviderTypeSelector({
               key={filter.key}
               type="button"
               onClick={() => handleTagToggle(filter.key)}
+              aria-pressed={selectedTag === filter.key}
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -1182,7 +1184,7 @@ export default function ProviderTypeSelector({
       <div className="space-y-2">
         {filteredProviderOptions.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
               No providers found matching your search.
             </p>
           </div>

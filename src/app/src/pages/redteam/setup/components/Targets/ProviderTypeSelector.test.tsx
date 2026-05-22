@@ -150,6 +150,28 @@ describe('ProviderTypeSelector', () => {
     expect(searchWrapper).toHaveClass('w-full', 'sm:w-64');
   });
 
+  it('announces active category filters and empty search feedback', async () => {
+    const user = userEvent.setup();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={vi.fn()} />,
+    );
+
+    const allFilter = screen.getByRole('button', { name: /^All \(/ });
+    const agentsFilter = screen.getByRole('button', { name: /^Agent Frameworks \(/ });
+    expect(allFilter).toHaveAttribute('aria-pressed', 'true');
+    expect(agentsFilter).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(agentsFilter);
+    expect(allFilter).toHaveAttribute('aria-pressed', 'false');
+    expect(agentsFilter).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search providers' }), 'not-present');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No providers found matching your search.',
+    );
+  });
+
   it('should filter provider options by selected category when a category chip is toggled on', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();
