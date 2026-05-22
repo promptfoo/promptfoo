@@ -8,6 +8,11 @@ in a consistent format using Pydantic models.
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
+# Use the explicit `openai-chat:` prefix so the example stays pinned to the Chat
+# Completions API. In PydanticAI v2.0 the bare `openai:` prefix will resolve to
+# the Responses API instead.
+DEFAULT_MODEL = "openai-chat:gpt-4.1-mini"
+
 
 class WeatherResponse(BaseModel):
     """Structured weather response"""
@@ -39,7 +44,7 @@ def get_weather(ctx: RunContext, location: str) -> dict:
     return {"location": location, "temperature": "21°C", "description": "Clear"}
 
 
-def get_weather_agent(model: str = "openai:gpt-4.1-mini") -> Agent:
+def get_weather_agent(model: str = DEFAULT_MODEL) -> Agent:
     """Create a weather agent with structured output"""
     agent = Agent(
         model,
@@ -55,9 +60,7 @@ def get_weather_agent(model: str = "openai:gpt-4.1-mini") -> Agent:
     return agent
 
 
-async def run_weather_agent(
-    query: str, model: str = "openai:gpt-4.1-mini"
-) -> WeatherResponse:
+async def run_weather_agent(query: str, model: str = DEFAULT_MODEL) -> WeatherResponse:
     """Run the weather agent with a query"""
     try:
         agent = get_weather_agent(model)
