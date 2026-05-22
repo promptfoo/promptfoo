@@ -877,6 +877,10 @@ describe('TestCasesSection', () => {
           testCases[0], // Duplicated
         ],
       });
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'Test case duplicated. Each test case runs across every prompt and provider.',
+        'success',
+      );
     });
 
     it('can delete a test case with confirmation', async () => {

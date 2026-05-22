@@ -245,6 +245,10 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: [initialPrompt, initialPrompt],
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Prompt duplicated. Each prompt runs across every test case and provider.',
+      'success',
+    );
 
     updateStoreAndRerender([initialPrompt, initialPrompt], rerender);
 

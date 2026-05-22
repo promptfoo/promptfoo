@@ -325,6 +325,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     event.stopPropagation();
     const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
     setTestCases([...testCases, duplicatedTestCase]);
+    showToast(
+      'Test case duplicated. Each test case runs across every prompt and provider.',
+      'success',
+    );
   };
 
   return (

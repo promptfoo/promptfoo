@@ -92,6 +92,10 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
     event.stopPropagation();
     const duplicatedPrompt = prompts[index];
     setPrompts([...prompts, duplicatedPrompt]);
+    showToast(
+      'Prompt duplicated. Each prompt runs across every test case and provider.',
+      'success',
+    );
   };
 
   const handleChangePrompt = (index: number, newPrompt: string) => {
