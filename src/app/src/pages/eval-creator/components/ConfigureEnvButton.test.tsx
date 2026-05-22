@@ -35,7 +35,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
+    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
     const newOpenAiKey = 'new-openai-key-12345';
     await userEvent.type(openaiApiKeyInput, newOpenAiKey);
 
@@ -62,7 +62,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
+    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
     await userEvent.type(openaiApiKeyInput, 'new-openai-key');
 
     const cancelButton = screen.getByRole('button', { name: /cancel/i });
@@ -87,15 +87,46 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
+    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
     expect(openaiApiKeyInput).toHaveValue(initialEnv.OPENAI_API_KEY);
 
     // Expand the Azure section
     const azureSection = screen.getByRole('button', { name: /azure/i });
     await userEvent.click(azureSection);
 
-    const azureApiKeyInput = screen.getByLabelText(/azure api key/i);
+    const azureApiKeyInput = screen.getByLabelText(/^azure api key$/i);
     expect(azureApiKeyInput).toHaveValue(initialEnv.AZURE_API_KEY);
+  });
+
+  it('masks only secret values and lets users verify API keys on demand', async () => {
+    render(<ConfigureEnvButton />);
+
+    await openProviderSettingsDialog();
+
+    const apiKeyInput = screen.getByLabelText(/^openai api key$/i);
+    const hostInput = screen.getByLabelText(/^openai api host$/i);
+    const organizationInput = screen.getByLabelText(/^openai organization$/i);
+
+    expect(apiKeyInput).toHaveAttribute('type', 'password');
+    expect(apiKeyInput).toHaveAttribute('autocomplete', 'new-password');
+    expect(hostInput).toHaveAttribute('type', 'url');
+    expect(organizationInput).toHaveAttribute('type', 'text');
+
+    await userEvent.click(screen.getByRole('button', { name: /show openai api key/i }));
+
+    expect(apiKeyInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: /hide openai api key/i })).toBeInTheDocument();
+  });
+
+  it('leaves non-secret Vertex project and region fields readable', async () => {
+    render(<ConfigureEnvButton />);
+
+    await openProviderSettingsDialog();
+    await userEvent.click(screen.getByRole('button', { name: /google vertex ai/i }));
+
+    expect(screen.getByLabelText(/^vertex api key$/i)).toHaveAttribute('type', 'password');
+    expect(screen.getByLabelText(/^vertex project id$/i)).toHaveAttribute('type', 'text');
+    expect(screen.getByLabelText(/^vertex region$/i)).toHaveAttribute('type', 'text');
   });
 
   it('should refresh environment fields from the latest config when reopened', async () => {
@@ -105,7 +136,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    expect(screen.getByLabelText(/openai api key/i)).toHaveValue('uploaded-key');
+    expect(screen.getByLabelText(/^openai api key$/i)).toHaveValue('uploaded-key');
   });
 
   it('should handle partial updates to the environment configuration, preserving existing values', async () => {
@@ -119,7 +150,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
+    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
     await userEvent.type(openaiApiKeyInput, 'new-openai-key');
 
     const saveButton = screen.getByRole('button', { name: /save/i });
@@ -142,7 +173,7 @@ describe('ConfigureEnvButton', () => {
 
     await openProviderSettingsDialog();
 
-    const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
+    const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
     const invalidApiKey = 'invalid-api-key-format';
     await userEvent.type(openaiApiKeyInput, invalidApiKey);
 

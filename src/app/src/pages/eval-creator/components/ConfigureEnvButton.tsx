@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type HTMLInputTypeAttribute, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -44,19 +44,45 @@ interface EnvFieldProps {
   envKey: string;
   value: string;
   onChange: (key: string, value: string) => void;
+  sensitive?: boolean;
+  inputType?: HTMLInputTypeAttribute;
 }
 
-function EnvField({ label, envKey, value, onChange }: EnvFieldProps) {
+function EnvField({
+  label,
+  envKey,
+  value,
+  onChange,
+  sensitive = false,
+  inputType = 'text',
+}: EnvFieldProps) {
+  const [showSecret, setShowSecret] = useState(false);
+
   return (
     <div className="space-y-2">
       <Label htmlFor={envKey}>{label}</Label>
-      <Input
-        id={envKey}
-        type="password"
-        value={value}
-        onChange={(e) => onChange(envKey, e.target.value)}
-        placeholder={`Enter ${label.toLowerCase()}`}
-      />
+      <div className="flex items-center gap-2">
+        <Input
+          id={envKey}
+          type={sensitive && !showSecret ? 'password' : inputType}
+          value={value}
+          onChange={(e) => onChange(envKey, e.target.value)}
+          placeholder={`Enter ${label.toLowerCase()}`}
+          autoComplete={sensitive ? 'new-password' : undefined}
+          spellCheck={sensitive ? false : undefined}
+        />
+        {sensitive && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowSecret((shown) => !shown)}
+            aria-label={`${showSecret ? 'Hide' : 'Show'} ${label}`}
+          >
+            {showSecret ? 'Hide' : 'Show'}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -114,12 +140,14 @@ const ConfigureEnvButton = () => {
                   envKey="OPENAI_API_KEY"
                   value={env.OPENAI_API_KEY || ''}
                   onChange={handleEnvChange}
+                  sensitive
                 />
                 <EnvField
                   label="OpenAI API host"
                   envKey="OPENAI_API_HOST"
                   value={env.OPENAI_API_HOST || ''}
                   onChange={handleEnvChange}
+                  inputType="url"
                 />
                 <EnvField
                   label="OpenAI organization"
@@ -135,6 +163,7 @@ const ConfigureEnvButton = () => {
                   envKey="AZURE_API_KEY"
                   value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY || ''}
                   onChange={handleEnvChange}
+                  sensitive
                 />
               </EnvSection>
 
@@ -153,6 +182,7 @@ const ConfigureEnvButton = () => {
                   envKey="ANTHROPIC_API_KEY"
                   value={env.ANTHROPIC_API_KEY || ''}
                   onChange={handleEnvChange}
+                  sensitive
                 />
               </EnvSection>
 
@@ -162,6 +192,7 @@ const ConfigureEnvButton = () => {
                   envKey="VERTEX_API_KEY"
                   value={env.VERTEX_API_KEY || ''}
                   onChange={handleEnvChange}
+                  sensitive
                 />
                 <EnvField
                   label="Vertex Project ID"
@@ -183,6 +214,7 @@ const ConfigureEnvButton = () => {
                   envKey="REPLICATE_API_KEY"
                   value={env.REPLICATE_API_KEY || ''}
                   onChange={handleEnvChange}
+                  sensitive
                 />
               </EnvSection>
             </div>
