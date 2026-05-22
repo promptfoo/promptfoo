@@ -163,9 +163,10 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Running evaluation' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Starting evaluation and preparing requests.',
-    );
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Starting evaluation and preparing requests.');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('announces measurable progress while an evaluation is running', async () => {
@@ -191,9 +192,9 @@ describe('RunTestSuiteButton', () => {
       await timers.advanceByAsync(1500);
     });
 
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '50% complete. Results open automatically when finished.',
-    );
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('50% complete. Results open automatically when finished.');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('explains when a completed evaluation has no saved results to open', async () => {

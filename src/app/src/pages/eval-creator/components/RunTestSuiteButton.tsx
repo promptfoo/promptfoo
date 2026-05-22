@@ -185,7 +185,12 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
         )}
       </Button>
       {isRunning && (
-        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+        <p
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="text-sm text-muted-foreground"
+        >
           {progressMessage}
         </p>
       )}
