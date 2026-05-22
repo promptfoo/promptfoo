@@ -55,6 +55,12 @@ redteam:
 
 To set up the scan through the Promptfoo UI, select the **OWASP Agentic** preset on the Plugins page.
 
+## Benchmarking with AgentThreatBench
+
+[AgentThreatBench](https://ukgovernmentbeis.github.io/inspect_evals/evals/safeguards/agent_threat_bench/) is a fixed Inspect benchmark for ASI01 and ASI06. Its tasks inject adversarial content into a simulated memory store, email triage tools, and customer support tools, then score both task utility and attack resistance.
+
+Use the [`integration-inspect-agent-threat-bench`](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-inspect-agent-threat-bench) example to run those Inspect-native tasks through Promptfoo and keep the benchmark's separate `utility` and `security` scores. Use the plugins below when you want to red team your own target agent instead of the benchmark harness.
+
 ## ASI01: Agent Goal Hijack
 
 Agent Goal Hijack occurs when an attacker alters an agent's objectives or decision path through malicious content, exploiting the agent's planning and reasoning capabilities.
