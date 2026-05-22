@@ -425,6 +425,61 @@ describe('Eval', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  it('clears a stale rowId param when filters are cleared without a filter param', async () => {
+    let subscriptionCallback: ((filters: any) => void) | null = null;
+
+    // Mock subscribe to capture the callback and trigger it
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn(); // unsubscribe function
+    });
+
+    const mockFilters = {
+      values: {},
+      appliedCount: 0, // Filters cleared
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    // No `filter` param, but a stale `rowId` and details hash are present.
+    const initialUrl = '/eval/test-eval?rowId=51#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // Trigger the subscription callback manually
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters);
+      });
+    }
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/eval/test-eval',
+        hash: '',
+      }),
+      { replace: true },
+    );
+
+    const [nextLocation] = mockNavigate.mock.calls[0];
+    expect(new URLSearchParams(nextLocation.search).has('rowId')).toBe(false);
+    expect(new URLSearchParams(nextLocation.search).has('filter')).toBe(false);
+  });
+
   it('preserves a details hash while rehydrating filters from the URL', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 
