@@ -271,6 +271,24 @@ describe('EvaluateTestSuiteCreator', () => {
       'aria-current',
       'step',
     );
+    expect(
+      screen.getByRole('button', { name: 'What are providers? Learn what you can evaluate.' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/Providers are the systems you want to test/i)).toBeNull();
+  });
+
+  it('reveals detailed provider help only when requested', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const providerHelpButton = screen.getByRole('button', {
+      name: 'What are providers? Learn what you can evaluate.',
+    });
+    await user.click(providerHelpButton);
+
+    expect(providerHelpButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/Providers are the systems you want to test/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select at least one provider below/i)).toBeInTheDocument();
   });
 
   it('should advance the progress summary as required setup is completed', async () => {

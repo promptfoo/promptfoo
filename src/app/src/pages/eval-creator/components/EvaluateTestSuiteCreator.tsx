@@ -4,6 +4,11 @@ import { PageContainer, PageHeader } from '@app/components/layout';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -17,7 +22,7 @@ import { cn } from '@app/lib/utils';
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
-import { Check, Upload } from 'lucide-react';
+import { Check, ChevronDown, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
 import { InfoBox } from './InfoBox';
@@ -78,6 +83,7 @@ const EvaluateTestSuiteCreator = () => {
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [yamlHasUnsavedChanges, setYamlHasUnsavedChanges] = useState(false);
   const [discardYamlDialogOpen, setDiscardYamlDialogOpen] = useState(false);
+  const [providerHelpOpen, setProviderHelpOpen] = useState(false);
   const [pendingYamlImport, setPendingYamlImport] = useState<{
     config: Partial<UnifiedConfig>;
     fileName: string;
@@ -517,33 +523,45 @@ const EvaluateTestSuiteCreator = () => {
                     count={normalizedProviders.length}
                     guidance={
                       normalizedProviders.length === 0 ? (
-                        <InfoBox variant="help">
-                          <strong>What are providers?</strong>
-                          <p className="mt-1">
-                            Providers are the systems you want to test. This can be:
-                          </p>
-                          <ul className="mt-2 space-y-1 list-disc list-inside ml-2">
-                            <li>
-                              <strong>AI Models</strong> - OpenAI GPT, Anthropic Claude, Google
-                              Gemini, etc.
-                            </li>
-                            <li>
-                              <strong>HTTP/WebSocket APIs</strong> - Your own API endpoints or
-                              third-party services
-                            </li>
-                            <li>
-                              <strong>Python Scripts</strong> - Custom Python code or agent
-                              frameworks (LangChain, CrewAI, etc.)
-                            </li>
-                            <li>
-                              <strong>JavaScript/Local Providers</strong> - Custom implementations
-                            </li>
-                          </ul>
-                          <p className="mt-2">
-                            <strong>Getting started:</strong> Select at least one provider below.
-                            You can compare multiple providers side-by-side.
-                          </p>
-                        </InfoBox>
+                        <Collapsible open={providerHelpOpen} onOpenChange={setProviderHelpOpen}>
+                          <InfoBox variant="help">
+                            <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 text-left font-medium">
+                              <span>What are providers? Learn what you can evaluate.</span>
+                              <ChevronDown
+                                aria-hidden="true"
+                                className={cn(
+                                  'size-4 shrink-0 transition-transform',
+                                  providerHelpOpen && 'rotate-180',
+                                )}
+                              />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="mt-3 border-t border-current/20 pt-3">
+                              <p>Providers are the systems you want to test. This can be:</p>
+                              <ul className="mt-2 space-y-1 list-disc list-inside ml-2">
+                                <li>
+                                  <strong>AI Models</strong> - OpenAI GPT, Anthropic Claude, Google
+                                  Gemini, etc.
+                                </li>
+                                <li>
+                                  <strong>HTTP/WebSocket APIs</strong> - Your own API endpoints or
+                                  third-party services
+                                </li>
+                                <li>
+                                  <strong>Python Scripts</strong> - Custom Python code or agent
+                                  frameworks (LangChain, CrewAI, etc.)
+                                </li>
+                                <li>
+                                  <strong>JavaScript/Local Providers</strong> - Custom
+                                  implementations
+                                </li>
+                              </ul>
+                              <p className="mt-2">
+                                <strong>Getting started:</strong> Select at least one provider
+                                below. You can compare multiple providers side-by-side.
+                              </p>
+                            </CollapsibleContent>
+                          </InfoBox>
+                        </Collapsible>
                       ) : (
                         <InfoBox variant="subtle">
                           <strong>Pro tip:</strong> Testing multiple providers helps you find the
