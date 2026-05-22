@@ -42,8 +42,11 @@ const WebSocketEndpointConfiguration = ({
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
   const urlErrorId = useId();
+  const urlHelpId = useId();
   const messageTemplateHelpId = useId();
+  const streamResponseToggleHelpId = useId();
   const streamResponseHelpId = useId();
+  const responseTransformHelpId = useId();
   const streamResponseEditorContainerRef = useRef<HTMLDivElement>(null);
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
@@ -75,15 +78,20 @@ const WebSocketEndpointConfiguration = ({
             required
             value={selectedTarget.config.url}
             onChange={(e) => updateWebSocketTarget('url', e.target.value)}
+            placeholder="wss://example.com/ws"
             aria-invalid={Boolean(urlError)}
-            aria-describedby={urlError ? urlErrorId : undefined}
+            aria-describedby={urlError ? `${urlErrorId} ${urlHelpId}` : urlHelpId}
             className={cn(urlError && 'border-destructive')}
           />
           {urlError && (
-            <HelperText id={urlErrorId} error>
+            <HelperText id={urlErrorId} error role="alert">
               {urlError}
             </HelperText>
           )}
+          <HelperText id={urlHelpId} className="text-sm">
+            Use <code>wss://</code> for encrypted connections or <code>ws://</code> for local
+            development.
+          </HelperText>
         </div>
 
         <div className="mt-4 space-y-2">
@@ -122,13 +130,14 @@ const WebSocketEndpointConfiguration = ({
 
         <div className="mt-4 space-y-2">
           <Label htmlFor="stream-response">Stream Response</Label>
-          <p className="text-sm text-muted-foreground">
+          <HelperText id={streamResponseToggleHelpId} className="text-sm">
             Configure your WebSocket to stream responses instead of returning a single response per
             prompt.
-          </p>
+          </HelperText>
           <Switch
             id="stream-response"
             checked={streamResponse}
+            aria-describedby={streamResponseToggleHelpId}
             onCheckedChange={(checked) => {
               setStreamResponse(checked);
               if (checked) {
@@ -187,7 +196,11 @@ const WebSocketEndpointConfiguration = ({
               id="response-transform"
               value={selectedTarget.config.transformResponse}
               onChange={(e) => updateWebSocketTarget('transformResponse', e.target.value)}
+              aria-describedby={responseTransformHelpId}
             />
+            <HelperText id={responseTransformHelpId} className="text-sm">
+              Optional. Extract a value from the single response returned for each prompt.
+            </HelperText>
           </div>
         )}
       </div>
