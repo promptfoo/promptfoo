@@ -118,11 +118,19 @@ describe('PromptDialog', () => {
   it("should disable the 'Add' and 'Add and create another' buttons when the text field is empty", () => {
     render(<PromptDialog {...mockProps} prompt="" />);
 
+    expect(
+      screen.getByText(/Each prompt runs once for every test case and provider/i),
+    ).toBeInTheDocument();
+    const textField = screen.getByRole('textbox');
     const addButton = screen.getByRole('button', { name: 'Add' });
     const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
 
+    expect(textField).toBeRequired();
+    expect(textField).toHaveAccessibleDescription(/Required.*varname/);
     expect(addButton).toBeDisabled();
+    expect(addButton).toHaveAccessibleDescription(/Required.*varname/);
     expect(addAnotherButton).toBeDisabled();
+    expect(addAnotherButton).toHaveAccessibleDescription(/Required.*varname/);
   });
 
   it('should reject whitespace-only prompt text with an accessible explanation', async () => {
@@ -134,7 +142,9 @@ describe('PromptDialog', () => {
 
     expect(textField).toHaveAttribute('aria-invalid', 'true');
     expect(textField).toHaveAccessibleDescription('Prompt must include text, not only spaces.');
-    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add' })).toHaveAccessibleDescription(
+      'Prompt must include text, not only spaces.',
+    );
     expect(screen.getByRole('button', { name: 'Add and create another' })).toBeDisabled();
     expect(mockProps.onAdd).not.toHaveBeenCalled();
   });

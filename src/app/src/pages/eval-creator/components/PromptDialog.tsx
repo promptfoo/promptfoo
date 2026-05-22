@@ -38,6 +38,8 @@ const PromptDialog = ({
   const promptHasText = editingPrompt.trim().length > 0;
   const hasBlankPromptError = editingPrompt.length > 0 && !promptHasText;
   const promptErrorId = 'prompt-input-error';
+  const promptHelpId = 'prompt-input-help';
+  const disabledPromptActionHelpId = hasBlankPromptError ? promptErrorId : promptHelpId;
   const isDirty = editingPrompt !== cleanPrompt;
 
   React.useEffect(() => {
@@ -80,6 +82,10 @@ const PromptDialog = ({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{isEditing ? `Edit Prompt ${index + 1}` : 'Add Prompt'}</DialogTitle>
+            <DialogDescription>
+              Each prompt runs once for every test case and provider. Use variables when the input
+              should change between test cases.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2 py-4">
@@ -88,7 +94,10 @@ const PromptDialog = ({
                 {addAnotherStatus}
               </p>
             )}
-            <Label htmlFor="prompt-input">Prompt</Label>
+            <div className="flex items-baseline gap-1.5">
+              <Label htmlFor="prompt-input">Prompt</Label>
+              <span className="text-xs text-muted-foreground">(required)</span>
+            </div>
             <Textarea
               id="prompt-input"
               ref={textareaRef}
@@ -98,20 +107,21 @@ const PromptDialog = ({
                 setAddAnotherStatus(null);
               }}
               placeholder="The quick brown {{animal1}} jumps over the lazy {{animal2}}."
+              required
               className={cn(
                 'min-h-[200px] font-mono text-sm',
                 hasBlankPromptError && 'border-destructive',
               )}
               aria-invalid={hasBlankPromptError}
-              aria-describedby={hasBlankPromptError ? promptErrorId : undefined}
+              aria-describedby={hasBlankPromptError ? promptErrorId : promptHelpId}
             />
             {hasBlankPromptError ? (
               <p id={promptErrorId} className="text-sm text-destructive">
                 Prompt must include text, not only spaces.
               </p>
             ) : (
-              <p className="text-sm text-muted-foreground">
-                Tip: use the {'{{varname}}'} syntax to add variables to your prompt.
+              <p id={promptHelpId} className="text-sm text-muted-foreground">
+                Required. Use the {'{{varname}}'} syntax to add variables to your prompt.
               </p>
             )}
           </div>
@@ -125,11 +135,16 @@ const PromptDialog = ({
                 variant="secondary"
                 onClick={() => handleAdd(false)}
                 disabled={!promptHasText}
+                aria-describedby={promptHasText ? undefined : disabledPromptActionHelpId}
               >
                 Add and create another
               </Button>
             )}
-            <Button onClick={() => handleAdd(true)} disabled={!promptHasText}>
+            <Button
+              onClick={() => handleAdd(true)}
+              disabled={!promptHasText}
+              aria-describedby={promptHasText ? undefined : disabledPromptActionHelpId}
+            >
               {isEditing ? 'Save' : 'Add'}
             </Button>
           </DialogFooter>
