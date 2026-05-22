@@ -8,10 +8,10 @@ in a consistent format using Pydantic models.
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
-# Use the explicit `openai-chat:` prefix to pin this example to the OpenAI Chat
-# Completions API. The bare `openai:` prefix is Chat Completions today but
-# resolves to the Responses API in PydanticAI v2.0+.
-DEFAULT_MODEL = "openai-chat:gpt-4.1-mini"
+# Use the OpenAI Responses API with the smallest current GPT-5 reasoning model.
+# The `openai-responses:` prefix selects the Responses API explicitly (the bare
+# `openai:` prefix also resolves there in PydanticAI v2.0+).
+DEFAULT_MODEL = "openai-responses:gpt-5.4-nano"
 
 
 class WeatherResponse(BaseModel):
