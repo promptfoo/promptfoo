@@ -1012,9 +1012,10 @@ Configuration options:
 If `tokens-used` needs provider response usage and the provider does not return token
 usage metadata, the assertion throws instead of assuming zero tokens.
 
-For traced usage, matching token-bearing spans are deduplicated by hierarchy: when a
-matched parent and matched descendant both report token totals, Promptfoo counts the
-descendant so nested aggregate spans do not double-count the same usage.
+For traced usage, matching token-bearing spans are deduplicated by hierarchy. When a
+matched parent and matched descendants both report token totals, Promptfoo uses the
+larger covered total for that span subtree so nested aggregate spans do not double-count
+usage or discard a parent aggregate that covers more work than its children.
 
 ### Trace-Span-Duration
 
