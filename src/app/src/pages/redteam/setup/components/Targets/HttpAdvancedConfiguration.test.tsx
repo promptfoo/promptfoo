@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -728,5 +728,53 @@ describe('HttpAdvancedConfiguration', () => {
       expect(input).toHaveAccessibleName(name);
       expect(input).toBeRequired();
     }
+  });
+
+  it('reveals and preserves blocking authorization field feedback', async () => {
+    const user = userEvent.setup();
+    const selectedTarget: ProviderOptions = {
+      id: 'http-provider',
+      config: { auth: { type: 'api_key', keyName: '', value: '', placement: 'header' } },
+    };
+    const { rerender } = renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced HTTP settings/i }));
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+
+    rerender(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        authorizationFieldErrors={{
+          keyName: 'Key Name is required for API key authentication',
+          value: 'API Key Value is required for API key authentication',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Authorization' })).toHaveAttribute(
+        'data-state',
+        'active',
+      );
+    });
+    const keyName = document.getElementById('key-name');
+    const keyValue = document.getElementById('api-key-value');
+    expect(keyName).not.toBeNull();
+    expect(keyValue).not.toBeNull();
+    expect(keyName).toHaveAttribute('aria-invalid', 'true');
+    expect(keyName).toHaveAccessibleDescription('Key Name is required for API key authentication');
+    expect(keyValue).toHaveAttribute('aria-invalid', 'true');
+    expect(keyValue).toHaveAccessibleDescription(
+      'API Key Value is required for API key authentication',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced HTTP settings/i }));
+    expect(screen.getByRole('tablist')).toBeInTheDocument();
   });
 });

@@ -13,10 +13,12 @@ vi.mock('./HttpEndpointConfiguration', () => ({
     bodyError,
     urlError,
     updateCustomTarget,
+    authorizationFieldErrors,
   }: {
     bodyError?: React.ReactNode;
     urlError?: string | null;
     updateCustomTarget?: (field: string, value: unknown) => void;
+    authorizationFieldErrors?: Record<string, string>;
   }) => (
     <div data-testid="http-config">
       <button
@@ -28,6 +30,11 @@ vi.mock('./HttpEndpointConfiguration', () => ({
       </button>
       {bodyError && <div data-testid="http-body-error">{bodyError}</div>}
       {urlError && <div data-testid="http-url-error">{urlError}</div>}
+      {authorizationFieldErrors && Object.keys(authorizationFieldErrors).length > 0 && (
+        <div data-testid="http-auth-field-errors">
+          {Object.values(authorizationFieldErrors).join(', ')}
+        </div>
+      )}
     </div>
   ),
 }));
@@ -162,7 +169,7 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(true);
     });
 
-    it('blocks saving an HTTP provider with incomplete configured authentication', () => {
+    it('blocks saving an HTTP provider with incomplete configured authentication', async () => {
       const mockSetError = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
@@ -186,8 +193,13 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      expect(validateFn!()).toBe(false);
+      await act(async () => {
+        expect(validateFn!()).toBe(false);
+      });
       expect(mockSetError).toHaveBeenCalledWith(
+        'Key Name is required for API key authentication, API Key Value is required for API key authentication',
+      );
+      expect(screen.getByTestId('http-auth-field-errors')).toHaveTextContent(
         'Key Name is required for API key authentication, API Key Value is required for API key authentication',
       );
     });

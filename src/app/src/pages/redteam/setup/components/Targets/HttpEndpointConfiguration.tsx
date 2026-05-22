@@ -50,6 +50,7 @@ import TestSection from './TestSection';
 
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
+import type { AuthorizationFieldErrors } from './tabs/AuthorizationTab';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -60,6 +61,7 @@ interface HttpEndpointConfigurationProps {
   setUrlError: (error: string | null) => void;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  authorizationFieldErrors?: AuthorizationFieldErrors;
 }
 
 interface GeneratedConfig {
@@ -266,6 +268,7 @@ const HttpEndpointConfiguration = ({
   setUrlError,
   onTargetTested,
   onSessionTested,
+  authorizationFieldErrors,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
   const urlErrorId = useId();
   const bodyErrorId = useId();
@@ -1079,6 +1082,7 @@ ${exampleRequest}`;
         updateCustomTarget={updateCustomTarget}
         defaultRequestTransform={selectedTarget.config.transformRequest}
         onSessionTested={onSessionTested}
+        authorizationFieldErrors={authorizationFieldErrors}
       />
 
       {/* Response Transform Test Dialog */}

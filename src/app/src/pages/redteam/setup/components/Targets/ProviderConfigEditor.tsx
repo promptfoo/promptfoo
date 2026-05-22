@@ -13,6 +13,7 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 import type { ProviderOptions } from '../../types';
 import type { BrowserAutomationFieldErrors } from './BrowserAutomationConfiguration';
 import type { FoundationModelFieldErrors } from './FoundationModelConfiguration';
+import type { AuthorizationFieldErrors } from './tabs/AuthorizationTab';
 
 export interface ProviderConfigEditorProps {
   provider: ProviderOptions;
@@ -76,6 +77,7 @@ interface ProviderValidationResult {
   customIdError: string | null;
   urlError: string | null;
   requestError: string | null;
+  authorizationFieldErrors: AuthorizationFieldErrors;
   browserFieldErrors: BrowserAutomationFieldErrors;
 }
 
@@ -187,6 +189,7 @@ function validateFoundationModelProvider(
     customIdError: null,
     urlError: null,
     requestError: null,
+    authorizationFieldErrors: {},
     browserFieldErrors: {},
   };
 }
@@ -195,7 +198,10 @@ function validateHttpProvider(
   provider: ProviderOptions,
   bodyError: React.ReactNode | null,
   validateUrl: (url: string) => boolean,
-): Pick<ProviderValidationResult, 'errors' | 'urlError' | 'requestError'> {
+): Pick<
+  ProviderValidationResult,
+  'errors' | 'urlError' | 'requestError' | 'authorizationFieldErrors'
+> {
   const errors: ValidationError[] = [];
   let urlError: string | null = null;
   let requestError: string | null = null;
@@ -211,51 +217,72 @@ function validateHttpProvider(
   if (bodyError && bodyError !== requestError) {
     errors.push(bodyError);
   }
-  errors.push(...validateHttpAuthorization(provider));
-  return { errors, urlError, requestError };
+  const authorizationValidation = validateHttpAuthorization(provider);
+  errors.push(...authorizationValidation.errors);
+  return {
+    errors,
+    urlError,
+    requestError,
+    authorizationFieldErrors: authorizationValidation.fieldErrors,
+  };
 }
 
-function validateHttpAuthorization(provider: ProviderOptions): string[] {
+interface HttpAuthorizationValidationResult {
+  errors: string[];
+  fieldErrors: AuthorizationFieldErrors;
+}
+
+function validateHttpAuthorization(provider: ProviderOptions): HttpAuthorizationValidationResult {
   const auth = provider.config.auth;
   if (!auth) {
-    return [];
+    return { errors: [], fieldErrors: {} };
   }
 
   const errors: string[] = [];
-  const requireValue = (value: unknown, message: string) => {
+  const fieldErrors: AuthorizationFieldErrors = {};
+  const requireValue = (field: keyof AuthorizationFieldErrors, value: unknown, message: string) => {
     if (typeof value !== 'string' || value.trim() === '') {
       errors.push(message);
+      fieldErrors[field] = message;
     }
   };
 
   switch (auth.type) {
     case 'oauth':
-      requireValue(auth.tokenUrl, 'Token URL is required for OAuth authentication');
+      requireValue('tokenUrl', auth.tokenUrl, 'Token URL is required for OAuth authentication');
       if (auth.grantType === 'password') {
-        requireValue(auth.username, 'Username is required for OAuth password grant');
-        requireValue(auth.password, 'Password is required for OAuth password grant');
+        requireValue('username', auth.username, 'Username is required for OAuth password grant');
+        requireValue('password', auth.password, 'Password is required for OAuth password grant');
       } else {
-        requireValue(auth.clientId, 'Client ID is required for OAuth client credentials');
-        requireValue(auth.clientSecret, 'Client Secret is required for OAuth client credentials');
+        requireValue(
+          'clientId',
+          auth.clientId,
+          'Client ID is required for OAuth client credentials',
+        );
+        requireValue(
+          'clientSecret',
+          auth.clientSecret,
+          'Client Secret is required for OAuth client credentials',
+        );
       }
       break;
     case 'basic':
-      requireValue(auth.username, 'Username is required for Basic authentication');
-      requireValue(auth.password, 'Password is required for Basic authentication');
+      requireValue('username', auth.username, 'Username is required for Basic authentication');
+      requireValue('password', auth.password, 'Password is required for Basic authentication');
       break;
     case 'bearer':
-      requireValue(auth.token, 'Token is required for Bearer authentication');
+      requireValue('token', auth.token, 'Token is required for Bearer authentication');
       break;
     case 'api_key':
-      requireValue(auth.keyName, 'Key Name is required for API key authentication');
-      requireValue(auth.value, 'API Key Value is required for API key authentication');
+      requireValue('keyName', auth.keyName, 'Key Name is required for API key authentication');
+      requireValue('value', auth.value, 'API Key Value is required for API key authentication');
       break;
     case 'file':
-      requireValue(auth.path, 'Auth File Path is required for file authentication');
+      requireValue('path', auth.path, 'Auth File Path is required for file authentication');
       break;
   }
 
-  return errors;
+  return { errors, fieldErrors };
 }
 
 function validateAgentProvider(provider: ProviderOptions): string[] {
@@ -383,6 +410,7 @@ function getProviderValidationResult(
     customIdError: null,
     urlError: null,
     requestError: null,
+    authorizationFieldErrors: {},
     browserFieldErrors: {},
   };
   if (providerType === 'http') {
@@ -438,6 +466,8 @@ function ProviderConfigEditor({
   );
   const [agentIdError, setAgentIdError] = useState<string | null>(null);
   const [customIdError, setCustomIdError] = useState<string | null>(null);
+  const [authorizationFieldErrors, setAuthorizationFieldErrors] =
+    useState<AuthorizationFieldErrors>({});
   const [browserFieldErrors, setBrowserFieldErrors] = useState<BrowserAutomationFieldErrors>({});
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
@@ -455,6 +485,8 @@ function ProviderConfigEditor({
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
+    setAuthorizationFieldErrors((errors) => (field === 'auth' ? {} : errors));
+
     const foundationErrorField = FOUNDATION_ERROR_FIELD_BY_CONFIG_FIELD[field];
     if (foundationErrorField) {
       setFoundationFieldErrors((errors) => ({ ...errors, [foundationErrorField]: undefined }));
@@ -538,6 +570,7 @@ function ProviderConfigEditor({
       customIdError: nextCustomIdError,
       urlError: nextUrlError,
       requestError: nextRequestError,
+      authorizationFieldErrors: nextAuthorizationFieldErrors,
       browserFieldErrors: nextBrowserFieldErrors,
     } = getProviderValidationResult(
       provider,
@@ -553,6 +586,7 @@ function ProviderConfigEditor({
     if (nextRequestError) {
       setBodyError(nextRequestError);
     }
+    setAuthorizationFieldErrors(nextAuthorizationFieldErrors);
     setBrowserFieldErrors(nextBrowserFieldErrors);
     const hasErrors = errors.length > 0;
     if (setError) {
@@ -604,6 +638,7 @@ function ProviderConfigEditor({
           setUrlError={setUrlError}
           onTargetTested={onTargetTested}
           onSessionTested={onSessionTested}
+          authorizationFieldErrors={authorizationFieldErrors}
         />
       )}
 

@@ -1,7 +1,7 @@
 import '@app/lib/prism';
 import 'prismjs/themes/prism.css';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import {
   Collapsible,
@@ -20,6 +20,8 @@ import TlsHttpsConfigTab from './tabs/TlsHttpsConfigTab';
 import TokenEstimationTab from './tabs/TokenEstimationTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
+import type { AuthorizationFieldErrors } from './tabs/AuthorizationTab';
+
 // Tab values for string-based Radix tabs
 const TabValue = {
   SessionManagement: 'session',
@@ -35,6 +37,7 @@ interface HttpAdvancedConfigurationProps {
   updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
   onSessionTested?: (success: boolean) => void;
+  authorizationFieldErrors?: AuthorizationFieldErrors;
 }
 
 const ADVANCED_CONFIG_FIELDS = [
@@ -58,12 +61,28 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   defaultRequestTransform,
   updateCustomTarget,
   onSessionTested,
+  authorizationFieldErrors = {},
 }: HttpAdvancedConfigurationProps) => {
   const [isExpanded, setIsExpanded] = useState(() => hasAdvancedConfiguration(selectedTarget));
+  const [selectedTab, setSelectedTab] = useState<string>(TabValue.SessionManagement);
+  const hasAuthorizationErrors = Object.keys(authorizationFieldErrors).length > 0;
+  const handleExpandedChange = (open: boolean) => {
+    if (!open && hasAuthorizationErrors) {
+      return;
+    }
+    setIsExpanded(open);
+  };
+
+  useEffect(() => {
+    if (hasAuthorizationErrors) {
+      setIsExpanded(true);
+      setSelectedTab(TabValue.Authorization);
+    }
+  }, [hasAuthorizationErrors]);
 
   return (
     <>
-      <Collapsible open={isExpanded} onOpenChange={setIsExpanded} className="mt-8">
+      <Collapsible open={isExpanded} onOpenChange={handleExpandedChange} className="mt-8">
         <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 rounded-lg border border-border bg-card p-4 text-left transition-colors hover:bg-muted/50">
           <div>
             <h3 className="font-semibold">Advanced HTTP settings</h3>
@@ -79,7 +98,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
           />
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-4">
-          <Tabs defaultValue={TabValue.SessionManagement}>
+          <Tabs value={selectedTab} onValueChange={setSelectedTab}>
             <TabsList className="grid !h-auto w-full grid-cols-2 gap-1 overflow-visible md:grid-cols-3 xl:inline-flex xl:!h-10 xl:w-auto xl:gap-0">
               <TabsTrigger value={TabValue.SessionManagement}>Session Management</TabsTrigger>
               <TabsTrigger value={TabValue.Authorization}>Authorization</TabsTrigger>
@@ -102,6 +121,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
                 <AuthorizationTab
                   selectedTarget={selectedTarget}
                   updateCustomTarget={updateCustomTarget}
+                  fieldErrors={authorizationFieldErrors}
                 />
               </TabsContent>
 

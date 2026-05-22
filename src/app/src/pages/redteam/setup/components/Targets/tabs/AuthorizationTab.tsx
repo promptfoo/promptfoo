@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
@@ -22,6 +23,19 @@ import type { HttpProviderOptions } from '../../../types';
 interface AuthorizationTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
+  fieldErrors?: AuthorizationFieldErrors;
+}
+
+export interface AuthorizationFieldErrors {
+  tokenUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  username?: string;
+  password?: string;
+  token?: string;
+  keyName?: string;
+  value?: string;
+  path?: string;
 }
 
 // Password field with visibility toggle
@@ -33,6 +47,8 @@ const PasswordField: React.FC<{
   placeholder?: string;
   helperText?: string;
   required?: boolean;
+  error?: string;
+  errorId?: string;
   showValue: boolean;
   onToggleVisibility: () => void;
 }> = ({
@@ -43,56 +59,83 @@ const PasswordField: React.FC<{
   placeholder,
   helperText,
   required,
+  error,
+  errorId,
   showValue,
   onToggleVisibility,
-}) => (
-  <div className="space-y-2">
-    <Label htmlFor={id}>
-      {label}
-      {required && (
-        <span aria-hidden="true" className="ml-1 text-destructive">
-          *
-        </span>
+}) => {
+  const helperTextId = helperText && id ? `${id}-help` : undefined;
+  const describedBy = [helperTextId, error ? errorId : undefined].filter(Boolean).join(' ');
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>
+        {label}
+        {required && (
+          <span aria-hidden="true" className="ml-1 text-destructive">
+            *
+          </span>
+        )}
+      </Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={showValue ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="pr-10"
+          autoComplete="off"
+          required={required}
+          aria-invalid={Boolean(error)}
+          aria-describedby={describedBy || undefined}
+        />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+              onClick={onToggleVisibility}
+              aria-label={showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+            >
+              {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      {helperText && (
+        <p id={helperTextId} className="text-sm text-muted-foreground">
+          {helperText}
+        </p>
       )}
-    </Label>
-    <div className="relative">
-      <Input
-        id={id}
-        type={showValue ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="pr-10"
-        autoComplete="off"
-        required={required}
-      />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-            onClick={onToggleVisibility}
-            aria-label={showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-          >
-            {showValue ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {showValue ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-        </TooltipContent>
-      </Tooltip>
+      {error && errorId && (
+        <HelperText id={errorId} error>
+          {error}
+        </HelperText>
+      )}
     </div>
-    {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}
-  </div>
-);
+  );
+};
 
 const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
   selectedTarget,
   updateCustomTarget,
+  fieldErrors = {},
 }) => {
   const { showToast } = useToast();
+  const fieldErrorIdPrefix = React.useId();
+  const fieldErrorId = (field: keyof AuthorizationFieldErrors) => `${fieldErrorIdPrefix}-${field}`;
+  const renderFieldError = (field: keyof AuthorizationFieldErrors) =>
+    fieldErrors[field] ? (
+      <HelperText id={fieldErrorId(field)} error>
+        {fieldErrors[field]}
+      </HelperText>
+    ) : null;
 
   // Visibility state for password fields
   const [showClientSecret, setShowClientSecret] = useState(false);
@@ -286,7 +329,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   value={auth?.tokenUrl || ''}
                   onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
                   placeholder="https://example.com/oauth/token"
+                  aria-invalid={Boolean(fieldErrors.tokenUrl)}
+                  aria-describedby={fieldErrors.tokenUrl ? fieldErrorId('tokenUrl') : undefined}
                 />
+                {renderFieldError('tokenUrl')}
               </div>
 
               <div className="space-y-2">
@@ -303,7 +349,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   required={auth?.grantType !== 'password'}
                   value={auth?.clientId || ''}
                   onChange={(e) => updateAuthField('clientId', e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.clientId)}
+                  aria-describedby={fieldErrors.clientId ? fieldErrorId('clientId') : undefined}
                 />
+                {renderFieldError('clientId')}
                 {auth?.grantType === 'password' && (
                   <p className="text-sm text-muted-foreground">Optional for password grant</p>
                 )}
@@ -315,6 +364,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 value={auth?.clientSecret || ''}
                 onChange={(value) => updateAuthField('clientSecret', value)}
                 required={auth?.grantType !== 'password'}
+                error={fieldErrors.clientSecret}
+                errorId={fieldErrorId('clientSecret')}
                 helperText={
                   auth?.grantType === 'password' ? 'Optional for password grant' : undefined
                 }
@@ -337,7 +388,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                       required
                       value={auth?.username || ''}
                       onChange={(e) => updateAuthField('username', e.target.value)}
+                      aria-invalid={Boolean(fieldErrors.username)}
+                      aria-describedby={fieldErrors.username ? fieldErrorId('username') : undefined}
                     />
+                    {renderFieldError('username')}
                   </div>
 
                   <PasswordField
@@ -346,6 +400,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     value={auth?.password || ''}
                     onChange={(value) => updateAuthField('password', value)}
                     required
+                    error={fieldErrors.password}
+                    errorId={fieldErrorId('password')}
                     showValue={showOAuthPassword}
                     onToggleVisibility={() => setShowOAuthPassword(!showOAuthPassword)}
                   />
@@ -396,7 +452,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   required
                   value={auth?.username || ''}
                   onChange={(e) => updateAuthField('username', e.target.value)}
+                  aria-invalid={Boolean(fieldErrors.username)}
+                  aria-describedby={fieldErrors.username ? fieldErrorId('username') : undefined}
                 />
+                {renderFieldError('username')}
               </div>
 
               <PasswordField
@@ -405,6 +464,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 value={auth?.password || ''}
                 onChange={(value) => updateAuthField('password', value)}
                 required
+                error={fieldErrors.password}
+                errorId={fieldErrorId('password')}
                 showValue={showBasicPassword}
                 onToggleVisibility={() => setShowBasicPassword(!showBasicPassword)}
               />
@@ -430,6 +491,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 placeholder="Enter your Bearer token"
                 helperText="This token will be sent in the Authorization header as: Bearer {token}"
                 required
+                error={fieldErrors.token}
+                errorId={fieldErrorId('token')}
                 showValue={showBearerToken}
                 onToggleVisibility={() => setShowBearerToken(!showBearerToken)}
               />
@@ -476,12 +539,15 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   value={auth?.keyName || 'X-API-Key'}
                   onChange={(e) => updateAuthField('keyName', e.target.value)}
                   placeholder="X-API-Key"
+                  aria-invalid={Boolean(fieldErrors.keyName)}
+                  aria-describedby={fieldErrors.keyName ? fieldErrorId('keyName') : undefined}
                 />
                 <p className="text-sm text-muted-foreground">
                   {auth?.placement === 'header'
                     ? 'Header name where the API key will be placed (e.g., X-API-Key, Authorization)'
                     : 'Query parameter name where the API key will be placed (e.g., api_key, key)'}
                 </p>
+                {renderFieldError('keyName')}
               </div>
 
               <PasswordField
@@ -491,6 +557,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 onChange={(value) => updateAuthField('value', value)}
                 placeholder="Enter your API key"
                 required
+                error={fieldErrors.value}
+                errorId={fieldErrorId('value')}
                 showValue={showApiKey}
                 onToggleVisibility={() => setShowApiKey(!showApiKey)}
               />
@@ -519,6 +587,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   value={auth?.path || ''}
                   onChange={(e) => updateAuthField('path', e.target.value)}
                   placeholder="./auth/get-token.ts"
+                  aria-invalid={Boolean(fieldErrors.path)}
+                  aria-describedby={fieldErrors.path ? fieldErrorId('path') : undefined}
                 />
                 <p className="text-sm text-muted-foreground">
                   Load a token from a JavaScript, TypeScript, or Python auth file. See{' '}
@@ -532,6 +602,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   </a>{' '}
                   for details.
                 </p>
+                {renderFieldError('path')}
               </div>
             </div>
           );
