@@ -74,8 +74,9 @@ async function main() {
   const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
   // Auto-update is opt-in: only enabled if explicitly set to true
   const enableAutoUpdate = getEnvBool('PROMPTFOO_ENABLE_AUTO_UPDATE');
+  const updateCommandRequested = isUpdateCommandRequested(argv);
 
-  if (!disableUpdateNag) {
+  if (!disableUpdateNag && !updateCommandRequested) {
     checkForUpdates()
       .then((info) => {
         if (info) {
@@ -83,7 +84,7 @@ async function main() {
           logger.info('Run "promptfoo update" to upgrade to the latest version.');
 
           // Never replace the installed package while the current invocation is using it.
-          if (enableAutoUpdate && !isUpdateCommandRequested(argv)) {
+          if (enableAutoUpdate) {
             scheduleAutoUpdateOnExit(info, disableUpdateNag, process.cwd());
           }
         }
