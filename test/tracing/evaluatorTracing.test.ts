@@ -14,7 +14,6 @@ import { mockProcessEnv } from '../util/utils';
 import type { TestCase, TestSuite } from '../../src/types/index';
 
 const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
 const mockCreateTrace = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
@@ -37,7 +36,6 @@ vi.mock('../../src/tracing/store', () => ({
 vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: mockStartOTLPReceiver,
   stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
-  updateOTLPReceiverOptions: mockUpdateOTLPReceiverOptions,
 }));
 
 describe('evaluatorTracing', () => {
@@ -45,7 +43,6 @@ describe('evaluatorTracing', () => {
     vi.clearAllMocks();
     mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
-    mockUpdateOTLPReceiverOptions.mockReset();
     mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
     resetTracingState();
@@ -193,6 +190,35 @@ describe('evaluatorTracing', () => {
       } finally {
         getTraceStoreSpy.mockRestore();
       }
+    });
+
+    it('should persist OTLP redaction config in trace metadata', async () => {
+      const test: TestCase = {
+        vars: { foo: 'bar' },
+      };
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
+
+      expect(mockCreateTrace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            otlpHttpRedactAttributes: ['authorization'],
+          }),
+        }),
+      );
     });
   });
 
@@ -406,7 +432,13 @@ describe('evaluatorTracing', () => {
       });
     });
 
-    it('should merge receiver options when tracing is already running', async () => {
+    it('should prune the trace store when tracing is already running', async () => {
+      const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
+      const { getTraceStore } = await import('../../src/tracing/store');
+      vi.mocked(getTraceStore).mockReturnValue({
+        deleteOldTraces,
+      } as unknown as ReturnType<typeof getTraceStore>);
+
       await startOtlpReceiverIfNeeded({
         providers: [],
         prompts: [],
@@ -426,17 +458,14 @@ describe('evaluatorTracing', () => {
               enabled: true,
               port: 4318,
               host: '127.0.0.1',
-              redactAttributes: ['authorization'],
             },
           },
+          storage: { type: 'sqlite', retentionDays: 7 },
         },
       } as unknown as TestSuite);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
-      expect(mockUpdateOTLPReceiverOptions).toHaveBeenCalledWith({
-        acceptFormats: ['json', 'protobuf'],
-        redactAttributes: ['authorization'],
-      });
+      expect(deleteOldTraces).toHaveBeenCalledWith(7);
     });
   });
 });

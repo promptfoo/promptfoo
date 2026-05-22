@@ -82,9 +82,8 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     const redactAttributes = httpTracing.redactAttributes;
 
     if (otlpReceiverStarted) {
-      const { updateOTLPReceiverOptions } = await import('./otlpReceiver');
-      updateOTLPReceiverOptions({ acceptFormats, redactAttributes });
-      logger.debug('[EvaluatorTracing] OTLP receiver already started, merged live options');
+      logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
+      await pruneTraceStoreIfNeeded(testSuite);
       return;
     }
 
@@ -107,25 +106,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
       );
-
-      // Apply retention if configured. Default 30 days from the schema; only run when
-      // the user opts in to a finite retention via tracing.storage.retentionDays > 0.
-      const retentionDays = testSuite.tracing.storage?.retentionDays;
-      if (typeof retentionDays === 'number' && retentionDays > 0) {
-        try {
-          const { getTraceStore } = await import('./store');
-          await getTraceStore().deleteOldTraces(retentionDays);
-          logger.debug(
-            `[EvaluatorTracing] Pruned trace store entries older than ${retentionDays} days`,
-          );
-        } catch (pruneError) {
-          logger.warn(
-            `[EvaluatorTracing] Failed to prune old traces: ${
-              pruneError instanceof Error ? pruneError.message : pruneError
-            }`,
-          );
-        }
-      }
+      await pruneTraceStoreIfNeeded(testSuite);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
@@ -149,6 +130,27 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
         `[EvaluatorTracing] tracing.otlp.http.enabled: ${testSuite.tracing?.otlp?.http?.enabled}`,
       );
     }
+  }
+}
+
+async function pruneTraceStoreIfNeeded(testSuite: TestSuite): Promise<void> {
+  // Default retention is only materialized on parsed configs. Keep ad-hoc suites
+  // opt-in so tests and programmatic callers do not prune unexpectedly.
+  const retentionDays = testSuite.tracing?.storage?.retentionDays;
+  if (typeof retentionDays !== 'number' || retentionDays <= 0) {
+    return;
+  }
+
+  try {
+    const { getTraceStore } = await import('./store');
+    await getTraceStore().deleteOldTraces(retentionDays);
+    logger.debug(`[EvaluatorTracing] Pruned trace store entries older than ${retentionDays} days`);
+  } catch (pruneError) {
+    logger.warn(
+      `[EvaluatorTracing] Failed to prune old traces: ${
+        pruneError instanceof Error ? pruneError.message : pruneError
+      }`,
+    );
   }
 }
 
@@ -248,6 +250,7 @@ export async function generateTraceContextIfNeeded(
         promptIdx,
         vars: test.vars,
         commandToolNames: testSuite?.tracing?.commandToolNames,
+        otlpHttpRedactAttributes: testSuite?.tracing?.otlp?.http?.redactAttributes,
       },
     });
     logger.debug('[EvaluatorTracing] Trace record created successfully');

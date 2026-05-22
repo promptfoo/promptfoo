@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import { renderVarsInObject } from '../util/render';
 import {
   extractTrajectorySteps,
   formatTrajectoryArgs,
@@ -629,8 +630,11 @@ export const handleTrajectoryGoalSuccess = async (
   params: AssertionParams,
 ): Promise<GradingResult> => {
   const trace = getTraceOrThrow(params);
+  const assertionValue = params.renderedValue ?? params.assertion.value;
   const { goal, timeoutMs } = resolveGoalSuccessValue(
-    params.renderedValue ?? params.assertion.value,
+    typeof assertionValue === 'object' && assertionValue !== null && !Array.isArray(assertionValue)
+      ? renderVarsInObject(assertionValue, params.assertionValueContext.vars)
+      : assertionValue,
   );
   const trajectory = summarizeTrajectoryForJudge(trace);
   const judgePromise = matchesTrajectoryGoalSuccess(

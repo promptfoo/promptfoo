@@ -160,6 +160,45 @@ describe('handleTrajectoryGoalSuccess', () => {
     );
   });
 
+  it('renders templated goals from object values', async () => {
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Goal achieved',
+    });
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trajectory:goal-success',
+        value: {
+          goal: 'Find order {{ order_id }} before replying',
+          timeoutMs: 10000,
+        },
+      },
+      renderedValue: {
+        goal: 'Find order {{ order_id }} before replying',
+        timeoutMs: 10000,
+      },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        vars: { order_id: '123' },
+      },
+    };
+
+    await handleTrajectoryGoalSuccess(params);
+
+    expect(matchesTrajectoryGoalSuccess).toHaveBeenCalledWith(
+      'Find order 123 before replying',
+      expect.any(String),
+      'test output',
+      undefined,
+      { order_id: '123' },
+      params.assertion,
+      undefined,
+    );
+  });
+
   it('passes resolved assertion vars instead of the raw test vars', async () => {
     vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue({
       pass: true,
