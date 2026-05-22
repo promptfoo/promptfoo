@@ -2,6 +2,7 @@ import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
+import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
 import { type BlobRef, recordBlobReference, storeBlob } from './index';
 import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
@@ -15,9 +16,6 @@ interface BlobContext {
 }
 
 type BlobKind = 'audio' | 'image';
-
-const BLOB_URI_REGEX = /^promptfoo:\/\/blob\/([a-f0-9]{64})$/i;
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 
 function isDataUrl(value: string): boolean {
   return /^data:(audio|image)\/[^;]+;base64,/.test(value);
@@ -682,40 +680,14 @@ export function isBlobStorageEnabled(): boolean {
   return !getEnvBool('PROMPTFOO_INLINE_MEDIA', false);
 }
 
-function parseBlobHashFromValue(value: unknown): string | null {
-  if (!value) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    const match = value.match(BLOB_URI_REGEX);
-    return match ? match[1] : null;
-  }
-
-  if (typeof value === 'object') {
-    const candidate = value as { uri?: string; hash?: string };
-    if (candidate.hash && BLOB_HASH_REGEX.test(candidate.hash)) {
-      return candidate.hash;
-    }
-    if (candidate.uri && typeof candidate.uri === 'string') {
-      const match = candidate.uri.match(BLOB_URI_REGEX);
-      if (match) {
-        return match[1];
-      }
-    }
-  }
-
-  return null;
-}
-
 async function recordExistingBlobReferences(
   value: unknown,
   context: BlobContext,
   location: string,
 ): Promise<void> {
-  const hash = parseBlobHashFromValue(value);
-  if (hash) {
-    await recordBlobReference(hash, { ...context, location });
+  const hashes = [...new Set(extractBlobHashesFromValue(value))];
+  if (hashes.length > 0) {
+    await Promise.all(hashes.map((hash) => recordBlobReference(hash, { ...context, location })));
     return;
   }
 
