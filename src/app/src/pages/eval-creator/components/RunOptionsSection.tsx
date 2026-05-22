@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Card } from '@app/components/ui/card';
 import {
@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { cn } from '@app/lib/utils';
@@ -22,6 +23,32 @@ interface RunOptionsSectionProps {
   readiness: SetupReadiness;
 }
 
+const getDelayError = (value: string): string | undefined => {
+  if (value === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return 'Enter a whole number of milliseconds, 0 or greater.';
+  }
+
+  return undefined;
+};
+
+const getMaxConcurrencyError = (value: string): string | undefined => {
+  if (value === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return 'Enter a whole number of concurrent requests, 1 or greater.';
+  }
+
+  return undefined;
+};
+
 export function RunOptionsSection({
   description,
   delay,
@@ -32,26 +59,47 @@ export function RunOptionsSection({
   const [showOptionalSettings, setShowOptionalSettings] = useState(
     Boolean(description || delay || maxConcurrency),
   );
-  const canSetDelay = !maxConcurrency || maxConcurrency === 1;
-  const canSetMaxConcurrency = !delay || delay === 0;
+  const [delayDraft, setDelayDraft] = useState(delay?.toString() || '');
+  const [maxConcurrencyDraft, setMaxConcurrencyDraft] = useState(maxConcurrency?.toString() || '');
+  const delayError = getDelayError(delayDraft);
+  const maxConcurrencyError = getMaxConcurrencyError(maxConcurrencyDraft);
+  const canSetDelay = maxConcurrencyDraft === '' || Number(maxConcurrencyDraft) === 1;
+  const canSetMaxConcurrency = delayDraft === '' || Number(delayDraft) === 0;
+  const settingsError = delayError || maxConcurrencyError;
+
+  useEffect(() => {
+    setDelayDraft(delay?.toString() || '');
+  }, [delay]);
+
+  useEffect(() => {
+    setMaxConcurrencyDraft(maxConcurrency?.toString() || '');
+  }, [maxConcurrency]);
 
   const handleDelayChange = (value: string) => {
+    setDelayDraft(value);
+    if (getDelayError(value)) {
+      return;
+    }
+
     const parsed = value === '' ? undefined : Number(value);
-    const safe = parsed !== undefined && (Number.isNaN(parsed) || parsed < 0) ? 0 : parsed;
     onChange({
       description,
-      delay: safe,
-      maxConcurrency: safe && safe > 0 ? 1 : maxConcurrency,
+      delay: parsed,
+      maxConcurrency: parsed && parsed > 0 ? 1 : maxConcurrency,
     });
   };
 
   const handleMaxConcurrencyChange = (value: string) => {
+    setMaxConcurrencyDraft(value);
+    if (getMaxConcurrencyError(value)) {
+      return;
+    }
+
     const parsed = value === '' ? undefined : Number(value);
-    const safe = parsed !== undefined && (Number.isNaN(parsed) || parsed < 1) ? 1 : parsed;
     onChange({
       description,
-      delay: safe && safe > 1 ? 0 : delay,
-      maxConcurrency: safe,
+      delay: parsed && parsed > 1 ? 0 : delay,
+      maxConcurrency: parsed,
     });
   };
 
@@ -96,16 +144,25 @@ export function RunOptionsSection({
                   id="delay"
                   type="number"
                   min="0"
+                  step="1"
                   placeholder="0"
-                  value={delay?.toString() || ''}
+                  value={delayDraft}
                   onChange={(e) => handleDelayChange(e.target.value)}
                   disabled={!canSetDelay}
+                  aria-invalid={Boolean(delayError)}
+                  aria-describedby={delayError ? 'delay-error' : undefined}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {canSetDelay
-                    ? 'Add a delay to reduce rate-limit errors.'
-                    : 'Set maximum concurrent requests to 1 before adding a delay.'}
-                </p>
+                {delayError ? (
+                  <HelperText id="delay-error" error>
+                    {delayError}
+                  </HelperText>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {canSetDelay
+                      ? 'Add a delay to reduce rate-limit errors.'
+                      : 'Set maximum concurrent requests to 1 before adding a delay.'}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -119,16 +176,25 @@ export function RunOptionsSection({
                   id="maxConcurrency"
                   type="number"
                   min="1"
+                  step="1"
                   placeholder="4"
-                  value={maxConcurrency?.toString() || ''}
+                  value={maxConcurrencyDraft}
                   onChange={(e) => handleMaxConcurrencyChange(e.target.value)}
                   disabled={!canSetMaxConcurrency}
+                  aria-invalid={Boolean(maxConcurrencyError)}
+                  aria-describedby={maxConcurrencyError ? 'max-concurrency-error' : undefined}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {canSetMaxConcurrency
-                    ? 'Controls how many requests run at once.'
-                    : 'Set delay to 0 before increasing concurrency.'}
-                </p>
+                {maxConcurrencyError ? (
+                  <HelperText id="max-concurrency-error" error>
+                    {maxConcurrencyError}
+                  </HelperText>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {canSetMaxConcurrency
+                      ? 'Controls how many requests run at once.'
+                      : 'Set delay to 0 before increasing concurrency.'}
+                  </p>
+                )}
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -186,7 +252,11 @@ export function RunOptionsSection({
             </div>
           )}
 
-          <RunTestSuiteButton />
+          <RunTestSuiteButton
+            disabledReason={
+              settingsError ? 'Fix invalid optional run settings before starting.' : undefined
+            }
+          />
         </div>
       </Card>
     </div>

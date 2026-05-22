@@ -73,6 +73,24 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it('blocks launch and explains an invalid run-settings reason', () => {
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(
+      <RunTestSuiteButton disabledReason="Fix invalid optional run settings before starting." />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(
+      'Fix invalid optional run settings before starting.',
+    );
+  });
+
   it('should be disabled when a test case omits a required prompt variable', () => {
     useStore.getState().updateConfig({
       prompts: ['Write about {{topic}} for {{audience}}'],

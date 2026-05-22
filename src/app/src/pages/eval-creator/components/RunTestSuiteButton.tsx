@@ -12,7 +12,11 @@ import { useNavigate } from 'react-router-dom';
 import { getSetupReadiness, normalizePromptsForJob } from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
-const RunTestSuiteButton = () => {
+interface RunTestSuiteButtonProps {
+  disabledReason?: string;
+}
+
+const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
   const navigate = useNavigate();
   const { config } = useStore();
   const { signalEvalCompleted } = useEvalHistoryRefresh();
@@ -54,7 +58,7 @@ const RunTestSuiteButton = () => {
   const jobPrompts = normalizePromptsForJob(prompts);
   const readiness = getSetupReadiness(config);
 
-  const isDisabled = isRunning || !readiness.isReadyToRun;
+  const isDisabled = isRunning || !readiness.isReadyToRun || Boolean(disabledReason);
   const progressMessage =
     progressPercent === 0
       ? 'Starting evaluation and preparing requests.'
@@ -178,11 +182,15 @@ const RunTestSuiteButton = () => {
           {progressMessage}
         </p>
       )}
-      {!isRunning && isDisabled && (
+      {!isRunning && disabledReason ? (
+        <p id="run-eval-help" className="text-xs text-destructive">
+          {disabledReason}
+        </p>
+      ) : !isRunning && isDisabled ? (
         <p id="run-eval-help" className="text-xs text-muted-foreground">
           Resolve the required setup items above to run this evaluation.
         </p>
-      )}
+      ) : null}
       {runError && (
         <Alert variant="destructive">
           <AlertContent>
