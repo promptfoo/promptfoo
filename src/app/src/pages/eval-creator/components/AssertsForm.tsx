@@ -68,8 +68,11 @@ const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
       'g-eval',
       'moderation',
       'pi',
-      'select-best',
     ],
+  },
+  {
+    label: 'Compare outputs',
+    types: ['select-best', 'max-score'],
   },
   {
     label: 'Tools and agent behavior',
@@ -138,6 +141,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'model-graded-closedqa': 'Closed QA grading',
   'not-similar': 'Not semantically similar',
   'select-best': 'Choose best output',
+  'max-score': 'Choose highest score',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
@@ -154,6 +158,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Fails when a model finds semantic similarity to your expected answer. This can add cost.',
   'select-best':
     'Compares outputs for this test case. Add at least two prompts or providers; a model judges the winner and this can add cost.',
+  'max-score':
+    'Selects the highest-scoring output from your other checks. Add at least two prompts or providers and one other assertion; this check does not add model-grading cost itself.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
@@ -200,6 +206,7 @@ const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-context-faithfulness',
   'context-relevance',
   'not-context-relevance',
+  'max-score',
 ]);
 
 // Assertion types that require an LLM
@@ -486,6 +493,17 @@ const NoValueField = ({ type }: { type: AssertionType }) => {
   );
 };
 
+const MaxScoreField = ({ assertion }: { assertion: Assertion }) => (
+  <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+    <p>This check uses scores from your other assertions. No expected value is needed.</p>
+    <p className="mt-2">
+      {assertion.value === undefined
+        ? 'For weights, aggregation method, or a minimum score, configure advanced settings in the YAML editor.'
+        : 'Advanced scoring settings are configured. Use the YAML editor to change weights, aggregation method, or a minimum score.'}
+    </p>
+  </div>
+);
+
 interface OptionalXmlFieldProps {
   assertion: Assertion;
   index: number;
@@ -593,6 +611,10 @@ const AssertionValueFields = ({
         onChange={(value) => onChange({ ...assertion, value })}
       />
     );
+  }
+
+  if (assertion.type === 'max-score') {
+    return <MaxScoreField assertion={assertion} />;
   }
 
   if (NO_VALUE_ASSERTION_TYPES.has(assertion.type)) {

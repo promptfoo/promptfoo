@@ -400,6 +400,32 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
   });
 
+  it('offers deterministic highest-score comparison without asking for an expected value', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'equals', value: 'stale expected text' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(
+      await screen.findByRole('option', { name: /Choose highest score \(max-score\)/ }),
+    );
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'max-score' }]);
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    expect(screen.queryByText('Model-graded: may add cost')).toBeNull();
+    expect(screen.getByText(/highest-scoring output from your other checks/i)).toBeVisible();
+    expect(screen.getByText(/configure advanced settings in the YAML editor/i)).toBeVisible();
+  });
+
+  it('discloses retained advanced max-score YAML settings without hiding their edit path', () => {
+    initialValues = [{ type: 'max-score', value: { method: 'sum' } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    expect(screen.getByText(/Advanced scoring settings are configured/i)).toBeVisible();
+    expect(screen.getByText(/Use the YAML editor to change weights/i)).toBeVisible();
+  });
+
   it('progressively reveals optional XML element requirements', async () => {
     const user = userEvent.setup();
     initialValues = [{ type: 'is-xml' }];

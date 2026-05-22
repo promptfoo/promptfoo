@@ -370,6 +370,42 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('requires scored comparison candidates for max-score assertions', () => {
+      const singleOutputConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [
+          {
+            assert: [{ type: 'contains' as const, value: 'hello' }, { type: 'max-score' as const }],
+          },
+        ],
+      };
+
+      expect(getSetupReadiness(singleOutputConfig).issues).toContainEqual({
+        id: 'comparisonOutputs',
+        message:
+          'Choose highest score needs at least two outputs per test case. Add another provider or prompt.',
+        stepId: 1,
+      });
+
+      const multipleOutputsConfig = {
+        ...singleOutputConfig,
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+      };
+      expect(getSetupReadiness(multipleOutputsConfig).isReadyToRun).toBe(true);
+
+      const missingScoringAssertion = getSetupReadiness({
+        ...multipleOutputsConfig,
+        tests: [{ assert: [{ type: 'max-score' as const }] }],
+      });
+      expect(missingScoringAssertion.isReadyToRun).toBe(false);
+      expect(missingScoringAssertion.issues).toContainEqual({
+        id: 'comparisonScoring',
+        message: 'Choose highest score needs at least one other assertion to score each output.',
+        stepId: 3,
+      });
+    });
+
     it('rejects authored moderation categories unless they use runtime array form', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],

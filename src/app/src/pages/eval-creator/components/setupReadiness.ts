@@ -12,7 +12,8 @@ export interface SetupIssue {
     | 'variables'
     | 'assertions'
     | 'assertionVariables'
-    | 'comparisonOutputs';
+    | 'comparisonOutputs'
+    | 'comparisonScoring';
   message: string;
   stepId: SetupStepId;
 }
@@ -89,20 +90,31 @@ function getAssertions(testCase: unknown): AssertionOrSet[] {
     : [];
 }
 
-function containsSelectBest(assertions: AssertionOrSet[]): boolean {
-  return assertions.some((assertion) =>
-    assertion.type === 'assert-set'
-      ? assertion.assert.some((nestedAssertion) => nestedAssertion.type === 'select-best')
-      : assertion.type === 'select-best',
-  );
+type ComparisonAssertionType = 'select-best' | 'max-score';
+
+function containsComparisonAssertion(
+  assertions: AssertionOrSet[],
+  type: ComparisonAssertionType,
+): boolean {
+  return assertions.some((assertion) => assertion.type === type);
 }
 
-function hasConfiguredSelectBest(
+function getEffectiveAssertions(
+  testCase: Record<string, unknown>,
+  defaultAssertions: AssertionOrSet[],
+): AssertionOrSet[] {
+  const disablesDefaultAsserts =
+    isRecord(testCase.options) && testCase.options.disableDefaultAsserts === true;
+  return [...(disablesDefaultAsserts ? [] : defaultAssertions), ...getAssertions(testCase)];
+}
+
+function hasConfiguredComparisonAssertion(
   tests: UnifiedConfig['tests'] | undefined,
   defaultAssertions: AssertionOrSet[],
+  type: ComparisonAssertionType,
 ): boolean {
   if (!Array.isArray(tests)) {
-    return countTests(tests) > 0 && containsSelectBest(defaultAssertions);
+    return countTests(tests) > 0 && containsComparisonAssertion(defaultAssertions, type);
   }
 
   return tests.some((testCase) => {
@@ -110,14 +122,67 @@ function hasConfiguredSelectBest(
       return false;
     }
 
-    const disablesDefaultAsserts =
-      isRecord(testCase.options) && testCase.options.disableDefaultAsserts === true;
-    const assertions = [
-      ...(disablesDefaultAsserts ? [] : defaultAssertions),
-      ...getAssertions(testCase),
-    ];
-    return containsSelectBest(assertions);
+    return containsComparisonAssertion(getEffectiveAssertions(testCase, defaultAssertions), type);
   });
+}
+
+function hasMaxScoreWithoutScoringAssertion(
+  tests: UnifiedConfig['tests'] | undefined,
+  defaultAssertions: AssertionOrSet[],
+): boolean {
+  if (!Array.isArray(tests)) {
+    return false;
+  }
+
+  return tests.some((testCase) => {
+    if (!isRecord(testCase)) {
+      return false;
+    }
+
+    const assertions = getEffectiveAssertions(testCase, defaultAssertions);
+    return (
+      containsComparisonAssertion(assertions, 'max-score') &&
+      !assertions.some(
+        (assertion) => assertion.type !== 'select-best' && assertion.type !== 'max-score',
+      )
+    );
+  });
+}
+
+function getComparisonSetupIssues(
+  outputCount: number,
+  tests: UnifiedConfig['tests'] | undefined,
+  defaultAssertions: AssertionOrSet[],
+): SetupIssue[] {
+  const issues: SetupIssue[] = [];
+  const hasSelectBest = hasConfiguredComparisonAssertion(tests, defaultAssertions, 'select-best');
+  const hasMaxScore = hasConfiguredComparisonAssertion(tests, defaultAssertions, 'max-score');
+
+  if (outputCount < 2 && hasSelectBest) {
+    issues.push({
+      id: 'comparisonOutputs',
+      message:
+        'Choose best output needs at least two outputs per test case. Add another provider or prompt.',
+      stepId: 1,
+    });
+  } else if (outputCount < 2 && hasMaxScore) {
+    issues.push({
+      id: 'comparisonOutputs',
+      message:
+        'Choose highest score needs at least two outputs per test case. Add another provider or prompt.',
+      stepId: 1,
+    });
+  }
+
+  if (hasMaxScoreWithoutScoringAssertion(tests, defaultAssertions)) {
+    issues.push({
+      id: 'comparisonScoring',
+      message: 'Choose highest score needs at least one other assertion to score each output.',
+      stepId: 3,
+    });
+  }
+
+  return issues;
 }
 
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
@@ -316,14 +381,9 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
   }
 
   const defaultAssertions = getAssertions(config.defaultTest);
-  if (providerCount * promptCount < 2 && hasConfiguredSelectBest(config.tests, defaultAssertions)) {
-    issues.push({
-      id: 'comparisonOutputs',
-      message:
-        'Choose best output needs at least two outputs per test case. Add another provider or prompt.',
-      stepId: 1,
-    });
-  }
+  issues.push(
+    ...getComparisonSetupIssues(providerCount * promptCount, config.tests, defaultAssertions),
+  );
 
   const assertionVariableIssues = Array.isArray(config.tests)
     ? config.tests.flatMap((testCase, index) => {
@@ -332,12 +392,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
         }
 
         const testVars = isRecord(testCase.vars) ? testCase.vars : {};
-        const disablesDefaultAsserts =
-          isRecord(testCase.options) && testCase.options.disableDefaultAsserts === true;
-        const assertions = [
-          ...(disablesDefaultAsserts ? [] : defaultAssertions),
-          ...getAssertions(testCase),
-        ];
+        const assertions = getEffectiveAssertions(testCase, defaultAssertions);
         const missingVariables = getMissingAssertionVariables(assertions, {
           ...defaultVars,
           ...testVars,
