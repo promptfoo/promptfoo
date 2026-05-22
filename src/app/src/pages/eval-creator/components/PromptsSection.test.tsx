@@ -286,7 +286,7 @@ describe('PromptsSection', () => {
     await user.click(deleteButton);
 
     expect(screen.getByRole('dialog', { name: 'Delete prompt 2?' })).toHaveAccessibleDescription(
-      /This removes prompt 2 from this evaluation. This action cannot be undone./,
+      /This removes prompt 2 from this evaluation. This action cannot be undone. Future runs will no longer send it to providers for any test case./,
     );
     expect(screen.getByText(/removes prompt 2 from this evaluation/i)).toBeInTheDocument();
 
@@ -297,6 +297,10 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: ['Prompt 1', 'Prompt 3'],
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Prompt 2 deleted. Future runs no longer include it.',
+      'success',
+    );
 
     updateStoreAndRerender(['Prompt 1', 'Prompt 3'], rerender);
 

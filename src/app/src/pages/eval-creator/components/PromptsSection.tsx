@@ -119,6 +119,10 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const confirmDeletePrompt = () => {
     if (promptToDelete !== null) {
       setPrompts(prompts.filter((_, index) => index !== promptToDelete));
+      showToast(
+        `Prompt ${promptToDelete + 1} deleted. Future runs no longer include it.`,
+        'success',
+      );
       setPromptToDelete(null);
     }
     setDeleteDialogOpen(false);
@@ -344,6 +348,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
             </DialogTitle>
             <DialogDescription id={deleteDialogDescriptionId}>
               This removes {promptLabelToDelete} from this evaluation. This action cannot be undone.
+              Future runs will no longer send it to providers for any test case.
               {prompts.length === 1 &&
                 ' This is your only prompt; add another prompt before you can run the evaluation.'}
             </DialogDescription>
