@@ -21,6 +21,7 @@ import {
   ARRAY_VALUE_ASSERTION_TYPES,
   COMMA_SEPARATED_VALUE_ASSERTION_TYPES,
   getAssertionValueError,
+  PI_SCORE_ASSERTION_TYPES,
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
   STRUCTURED_VALUE_ASSERTION_TYPES,
   TEXT_SCORE_ASSERTION_TYPES,
@@ -150,6 +151,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   latency: 'Latency threshold',
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
+  pi: 'Pi Labs scoring',
 };
 
 const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
@@ -174,6 +176,7 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
+  pi: 'Uses the external Pi Labs scorer. This requires WITHPI_API_KEY and may add service cost.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
   'perplexity-score':
     'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
@@ -725,6 +728,58 @@ const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueF
   );
 };
 
+const PiScoreField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
+  const helpId = `assert-pi-score-help-${index}`;
+  const errorId = `assert-value-error-${index}`;
+  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`assert-pi-criteria-${index}`} className="text-sm font-medium">
+          Scoring criteria (required)
+        </Label>
+        <Textarea
+          id={`assert-pi-criteria-${index}`}
+          value={formatAssertionValue(assertion)}
+          onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+          placeholder="Is the response accurate and concise?"
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionIds}
+          className="min-h-20 resize-y"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`assert-pi-threshold-${index}`} className="text-sm font-medium">
+          Passing score threshold (optional)
+        </Label>
+        <Input
+          id={`assert-pi-threshold-${index}`}
+          type="number"
+          min="0"
+          step="0.01"
+          value={formatAssertionThreshold(assertion)}
+          onChange={(event) =>
+            onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
+          }
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionIds}
+        />
+      </div>
+      {error && (
+        <HelperText id={errorId} error>
+          {error}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        Pi Labs receives the prompt and generated output to score these criteria. Requires{' '}
+        <code className="rounded bg-muted px-1 py-0.5 font-mono">WITHPI_API_KEY</code>. The passing
+        threshold defaults to 0.5.
+      </p>
+    </div>
+  );
+};
+
 const SpecializedValueField = ({
   assertion,
   error,
@@ -747,6 +802,10 @@ const SpecializedValueField = ({
 
   if (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type)) {
     return <TextScoreField assertion={assertion} error={error} index={index} onChange={onChange} />;
+  }
+
+  if (PI_SCORE_ASSERTION_TYPES.has(assertion.type)) {
+    return <PiScoreField assertion={assertion} error={error} index={index} onChange={onChange} />;
   }
 
   return <NoValueField type={assertion.type} />;
@@ -865,7 +924,8 @@ const AssertionValueFields = ({
     NO_VALUE_ASSERTION_TYPES.has(assertion.type) ||
     GUIDED_FINISH_REASON_TYPES.has(assertion.type) ||
     DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type) ||
-    TEXT_SCORE_ASSERTION_TYPES.has(assertion.type)
+    TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+    PI_SCORE_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -993,6 +1053,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(nextType) ||
     GUIDED_FINISH_REASON_TYPES.has(nextType) ||
     DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(nextType) ||
+    PI_SCORE_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -1005,6 +1066,11 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
   if (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) && !TEXT_SCORE_ASSERTION_TYPES.has(nextType)) {
     const { threshold: _threshold, ...withoutThreshold } = assertion;
     return { ...withoutThreshold, type: nextType };
+  }
+
+  if (PI_SCORE_ASSERTION_TYPES.has(assertion.type) && !PI_SCORE_ASSERTION_TYPES.has(nextType)) {
+    const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
+    return { ...withoutStoredValue, type: nextType, value: '' };
   }
 
   if (

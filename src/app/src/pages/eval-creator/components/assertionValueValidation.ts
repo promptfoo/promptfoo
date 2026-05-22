@@ -46,6 +46,8 @@ export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-similar',
 ]);
 
+export const PI_SCORE_ASSERTION_TYPES = new Set<AssertionType>(['pi', 'not-pi']);
+
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-sql',
   'contains-sql',
@@ -172,6 +174,16 @@ function getThresholdError(assertion: Assertion): string | undefined {
     return 'Enter a score threshold from 0 to 1.';
   }
 
+  if (
+    PI_SCORE_ASSERTION_TYPES.has(assertion.type) &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0)
+  ) {
+    return 'Enter a passing score threshold of 0 or greater.';
+  }
+
   return undefined;
 }
 
@@ -273,6 +285,9 @@ function getRequiredStringValueError(assertion: Assertion): string | undefined {
   }
   if (assertion.type === 'webhook' || assertion.type === 'not-webhook') {
     return 'Enter the webhook URL that will validate responses.';
+  }
+  if (PI_SCORE_ASSERTION_TYPES.has(assertion.type)) {
+    return 'Enter criteria for Pi Labs scoring.';
   }
 
   return 'Enter an expected value before saving this check.';

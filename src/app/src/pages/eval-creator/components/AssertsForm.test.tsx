@@ -366,6 +366,42 @@ describe('AssertsForm', () => {
     ]);
   });
 
+  it('discloses Pi Labs data sharing and configures its passing threshold', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'pi' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByText(/external Pi Labs scorer.*requires WITHPI_API_KEY/i)).toBeVisible();
+    const criteria = screen.getByRole('textbox', { name: 'Scoring criteria (required)' });
+    expect(criteria).toHaveAccessibleDescription(
+      /Enter criteria for Pi Labs scoring.*Pi Labs receives the prompt and generated output/i,
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.type(criteria, 'Is the response accurate and concise?');
+    const threshold = screen.getByRole('spinbutton', {
+      name: 'Passing score threshold (optional)',
+    });
+    expect(threshold).toHaveAccessibleDescription(/WITHPI_API_KEY.*defaults to 0.5/i);
+    await user.type(threshold, '0.8');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      {
+        type: 'pi',
+        value: 'Is the response accurate and concise?',
+        threshold: 0.8,
+      },
+    ]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
   it('stores word count limits in the runtime range shape without model-grading cost', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();

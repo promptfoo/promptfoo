@@ -266,6 +266,26 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('validates external Pi scorer criteria and passing thresholds', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'pi' as const, value: 'Be concise', threshold: -0.1 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'pi' as const, value: 'Be concise', threshold: 0.8 }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('requires the threshold property used by runtime cost checks', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],
