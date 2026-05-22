@@ -358,9 +358,8 @@ describe('prompt optimizer', () => {
   });
 
   it('marks internal optimizer evals as redteam when the config has a redteam block', async () => {
-    const internalEvalOptions = await collectInternalEvalOptions({
-      redteam: { plugins: [{ id: 'harmful' }] },
-    });
+    const redteam = { plugins: [{ id: 'harmful' }] };
+    const internalEvalOptions = await collectInternalEvalOptions({ redteam });
 
     for (const options of internalEvalOptions) {
       expect(options).toEqual(
@@ -368,6 +367,9 @@ describe('prompt optimizer', () => {
           isRedteam: true,
         }),
       );
+    }
+    for (const [suite] of vi.mocked(evaluate).mock.calls) {
+      expect(suite.redteam).toEqual(redteam);
     }
   });
 

@@ -601,6 +601,18 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   return explicitTests + scenarioTests;
 }
 
+function createRuntimeOptimizationTestSuite(
+  config: Partial<UnifiedConfig>,
+  testSuite: TestSuite,
+): TestSuite {
+  // Low-level `evaluate` derives per-row redteam semantics from the runtime
+  // suite. Resolved CLI configs already have this field, but direct callers may
+  // pass the redteam block only on the config.
+  return testSuite.redteam == null && config.redteam != null
+    ? { ...testSuite, redteam: config.redteam }
+    : testSuite;
+}
+
 function createEvaluationOptions(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
@@ -611,10 +623,7 @@ function createEvaluationOptions(
     eventSource: 'library',
     showProgressBar: false,
     silent: true,
-    // Match `evaluateWithSource` / `createRunEvalOptions`: optimizing a redteam
-    // config must use redteam scoring semantics (e.g. an empty response counts
-    // as a safe success) so refusals are not mis-scored as failures.
-    isRedteam: Boolean(config.redteam) || testSuite.redteam != null,
+    isRedteam: testSuite.redteam != null,
   };
   // Match the `eval` command: a configured delay only rate-limits API calls
   // when concurrency is forced to 1, otherwise delayed evals still run in parallel.
@@ -630,14 +639,16 @@ export async function optimizePromptTestSuite(
   options: PromptOptimizationOptions = {},
 ): Promise<PromptOptimizationResult> {
   validateOptimizationOptions(options);
-  if (testSuite.prompts.length === 0) {
+  const runtimeTestSuite = createRuntimeOptimizationTestSuite(config, testSuite);
+
+  if (runtimeTestSuite.prompts.length === 0) {
     throw new Error('Prompt optimization requires at least one configured prompt.');
   }
-  if (countConfiguredOptimizationTests(testSuite) === 0) {
+  if (countConfiguredOptimizationTests(runtimeTestSuite) === 0) {
     throw new Error('Prompt optimization requires at least one configured test or scenario.');
   }
 
-  const selectedTestSuite = createSelectedOptimizationTestSuite(testSuite, options);
+  const selectedTestSuite = createSelectedOptimizationTestSuite(runtimeTestSuite, options);
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(selectedTestSuite, options.validationSplit);
 
@@ -645,13 +656,13 @@ export async function optimizePromptTestSuite(
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(config, { persisted: false }),
-    createEvaluationOptions(config, testSuite),
+    createEvaluationOptions(config, runtimeTestSuite),
   );
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(config, { persisted: false }),
-        createEvaluationOptions(config, testSuite),
+        createEvaluationOptions(config, runtimeTestSuite),
       )
     : undefined;
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
@@ -714,7 +725,7 @@ export async function optimizePromptTestSuite(
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(config, { persisted: false }),
-      createEvaluationOptions(config, testSuite),
+      createEvaluationOptions(config, runtimeTestSuite),
     );
     const candidateValidationEval = validationTestSuite
       ? await evaluate(
@@ -727,7 +738,7 @@ export async function optimizePromptTestSuite(
             ),
           ),
           new Eval(config, { persisted: false }),
-          createEvaluationOptions(config, testSuite),
+          createEvaluationOptions(config, runtimeTestSuite),
         )
       : undefined;
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =
