@@ -116,6 +116,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   similar: 'Semantically similar',
   factuality: 'Factuality',
   'model-graded-closedqa': 'Closed QA grading',
+  'not-similar': 'Not semantically similar',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
 };
@@ -127,6 +128,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   'llm-rubric':
     'A model judges the response. Add criteria to tailor the judge, or leave blank for the default rubric. This can add cost.',
   similar: 'A model checks semantic similarity to your expected answer. This can add cost.',
+  'not-similar':
+    'Fails when a model finds semantic similarity to your expected answer. This can add cost.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
@@ -157,26 +160,44 @@ const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
+  'not-is-valid-function-call',
+  'not-is-valid-openai-function-call',
+  'not-is-valid-openai-tools-call',
   'answer-relevance',
+  'not-answer-relevance',
   'context-faithfulness',
+  'not-context-faithfulness',
   'context-relevance',
+  'not-context-relevance',
 ]);
 
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
+  'not-similar',
   'llm-rubric',
+  'not-llm-rubric',
   'factuality',
+  'not-factuality',
   'model-graded-closedqa',
+  'not-model-graded-closedqa',
   'answer-relevance',
+  'not-answer-relevance',
   'context-faithfulness',
+  'not-context-faithfulness',
   'context-recall',
+  'not-context-recall',
   'context-relevance',
+  'not-context-relevance',
   'g-eval',
+  'not-g-eval',
   'moderation',
+  'not-moderation',
   'pi',
+  'not-pi',
   'select-best',
   'trajectory:goal-success',
+  'not-trajectory:goal-success',
 ]);
 
 const formatAssertionValue = (assert: Assertion): string => {
@@ -321,9 +342,12 @@ const StructuredValueField = ({ assertion, error, index, onChange }: StructuredV
 
 const NoValueField = ({ type }: { type: AssertionType }) => {
   const explanation =
-    type === 'answer-relevance'
+    type === 'answer-relevance' || type === 'not-answer-relevance'
       ? 'This check uses the prompt or query variable and the generated response. No value is needed.'
-      : type === 'context-faithfulness' || type === 'context-relevance'
+      : type === 'context-faithfulness' ||
+          type === 'not-context-faithfulness' ||
+          type === 'context-relevance' ||
+          type === 'not-context-relevance'
         ? 'This check uses your query and context variables. No value is needed.'
         : 'This check validates function or tool calls returned by the provider. No value is needed.';
 

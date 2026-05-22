@@ -299,6 +299,23 @@ describe('AssertsForm', () => {
     ).toBeVisible();
   });
 
+  it('does not invite unused values for imported inverse context checks', () => {
+    initialValues = [{ type: 'not-context-relevance' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    expect(screen.getByText('Model-graded: may add cost')).toBeVisible();
+    expect(screen.getByText(/uses your query and context variables/i)).toBeVisible();
+  });
+
+  it('discloses model grading for a negative semantic similarity check', () => {
+    initialValues = [{ type: 'not-similar', value: 'An unrelated answer' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByText('Model-graded: may add cost')).toBeVisible();
+    expect(screen.getByText(/fails when a model finds semantic similarity/i)).toBeVisible();
+  });
+
   it('progressively reveals optional XML element requirements', async () => {
     const user = userEvent.setup();
     initialValues = [{ type: 'is-xml' }];
