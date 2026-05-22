@@ -81,7 +81,10 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
         }
 
         setPrompts([...prompts, text]);
-        showToast('Prompt imported successfully', 'success');
+        showToast(
+          'Prompt imported. Each prompt runs across every test case and provider.',
+          'success',
+        );
         event.target.value = '';
       };
       reader.onerror = () => {

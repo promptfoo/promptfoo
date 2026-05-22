@@ -378,7 +378,10 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: [longLineText],
     });
-    expect(showToastMock).toHaveBeenCalledWith('Prompt imported successfully', 'success');
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Prompt imported. Each prompt runs across every test case and provider.',
+      'success',
+    );
     expect(fileInput.value).toBe('');
   });
 
