@@ -283,6 +283,38 @@ describe('AssertsForm', () => {
     expect(screen.queryByDisplayValue('stale expected text')).toBeNull();
   });
 
+  it('discloses webhook data sharing and clears unrelated values before configuration', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'equals', value: 'stale expected text' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(await screen.findByRole('option', { name: /Webhook validation \(webhook\)/ }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'webhook' }]);
+    const urlInput = screen.getByRole('textbox', { name: 'Webhook URL (required)' });
+    expect(urlInput).toHaveAttribute('type', 'url');
+    expect(urlInput).toHaveAccessibleDescription(
+      /Enter the webhook URL that will validate responses.*sends generated output and test-case variables/i,
+    );
+    expect(screen.getByText(/Use only an endpoint you trust/i)).toBeVisible();
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.type(urlInput, 'https://example.com/validate');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'webhook', value: 'https://example.com/validate' },
+    ]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
   it('stores word count limits in the runtime range shape without model-grading cost', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();

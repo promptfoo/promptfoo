@@ -220,6 +220,26 @@ describe('setupReadiness', () => {
       });
     });
 
+    it('blocks imported webhook checks without a configured endpoint', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'webhook' as const }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'webhook' as const, value: 'https://example.com/check' }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('requires the threshold property used by runtime cost checks', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

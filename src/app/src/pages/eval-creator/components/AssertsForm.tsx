@@ -143,6 +143,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'select-best': 'Choose best output',
   'max-score': 'Choose highest score',
   'finish-reason': 'Finish reason',
+  webhook: 'Webhook validation',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
@@ -163,6 +164,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Selects the highest-scoring output from your other checks. Add at least two prompts or providers and one other assertion; this check does not add model-grading cost itself.',
   'finish-reason':
     'Checks why generation stopped using normalized provider finish reasons, such as natural completion or tool calls.',
+  webhook:
+    'Sends each generated response and its test-case variables to the URL below for validation. Use only an endpoint you trust.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
@@ -191,6 +194,7 @@ const OPTIONAL_XML_ELEMENT_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 const GUIDED_FINISH_REASON_TYPES = new Set<AssertionType>(['finish-reason', 'not-finish-reason']);
+const DISCLOSED_WEBHOOK_ASSERTION_TYPES = new Set<AssertionType>(['webhook', 'not-webhook']);
 
 const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-html',
@@ -520,14 +524,14 @@ const STANDARD_FINISH_REASON_VALUES = new Set<string>(
   STANDARD_FINISH_REASONS.map((reason) => reason.value),
 );
 
-interface FinishReasonFieldProps {
+interface SpecializedValueFieldProps {
   assertion: Assertion;
   error?: string;
   index: number;
   onChange: (assertion: Assertion) => void;
 }
 
-const FinishReasonField = ({ assertion, error, index, onChange }: FinishReasonFieldProps) => {
+const FinishReasonField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
   const value = typeof assertion.value === 'string' ? assertion.value : '';
   const hasCustomValue = value !== '' && !STANDARD_FINISH_REASON_VALUES.has(value);
   const [isEnteringCustomValue, setIsEnteringCustomValue] = useState(hasCustomValue);
@@ -625,7 +629,43 @@ const FinishReasonField = ({ assertion, error, index, onChange }: FinishReasonFi
   );
 };
 
-const SpecializedValueField = ({ assertion, error, index, onChange }: FinishReasonFieldProps) => {
+const WebhookField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
+  const errorId = `assert-value-error-${index}`;
+  const helpId = `assert-webhook-help-${index}`;
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`assert-webhook-${index}`} className="text-sm font-medium">
+        Webhook URL (required)
+      </Label>
+      <Input
+        id={`assert-webhook-${index}`}
+        type="url"
+        value={formatAssertionValue(assertion)}
+        onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+        placeholder="https://example.com/validate"
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${errorId} ${helpId}` : helpId}
+      />
+      {error && (
+        <HelperText id={errorId} error>
+          {error}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        This sends generated output and test-case variables to the endpoint. It must return JSON
+        with a <code className="rounded bg-muted px-1 py-0.5 font-mono">pass</code> result.
+      </p>
+    </div>
+  );
+};
+
+const SpecializedValueField = ({
+  assertion,
+  error,
+  index,
+  onChange,
+}: SpecializedValueFieldProps) => {
   if (assertion.type === 'max-score') {
     return <MaxScoreField assertion={assertion} />;
   }
@@ -634,6 +674,10 @@ const SpecializedValueField = ({ assertion, error, index, onChange }: FinishReas
     return (
       <FinishReasonField assertion={assertion} error={error} index={index} onChange={onChange} />
     );
+  }
+
+  if (DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type)) {
+    return <WebhookField assertion={assertion} error={error} index={index} onChange={onChange} />;
   }
 
   return <NoValueField type={assertion.type} />;
@@ -750,7 +794,8 @@ const AssertionValueFields = ({
 
   if (
     NO_VALUE_ASSERTION_TYPES.has(assertion.type) ||
-    GUIDED_FINISH_REASON_TYPES.has(assertion.type)
+    GUIDED_FINISH_REASON_TYPES.has(assertion.type) ||
+    DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -877,6 +922,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(nextType) ||
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(nextType) ||
     GUIDED_FINISH_REASON_TYPES.has(nextType) ||
+    DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -892,6 +938,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     STRUCTURED_VALUE_ASSERTION_TYPES.has(assertion.type) ||
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(assertion.type) ||
     GUIDED_FINISH_REASON_TYPES.has(assertion.type) ||
+    DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type) ||
     NO_VALUE_ASSERTION_TYPES.has(assertion.type)
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;

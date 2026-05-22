@@ -240,6 +240,24 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
+function getRequiredStringValueError(assertion: Assertion): string | undefined {
+  if (!REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) || hasNonBlankString(assertion.value)) {
+    return undefined;
+  }
+
+  if (assertion.type === 'select-best') {
+    return 'Enter criteria for selecting the best output.';
+  }
+  if (assertion.type === 'finish-reason' || assertion.type === 'not-finish-reason') {
+    return 'Select or enter the expected finish reason.';
+  }
+  if (assertion.type === 'webhook' || assertion.type === 'not-webhook') {
+    return 'Enter the webhook URL that will validate responses.';
+  }
+
+  return 'Enter an expected value before saving this check.';
+}
+
 function getExpectedValueError(assertion: Assertion): string | undefined {
   if (
     (assertion.type === 'moderation' || assertion.type === 'not-moderation') &&
@@ -266,15 +284,9 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
     return 'Enter an expected value before saving this check.';
   }
 
-  if (REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) && !hasNonBlankString(assertion.value)) {
-    if (assertion.type === 'select-best') {
-      return 'Enter criteria for selecting the best output.';
-    }
-    if (assertion.type === 'finish-reason' || assertion.type === 'not-finish-reason') {
-      return 'Select or enter the expected finish reason.';
-    }
-
-    return 'Enter an expected value before saving this check.';
+  const requiredStringValueError = getRequiredStringValueError(assertion);
+  if (requiredStringValueError) {
+    return requiredStringValueError;
   }
 
   if (
