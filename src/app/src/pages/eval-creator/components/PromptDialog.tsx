@@ -34,6 +34,8 @@ const PromptDialog = ({
   const [cleanPrompt, setCleanPrompt] = React.useState(prompt);
   const [discardDialogOpen, setDiscardDialogOpen] = React.useState(false);
   const [addAnotherStatus, setAddAnotherStatus] = React.useState<string | null>(null);
+  const dialogDescriptionId = React.useId();
+  const discardDescriptionId = React.useId();
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const promptHasText = editingPrompt.trim().length > 0;
   const hasBlankPromptError = editingPrompt.length > 0 && !promptHasText;
@@ -79,10 +81,14 @@ const PromptDialog = ({
   return (
     <>
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && requestCancel()}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className="max-w-2xl"
+          hideDescription={false}
+          aria-describedby={dialogDescriptionId}
+        >
           <DialogHeader>
             <DialogTitle>{isEditing ? `Edit Prompt ${index + 1}` : 'Add Prompt'}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={dialogDescriptionId}>
               Each prompt runs once for every test case and provider. Use variables when the input
               should change between test cases.
             </DialogDescription>
@@ -155,10 +161,12 @@ const PromptDialog = ({
         open={discardDialogOpen}
         onOpenChange={(isOpen) => !isOpen && setDiscardDialogOpen(false)}
       >
-        <DialogContent>
+        <DialogContent hideDescription={false} aria-describedby={discardDescriptionId}>
           <DialogHeader>
             <DialogTitle>Discard prompt changes?</DialogTitle>
-            <DialogDescription>Your unsaved prompt text will be lost.</DialogDescription>
+            <DialogDescription id={discardDescriptionId}>
+              Your unsaved prompt text will be lost.
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>

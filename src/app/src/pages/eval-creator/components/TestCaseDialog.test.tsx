@@ -43,6 +43,9 @@ describe('TestCaseForm', () => {
 
     const dialogTitle = screen.getByRole('heading', { name: 'Add Test Case' });
     expect(dialogTitle).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add Test Case' })).toHaveAccessibleDescription(
+      'Set inputs for one evaluation example, then add optional pass or fail checks. Each test case runs against every configured prompt and provider.',
+    );
 
     const addTestCaseButton = screen.getByRole('button', { name: 'Add Test Case' });
     expect(addTestCaseButton).toBeInTheDocument();
@@ -273,7 +276,9 @@ describe('TestCaseForm', () => {
     await user.type(screen.getByLabelText('Description'), 'Draft case');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    expect(screen.getByText('Discard test case changes?')).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Discard test case changes?' }),
+    ).toHaveAccessibleDescription('Your unsaved inputs and assertions will be lost.');
     expect(onCancel).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Continue editing' }));
