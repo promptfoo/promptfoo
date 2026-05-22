@@ -292,7 +292,7 @@ const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 // response formats for the same URL/body. `x-promptfoo-version` is also kept in
 // the key so promptfoo upgrades remain a deliberate invalidation boundary.
 const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding']);
-const SDK_USER_AGENT_PATTERN = /^[\w.-]+\/JS \S+$/;
+const SDK_USER_AGENT_PATTERN = /^OpenAI\/JS \S+$/;
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 

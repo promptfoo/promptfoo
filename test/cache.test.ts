@@ -1189,6 +1189,43 @@ describe('fetchWithCache', () => {
       expect(agentBResult.data).toEqual({ data: 'agent-b' });
     });
 
+    it('should keep caller-authored JS User-Agent headers with SDK telemetry in cache keys', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-a' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-b' }));
+
+      const agentAResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'Gateway/JS 1.0',
+            'x-stainless-lang': 'js',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const agentBResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'Gateway/JS 2.0',
+            'x-stainless-lang': 'js',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(agentAResult.data).toEqual({ data: 'agent-a' });
+      expect(agentBResult.data).toEqual({ data: 'agent-b' });
+    });
+
     it('should normalize request method casing in cache keys', async () => {
       mockFetchWithRetries.mockResolvedValueOnce(
         mockFetchWithRetriesResponse(true, { data: 'method-normalized' }),

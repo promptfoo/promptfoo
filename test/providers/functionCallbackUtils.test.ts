@@ -325,6 +325,27 @@ describe('FunctionCallbackHandler', () => {
       expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
     });
 
+    it('should fall back to a default external function when a named export is missing', async () => {
+      const mockDefaultFunction = vi.fn().mockResolvedValue('default result');
+      mockImportModule.mockResolvedValue({ default: mockDefaultFunction });
+
+      const callbacks: FunctionCallbackConfig = {
+        testFunction: 'file://path/to/functions.js:missingFunction',
+      };
+      const call = { name: 'testFunction', arguments: '{}' };
+
+      const result = await handler.processCall(call, callbacks);
+
+      expect(result).toEqual({
+        output: 'default result',
+        isError: false,
+      });
+      expect(mockImportModule).toHaveBeenCalledWith(
+        path.resolve('/test/basePath', 'path/to/functions.js'),
+      );
+      expect(mockDefaultFunction).toHaveBeenCalledWith('{}');
+    });
+
     it('should handle inline function strings', async () => {
       const callbacks: FunctionCallbackConfig = {
         testFunction: '() => "inline result"',

@@ -1093,7 +1093,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'test/callbacks.js'),
-          'testFunction',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
         expect(result.output).toBe('External function result');
@@ -1227,7 +1226,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'nonexistent/module.js'),
-          'errorFunction',
         );
         // Should fall back to original function call object when loading fails
         expect(result.output).toEqual([
@@ -1370,7 +1368,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'deep/path/module.js'),
-          'deepExport.nestedFunction',
         );
         expect(mockParsedFunction).toHaveBeenCalledWith('{"data": "parsing_test"}');
         expect(result.output).toBe('Parsed successfully');
@@ -1456,7 +1453,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(mockInlineFunction).toHaveBeenCalledWith('{"inline": "test"}');
         expect(mockImportModule).toHaveBeenCalledWith(
           path.resolve('/test/base/path', 'mixed/callbacks.js'),
-          'externalFunc',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"external": "test"}');
         expect(result.output).toBe('Inline result\nExternal result');

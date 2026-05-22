@@ -231,9 +231,7 @@ export class FunctionCallbackHandler {
         `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
       );
 
-      const mod = functionName
-        ? await importModule(resolvedPath, functionName)
-        : await importModule(resolvedPath);
+      const mod = await importModule(resolvedPath);
       const func =
         typeof mod === 'function'
           ? mod
