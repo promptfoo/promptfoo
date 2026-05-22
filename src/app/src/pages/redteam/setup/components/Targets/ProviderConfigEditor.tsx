@@ -74,6 +74,46 @@ function ProviderConfigEditor({
     }
   }, []);
 
+  const getHttpBodyError = (target: ProviderOptions): string | React.ReactNode | null => {
+    const hasInputs = Boolean(target.inputs && Object.keys(target.inputs).length > 0);
+    const { body, request } = target.config;
+
+    if (request !== undefined) {
+      if (typeof request === 'string' && request && !request.includes('{{prompt}}') && !hasInputs) {
+        return 'Raw request must contain {{prompt}} template variable';
+      }
+      return null;
+    }
+
+    const bodyStr = typeof body === 'object' ? JSON.stringify(body) : String(body);
+    if (bodyStr.includes('{{prompt}}') || hasInputs) {
+      return null;
+    }
+
+    return (
+      <>
+        Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will inject
+        the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>. Promptfoo
+        uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the actual test
+        content.{' '}
+        <a
+          href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Learn more
+        </a>
+      </>
+    );
+  };
+
+  const getHttpUrlError = (target: ProviderOptions): string | null => {
+    if (target.config.request !== undefined || validateUrl(target.config.url)) {
+      return null;
+    }
+    return 'Invalid URL format';
+  };
+
   const updateCustomTarget = (field: string, value: unknown) => {
     // Shallow-clone the config along with the target so subsequent
     // assignments and `delete` don't mutate the original provider object
@@ -90,11 +130,7 @@ function ProviderConfigEditor({
       }
     } else if (field === 'url') {
       updatedTarget.config.url = value as string;
-      if (validateUrl(value as string)) {
-        setUrlError(null);
-      } else {
-        setUrlError('Invalid URL format');
-      }
+      setUrlError(getHttpUrlError(updatedTarget));
     } else if (field === 'method') {
       updatedTarget.config.method = value as string;
     } else if (field === 'body') {
@@ -102,35 +138,10 @@ function ProviderConfigEditor({
         typeof value === 'string' || (typeof value === 'object' && value !== null)
           ? value
           : String(value);
-      const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (bodyStr.includes('{{prompt}}') || hasInputs) {
-        setBodyError(null);
-      } else if (!updatedTarget.config.request) {
-        setBodyError(
-          <>
-            Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
-            inject the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>
-            . Promptfoo uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the
-            actual test content.{' '}
-            <a
-              href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learn more
-            </a>
-          </>,
-        );
-      }
+      setBodyError(getHttpBodyError(updatedTarget));
     } else if (field === 'request') {
       updatedTarget.config.request = value as string;
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (value && typeof value === 'string' && !value.includes('{{prompt}}') && !hasInputs) {
-        setBodyError('Raw request must contain {{prompt}} template variable');
-      } else {
-        setBodyError(null);
-      }
+      setBodyError(getHttpBodyError(updatedTarget));
     } else if (field === 'transformResponse') {
       updatedTarget.config.transformResponse = value as string;
     } else if (field === 'label') {
@@ -139,6 +150,10 @@ function ProviderConfigEditor({
       updatedTarget.delay = value as number;
     } else if (field === 'config') {
       updatedTarget.config = value as typeof updatedTarget.config;
+      if (providerType === 'http') {
+        setBodyError(getHttpBodyError(updatedTarget));
+        setUrlError(getHttpUrlError(updatedTarget));
+      }
     } else if (field === 'inputs') {
       // Handle top-level inputs field for multi-variable input configuration
       if (value === undefined) {
