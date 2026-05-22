@@ -11,6 +11,7 @@ import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
+import type { FoundationModelFieldErrors } from './FoundationModelConfiguration';
 
 export interface ProviderConfigEditorProps {
   provider: ProviderOptions;
@@ -40,6 +41,207 @@ const shouldRemoveMcpConfig = (
 const usesExamplePath = (providerId: string | undefined): boolean =>
   Boolean(providerId?.includes('/path/to/'));
 
+const FOUNDATION_MODEL_TYPES = [
+  'openai',
+  'anthropic',
+  'google',
+  'vertex',
+  'mistral',
+  'cohere',
+  'groq',
+  'deepseek',
+  'azure',
+  'bedrock',
+  'openrouter',
+  'perplexity',
+  'cerebras',
+];
+
+const FOUNDATION_ERROR_FIELD_BY_CONFIG_FIELD: Partial<
+  Record<string, keyof FoundationModelFieldErrors>
+> = {
+  id: 'modelId',
+  max_tokens: 'maxTokens',
+  temperature: 'temperature',
+  top_p: 'topP',
+};
+
+type ValidationError = string | React.ReactNode;
+
+interface ProviderValidationResult {
+  errors: ValidationError[];
+  foundationFieldErrors: FoundationModelFieldErrors;
+}
+
+const hasConfiguredInputs = (provider: ProviderOptions): boolean =>
+  Boolean(provider.inputs && Object.keys(provider.inputs).length > 0);
+
+const cloneProvider = (provider: ProviderOptions): ProviderOptions =>
+  ({
+    ...provider,
+    config: { ...(provider.config ?? {}) },
+  }) as ProviderOptions;
+
+function getBodyPromptError(value: unknown, provider: ProviderOptions): React.ReactNode | null {
+  const bodyString = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  if (bodyString.includes('{{prompt}}') || hasConfiguredInputs(provider)) {
+    return null;
+  }
+  if (provider.config.request) {
+    return null;
+  }
+
+  return (
+    <>
+      Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will inject
+      the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>. Promptfoo
+      uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the actual test content.{' '}
+      <a
+        href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Learn more
+      </a>
+    </>
+  );
+}
+
+function getRawRequestPromptError(value: unknown, provider: ProviderOptions): string | null {
+  if (
+    typeof value === 'string' &&
+    value &&
+    !value.includes('{{prompt}}') &&
+    !hasConfiguredInputs(provider)
+  ) {
+    return 'Raw request must contain {{prompt}} template variable';
+  }
+
+  return null;
+}
+
+function updateGenericProviderField(
+  provider: ProviderOptions,
+  field: string,
+  value: unknown,
+): void {
+  if (field === 'label') {
+    provider.label = value as string;
+    return;
+  }
+  if (field === 'delay') {
+    provider.delay = value as number;
+    return;
+  }
+  if (field === 'config') {
+    provider.config = value as typeof provider.config;
+    return;
+  }
+
+  provider.config[field] = value;
+}
+
+function validateFoundationModelProvider(
+  provider: ProviderOptions,
+  providerType: string | undefined,
+): ProviderValidationResult {
+  const errors: string[] = [];
+  const foundationFieldErrors: FoundationModelFieldErrors = {};
+
+  if (!provider.id || provider.id.trim() === '') {
+    foundationFieldErrors.modelId = 'Model ID is required';
+    errors.push(foundationFieldErrors.modelId);
+  } else if (providerType === 'azure' && provider.id.includes('your-deployment-name')) {
+    foundationFieldErrors.modelId = 'Replace the example value with your Azure deployment name';
+    errors.push(foundationFieldErrors.modelId);
+  }
+  if (
+    provider.config?.temperature !== undefined &&
+    (provider.config.temperature < 0 || provider.config.temperature > 2)
+  ) {
+    foundationFieldErrors.temperature = 'Temperature must be between 0 and 2';
+    errors.push(foundationFieldErrors.temperature);
+  }
+  if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
+    foundationFieldErrors.maxTokens = 'Max tokens must be greater than 0';
+    errors.push(foundationFieldErrors.maxTokens);
+  }
+  if (
+    provider.config?.top_p !== undefined &&
+    (provider.config.top_p < 0 || provider.config.top_p > 1)
+  ) {
+    foundationFieldErrors.topP = 'Top P must be between 0 and 1';
+    errors.push(foundationFieldErrors.topP);
+  }
+
+  return { errors, foundationFieldErrors };
+}
+
+function validateHttpProvider(
+  provider: ProviderOptions,
+  bodyError: React.ReactNode | null,
+  validateUrl: (url: string) => boolean,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+  if (provider.config.request === undefined) {
+    if (!provider.config.url || !validateUrl(provider.config.url)) {
+      errors.push('Valid URL is required');
+    }
+  } else if (!provider.config.request || provider.config.request.trim() === '') {
+    errors.push('HTTP request content is required');
+  }
+  if (bodyError) {
+    errors.push(bodyError);
+  }
+  return errors;
+}
+
+function validateAgentProvider(provider: ProviderOptions): string[] {
+  if (!provider.id || provider.id.trim() === '') {
+    return ['Python file path is required'];
+  }
+  if (!provider.id.startsWith('file://')) {
+    return ['Provider ID must start with file:// for Python agent files'];
+  }
+  return usesExamplePath(provider.id) ? ['Replace the example path with your agent file path'] : [];
+}
+
+function validateCustomProvider(provider: ProviderOptions): string[] {
+  if (!provider.id || provider.id.trim() === '') {
+    return ['Provider ID is required'];
+  }
+  return usesExamplePath(provider.id)
+    ? ['Replace the example path with your provider file path']
+    : [];
+}
+
+function getProviderValidationResult(
+  provider: ProviderOptions,
+  providerType: string | undefined,
+  bodyError: React.ReactNode | null,
+  extensionErrors: boolean,
+  validateUrl: (url: string, type?: 'http' | 'websocket') => boolean,
+): ProviderValidationResult {
+  let result: ProviderValidationResult = { errors: [], foundationFieldErrors: {} };
+  if (providerType === 'http') {
+    result.errors = validateHttpProvider(provider, bodyError, validateUrl);
+  } else if (providerType === 'websocket') {
+    if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
+      result.errors.push('Valid WebSocket URL is required');
+    }
+  } else if (FOUNDATION_MODEL_TYPES.includes(providerType || '')) {
+    result = validateFoundationModelProvider(provider, providerType);
+  } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
+    result.errors = validateAgentProvider(provider);
+  } else if (['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
+    result.errors = validateCustomProvider(provider);
+  }
+  if (extensionErrors) {
+    result.errors.push('Extension configuration has errors');
+  }
+  return result;
+}
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -62,6 +264,9 @@ function ProviderConfigEditor({
     JSON.stringify(provider.config, null, 2),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
+  const [foundationFieldErrors, setFoundationFieldErrors] = useState<FoundationModelFieldErrors>(
+    {},
+  );
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -78,13 +283,15 @@ function ProviderConfigEditor({
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
+    const foundationErrorField = FOUNDATION_ERROR_FIELD_BY_CONFIG_FIELD[field];
+    if (foundationErrorField) {
+      setFoundationFieldErrors((errors) => ({ ...errors, [foundationErrorField]: undefined }));
+    }
+
     // Shallow-clone the config along with the target so subsequent
     // assignments and `delete` don't mutate the original provider object
     // by reference (which is React state owned by our parent).
-    const updatedTarget = {
-      ...provider,
-      config: { ...(provider.config ?? {}) },
-    } as ProviderOptions;
+    const updatedTarget = cloneProvider(provider);
 
     if (field === 'id') {
       updatedTarget.id = value as string;
@@ -105,56 +312,21 @@ function ProviderConfigEditor({
         typeof value === 'string' || (typeof value === 'object' && value !== null)
           ? value
           : String(value);
-      const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (bodyStr.includes('{{prompt}}') || hasInputs) {
-        setBodyError(null);
-      } else if (!updatedTarget.config.request) {
-        setBodyError(
-          <>
-            Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will
-            inject the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>
-            . Promptfoo uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the
-            actual test content.{' '}
-            <a
-              href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learn more
-            </a>
-          </>,
-        );
-      }
+      setBodyError(getBodyPromptError(value, updatedTarget));
     } else if (field === 'request') {
       updatedTarget.config.request = value as string;
-      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
-      if (value && typeof value === 'string' && !value.includes('{{prompt}}') && !hasInputs) {
-        setBodyError('Raw request must contain {{prompt}} template variable');
-      } else {
-        setBodyError(null);
-      }
-    } else if (field === 'transformResponse') {
-      updatedTarget.config.transformResponse = value as string;
-    } else if (field === 'label') {
-      updatedTarget.label = value as string;
-    } else if (field === 'delay') {
-      updatedTarget.delay = value as number;
-    } else if (field === 'config') {
-      updatedTarget.config = value as typeof updatedTarget.config;
+      setBodyError(getRawRequestPromptError(value, updatedTarget));
     } else if (field === 'inputs') {
-      // Handle top-level inputs field for multi-variable input configuration
       if (value === undefined) {
         delete updatedTarget.inputs;
       } else {
         updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
-        // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
-        if (Object.keys(value as NonNullable<ProviderOptions['inputs']>).length > 0) {
+        if (hasConfiguredInputs(updatedTarget)) {
           setBodyError(null);
         }
       }
     } else {
-      updatedTarget.config[field] = value;
+      updateGenericProviderField(updatedTarget, field, value);
     }
 
     setProvider(updatedTarget);
@@ -182,95 +354,9 @@ function ProviderConfigEditor({
   };
 
   const validate = useCallback((): boolean => {
-    const errors: (string | React.ReactNode)[] = [];
-
-    if (providerType === 'http') {
-      // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request === undefined) {
-        // Structured mode: validate URL
-        if (!provider.config.url || !validateUrl(provider.config.url)) {
-          errors.push('Valid URL is required');
-        }
-      } else {
-        // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
-          errors.push('HTTP request content is required');
-        }
-      }
-
-      if (bodyError) {
-        errors.push(bodyError);
-      }
-    } else if (providerType === 'websocket') {
-      if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
-        errors.push('Valid WebSocket URL is required');
-      }
-    } else if (
-      [
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '')
-    ) {
-      // Foundation model providers validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Model ID is required');
-      }
-      if (providerType === 'azure' && provider.id?.includes('your-deployment-name')) {
-        errors.push('Replace the example value with your Azure deployment name');
-      }
-      // Validate that temperature is within reasonable bounds if provided
-      if (
-        provider.config?.temperature !== undefined &&
-        (provider.config.temperature < 0 || provider.config.temperature > 2)
-      ) {
-        errors.push('Temperature must be between 0 and 2');
-      }
-      // Validate that max_tokens is positive if provided
-      if (provider.config?.max_tokens !== undefined && provider.config.max_tokens <= 0) {
-        errors.push('Max tokens must be greater than 0');
-      }
-      // Validate that top_p is between 0 and 1 if provided
-      if (
-        provider.config?.top_p !== undefined &&
-        (provider.config.top_p < 0 || provider.config.top_p > 1)
-      ) {
-        errors.push('Top P must be between 0 and 1');
-      }
-    } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
-      // Agent frameworks validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Python file path is required');
-      } else if (!provider.id.startsWith('file://')) {
-        errors.push('Provider ID must start with file:// for Python agent files');
-      } else if (usesExamplePath(provider.id)) {
-        errors.push('Replace the example path with your agent file path');
-      }
-    } else if (
-      ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
-    ) {
-      // Custom providers validation
-      if (!provider.id || provider.id.trim() === '') {
-        errors.push('Provider ID is required');
-      } else if (usesExamplePath(provider.id)) {
-        errors.push('Replace the example path with your provider file path');
-      }
-    }
-
-    if (extensionErrors) {
-      errors.push('Extension configuration has errors');
-    }
-
+    const { errors, foundationFieldErrors: nextFoundationFieldErrors } =
+      getProviderValidationResult(provider, providerType, bodyError, extensionErrors, validateUrl);
+    setFoundationFieldErrors(nextFoundationFieldErrors);
     const hasErrors = errors.length > 0;
     if (setError) {
       const stringErrors = errors.filter((e): e is string => typeof e === 'string');
@@ -337,25 +423,12 @@ function ProviderConfigEditor({
       )}
 
       {/* Foundation model providers */}
-      {[
-        'openai',
-        'anthropic',
-        'google',
-        'vertex',
-        'mistral',
-        'cohere',
-        'groq',
-        'deepseek',
-        'azure',
-        'bedrock',
-        'openrouter',
-        'perplexity',
-        'cerebras',
-      ].includes(providerType || '') && (
+      {FOUNDATION_MODEL_TYPES.includes(providerType || '') && (
         <FoundationModelConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           providerType={providerType || ''}
+          fieldErrors={foundationFieldErrors}
         />
       )}
 

@@ -177,6 +177,33 @@ describe('FoundationModelConfiguration', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('top_p', 0);
   });
 
+  it('associates validation messages with fields and reveals invalid advanced settings', async () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+        fieldErrors={{
+          modelId: 'Model ID is required',
+          temperature: 'Temperature must be between 0 and 2',
+          maxTokens: 'Max tokens must be greater than 0',
+        }}
+      />,
+    );
+
+    const modelIdInput = screen.getByLabelText(/Model ID/i);
+    expect(modelIdInput).toHaveAttribute('aria-invalid', 'true');
+    expect(modelIdInput).toHaveAccessibleDescription('Model ID is required');
+
+    const temperatureInput = await screen.findByLabelText('Temperature');
+    expect(temperatureInput).toHaveAttribute('aria-invalid', 'true');
+    expect(temperatureInput).toHaveAccessibleDescription('Temperature must be between 0 and 2');
+
+    const maxTokensInput = screen.getByLabelText('Max Tokens');
+    expect(maxTokensInput).toHaveAttribute('aria-invalid', 'true');
+    expect(maxTokensInput).toHaveAccessibleDescription('Max tokens must be greater than 0');
+  });
+
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
     const user = userEvent.setup();
     render(

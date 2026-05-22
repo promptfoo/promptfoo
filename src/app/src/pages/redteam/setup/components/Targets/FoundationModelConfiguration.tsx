@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
@@ -12,6 +13,14 @@ interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   providerType: string;
+  fieldErrors?: FoundationModelFieldErrors;
+}
+
+export interface FoundationModelFieldErrors {
+  maxTokens?: string;
+  modelId?: string;
+  temperature?: string;
+  topP?: string;
 }
 
 type BedrockApiMode = 'invoke' | 'converse';
@@ -73,6 +82,7 @@ const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
+  fieldErrors = {},
 }: FoundationModelConfigurationProps) => {
   const isBedrock = providerType === 'bedrock';
   const bedrockApiMode = getBedrockApiModeFromId(selectedTarget.id);
@@ -84,10 +94,20 @@ const FoundationModelConfiguration = ({
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
     isBedrock && Boolean(selectedTarget.config?.region || selectedTarget.config?.profile),
   );
+  const fieldErrorIdPrefix = React.useId();
+  const hasAdvancedFieldErrors = Boolean(
+    fieldErrors.temperature || fieldErrors.maxTokens || fieldErrors.topP,
+  );
 
   useEffect(() => {
     setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
   }, [isBedrock, selectedTarget.id]);
+
+  useEffect(() => {
+    if (hasAdvancedFieldErrors) {
+      setIsAdvancedOpen(true);
+    }
+  }, [hasAdvancedFieldErrors]);
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
@@ -280,7 +300,14 @@ const FoundationModelConfiguration = ({
             value={modelId}
             onChange={handleModelIdChange}
             placeholder={providerInfo.placeholder}
+            aria-invalid={Boolean(fieldErrors.modelId)}
+            aria-describedby={fieldErrors.modelId ? `${fieldErrorIdPrefix}-model-id` : undefined}
           />
+          {fieldErrors.modelId && (
+            <HelperText id={`${fieldErrorIdPrefix}-model-id`} error>
+              {fieldErrors.modelId}
+            </HelperText>
+          )}
           <p className="text-sm text-muted-foreground">
             {isBedrock
               ? `Saved as ${buildBedrockProviderId(bedrockApiMode, modelId || '<model>')}. `
@@ -478,7 +505,16 @@ const FoundationModelConfiguration = ({
                 onChange={(e) =>
                   updateCustomTarget('temperature', parseOptionalNumber(e.target.value))
                 }
+                aria-invalid={Boolean(fieldErrors.temperature)}
+                aria-describedby={
+                  fieldErrors.temperature ? `${fieldErrorIdPrefix}-temperature` : undefined
+                }
               />
+              {fieldErrors.temperature && (
+                <HelperText id={`${fieldErrorIdPrefix}-temperature`} error>
+                  {fieldErrors.temperature}
+                </HelperText>
+              )}
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
 
@@ -492,7 +528,16 @@ const FoundationModelConfiguration = ({
                 onChange={(e) =>
                   updateCustomTarget('max_tokens', parseOptionalInteger(e.target.value))
                 }
+                aria-invalid={Boolean(fieldErrors.maxTokens)}
+                aria-describedby={
+                  fieldErrors.maxTokens ? `${fieldErrorIdPrefix}-max-tokens` : undefined
+                }
               />
+              {fieldErrors.maxTokens && (
+                <HelperText id={`${fieldErrorIdPrefix}-max-tokens`} error>
+                  {fieldErrors.maxTokens}
+                </HelperText>
+              )}
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
             </div>
 
@@ -506,7 +551,14 @@ const FoundationModelConfiguration = ({
                 step={0.01}
                 value={selectedTarget.config?.top_p ?? ''}
                 onChange={(e) => updateCustomTarget('top_p', parseOptionalNumber(e.target.value))}
+                aria-invalid={Boolean(fieldErrors.topP)}
+                aria-describedby={fieldErrors.topP ? `${fieldErrorIdPrefix}-top-p` : undefined}
               />
+              {fieldErrors.topP && (
+                <HelperText id={`${fieldErrorIdPrefix}-top-p`} error>
+                  {fieldErrors.topP}
+                </HelperText>
+              )}
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)
               </p>

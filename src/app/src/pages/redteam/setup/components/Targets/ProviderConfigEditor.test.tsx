@@ -23,11 +23,16 @@ vi.mock('./FoundationModelConfiguration', () => ({
   default: ({
     providerType,
     updateCustomTarget,
+    fieldErrors,
   }: {
     providerType: string;
     updateCustomTarget: (field: string, value: unknown) => void;
+    fieldErrors?: Record<string, string>;
   }) => (
     <div data-testid="fm-config">
+      {Object.values(fieldErrors || {}).map((error) => (
+        <p key={error}>{error}</p>
+      ))}
       {providerType === 'bedrock' && (
         <button
           data-testid="switch-bedrock-invoke"
@@ -249,6 +254,26 @@ describe('ProviderConfigEditor', () => {
 
       expect(validateFn!()).toBe(false);
       expect(mockSetError).toHaveBeenCalledWith('Max tokens must be greater than 0');
+    });
+
+    it('should expose foundation validation errors to the corresponding field UI', async () => {
+      const mockSetProvider = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:gpt-5.5', config: { temperature: 3, top_p: 2 } }}
+          setProvider={mockSetProvider}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="openai"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(await screen.findByText('Temperature must be between 0 and 2')).toBeInTheDocument();
+      expect(screen.getByText('Top P must be between 0 and 1')).toBeInTheDocument();
     });
   });
 
