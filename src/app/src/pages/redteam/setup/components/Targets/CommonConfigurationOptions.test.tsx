@@ -151,11 +151,11 @@ describe('CommonConfigurationOptions', () => {
     expect(updateCustomTarget).toHaveBeenCalledWith('inputs', { testVar: 'test description' });
   });
 
-  it('should render Delay collapsible section', () => {
+  it('should disclose that delay applies only to this provider', () => {
     renderWithProviders(<CommonConfigurationOptions {...defaultProps} />);
 
-    expect(screen.getByText('Delay')).toBeInTheDocument();
-    expect(screen.getByText('Configure the delay between requests')).toBeInTheDocument();
+    expect(screen.getByText('Provider Delay')).toBeInTheDocument();
+    expect(screen.getByText('Wait before requests to this provider')).toBeInTheDocument();
   });
 
   it('should expand Delay section when target has delay set', () => {
@@ -190,7 +190,7 @@ describe('CommonConfigurationOptions', () => {
       />,
     );
 
-    const delayInput = screen.getByDisplayValue('100');
+    const delayInput = screen.getByLabelText('Delay for this provider (ms)');
     await user.click(delayInput);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('200');
