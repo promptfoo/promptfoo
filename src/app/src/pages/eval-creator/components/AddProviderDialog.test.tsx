@@ -193,6 +193,8 @@ describe('AddProviderDialog layout', () => {
       screen.getByText(/update the connection and model settings used for this evaluation/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Step \d of 2/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('closes an untouched add flow without a discard warning', async () => {
@@ -256,6 +258,33 @@ describe('AddProviderDialog layout', () => {
 
     expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('announces pending edits and enables saving an updated provider', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <AddProviderDialog
+        open
+        onClose={vi.fn()}
+        onSave={onSave}
+        initialProvider={{ id: 'openai:gpt-5.5', config: {} }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Change Provider Settings' }));
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Unsaved provider changes');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+
+    const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 
   it('requires valid provider configuration before saving and keeps recovery available', async () => {

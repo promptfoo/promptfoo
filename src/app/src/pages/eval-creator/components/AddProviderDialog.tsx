@@ -253,12 +253,23 @@ export default function AddProviderDialog({
                 {error}
               </p>
             )}
+            {initialProvider && hasUnsavedChanges && !error && (
+              <p
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className="mr-auto text-left text-sm text-muted-foreground"
+              >
+                Unsaved provider changes
+              </p>
+            )}
             <Button variant="outline" onClick={handleBack}>
               {step === 'configure' ? 'Back' : 'Cancel'}
             </Button>
             {step === 'configure' && (
               <Button
                 onClick={handleSave}
+                disabled={Boolean(initialProvider && !hasUnsavedChanges)}
                 aria-describedby={error ? validationMessageId : undefined}
               >
                 {initialProvider ? 'Save Changes' : 'Add Provider'}
