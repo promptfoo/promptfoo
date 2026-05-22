@@ -80,9 +80,15 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 
       {selectedTarget.config?.tls?.enabled && (
         <div className="mt-6 space-y-8">
+          <p className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Uploaded or pasted certificate, key, and passphrase values are included in this provider
+            configuration and any copied or downloaded YAML. File paths reference files loaded at
+            run time. Avoid entering secrets you do not intend to include.
+          </p>
+
           {/* Certificate Type Selection */}
           <div className="space-y-2">
-            <Label>Certificate Type</Label>
+            <Label htmlFor="tls-certificate-type">Certificate Type</Label>
             <Select
               value={selectedTarget.config?.tls?.certificateType || 'none'}
               onValueChange={(value) => {
@@ -118,7 +124,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 });
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger id="tls-certificate-type">
                 <SelectValue placeholder="Select certificate type" />
               </SelectTrigger>
               <SelectContent>
@@ -229,32 +235,40 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 )}
 
                 {selectedTarget.config?.tls?.certInputType === 'path' && (
-                  <Input
-                    placeholder="/path/to/client-cert.pem"
-                    value={selectedTarget.config?.tls?.certPath || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config?.tls,
-                        certPath: e.target.value,
-                        cert: undefined,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="tls-cert-path">Client Certificate File Path</Label>
+                    <Input
+                      id="tls-cert-path"
+                      placeholder="/path/to/client-cert.pem"
+                      value={selectedTarget.config?.tls?.certPath || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          certPath: e.target.value,
+                          cert: undefined,
+                        })
+                      }
+                    />
+                  </div>
                 )}
 
                 {selectedTarget.config?.tls?.certInputType === 'inline' && (
-                  <Textarea
-                    rows={4}
-                    placeholder="-----BEGIN CERTIFICATE-----&#10;...certificate content...&#10;-----END CERTIFICATE-----"
-                    value={selectedTarget.config?.tls?.cert || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config?.tls,
-                        cert: e.target.value,
-                        certPath: undefined,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="tls-cert-inline">Client Certificate Content</Label>
+                    <Textarea
+                      id="tls-cert-inline"
+                      rows={4}
+                      placeholder="-----BEGIN CERTIFICATE-----&#10;...certificate content...&#10;-----END CERTIFICATE-----"
+                      value={selectedTarget.config?.tls?.cert || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          cert: e.target.value,
+                          certPath: undefined,
+                        })
+                      }
+                    />
+                  </div>
                 )}
               </div>
 
@@ -354,32 +368,40 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 )}
 
                 {selectedTarget.config?.tls?.keyInputType === 'path' && (
-                  <Input
-                    placeholder="/path/to/client-key.pem"
-                    value={selectedTarget.config?.tls?.keyPath || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config?.tls,
-                        keyPath: e.target.value,
-                        key: undefined,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="tls-key-path">Private Key File Path</Label>
+                    <Input
+                      id="tls-key-path"
+                      placeholder="/path/to/client-key.pem"
+                      value={selectedTarget.config?.tls?.keyPath || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          keyPath: e.target.value,
+                          key: undefined,
+                        })
+                      }
+                    />
+                  </div>
                 )}
 
                 {selectedTarget.config?.tls?.keyInputType === 'inline' && (
-                  <Textarea
-                    rows={4}
-                    placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
-                    value={selectedTarget.config?.tls?.key || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config?.tls,
-                        key: e.target.value,
-                        keyPath: undefined,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="tls-key-inline">Private Key Content</Label>
+                    <Textarea
+                      id="tls-key-inline"
+                      rows={4}
+                      placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
+                      value={selectedTarget.config?.tls?.key || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          key: e.target.value,
+                          keyPath: undefined,
+                        })
+                      }
+                    />
+                  </div>
                 )}
               </div>
 
@@ -387,6 +409,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <div className="rounded-lg border border-border p-4 space-y-4">
                 <h4 className="font-medium">Private Key Password (Optional)</h4>
                 <SensitiveTextField
+                  id="tls-private-key-password"
                   label="Password"
                   placeholder="Enter password for encrypted private key"
                   value={selectedTarget.config?.tls?.passphrase || ''}
@@ -532,7 +555,9 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 
                   {selectedTarget.config?.tls?.jksInputType === 'path' && (
                     <div className="space-y-2">
+                      <Label htmlFor="tls-jks-path">JKS File Path</Label>
                       <Input
+                        id="tls-jks-path"
                         placeholder="/path/to/keystore.jks"
                         value={selectedTarget.config?.tls?.jksPath || ''}
                         onChange={(e) =>
@@ -551,6 +576,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 </div>
 
                 <SensitiveTextField
+                  id="tls-jks-password"
                   label="Keystore Password"
                   placeholder="Enter keystore password"
                   value={selectedTarget.config?.tls?.passphrase || ''}
@@ -722,22 +748,28 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 )}
 
                 {selectedTarget.config?.tls?.pfxInputType === 'path' && (
-                  <Input
-                    placeholder="/path/to/certificate.pfx"
-                    value={selectedTarget.config?.tls?.pfxPath || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config?.tls,
-                        pfxPath: e.target.value,
-                        pfx: undefined,
-                      })
-                    }
-                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="tls-pfx-path">PFX File Path</Label>
+                    <Input
+                      id="tls-pfx-path"
+                      placeholder="/path/to/certificate.pfx"
+                      value={selectedTarget.config?.tls?.pfxPath || ''}
+                      onChange={(e) =>
+                        updateCustomTarget('tls', {
+                          ...selectedTarget.config?.tls,
+                          pfxPath: e.target.value,
+                          pfx: undefined,
+                        })
+                      }
+                    />
+                  </div>
                 )}
 
                 {selectedTarget.config?.tls?.pfxInputType === 'base64' && (
                   <div className="space-y-2">
+                    <Label htmlFor="tls-pfx-content">PFX Certificate Content</Label>
                     <Textarea
+                      id="tls-pfx-content"
                       rows={4}
                       placeholder="Base64-encoded PFX content"
                       value={
@@ -760,6 +792,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 )}
 
                 <SensitiveTextField
+                  id="tls-pfx-passphrase"
                   label="PFX Passphrase"
                   placeholder="Enter passphrase for PFX"
                   value={selectedTarget.config?.tls?.passphrase || ''}
@@ -869,32 +902,40 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               )}
 
               {selectedTarget.config?.tls?.caInputType === 'path' && (
-                <Input
-                  placeholder="/path/to/ca-cert.pem"
-                  value={selectedTarget.config?.tls?.caPath || ''}
-                  onChange={(e) =>
-                    updateCustomTarget('tls', {
-                      ...selectedTarget.config?.tls,
-                      caPath: e.target.value,
-                      ca: undefined,
-                    })
-                  }
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="tls-ca-path">CA Certificate File Path</Label>
+                  <Input
+                    id="tls-ca-path"
+                    placeholder="/path/to/ca-cert.pem"
+                    value={selectedTarget.config?.tls?.caPath || ''}
+                    onChange={(e) =>
+                      updateCustomTarget('tls', {
+                        ...selectedTarget.config?.tls,
+                        caPath: e.target.value,
+                        ca: undefined,
+                      })
+                    }
+                  />
+                </div>
               )}
 
               {selectedTarget.config?.tls?.caInputType === 'inline' && (
-                <Textarea
-                  rows={4}
-                  placeholder="-----BEGIN CERTIFICATE-----&#10;...CA certificate content...&#10;-----END CERTIFICATE-----"
-                  value={selectedTarget.config?.tls?.ca || ''}
-                  onChange={(e) =>
-                    updateCustomTarget('tls', {
-                      ...selectedTarget.config?.tls,
-                      ca: e.target.value,
-                      caPath: undefined,
-                    })
-                  }
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="tls-ca-inline">CA Certificate Content</Label>
+                  <Textarea
+                    id="tls-ca-inline"
+                    rows={4}
+                    placeholder="-----BEGIN CERTIFICATE-----&#10;...CA certificate content...&#10;-----END CERTIFICATE-----"
+                    value={selectedTarget.config?.tls?.ca || ''}
+                    onChange={(e) =>
+                      updateCustomTarget('tls', {
+                        ...selectedTarget.config?.tls,
+                        ca: e.target.value,
+                        caPath: undefined,
+                      })
+                    }
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -974,7 +1015,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label>Minimum TLS Version</Label>
+                <Label htmlFor="tls-min-version">Minimum TLS Version</Label>
                 <Select
                   value={selectedTarget.config?.tls?.minVersion || 'default'}
                   onValueChange={(value) =>
@@ -984,7 +1025,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="tls-min-version">
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
                   <SelectContent>
@@ -998,7 +1039,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label>Maximum TLS Version</Label>
+                <Label htmlFor="tls-max-version">Maximum TLS Version</Label>
                 <Select
                   value={selectedTarget.config?.tls?.maxVersion || 'default'}
                   onValueChange={(value) =>
@@ -1008,7 +1049,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="tls-max-version">
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
                   <SelectContent>
