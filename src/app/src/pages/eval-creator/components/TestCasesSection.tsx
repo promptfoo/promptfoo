@@ -338,7 +338,11 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   return (
     <div className="space-y-4">
       {!canEditInlineTests && (
-        <Alert variant="info" className="flex-col items-start sm:flex-row sm:items-center">
+        <Alert
+          variant="info"
+          role="note"
+          className="flex-col items-start sm:flex-row sm:items-center"
+        >
           <AlertContent>
             <AlertTitle>Managed in YAML</AlertTitle>
             <AlertDescription>

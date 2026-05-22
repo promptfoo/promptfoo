@@ -126,6 +126,8 @@ describe('PromptsSection', () => {
     );
 
     expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('Managed in YAML');
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('file://prompt.txt')).toBeInTheDocument();
     expect(
       screen.getByText('Prompt entries from YAML are not editable in the UI editor.'),

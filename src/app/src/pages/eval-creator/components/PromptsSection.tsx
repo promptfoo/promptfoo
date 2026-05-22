@@ -145,7 +145,11 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   return (
     <div className="space-y-4">
       {!canEditInlinePrompts && (
-        <Alert variant="info" className="flex-col items-start sm:flex-row sm:items-center">
+        <Alert
+          variant="info"
+          role="note"
+          className="flex-col items-start sm:flex-row sm:items-center"
+        >
           <AlertContent>
             <AlertTitle>Managed in YAML</AlertTitle>
             <AlertDescription>

@@ -233,6 +233,8 @@ describe('TestCasesSection', () => {
     );
 
     expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('Managed in YAML');
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('file://tests.csv')).toBeInTheDocument();
     expect(
       screen.getByText('Test entries from YAML are not editable in the UI editor.'),
