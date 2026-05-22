@@ -269,8 +269,10 @@ function loadCjsModule(modulePath) {
 
 async function importModuleWithFallback(modulePath) {
   try {
-    await ensureTypescriptLoader(modulePath);
-    const importedModule = await import(pathToFileURL(modulePath).toString());
+    const moduleUrl = pathToFileURL(modulePath).toString();
+    const importedModule = isTypescriptModulePath(modulePath)
+      ? await importTypescriptModule(moduleUrl)
+      : await import(moduleUrl);
     return importedModule?.default?.default || importedModule?.default || importedModule;
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
@@ -281,21 +283,13 @@ async function importModuleWithFallback(modulePath) {
   }
 }
 
-let tsxLoaderPromise;
+function isTypescriptModulePath(modulePath) {
+  return /\\.[cm]?ts$/.test(modulePath);
+}
 
-async function ensureTypescriptLoader(modulePath) {
-  if (!/\\.[cm]?ts$/.test(modulePath)) {
-    return;
-  }
-
-  if (!tsxLoaderPromise) {
-    tsxLoaderPromise = import('tsx').catch((err) => {
-      tsxLoaderPromise = undefined;
-      throw err;
-    });
-  }
-
-  await tsxLoaderPromise;
+async function importTypescriptModule(moduleUrl) {
+  const { tsImport } = await import('tsx/esm/api');
+  return tsImport(moduleUrl, moduleUrl);
 }
 
 function resolveExportedFunction(requiredModule, filePath, functionName) {
