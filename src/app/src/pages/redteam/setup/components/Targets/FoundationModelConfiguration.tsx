@@ -278,6 +278,7 @@ const FoundationModelConfiguration = ({
               </Label>
               <select
                 id="bedrock-api-mode"
+                required
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={bedrockApiMode}
                 onChange={(e) => updateBedrockApiMode(e.target.value as BedrockApiMode)}
@@ -297,6 +298,7 @@ const FoundationModelConfiguration = ({
           </Label>
           <Input
             id="model-id"
+            required
             value={modelId}
             onChange={handleModelIdChange}
             placeholder={providerInfo.placeholder}

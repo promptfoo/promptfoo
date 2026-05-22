@@ -95,6 +95,7 @@ describe('FoundationModelConfiguration', () => {
 
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveValue('test-model-id');
+    expect(modelIdInput).toBeRequired();
   });
 
   it('should call updateCustomTarget with the correct arguments when the user types a new model ID', async () => {
@@ -443,6 +444,7 @@ describe('FoundationModelConfiguration', () => {
     );
 
     expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('invoke');
+    expect(screen.getByLabelText(/Bedrock API/i)).toBeRequired();
     expect(screen.getByRole('textbox', { name: /Model ID/i })).toHaveValue(
       'anthropic.claude-3-5-sonnet-20241022-v2:0',
     );
