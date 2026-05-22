@@ -129,7 +129,7 @@ const PromptDialog = ({
               aria-describedby={hasBlankPromptError ? promptErrorId : promptHelpId}
             />
             {hasBlankPromptError ? (
-              <p id={promptErrorId} className="text-sm text-destructive">
+              <p id={promptErrorId} role="alert" className="text-sm text-destructive">
                 Prompt must include text, not only spaces.
               </p>
             ) : (

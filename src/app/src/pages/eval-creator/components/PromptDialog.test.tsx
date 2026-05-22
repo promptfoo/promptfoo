@@ -150,6 +150,9 @@ describe('PromptDialog', () => {
     const textField = screen.getByRole('textbox');
     await user.type(textField, '   ');
 
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Prompt must include text, not only spaces.',
+    );
     expect(textField).toHaveAttribute('aria-invalid', 'true');
     expect(textField).toHaveAccessibleDescription('Prompt must include text, not only spaces.');
     expect(screen.getByRole('button', { name: 'Add' })).toHaveAccessibleDescription(
