@@ -338,6 +338,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
 
     expect(screen.getByTestId('mock-prompts-section')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Viewing step 2: Write Prompts.');
     expect(screen.getByRole('button', { name: 'Prompts: Missing' })).toHaveAttribute(
       'aria-current',
       'step',

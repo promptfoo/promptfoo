@@ -185,6 +185,8 @@ const EvaluateTestSuiteCreator = () => {
     requiredSteps.find((step) => !step.isComplete) ?? setupSteps[setupSteps.length - 1];
   const nextSetupIssue = readiness.issues.find((issue) => issue.stepId === nextRecommendedStep.id);
   const shouldShowSummaryAction = activeStep !== nextRecommendedStep.id;
+  const activeSetupStep =
+    setupSteps.find((step) => step.id === activeStep) ?? setupSteps[setupSteps.length - 1];
 
   const handleReset = () => {
     reset();
@@ -408,6 +410,10 @@ const EvaluateTestSuiteCreator = () => {
                 </div>
               </CardContent>
             </Card>
+
+            <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+              Viewing step {activeSetupStep.id}: {activeSetupStep.title}.
+            </p>
 
             <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] xl:gap-8">
               {/* Left Sidebar - Step Navigation */}
