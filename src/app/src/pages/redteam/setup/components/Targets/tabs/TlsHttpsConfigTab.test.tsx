@@ -376,6 +376,8 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
       expect(screen.getByText('Client Certificate')).toBeInTheDocument();
       expect(screen.getByText('Private Key')).toBeInTheDocument();
+      expect(document.getElementById('tls-cert-upload')).toBeInTheDocument();
+      expect(document.getElementById('tls-key-upload')).toBeInTheDocument();
     });
 
     it('should show JKS configuration fields when JKS certificate type is selected', () => {
@@ -399,6 +401,7 @@ describe('TlsHttpsConfigTab', () => {
 
       expect(screen.getByText('JKS (Java KeyStore) Certificate')).toBeInTheDocument();
       expect(screen.getByText('JKS File Input')).toBeInTheDocument();
+      expect(document.getElementById('tls-jks-upload')).toBeInTheDocument();
       expect(screen.getByLabelText('Key Alias (Optional)')).toBeInTheDocument();
     });
 
@@ -424,6 +427,32 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PFX/PKCS#12 Certificate Bundle')).toBeInTheDocument();
       // Check for Base64 button which is unique to PFX configuration
       expect(screen.getByRole('button', { name: /Base64/i })).toBeInTheDocument();
+      expect(document.getElementById('tls-pfx-upload')).toBeInTheDocument();
+    });
+
+    it('selects uploaded PEM inputs as the initial disclosed setup path', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={{
+            id: 'http-provider',
+            config: { tls: { enabled: true, rejectUnauthorized: true } },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox', { name: 'Certificate Type' }));
+      await user.click(screen.getByRole('option', { name: /PEM/ }));
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+        'tls',
+        expect.objectContaining({
+          certificateType: 'pem',
+          certInputType: 'upload',
+          keyInputType: 'upload',
+        }),
+      );
     });
 
     it.each([
