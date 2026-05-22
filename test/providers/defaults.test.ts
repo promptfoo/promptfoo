@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
+  resetDefaultProviders,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
   setDefaultRedteamProviders,
@@ -68,9 +70,7 @@ describe('Provider override tests', () => {
 
   beforeEach(() => {
     mockProcessEnv({ ...originalEnv }, { clear: true });
-    setDefaultCompletionProviders(undefined as any);
-    setDefaultEmbeddingProviders(undefined as any);
-    setDefaultRedteamProviders(undefined as any);
+    resetDefaultProviders();
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
     clearCodexDefaultProvidersForTesting();
@@ -146,6 +146,7 @@ describe('Provider override tests', () => {
     const providers = await getDefaultProviders();
 
     expect(providers.redteamProvider?.id()).toBe('test-redteam-provider');
+    expect(providers.redteamJsonProvider?.id()).toBe('test-redteam-provider');
   });
 
   it('should include redteam provider for Anthropic when credentials are set', async () => {
@@ -155,13 +156,16 @@ describe('Provider override tests', () => {
 
     expect(providers.redteamProvider).toBeDefined();
     expect(providers.redteamProvider?.id()).toContain('claude');
+    expect(providers.redteamJsonProvider?.id()).toContain('claude');
   });
 
-  it('should include redteam provider for OpenAI when no other credentials are set', async () => {
+  it('should leave OpenAI redteam resolution to the existing optimized fallback', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
+
     const providers = await getDefaultProviders();
 
-    expect(providers.redteamProvider).toBeDefined();
-    expect(providers.redteamProvider?.id()).toContain('openai');
+    expect(providers.redteamProvider).toBeUndefined();
+    expect(providers.redteamJsonProvider).toBeUndefined();
   });
 
   it('should include redteam provider for Google AI Studio when credentials are set', async () => {
@@ -171,6 +175,7 @@ describe('Provider override tests', () => {
 
     expect(providers.redteamProvider).toBeDefined();
     expect(providers.redteamProvider?.id()).toContain('google');
+    expect(providers.redteamJsonProvider?.id()).toContain('google');
   });
 
   it('should include redteam provider for Mistral when credentials are set', async () => {
@@ -180,6 +185,26 @@ describe('Provider override tests', () => {
 
     expect(providers.redteamProvider).toBeDefined();
     expect(providers.redteamProvider?.id()).toContain('mistral');
+    expect(providers.redteamJsonProvider?.id()).toContain('mistral');
+    expect(providers.redteamJsonProvider?.config?.response_format).toEqual({
+      type: 'json_object',
+    });
+  });
+
+  it('should include JSON-capable redteam providers for Azure defaults', async () => {
+    mockProcessEnv({
+      AZURE_OPENAI_API_KEY: 'test-key',
+      AZURE_DEPLOYMENT_NAME: 'azure-chat',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat',
+    });
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider).toBeInstanceOf(AzureChatCompletionProvider);
+    expect(providers.redteamJsonProvider).toBeInstanceOf(AzureChatCompletionProvider);
+    expect(providers.redteamJsonProvider?.config?.response_format).toEqual({
+      type: 'json_object',
+    });
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
@@ -243,6 +268,7 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
     expect(providers.redteamProvider?.id()).toContain('mistral');
+    expect(providers.redteamJsonProvider?.id()).toContain('mistral');
   });
 
   it('should use xAI providers when XAI_API_KEY is set', async () => {
@@ -257,6 +283,11 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
     expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
     expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+    expect(providers.redteamProvider?.id()).toBe('xai:grok-4.3');
+    expect(providers.redteamJsonProvider?.id()).toBe('xai:grok-4.3');
+    expect(providers.redteamJsonProvider?.config?.response_format).toEqual({
+      type: 'json_object',
+    });
   });
 
   it('should use Codex SDK providers when ChatGPT/Codex credentials exist without API provider keys', async () => {
@@ -270,6 +301,8 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider.id()).toBe('openai:codex-sdk');
     expect(providers.synthesizeProvider.id()).toBe('openai:codex-sdk');
     expect(providers.redteamProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.redteamJsonProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.redteamJsonProvider).toBe(providers.redteamProvider);
     expect(providers.webSearchProvider?.id()).toBe('openai:codex-sdk');
     expect(providers.webSearchProvider?.config?.web_search_mode).toBe('live');
     expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
@@ -341,6 +374,7 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
     expect(providers.redteamProvider?.id()).toContain('mistral');
+    expect(providers.redteamJsonProvider?.id()).toContain('mistral');
   });
 
   it('should use xAI providers when provided via env overrides', async () => {
@@ -356,6 +390,8 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
     expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
     expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+    expect(providers.redteamProvider?.id()).toBe('xai:grok-4.3');
+    expect(providers.redteamJsonProvider?.id()).toBe('xai:grok-4.3');
   });
 
   it('should prefer Mistral defaults over xAI defaults when both keys exist', async () => {
@@ -407,6 +443,10 @@ describe('Provider override tests', () => {
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.config?.generationConfig?.response_mime_type).toBe(
+        'application/json',
+      );
       expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
@@ -421,6 +461,7 @@ describe('Provider override tests', () => {
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.id()).toContain('google:');
       expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
@@ -435,6 +476,7 @@ describe('Provider override tests', () => {
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.id()).toContain('google:');
       expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
@@ -451,6 +493,7 @@ describe('Provider override tests', () => {
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.id()).toContain('google:');
       expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
@@ -490,6 +533,7 @@ describe('Provider override tests', () => {
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.id()).toContain('google:');
     });
 
     it('should prefer Google AI Studio over Mistral when both credentials are available', async () => {
@@ -503,6 +547,7 @@ describe('Provider override tests', () => {
       expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
+      expect(providers.redteamJsonProvider?.id()).toContain('google:');
       expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
       expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
     });

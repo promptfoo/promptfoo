@@ -441,36 +441,52 @@ describe('shared redteam provider utilities', () => {
         expect(mockOpenAiInstances.length).toBe(0);
       });
 
-      it('keeps the JSON fallback model when jsonOnly is requested', async () => {
+      it('uses the selected provider JSON variant when jsonOnly is requested', async () => {
         redteamProviderManager.clearProvider();
         const defaultRedteamProvider = createMockProvider({ id: 'defaults-redteam-provider' });
+        const defaultRedteamJsonProvider = createMockProvider({
+          id: 'defaults-redteam-json-provider',
+        });
         mockedGetDefaultProviders.mockResolvedValue({
           redteamProvider: defaultRedteamProvider,
+          redteamJsonProvider: defaultRedteamJsonProvider,
         });
 
         const got = await redteamProviderManager.getProvider({ jsonOnly: true });
 
-        expect(got).not.toBe(defaultRedteamProvider);
-        expect(got.id()).toBe(`openai:${ATTACKER_MODEL}`);
-        expect(mockOpenAiInstances[0].config).toEqual({
-          temperature: TEMPERATURE,
-          response_format: { type: 'json_object' },
-        });
-        expect(mockedGetDefaultProviders).not.toHaveBeenCalled();
+        expect(got).toBe(defaultRedteamJsonProvider);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledTimes(1);
+        expect(mockOpenAiInstances.length).toBe(0);
       });
 
-      it('keeps the small-model fallback when preferSmallModel is requested', async () => {
+      it('keeps structured work on a selected non-OpenAI provider when small is preferred', async () => {
         redteamProviderManager.clearProvider();
         const defaultRedteamProvider = createMockProvider({ id: 'defaults-redteam-provider' });
+        const defaultRedteamJsonProvider = createMockProvider({
+          id: 'defaults-redteam-json-provider',
+        });
         mockedGetDefaultProviders.mockResolvedValue({
           redteamProvider: defaultRedteamProvider,
+          redteamJsonProvider: defaultRedteamJsonProvider,
         });
 
-        const got = await redteamProviderManager.getProvider({ preferSmallModel: true });
+        const got = await redteamProviderManager.getProvider({
+          jsonOnly: true,
+          preferSmallModel: true,
+        });
 
-        expect(got).not.toBe(defaultRedteamProvider);
-        expect(got.id()).toBe(`openai:${ATTACKER_MODEL_SMALL}`);
-        expect(mockedGetDefaultProviders).not.toHaveBeenCalled();
+        expect(got).toBe(defaultRedteamJsonProvider);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledTimes(1);
+        expect(mockOpenAiInstances.length).toBe(0);
+      });
+
+      it('surfaces default-provider selection failures instead of silently using OpenAI', async () => {
+        redteamProviderManager.clearProvider();
+        mockedGetDefaultProviders.mockRejectedValueOnce(new Error('invalid provider defaults'));
+
+        await expect(redteamProviderManager.getProvider({})).rejects.toThrow(
+          'invalid provider defaults',
+        );
       });
 
       it('falls back to OpenAI default when neither redteam.provider nor defaultTest provider is set', async () => {

@@ -1,7 +1,6 @@
 ---
 sidebar_position: 2
 sidebar_label: Getting started
-title: Red Team Quickstart
 description: Start red teaming LLMs in minutes by scanning 50+ vulnerabilities including jailbreaks, prompt injection, and data exfiltration
 ---
 
@@ -30,7 +29,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 ## Prerequisites
 
 - Install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`
-- Optional but recommended: Set an environment variable for your preferred LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Promptfoo uses this to select a strong model for generating attacks.
+- Optional but recommended: Configure credentials for a supported LLM provider, such as `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, or `MISTRAL_API_KEY`. Local attack generation will select a strong model from that provider automatically.
 
 ## Initialize the project
 
@@ -131,7 +130,7 @@ promptfoo redteam init --no-gui
 
 ## Run the scan
 
-Now that we've generated the test cases, we're ready to run the adversarial eval.
+Now that we've generated the test cases, we're ready to run the adversarial evaluation.
 
 Run this command in the same directory as your `promptfooconfig.yaml` file:
 
@@ -254,7 +253,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 ## Continuous improvement
 
-Red teaming is not a one-time activity but an ongoing process. As you develop and refine your LLM application, regularly running red team evals helps ensure that:
+Red teaming is not a one-time activity but an ongoing process. As you develop and refine your LLM application, regularly running red team evaluations helps ensure that:
 
 1. New features or changes don't introduce unexpected vulnerabilities
 2. Your application remains robust against evolving attack techniques

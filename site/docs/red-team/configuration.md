@@ -1,5 +1,4 @@
 ---
-title: Red team configuration
 sidebar_position: 3
 sidebar_label: Configuration
 description: Red team your LLM configuration settings using automated vulnerability scanning to detect misconfigurations and prevent unauthorized access to AI system parameters
@@ -791,21 +790,23 @@ Testing in "low-resource" languages (languages with less training data) often re
 
 ## Providers
 
-The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_. This is separate from the "target" model(s) set in top-level `targets`/`providers` - configuring your target does **not** affect attack generation.
+The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e. the model that generates adversarial _inputs_. This is separate from the "target" model(s) set in top-level `targets`/`providers` — configuring your target does **not** affect attack generation.
 
 ### Automatic Provider Selection
 
-If you have set an environment variable for a supported provider, Promptfoo uses a powerful default model from that provider for attack generation. This is the recommended approach for most users.
+For local attack generation, if `redteam.provider` is not set and Promptfoo detects credentials for a supported provider, it uses a strong default model from that provider. Strategies that require JSON output remain on the selected provider instead of requiring an OpenAI key.
 
-| Environment Variable       | Vendor           | Default Redteam Model                     |
-| :------------------------- | :--------------- | :---------------------------------------- |
-| `OPENAI_API_KEY`           | OpenAI           | `gpt-5.5-2026-04-23`                      |
-| `ANTHROPIC_API_KEY`        | Anthropic        | `claude-sonnet-4-6`                       |
-| `GEMINI_API_KEY`           | Google AI Studio | `gemini-2.5-pro`                          |
-| (Google Cloud Credentials) | Google Vertex AI | `gemini-2.5-pro`                          |
-| `MISTRAL_API_KEY`          | Mistral          | `mistral-large-latest`                    |
-| `AZURE_OPENAI_API_KEY`     | Azure OpenAI     | Your deployment (GPT-4 class recommended) |
-| `GITHUB_TOKEN`             | GitHub Models    | `openai/gpt-5`                            |
+| Credential or environment variable                 | Vendor           | Default red team model     |
+| :------------------------------------------------- | :--------------- | :------------------------- |
+| `OPENAI_API_KEY`                                   | OpenAI           | `gpt-5.5-2026-04-23`       |
+| `ANTHROPIC_API_KEY`                                | Anthropic        | `claude-sonnet-4-6`        |
+| `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `PALM_API_KEY` | Google AI Studio | `gemini-2.5-pro`           |
+| Google Cloud application default credentials       | Google Vertex AI | `gemini-2.5-pro`           |
+| `MISTRAL_API_KEY`                                  | Mistral          | `mistral-large-latest`     |
+| `XAI_API_KEY`                                      | xAI              | `grok-4.3`                 |
+| Azure OpenAI credentials and deployment variables  | Azure OpenAI     | Your configured deployment |
+| Codex login or `CODEX_API_KEY`                     | OpenAI Codex SDK | Codex default provider     |
+| `GITHUB_TOKEN`                                     | GitHub Models    | `openai/gpt-5`             |
 
 ### Overriding the Provider
 
@@ -816,29 +817,20 @@ A common use case is to use an alternative platform like [Azure](/docs/providers
 You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
 :::warning
-Your choice of attack provider is critical to the quality of your red team tests. We recommend using a frontier model such as GPT-5.5 or Claude Sonnet 4.6.
+Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4.1.
 :::
 
 ### How attacks are generated
 
-By default, Promptfoo automatically selects a provider based on your configured API keys (see the table above). If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+Where remote generation is supported and enabled, Promptfoo can use its hosted generation service. On local generation paths, Promptfoo uses `redteam.provider` when configured and otherwise resolves a default from the credentials above. The evaluation of your target model is always performed locally.
 
 The `redteam.provider` configuration controls both attack generation and grading. For details on configuring grading behavior, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results/).
 
-If no API keys are configured:
-
-- When remote generation is enabled (default), Promptfoo uses the remote generation service for supported plugins/strategies.
-- When remote generation is disabled, you must set `redteam.provider` explicitly or supply an API key. If `OPENAI_API_KEY` is present, the hardcoded fallback is OpenAI's `gpt-5.5-2026-04-23`.
-
-For users without API keys, Promptfoo provides remote generation capabilities through our API for certain plugins and strategies. Disable this by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
-
-:::note
-Some plugins and strategies may require specific provider configurations or API keys to function properly.
-:::
+You can force 100% local generation by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. Local generation requires usable credentials or an explicit `redteam.provider`, and its quality depends greatly on the model that you configure.
 
 ### Changing the model
 
-To use a different model like `openai:chat:gpt-5-mini`, you can override the provider on the command line:
+To use the `openai:chat:gpt-5-mini` model, you can override the provider on the command line:
 
 ```sh
 npx promptfoo@latest redteam generate --provider openai:chat:gpt-5-mini
@@ -855,7 +847,7 @@ redteam:
       temperature: 0.5
 ```
 
-A local model via [Ollama](/docs/providers/ollama/) looks similar:
+A local model via [ollama](/docs/providers/ollama/) would look similar:
 
 ```yaml
 redteam:
@@ -874,12 +866,12 @@ redteam:
 ```
 
 :::warning
-Some providers, such as Anthropic, may restrict accounts that generate harmful test cases. We recommend using the default OpenAI provider.
+Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
 :::
 
 ### Remote Generation
 
-By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+By default, promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
 
 :::info Cloud Users
 If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.

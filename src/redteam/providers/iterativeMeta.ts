@@ -722,6 +722,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       task: 'meta-agent-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      // Pass inputs schema for multi-input mode
       inputs: this.inputs,
     });
   }

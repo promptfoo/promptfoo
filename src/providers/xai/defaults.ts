@@ -12,11 +12,17 @@ export function getXAIProviders(
   DefaultProviders,
   | 'gradingJsonProvider'
   | 'gradingProvider'
+  | 'redteamProvider'
+  | 'redteamJsonProvider'
   | 'suggestionsProvider'
   | 'synthesizeProvider'
   | 'webSearchProvider'
 > {
   const gradingProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, { env });
+  const redteamProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
+    env,
+    config: { config: { temperature: 0.7 } },
+  });
 
   // The outer `config` is `ProviderOptions.config`; the xAI chat provider then reads
   // its model-specific options from the *nested* `config.config` (see XAIProvider's
@@ -29,10 +35,21 @@ export function getXAIProviders(
       },
     },
   });
+  const redteamJsonProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
+    env,
+    config: {
+      config: {
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      },
+    },
+  });
 
   return {
     gradingJsonProvider,
     gradingProvider,
+    redteamProvider,
+    redteamJsonProvider,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
     webSearchProvider: new XAIResponsesProvider(DEFAULT_XAI_MODEL, {

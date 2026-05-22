@@ -187,6 +187,7 @@ export class HydraProvider implements ApiProvider {
       task: 'hydra-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      // Pass inputs schema for multi-input mode
       inputs: this.config.inputs,
     });
 

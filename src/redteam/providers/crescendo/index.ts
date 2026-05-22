@@ -222,6 +222,7 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          // Pass inputs schema for multi-input mode
           inputs: this.config.inputs,
         });
       } else {
@@ -244,6 +245,7 @@ export class CrescendoProvider implements ApiProvider {
           preferSmallModel: false,
         });
       } else {
+        // Don't pass explicit provider - let getGradingProvider check CLI --grader first
         this.scoringProvider = await redteamProviderManager.getGradingProvider({});
       }
     }

@@ -26,11 +26,3 @@ export const DefaultWebSearchProvider = new OpenAiResponsesProvider('gpt-5.5-202
     tools: [{ type: 'web_search_preview' }],
   },
 });
-export const DefaultRedteamProvider = new OpenAiChatCompletionProvider(
-  DEFAULT_OPENAI_GRADING_MODEL,
-  {
-    config: {
-      temperature: 0.7,
-    },
-  },
-);

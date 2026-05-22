@@ -860,6 +860,7 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
         inputs: this.inputs,
       });
     } else {

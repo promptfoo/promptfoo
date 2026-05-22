@@ -246,7 +246,6 @@ export class CustomProvider implements ApiProvider {
         this.scoringProvider = await redteamProviderManager.getProvider({
           provider: this.config.redteamProvider,
           preferSmallModel: false,
-          jsonOnly: false,
         });
       }
     }

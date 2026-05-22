@@ -22,6 +22,21 @@ export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider
   config: githubConfig,
 });
 
+export const DefaultGitHubRedteamProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
+  config: {
+    ...githubConfig,
+    temperature: 0.7,
+  },
+});
+
+export const DefaultGitHubRedteamJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
+  config: {
+    ...githubConfig,
+    temperature: 0.7,
+    response_format: { type: 'json_object' },
+  },
+});
+
 // Fast model for quick evaluations
 export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-5-nano', {
   config: githubConfig,

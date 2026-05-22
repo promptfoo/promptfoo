@@ -149,6 +149,7 @@ export function getAnthropicProviders(
   | 'synthesizeProvider'
   | 'webSearchProvider'
   | 'redteamProvider'
+  | 'redteamJsonProvider'
 > {
   // Get providers with the provided environment variables
   const gradingProvider = gradingProviderFactory.getInstance(env);
@@ -164,5 +165,8 @@ export function getAnthropicProviders(
     synthesizeProvider: gradingProvider,
     webSearchProvider,
     redteamProvider,
+    // Anthropic JSON generation is prompted rather than schema-constrained here;
+    // strategy output shapes differ and no common schema applies.
+    redteamJsonProvider: redteamProvider,
   };
 }

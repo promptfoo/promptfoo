@@ -346,8 +346,10 @@ export interface DefaultProviders {
   webSearchProvider?: ApiProvider;
   /**
    * Default provider used to generate adversarial inputs for red teaming.
-   * Do not mutate this instance directly at call sites; use the redteam provider
-   * manager to derive per-request variants such as JSON-only output.
    */
   redteamProvider?: ApiProvider;
+  /**
+   * Provider suitable for redteam strategies that require JSON output.
+   */
+  redteamJsonProvider?: ApiProvider;
 }

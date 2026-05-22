@@ -101,19 +101,18 @@ async function loadRedteamProvider({
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
     ret = (await redteamProviderLoader([redteamProvider]))[0];
   } else {
-    if (!jsonOnly && !preferSmallModel) {
-      try {
-        const { getDefaultProviders } = await import('../../providers/defaults');
-        const defaults = await getDefaultProviders();
-        if (defaults.redteamProvider) {
-          logger.debug(`Using default ${purpose} provider from defaults`, {
-            provider: defaults.redteamProvider.id(),
-          });
-          ret = defaults.redteamProvider;
-        }
-      } catch {
-        // Fall through to the built-in OpenAI default.
-      }
+    const { getDefaultProviders } = await import('../../providers/defaults');
+    const defaults = await getDefaultProviders();
+    const configuredDefault = jsonOnly
+      ? (defaults.redteamJsonProvider ?? defaults.redteamProvider)
+      : defaults.redteamProvider;
+    if (configuredDefault) {
+      logger.debug(`Using default ${purpose} provider from defaults`, {
+        provider: configuredDefault.id(),
+        jsonOnly,
+        preferSmallModel,
+      });
+      ret = configuredDefault;
     }
 
     if (!ret) {

@@ -54,6 +54,10 @@ describe('GitHub Models Default Providers', () => {
     expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
     expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-5');
     expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
+    expect(providers.redteamProvider?.config?.temperature).toBe(0.7);
+    expect(providers.redteamJsonProvider?.config?.response_format).toEqual({
+      type: 'json_object',
+    });
 
     // Should fall back to OpenAI for embeddings and moderation (not supported by GitHub)
     expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
