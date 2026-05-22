@@ -10,14 +10,19 @@ interface SkillCountValue {
 }
 
 function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
-  const rawSkillCalls = params.providerResponse?.metadata?.skillCalls;
+  const metadata = params.providerResponse?.metadata;
+  // Codex providers expose unsuccessful reads only in attemptedSkillCalls,
+  // which is the complete attempted-read set when it is present.
+  const rawSkillCalls =
+    params.inverse === true && Array.isArray(metadata?.attemptedSkillCalls)
+      ? metadata.attemptedSkillCalls
+      : metadata?.skillCalls;
   if (!Array.isArray(rawSkillCalls)) {
     return [];
   }
 
-  // skill-used counts only successful invocations, so errored skill calls are
-  // dropped. not-skill-used must still flag a forbidden skill that was invoked
-  // and merely errored, so the inverse path keeps errored calls.
+  // skill-used counts only confirmed successful invocations, while
+  // not-skill-used must flag forbidden attempts even if they errored.
   return rawSkillCalls.filter(
     (entry): entry is SkillCallEntry =>
       Boolean(entry) &&

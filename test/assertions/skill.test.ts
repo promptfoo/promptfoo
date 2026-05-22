@@ -172,6 +172,44 @@ describe('skill-used assertion', () => {
     expect(result.reason).toContain('Forbidden skill "forbidden-skill" was used');
   });
 
+  it('flags an attempted-only forbidden skill in not-skill-used assertions', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'not-skill-used',
+        value: 'forbidden-skill',
+      },
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          attemptedSkillCalls: [{ name: 'forbidden-skill', source: 'heuristic' }],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Forbidden skill(s) were used: forbidden-skill');
+  });
+
+  it('does not count attempted-only skill metadata as satisfying skill-used assertions', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'skill-used',
+        value: 'attempted-skill',
+      },
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          attemptedSkillCalls: [{ name: 'attempted-skill', source: 'heuristic' }],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Missing required skill(s): attempted-skill');
+  });
+
   it('treats not-skill-used object assertions with no count bounds as forbidding any match', async () => {
     const result = await runSkillAssertion({
       type: 'not-skill-used',

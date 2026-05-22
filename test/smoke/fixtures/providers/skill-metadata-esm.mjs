@@ -26,6 +26,21 @@ export default class SkillMetadataProvider {
             is_error: true,
           },
         ],
+        attemptedSkillCalls: [
+          {
+            name: 'smoke-skill',
+            source: 'tool',
+          },
+          {
+            name: 'errored-smoke-skill',
+            source: 'tool',
+            is_error: true,
+          },
+          {
+            name: 'attempted-smoke-skill',
+            source: 'heuristic',
+          },
+        ],
       },
     };
   }
