@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useId, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -98,6 +98,7 @@ const HttpEndpointConfiguration = ({
   onTargetTested,
   onSessionTested,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
+  const urlErrorId = useId();
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
       ? selectedTarget.config.body
@@ -616,11 +617,17 @@ ${exampleRequest}`;
                   id="url"
                   value={selectedTarget.config.url}
                   onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  aria-invalid={Boolean(urlError)}
+                  aria-describedby={urlError ? urlErrorId : undefined}
                   className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />
               </div>
-              {urlError && <HelperText error>{urlError}</HelperText>}
+              {urlError && (
+                <HelperText id={urlErrorId} error>
+                  {urlError}
+                </HelperText>
+              )}
             </div>
 
             <p className="mb-2 mt-6 font-medium">Headers</p>

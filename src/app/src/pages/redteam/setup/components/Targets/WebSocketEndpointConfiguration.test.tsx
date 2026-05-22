@@ -51,6 +51,22 @@ describe('WebSocketEndpointConfiguration', () => {
     expect(update).toHaveBeenCalledWith('url', 'wss://foo.bar');
   });
 
+  it('connects URL validation feedback to the URL field', () => {
+    renderWithProviders(
+      <WebSocketEndpointConfiguration
+        selectedTarget={baseProvider}
+        updateWebSocketTarget={vi.fn()}
+        urlError="Please enter a valid WebSocket URL (ws:// or wss://)"
+      />,
+    );
+
+    const urlField = screen.getByLabelText('WebSocket URL');
+    expect(urlField).toHaveAttribute('aria-invalid', 'true');
+    expect(urlField).toHaveAccessibleDescription(
+      'Please enter a valid WebSocket URL (ws:// or wss://)',
+    );
+  });
+
   it('calls updateWebSocketTarget on Message Template change', async () => {
     const user = userEvent.setup();
     const update = vi.fn();

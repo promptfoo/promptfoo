@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import Editor from '@app/components/ui/code-editor';
 import { HelperText } from '@app/components/ui/helper-text';
@@ -41,6 +41,7 @@ const WebSocketEndpointConfiguration = ({
   updateWebSocketTarget,
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
+  const urlErrorId = useId();
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
   );
@@ -54,9 +55,15 @@ const WebSocketEndpointConfiguration = ({
             id="websocket-url"
             value={selectedTarget.config.url}
             onChange={(e) => updateWebSocketTarget('url', e.target.value)}
+            aria-invalid={Boolean(urlError)}
+            aria-describedby={urlError ? urlErrorId : undefined}
             className={cn(urlError && 'border-destructive')}
           />
-          {urlError && <HelperText error>{urlError}</HelperText>}
+          {urlError && (
+            <HelperText id={urlErrorId} error>
+              {urlError}
+            </HelperText>
+          )}
         </div>
 
         <div className="mt-4 space-y-2">

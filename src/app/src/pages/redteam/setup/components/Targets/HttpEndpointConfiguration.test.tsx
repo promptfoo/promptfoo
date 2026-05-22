@@ -220,10 +220,13 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
 
     const firstNameField = nameFields[0];
     const firstValueField = valueFields[0];
+    const urlInput = screen.getByLabelText(/URL/);
 
     // Fields should remain visible after URL error state change
     expect(firstNameField).toBeVisible();
     expect(firstValueField).toBeVisible();
+    expect(urlInput).toHaveAttribute('aria-invalid', 'true');
+    expect(urlInput).toHaveAccessibleDescription(newUrlError);
   });
 
   it('should render header Name and Value fields with correct minimum widths and flex grow, ensuring both fields remain visible and usable for typical header values', () => {
