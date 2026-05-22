@@ -1851,6 +1851,7 @@ function ResultsTable({
   }, [filters.values]);
 
   const hasMountedResultSetResetRef = useRef(false);
+  const shouldSkipRowJumpAfterResultSetResetRef = useRef(false);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -1859,6 +1860,7 @@ function ResultsTable({
       return;
     }
 
+    shouldSkipRowJumpAfterResultSetResetRef.current = true;
     clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
@@ -2238,6 +2240,11 @@ function ResultsTable({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
+    if (shouldSkipRowJumpAfterResultSetResetRef.current) {
+      shouldSkipRowJumpAfterResultSetResetRef.current = false;
+      return;
+    }
+
     const params = parseQueryParams(window.location.search);
     const detailsHashTarget = parseEvalOutputPromptHash(locationHash);
     const rowId = params['rowId'];
@@ -2336,7 +2343,9 @@ function ResultsTable({
     filteredResultsCount,
     locationHash,
     debouncedSearchText,
+    failureFilter,
     filterMode,
+    appliedFiltersString,
     filters.appliedCount,
   ]);
 

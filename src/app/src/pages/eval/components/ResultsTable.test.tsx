@@ -1201,7 +1201,7 @@ describe('ResultsTable Row Navigation', () => {
     });
 
     // With the bug, the row-jump effect treats global test index 50 as a filtered
-    // position and pages to pageIndex 1; with the fix it stays on page 1 (pageIndex 0).
+    // position and pages to pageIndex 1; with the fix it stays on the first page.
     expect(mockFetchEvalData).not.toHaveBeenCalledWith(
       '123',
       expect.objectContaining({
@@ -1228,6 +1228,31 @@ describe('ResultsTable Row Navigation', () => {
         }),
       );
     });
+  });
+
+  it('does not reuse a cleared details hash when a filter is removed', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+    const { rerender } = renderWithProviders(
+      <ResultsTable {...defaultProps} filterMode="failures" />,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    mockFetchEvalData.mockClear();
+
+    rerender(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe('');
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
   });
 
   it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
