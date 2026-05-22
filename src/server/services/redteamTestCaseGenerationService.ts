@@ -64,6 +64,11 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
         return 'Privacy Rights Request Workflow Integrity plugin requires privacy geographies configuration';
       }
       break;
+    case 'decisioning:automated-decision-response-integrity':
+      if (!hasNonEmptyStringList(config.profiles)) {
+        return 'Automated Decision Response Integrity plugin requires decision-response profiles configuration';
+      }
+      break;
     case 'bfla': {
       const targetIdentifiers = config.targetIdentifiers as unknown;
       if (

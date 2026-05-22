@@ -175,6 +175,15 @@ describe('Plugins', () => {
       );
     });
 
+    it('should validate automated decision response profile config', async () => {
+      const decisioningPlugin = Plugins.find(
+        (p) => p.key === 'decisioning:automated-decision-response-integrity',
+      );
+      expect(() => decisioningPlugin?.validate?.({})).toThrow(
+        'Automated Decision Response Integrity plugin requires `config.profiles` with at least one supported decision-response profile.',
+      );
+    });
+
     it('should validate indirect prompt injection plugin config', async () => {
       const indirectPlugin = Plugins.find((p) => p.key === 'indirect-prompt-injection');
       expect(() => indirectPlugin?.validate?.({})).toThrow(

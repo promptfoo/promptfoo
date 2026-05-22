@@ -36,6 +36,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Compliance & Legal
   contracts: `${BASE_DOCS_URL}/contracts/`,
+  'decisioning:automated-decision-response-integrity': `${BASE_DOCS_URL}/automated-decision-response-integrity/`,
   'harmful:chemical-biological-weapons': `${BASE_DOCS_URL}/harmful/`,
   'harmful:copyright-violations': `${BASE_DOCS_URL}/harmful/`,
   'harmful:cybercrime:malicious-code': `${BASE_DOCS_URL}/harmful/`,

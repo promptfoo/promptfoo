@@ -17,6 +17,7 @@ export const NAVBAR_HEIGHT = 64;
  */
 export const PLUGINS_REQUIRING_CONFIG = [
   'indirect-prompt-injection',
+  'decisioning:automated-decision-response-integrity',
   'privacy-policy-consistency',
   'privacy:rights-request-workflow-integrity',
   'prompt-extraction',

@@ -18,6 +18,10 @@ describe('requiresPluginConfig', () => {
     expect(requiresPluginConfig('privacy:rights-request-workflow-integrity')).toBe(true);
   });
 
+  it('should return true for automated decision response plugin', () => {
+    expect(requiresPluginConfig('decisioning:automated-decision-response-integrity')).toBe(true);
+  });
+
   it('should return false for plugins that do not require config', () => {
     expect(requiresPluginConfig('bola')).toBe(false);
     expect(requiresPluginConfig('harmful:hate')).toBe(false);
@@ -49,6 +53,7 @@ describe('requiresPluginConfig', () => {
       // This is a type-level test - if it compiles, the type guard works
       const narrowedPlugin:
         | 'indirect-prompt-injection'
+        | 'decisioning:automated-decision-response-integrity'
         | 'privacy-policy-consistency'
         | 'privacy:rights-request-workflow-integrity'
         | 'prompt-extraction' = plugin;

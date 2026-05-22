@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
 import {
+  configureAutomatedDecisionResponseIntegrityPlugin,
   configurePrivacyRightsRequestWorkflowIntegrityPlugin,
   redteamInit,
   initCommand as redteamInitCommand,
@@ -265,6 +266,40 @@ describe('configurePrivacyRightsRequestWorkflowIntegrityPlugin', () => {
       id: 'privacy:rights-request-workflow-integrity',
       config: {
         geographies: ['california-ccpa', 'eu-gdpr'],
+      },
+    });
+  });
+});
+
+describe('configureAutomatedDecisionResponseIntegrityPlugin', () => {
+  it('collects decision-response profiles for CLI init config', async () => {
+    vi.mocked(checkbox).mockResolvedValue([
+      'california-ccpa-admt',
+      'eu-ai-act-high-risk-explanation',
+    ]);
+
+    const plugin = await configureAutomatedDecisionResponseIntegrityPlugin();
+
+    expect(checkbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('decisioning:automated-decision-response-integrity'),
+        choices: [
+          { name: 'California CCPA ADMT', value: 'california-ccpa-admt' },
+          {
+            name: 'EU AI Act High-Risk Explanation',
+            value: 'eu-ai-act-high-risk-explanation',
+          },
+          {
+            name: 'Colorado AI Act Consequential Decision',
+            value: 'colorado-ai-act-consequential-decision',
+          },
+        ],
+      }),
+    );
+    expect(plugin).toEqual({
+      id: 'decisioning:automated-decision-response-integrity',
+      config: {
+        profiles: ['california-ccpa-admt', 'eu-ai-act-high-risk-explanation'],
       },
     });
   });

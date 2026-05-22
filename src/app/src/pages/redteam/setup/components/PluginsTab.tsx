@@ -258,6 +258,12 @@ export default function PluginsTab({
       ) {
         return false;
       }
+      if (
+        plugin === 'decisioning:automated-decision-response-integrity' &&
+        !hasNonEmptyStringList(config.profiles)
+      ) {
+        return false;
+      }
 
       for (const key in config) {
         const value = config[key as keyof PluginConfig];

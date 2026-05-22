@@ -24,6 +24,12 @@ const PRIVACY_RIGHTS_GEOGRAPHY_OPTIONS = [
   { id: 'eu-gdpr', label: 'EU GDPR' },
 ] as const;
 
+const AUTOMATED_DECISION_RESPONSE_PROFILE_OPTIONS = [
+  { id: 'california-ccpa-admt', label: 'California CCPA ADMT' },
+  { id: 'eu-ai-act-high-risk-explanation', label: 'EU AI Act High-Risk Explanation' },
+  { id: 'colorado-ai-act-consequential-decision', label: 'Colorado AI Act Consequential Decision' },
+] as const;
+
 interface PluginConfigDialogProps {
   open: boolean;
   plugin: Plugin | null;
@@ -105,6 +111,19 @@ export default function PluginConfigDialog({
       return {
         ...prev,
         geographies,
+      };
+    });
+  };
+
+  const toggleAutomatedDecisionResponseProfile = (profile: string, checked: boolean) => {
+    setLocalConfig((prev) => {
+      const current = Array.isArray(prev.profiles) ? (prev.profiles as string[]) : [];
+      const profiles = checked
+        ? [...new Set([...current, profile])]
+        : current.filter((entry) => entry !== profile);
+      return {
+        ...prev,
+        profiles,
       };
     });
   };
@@ -289,6 +308,57 @@ export default function PluginConfigDialog({
               </p>
             </div>
           </div>
+        );
+        break;
+      case 'decisioning:automated-decision-response-integrity':
+        specificConfig = (
+          <>
+            <p className="mb-4 mt-4 text-sm text-muted-foreground">
+              Test whether an AI app or agent preserves person-specific automated-decision response
+              paths for the decision-response profiles where you deploy it. Output-only scans catch
+              visible false denials and invented decision facts; SOP, trace, and state evidence make
+              response-path grading stronger.
+            </p>
+            <div className="mb-4">
+              <p className="mb-1 text-sm font-medium">Decision-Response Profiles</p>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Select at least one profile. Promptfoo generates a separate batch for each selected
+                profile.
+              </p>
+              <div className="space-y-2">
+                {AUTOMATED_DECISION_RESPONSE_PROFILE_OPTIONS.map(({ id, label }) => (
+                  <label key={id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label={label}
+                      checked={
+                        Array.isArray(localConfig.profiles) &&
+                        (localConfig.profiles as string[]).includes(id)
+                      }
+                      onChange={(e) => toggleAutomatedDecisionResponseProfile(id, e.target.checked)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <Label className="mt-4" htmlFor="decisionResponsePolicy">
+              Decision-Response SOP
+            </Label>
+            <Input
+              id="decisionResponsePolicy"
+              placeholder="file://decision-response-sop.md"
+              value={(localConfig.decisionResponsePolicy as string) || ''}
+              onChange={(e) =>
+                setLocalConfig({ ...localConfig, decisionResponsePolicy: e.target.value })
+              }
+              className="mt-2"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Optional response evidence can ground routing, status, explanation, correction,
+              appeal, and human-response grading.
+            </p>
+          </>
         );
         break;
       case 'bfla':

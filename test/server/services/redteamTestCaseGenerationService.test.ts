@@ -170,5 +170,26 @@ describe('redteamTestCaseGenerationService', () => {
         }),
       ).toBeNull();
     });
+
+    it('requires profiles for automated decision response test generation', async () => {
+      const { getPluginConfigurationError } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: {},
+        }),
+      ).toBe(
+        'Automated Decision Response Integrity plugin requires decision-response profiles configuration',
+      );
+      expect(
+        getPluginConfigurationError({
+          id: 'decisioning:automated-decision-response-integrity',
+          config: { profiles: ['california-ccpa-admt'] },
+        }),
+      ).toBeNull();
+    });
   });
 });

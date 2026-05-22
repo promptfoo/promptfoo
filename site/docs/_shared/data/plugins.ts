@@ -604,6 +604,21 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether realistic users can induce unsupported automated-decision denials, invented decision facts, or broken person-specific response paths.',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/automated-decision-response-integrity/',
+    name: 'Automated Decision Response Integrity',
+    pluginId: 'decisioning:automated-decision-response-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'misinformation and misuse',
+  },
+  {
     category: 'Security and Access Control',
     description: 'Attempts to access or use debugging commands',
     label: 'technical',

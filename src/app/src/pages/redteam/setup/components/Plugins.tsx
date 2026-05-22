@@ -33,6 +33,7 @@ interface PluginsProps {
 
 const PLUGINS_REQUIRING_CONFIG = [
   'indirect-prompt-injection',
+  'decisioning:automated-decision-response-integrity',
   'privacy-policy-consistency',
   'privacy:rights-request-workflow-integrity',
   'prompt-extraction',
@@ -121,6 +122,13 @@ function hasConfiguredPluginValues(plugin: string, config: PluginConfig | undefi
     return false;
   }
 
+  if (
+    plugin === 'decisioning:automated-decision-response-integrity' &&
+    !hasAutomatedDecisionResponseProfileConfig(config)
+  ) {
+    return false;
+  }
+
   return Object.values(config).every((value) => {
     if (Array.isArray(value)) {
       return value.length > 0;
@@ -145,6 +153,10 @@ function hasNonEmptyStringList(value: unknown): boolean {
 
 function hasPrivacyRightsGeographyConfig(config: PluginConfig): boolean {
   return hasNonEmptyStringList(config.geographies) || hasNonEmptyStringList(config.frameworks);
+}
+
+function hasAutomatedDecisionResponseProfileConfig(config: PluginConfig): boolean {
+  return hasNonEmptyStringList(config.profiles);
 }
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {

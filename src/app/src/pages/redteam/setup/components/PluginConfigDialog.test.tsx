@@ -300,6 +300,36 @@ describe('PluginConfigDialog - OSS', () => {
         );
       });
     });
+
+    it('saves profile selection for automated decision response integrity', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="decisioning:automated-decision-response-integrity"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('EU AI Act High-Risk Explanation'));
+      await user.type(
+        screen.getByPlaceholderText('file://decision-response-sop.md'),
+        'file://decision-response-sop.md',
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => {
+        expect(mockOnSave).toHaveBeenCalledWith(
+          'decisioning:automated-decision-response-integrity',
+          expect.objectContaining({
+            profiles: ['eu-ai-act-high-risk-explanation'],
+            decisionResponsePolicy: 'file://decision-response-sop.md',
+          }),
+        );
+      });
+    });
   });
 
   describe('Read-Only Plugins', () => {
