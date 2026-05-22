@@ -46,6 +46,20 @@
   transition: all 0.15s ease-in-out;
 }
 
+/*
+ * Draw the keyboard-focus ring inset: `.metric-chip` has `overflow: hidden`,
+ * which would clip a default (outset) outline on the inner button.
+ */
+.metric-content:focus {
+  outline: none;
+}
+
+.metric-content:focus-visible {
+  outline: 2px solid var(--primary-color, #2563eb);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
 .metric-name {
   font-weight: 600;
   color: inherit;
