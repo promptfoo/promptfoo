@@ -137,9 +137,16 @@ const ConfigureEnvButton = () => {
       </Button>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && requestClose()}>
-        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
+        <DialogContent
+          className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden"
+          hideDescription={false}
+          aria-describedby="provider-settings-description"
+        >
           <DialogHeader>
             <DialogTitle>Provider Settings</DialogTitle>
+            <DialogDescription id="provider-settings-description">
+              Add temporary credentials only for providers you use in this evaluation.
+            </DialogDescription>
           </DialogHeader>
 
           <div
