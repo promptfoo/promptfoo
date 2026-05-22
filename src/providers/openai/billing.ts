@@ -109,12 +109,11 @@ const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
 ]);
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
-  { models: ['chat-latest', 'gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
+  { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
   { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
 ]);
 
 const FLEX_SUPPORTED_TEXT_MODELS = new Set([
-  'chat-latest',
   'gpt-5.5',
   'gpt-5.5-2026-04-23',
   'gpt-5.5-pro',
@@ -150,7 +149,7 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
 
 const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
-    models: ['chat-latest', 'gpt-5.5', 'gpt-5.5-2026-04-23'],
+    models: ['gpt-5.5', 'gpt-5.5-2026-04-23'],
     rates: { input: perMillion(12.5), cachedInput: perMillion(1.25), output: perMillion(75) },
   },
   {
@@ -210,6 +209,9 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
     rates: { input: perMillion(2), cachedInput: perMillion(0.5), output: perMillion(8) },
   },
 ]);
+
+// OpenAI publishes chat-latest pricing only for standard processing.
+const STANDARD_ONLY_TEXT_MODELS = new Set(['chat-latest']);
 
 const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
   {
@@ -485,6 +487,10 @@ function getModelRates(
             }
           : text,
     };
+  }
+
+  if (tier !== 'standard' && STANDARD_ONLY_TEXT_MODELS.has(modelName)) {
+    return undefined;
   }
 
   if (tier === 'priority' && PRIORITY_TEXT_RATES[modelName]) {

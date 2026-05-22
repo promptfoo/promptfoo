@@ -75,11 +75,6 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
     cost: {
       input: 5 / 1e6,
       output: 30 / 1e6,
-      longContext: {
-        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
-        input: 10 / 1e6,
-        output: 45 / 1e6,
-      },
     },
   },
   ...['gpt-4.1', 'gpt-4.1-2025-04-14'].map((model) => ({

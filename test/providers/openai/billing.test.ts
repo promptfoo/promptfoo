@@ -130,6 +130,20 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 10);
   });
 
+  it('keeps documented standard rates for chat-latest long prompts', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          input_tokens: 300_000,
+          output_tokens: 1_000,
+          input_tokens_details: { cached_tokens: 100_000 },
+        },
+      ),
+    ).toBeCloseTo((200_000 * 5 + 100_000 * 0.5 + 1_000 * 30) / 1e6, 10);
+  });
+
   it('uses returned service tiers when pricing flex and priority work', () => {
     const usage = {
       input_tokens: 1_000,
@@ -146,20 +160,22 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((600 * 0.45 + 400 * 0.045 + 100 * 3.6) / 1e6, 10);
   });
 
-  it('uses GPT-5.5 service-tier rates for chat-latest', () => {
+  it('does not invent unlisted processing tier rates for chat-latest', () => {
     const usage = {
       input_tokens: 1_000,
       output_tokens: 100,
       input_tokens_details: { cached_tokens: 400 },
     };
 
-    expect(calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' })).toBeCloseTo(
-      (600 * 2.5 + 400 * 0.25 + 100 * 15) / 1e6,
-      10,
-    );
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'batch' }),
+    ).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' }),
+    ).toBeUndefined();
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'priority' }),
-    ).toBeCloseTo((600 * 12.5 + 400 * 1.25 + 100 * 75) / 1e6, 10);
+    ).toBeUndefined();
   });
 
   it('uses current long-context flex rates for supported pro models', () => {

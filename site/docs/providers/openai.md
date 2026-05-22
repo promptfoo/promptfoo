@@ -487,11 +487,13 @@ providers:
 - **`medium`**: Balanced reasoning for moderate complexity
 - **`high`**: Maximum reasoning for complex problem-solving
 
-### GPT-5.5 Instant
+### ChatGPT Instant (`chat-latest`)
 
-OpenAI exposes the current ChatGPT Instant model as `chat-latest`. As of May 5, 2026, that alias points to GPT-5.5 Instant. Because `chat-latest` is a floating alias, use a dated or family-specific model when you need a stable eval baseline.
+OpenAI exposes the current ChatGPT Instant model as `chat-latest`. This floating alias can change as OpenAI updates the underlying snapshot. For production API use, OpenAI recommends `gpt-5.5`; use a dated or family-specific model when you need a stable eval baseline.
 
 OpenAI's pricing docs list `chat-latest` at $5 input, $0.50 cached input, and $30 output per 1M tokens.
+
+Promptfoo uses that standard price for the alias and does not infer Batch, Flex, Priority, or GPT-5.5-specific long-context rates unless OpenAI publishes them.
 
 If you set reasoning effort explicitly for `chat-latest`, use `medium`. The API rejects other reasoning-effort values for this floating alias on both Chat Completions and Responses.
 

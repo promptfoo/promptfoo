@@ -289,9 +289,9 @@ describe('calculateOpenAICost', () => {
     );
   });
 
-  it('should calculate long-context cost correctly for chat-latest', () => {
+  it('does not invent long-context pricing for chat-latest', () => {
     const cost = calculateOpenAICost('chat-latest', {}, 300_000, 1_000);
-    expect(cost).toBeCloseTo((300_000 * 10 + 1_000 * 45) / 1e6, 6);
+    expect(cost).toBeCloseTo((300_000 * 5 + 1_000 * 30) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5.5', () => {
