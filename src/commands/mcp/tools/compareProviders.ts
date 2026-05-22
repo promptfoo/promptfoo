@@ -50,7 +50,7 @@ export function registerCompareProvidersTool(server: McpServer) {
       const { providers, testPrompt, evaluationCriteria, timeoutMs = 30000 } = args;
 
       try {
-        providers.forEach(validateProviderId);
+        providers.forEach((provider) => validateProviderId(provider));
 
         // Load all providers
         const apiProviders = await loadApiProviders(providers.map((p) => ({ id: p })));

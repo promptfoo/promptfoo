@@ -181,6 +181,15 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('azure:gpt-4o')).not.toThrow();
       expect(() => validateProviderId('openai:chat:gpt-5.4-2026-03-05')).not.toThrow();
       expect(() => validateProviderId('bedrock:us.anthropic.claude-opus-4-6-v1:0')).not.toThrow();
+      expect(() =>
+        validateProviderId('bedrock:arn:aws:bedrock:us-east-2::inference-profile/model'),
+      ).not.toThrow();
+      expect(() =>
+        validateProviderId('cloudflare-ai:chat:@cf/meta/llama-3.1-8b-instruct'),
+      ).not.toThrow();
+      expect(() =>
+        validateProviderId('promptfoo://provider/12345678-1234-1234-1234-123456789abc'),
+      ).not.toThrow();
     });
 
     it('should accept file path providers', () => {
@@ -198,6 +207,51 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('file://script.py:getProvider')).not.toThrow();
     });
 
+    it('should reject prefixed script providers outside the workspace', () => {
+      expect(() =>
+        validateProviderId(`python:${path.join(path.dirname(process.cwd()), 'evil.py')}`),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId(`golang:${path.join(path.dirname(process.cwd()), 'evil.go')}`),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId(`ruby:${path.join(path.dirname(process.cwd()), 'evil.rb')}`),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('should render env provider paths before containment checks', () => {
+      const outsideWorkspace = path.join(path.dirname(process.cwd()), 'templated-provider.py');
+
+      expect(() =>
+        validateProviderId('file://{{ env.MCP_PROVIDER_DIR }}/templated-provider.py', {
+          MCP_PROVIDER_DIR: path.dirname(outsideWorkspace),
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId('file://{{ env.UNRESOLVED_PROVIDER_DIR }}/templated-provider.py'),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('should reject nested provider paths outside the workspace in provider config files', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'provider.json'),
+        JSON.stringify({ id: `file://${path.join(outside, 'evil.py')}` }),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateProviderId('file://provider.json')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
     it('should accept HTTP providers', () => {
       expect(() => validateProviderId('http://localhost:8080/api')).not.toThrow();
       expect(() => validateProviderId('https://api.example.com/v1')).not.toThrow();
@@ -205,10 +259,9 @@ describe('MCP Security', () => {
 
     it('should reject invalid formats', () => {
       expect(() => validateProviderId('invalid provider')).toThrow(ConfigurationError);
-      expect(() => validateProviderId('bad$provider')).toThrow(ConfigurationError);
       expect(() => validateProviderId('')).toThrow(ConfigurationError);
-      expect(() => validateProviderId('openai:')).toThrow(ConfigurationError);
-      expect(() => validateProviderId('openai::gpt-4')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('openai:\nmalformed')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('file://not-a-provider.txt')).toThrow(ConfigurationError);
       expect(() => validateProviderId('../providers/custom.js')).toThrow(ConfigurationError);
       expect(() => validateProviderId('openai:../../secret')).toThrow(ConfigurationError);
       expect(() =>

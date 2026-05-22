@@ -1,16 +1,33 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import yaml from 'js-yaml';
+import { isProviderConfigFileReference } from '../../../util/providerRef';
+import { renderEnvOnlyInObject } from '../../../util/render';
 import { ConfigurationError } from './errors';
+
+import type { EnvOverrides } from '../../../types/env';
 
 /**
  * Security utilities for MCP server operations
  */
 
-const SIMPLE_PROVIDER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
-const PROVIDER_MODEL_SEGMENT_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.\\/-]*$/;
-const PROVIDER_FILE_REFERENCE_PATTERN =
-  /^(.+\.(?:cjs|cts|go|js|json|mjs|mts|py|rb|ts|ya?ml))(?::[A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*)?$/i;
+const FILE_PROVIDER_PREFIX = 'file://';
+const LOCAL_PROVIDER_PREFIXES = ['exec:', 'golang:', 'python:', 'ruby:'] as const;
+const PROVIDER_FILE_EXTENSIONS = new Set([
+  'cjs',
+  'cts',
+  'go',
+  'js',
+  'json',
+  'mjs',
+  'mts',
+  'py',
+  'rb',
+  'ts',
+  'yaml',
+  'yml',
+]);
 
 /**
  * Validates that a file path is safe and within allowed boundaries.
@@ -90,55 +107,146 @@ export function validateMcpFilePath(filePath: string): void {
   }
 }
 
-function getProviderFilePath(providerId: string): string | undefined {
-  const providerPath = providerId.startsWith('file://')
-    ? providerId.slice('file://'.length)
-    : providerId;
-  return providerPath.match(PROVIDER_FILE_REFERENCE_PATTERN)?.[1];
+function hasProviderFileExtension(filePath: string): boolean {
+  return PROVIDER_FILE_EXTENSIONS.has(path.extname(filePath).slice(1).toLowerCase());
 }
 
-/**
- * Validates provider ID format
- */
-export function validateProviderId(providerId: string): void {
+function stripProviderFileExport(providerPath: string): string {
+  const lowerProviderPath = providerPath.toLowerCase();
+  let filePathEnd = -1;
+
+  for (const extension of PROVIDER_FILE_EXTENSIONS) {
+    const exportMarker = `.${extension}:`;
+    const markerIndex = lowerProviderPath.lastIndexOf(exportMarker);
+    if (markerIndex !== -1) {
+      filePathEnd = Math.max(filePathEnd, markerIndex + exportMarker.length - 1);
+    }
+  }
+
+  return filePathEnd === -1 ? providerPath : providerPath.slice(0, filePathEnd);
+}
+
+function getLocalProviderPath(providerId: string): string | undefined {
+  for (const prefix of LOCAL_PROVIDER_PREFIXES) {
+    if (providerId.startsWith(prefix)) {
+      return stripProviderFileExport(providerId.slice(prefix.length));
+    }
+  }
+
+  const providerPath = providerId.startsWith(FILE_PROVIDER_PREFIX)
+    ? providerId.slice(FILE_PROVIDER_PREFIX.length)
+    : providerId;
+  const filePath = stripProviderFileExport(providerPath);
+  return hasProviderFileExtension(filePath) ? filePath : undefined;
+}
+
+function renderProviderIdForValidation(providerId: string, env?: EnvOverrides): string {
+  const renderedProviderId = renderEnvOnlyInObject(providerId, env);
+  if (renderedProviderId.includes('{{') || renderedProviderId.includes('{%')) {
+    throw new ConfigurationError(
+      'Invalid provider ID format: provider ID templates must resolve before MCP validation',
+    );
+  }
+  return renderedProviderId;
+}
+
+interface ProviderValidationState {
+  env?: EnvOverrides;
+  validatedConfigFiles: Set<string>;
+}
+
+function mergeProviderEnv(baseEnv: EnvOverrides | undefined, providerEnv: unknown): EnvOverrides {
+  return {
+    ...baseEnv,
+    ...(typeof providerEnv === 'object' && providerEnv !== null ? providerEnv : {}),
+  } as EnvOverrides;
+}
+
+function validateProviderConfigFile(providerPath: string, state: ProviderValidationState): void {
+  if (!isProviderConfigFileReference(`${FILE_PROVIDER_PREFIX}${providerPath}`)) {
+    return;
+  }
+
+  const resolvedProviderPath = path.resolve(process.cwd(), providerPath);
+  if (!fs.existsSync(resolvedProviderPath)) {
+    return;
+  }
+
+  const realProviderPath = fs.realpathSync(resolvedProviderPath);
+  if (state.validatedConfigFiles.has(realProviderPath)) {
+    return;
+  }
+  state.validatedConfigFiles.add(realProviderPath);
+
+  const rawConfig = yaml.load(fs.readFileSync(realProviderPath, 'utf8'));
+  const configs = Array.isArray(rawConfig) ? rawConfig : [rawConfig];
+  for (const config of configs) {
+    if (typeof config === 'string' && config.startsWith(FILE_PROVIDER_PREFIX)) {
+      validateProviderIdWithState(config, state);
+      continue;
+    }
+
+    if (
+      typeof config === 'object' &&
+      config !== null &&
+      'id' in config &&
+      typeof config.id === 'string'
+    ) {
+      validateProviderIdWithState(config.id, {
+        env: mergeProviderEnv(state.env, 'env' in config ? config.env : undefined),
+        validatedConfigFiles: state.validatedConfigFiles,
+      });
+    }
+  }
+}
+
+function validateProviderIdWithState(providerId: string, state: ProviderValidationState): void {
   if (!providerId || /[\0\r\n]/.test(providerId)) {
     throw new ConfigurationError('Invalid provider ID format: provider ID cannot be empty');
   }
 
-  if (providerId.includes('..') || providerId.includes('~')) {
+  const renderedProviderId = renderProviderIdForValidation(providerId, state.env);
+  if (renderedProviderId.includes('..') || renderedProviderId.includes('~')) {
     throw new ConfigurationError(
       'Invalid provider ID format: provider IDs cannot contain ".." or "~"',
     );
   }
 
-  if (/^https?:\/\//i.test(providerId)) {
+  if (/\s/.test(renderedProviderId)) {
+    throw new ConfigurationError(`Invalid provider ID format: ${renderedProviderId}`);
+  }
+
+  if (/^https?:\/\//i.test(renderedProviderId)) {
     try {
-      const url = new URL(providerId);
+      const url = new URL(renderedProviderId);
       if (url.protocol === 'http:' || url.protocol === 'https:') {
         return;
       }
     } catch {
-      throw new ConfigurationError(`Invalid provider URL: ${providerId}`);
+      throw new ConfigurationError(`Invalid provider URL: ${renderedProviderId}`);
     }
   }
 
-  const providerFilePath = getProviderFilePath(providerId);
-  if (providerFilePath) {
-    validateMcpFilePath(providerFilePath);
+  const providerPath = getLocalProviderPath(renderedProviderId);
+  if (providerPath !== undefined) {
+    if (!providerPath) {
+      throw new ConfigurationError(`Invalid provider ID format: ${renderedProviderId}`);
+    }
+    validateMcpFilePath(providerPath);
+    validateProviderConfigFile(providerPath, state);
     return;
   }
 
-  const [providerPrefix, ...modelSegments] = providerId.split(':');
-  const isSimpleProviderId =
-    modelSegments.length === 0 && SIMPLE_PROVIDER_ID_PATTERN.test(providerPrefix);
-  const isProviderModelId =
-    modelSegments.length > 0 &&
-    SIMPLE_PROVIDER_ID_PATTERN.test(providerPrefix) &&
-    modelSegments.every((segment) => PROVIDER_MODEL_SEGMENT_PATTERN.test(segment));
-
-  if (!isSimpleProviderId && !isProviderModelId) {
+  if (renderedProviderId.startsWith(FILE_PROVIDER_PREFIX)) {
     throw new ConfigurationError(
-      `Invalid provider ID format: ${providerId}. Expected format like "openai:gpt-4" or path to provider file.`,
+      `Invalid provider ID format: ${renderedProviderId}. Expected a supported provider file.`,
     );
   }
+}
+
+/**
+ * Validates provider ID format
+ */
+export function validateProviderId(providerId: string, env?: EnvOverrides): void {
+  validateProviderIdWithState(providerId, { env, validatedConfigFiles: new Set() });
 }
