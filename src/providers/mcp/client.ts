@@ -458,6 +458,7 @@ export class MCPClient {
 
             return {
               content,
+              ...(result.isError ? { isError: true } : {}),
               raw: result,
             };
           } catch (error) {
