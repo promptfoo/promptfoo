@@ -608,6 +608,68 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it('still rejects prompt optimization when defaultTest is empty', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      defaultTest: {},
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
+  });
+
+  it('accepts a defaultTest-only config (no tests or scenarios) like eval does', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      // No `tests` or `scenarios`: `eval` synthesizes one implicit test and applies
+      // `defaultTest`, so the optimizer preflight must accept this config too.
+      defaultTest: {
+        assert: [{ type: 'contains', value: 'default' }],
+      },
+    };
+
+    const result = await optimizePromptTestSuite({}, testSuite);
+
+    expect(result.improved).toBe(true);
+    expect(result.bestPrompt.label).toBe('Seed [optimized 1]');
+    expect(evaluate).toHaveBeenCalled();
+  });
+
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',

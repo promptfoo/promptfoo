@@ -591,6 +591,23 @@ function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {
   };
 }
 
+/**
+ * Detects whether `defaultTest` carries enough configuration to be a runnable test
+ * on its own. `promptfoo eval` synthesizes a single implicit `[{}]` test case when no
+ * `tests` or `scenarios` are configured and merges `defaultTest` into it (see
+ * `getInitialTests` in `src/evaluator.ts`), so a `defaultTest` with assertions and/or
+ * vars produces one runnable row. An empty `defaultTest` (`{}`) carries nothing to
+ * evaluate and is not counted.
+ */
+function hasRunnableDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
+  if (!defaultTest || typeof defaultTest !== 'object') {
+    return false;
+  }
+  const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
+  const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
+  return hasAssertions || hasVars;
+}
+
 function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   const explicitTests = testSuite.tests?.length || 0;
   const scenarioTests = (testSuite.scenarios || []).reduce((count, scenario) => {
@@ -598,6 +615,11 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
     const scenarioTestCount = scenario.tests?.length ?? 1;
     return count + scenarioConfigCount * scenarioTestCount;
   }, 0);
+  // When neither `tests` nor `scenarios` are configured, a runnable `defaultTest`
+  // still yields one implicit test under `eval`, so accept it here too.
+  if (explicitTests === 0 && scenarioTests === 0 && hasRunnableDefaultTest(testSuite.defaultTest)) {
+    return 1;
+  }
   return explicitTests + scenarioTests;
 }
 
