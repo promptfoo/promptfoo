@@ -28,28 +28,39 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
-const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>) => ({
+const CREDENTIAL_FIELD_NAMES = new Set([
+  'apikey',
+  'api_key',
+  'authorization',
+  'password',
+  'secret',
+  'clientsecret',
+  'client_secret',
+  'token',
+]);
+
+const omitProviderCredentials = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(omitProviderCredentials);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, nestedValue]) =>
+      CREDENTIAL_FIELD_NAMES.has(key.toLowerCase())
+        ? []
+        : [[key, omitProviderCredentials(nestedValue)]],
+    ),
+  );
+};
+
+const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => ({
   ...config,
   env: {},
-  providers: Array.isArray(config.providers)
-    ? config.providers.map((provider) => {
-        if (!provider || typeof provider !== 'object' || !('config' in provider)) {
-          return provider;
-        }
-
-        const providerConfig = provider.config;
-        if (
-          !providerConfig ||
-          typeof providerConfig !== 'object' ||
-          !('apiKey' in providerConfig)
-        ) {
-          return provider;
-        }
-
-        const { apiKey: _apiKey, ...configWithoutApiKey } = providerConfig;
-        return { ...provider, config: configWithoutApiKey };
-      })
-    : config.providers,
+  providers: omitProviderCredentials(config.providers) as UnifiedConfig['providers'],
 });
 
 export const useStore = create<EvalConfigState>()(

@@ -76,17 +76,29 @@ describe('evalConfig store', () => {
         providers: [
           {
             id: 'openai:gpt-4o',
-            config: { apiKey: 'inline-session-key', temperature: 0.2 },
+            config: {
+              apiKey: 'inline-session-key',
+              headers: { Authorization: 'Bearer temporary-token', 'x-request-id': 'visible-id' },
+              temperature: 0.2,
+            },
           },
         ],
       });
 
-      expect((useStore.getState().config.providers?.[0] as any).config.apiKey).toBe(
+      const currentProviders = useStore.getState().config.providers;
+      expect(Array.isArray(currentProviders)).toBe(true);
+      if (!Array.isArray(currentProviders)) {
+        throw new Error('Expected providers to be stored as an array');
+      }
+      expect((currentProviders[0] as { config: { apiKey?: string } }).config.apiKey).toBe(
         'inline-session-key',
       );
 
       const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
-      expect(persistedState.state.config.providers[0].config).toEqual({ temperature: 0.2 });
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        headers: { 'x-request-id': 'visible-id' },
+        temperature: 0.2,
+      });
     });
 
     it('removes environment values from previously persisted browser state on rehydrate', async () => {
@@ -100,7 +112,11 @@ describe('evalConfig store', () => {
               providers: [
                 {
                   id: 'openai:gpt-4o',
-                  config: { apiKey: 'old-inline-key', temperature: 0.4 },
+                  config: {
+                    apiKey: 'old-inline-key',
+                    headers: { Authorization: 'Bearer old-token' },
+                    temperature: 0.4,
+                  },
                 },
               ],
             },
@@ -113,7 +129,13 @@ describe('evalConfig store', () => {
 
       expect(useStore.getState().config.description).toBe('Previously saved config');
       expect(useStore.getState().config.env).toEqual({});
-      expect((useStore.getState().config.providers?.[0] as any).config).toEqual({
+      const rehydratedProviders = useStore.getState().config.providers;
+      expect(Array.isArray(rehydratedProviders)).toBe(true);
+      if (!Array.isArray(rehydratedProviders)) {
+        throw new Error('Expected providers to rehydrate as an array');
+      }
+      expect((rehydratedProviders[0] as { config: Record<string, unknown> }).config).toEqual({
+        headers: {},
         temperature: 0.4,
       });
     });

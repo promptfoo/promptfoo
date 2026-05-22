@@ -238,7 +238,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
             return [];
           }
 
-          const testVars = isRecord(testCase.vars) ? testCase.vars : {};
+          const testVars = 'vars' in testCase && isRecord(testCase.vars) ? testCase.vars : {};
           const hasMissingVariables = requiredVariables.some(
             (variable) => !(variable in testVars) && !(variable in defaultVars),
           );
