@@ -595,7 +595,7 @@ Content-Type: application/json
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Provider list is always expanded - select WebSocket
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       await user.click(websocketProviderCard!);
 
       const webSocketURLInput = screen.getByLabelText(/WebSocket URL/i);
@@ -717,7 +717,7 @@ Content-Type: application/json
       renderWithProviders(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Provider list is always expanded - select WebSocket
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       await user.click(websocketProviderCard!);
 
       await waitFor(() => {
@@ -758,7 +758,7 @@ Content-Type: application/json
       });
 
       // Provider list is always expanded - switch to HTTP provider
-      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
       await user.click(httpProviderCard!);
 
       // For HTTP, Next button should be disabled until tests pass

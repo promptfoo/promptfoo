@@ -776,28 +776,21 @@ export default function ProviderTypeSelector({
                   </div>
                 )}
                 <div className="relative">
-                  <div
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     aria-pressed={isSelected}
                     onClick={() => handleProviderTypeSelect(option.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        handleProviderTypeSelect(option.value);
-                      }
-                    }}
                     className={cn(
-                      'flex w-full cursor-pointer items-center rounded-lg border p-4 pr-20 transition-colors',
+                      'flex w-full cursor-pointer items-center rounded-lg border p-4 pr-20 text-left transition-colors',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                       isSelected
                         ? 'border-2 border-primary bg-primary/5'
                         : 'border-border hover:bg-muted/50',
                     )}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-1 flex items-center gap-2">
-                        <p
+                    <span className="min-w-0 flex-1">
+                      <span className="mb-1 flex items-center gap-2">
+                        <span
                           className={cn(
                             isSelected
                               ? 'font-semibold text-primary'
@@ -805,18 +798,18 @@ export default function ProviderTypeSelector({
                           )}
                         >
                           {option.label}
-                        </p>
+                        </span>
                         {option.recommended && (
                           <span className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground">
                             Popular
                           </span>
                         )}
-                      </div>
-                      <p className="line-clamp-2 text-sm text-muted-foreground">
+                      </span>
+                      <span className="block line-clamp-2 text-sm text-muted-foreground">
                         {option.description}
-                      </p>
-                    </div>
-                  </div>
+                      </span>
+                    </span>
+                  </button>
 
                   <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center gap-2">
                     {hasSpecificDocumentation(option.value) && (

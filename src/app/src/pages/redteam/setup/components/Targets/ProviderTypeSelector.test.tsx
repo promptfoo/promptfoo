@@ -42,7 +42,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Python')).toBeVisible();
 
     // Select Python provider
-    const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
+    const pythonProviderCard = screen.getByText('Python').closest('button');
     expect(pythonProviderCard).toBeInTheDocument();
 
     if (pythonProviderCard) {
@@ -121,17 +121,13 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(screen.getByText('Python').closest('[role="button"]')).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    const selectedCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
+    expect(selectedCard).toBeInstanceOf(HTMLButtonElement);
+    expect(selectedCard).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Python').closest('button')).toHaveAttribute('aria-pressed', 'false');
 
     const documentationLink = screen.getByRole('link', { name: 'View Python documentation' });
-    expect(documentationLink.closest('[role="button"]')).toBeNull();
+    expect(documentationLink.closest('button')).toBeNull();
 
     fireEvent.keyDown(documentationLink, { key: 'Enter' });
 
@@ -348,7 +344,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Go')).toBeVisible();
 
-    const goProviderCard = screen.getByText('Go').closest('[role="button"]');
+    const goProviderCard = screen.getByText('Go').closest('button');
     expect(goProviderCard).toBeInTheDocument();
 
     if (goProviderCard) {
@@ -432,7 +428,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
+    const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
     expect(httpProviderCard).toBeInTheDocument();
 
     if (httpProviderCard) {
@@ -478,9 +474,7 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Connect to your REST API or HTTP endpoint')).toBeVisible();
-    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).toHaveClass(
-      'border-primary',
-    );
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('button')).toHaveClass('border-primary');
 
     rerender(
       <TooltipProvider>
@@ -494,8 +488,8 @@ describe('ProviderTypeSelector', () => {
 
     expect(screen.getByText('Python')).toBeVisible();
     expect(screen.getByText('Custom Python script or integration')).toBeVisible();
-    expect(screen.getByText('Python').closest('[role="button"]')).toHaveClass('border-primary');
-    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).not.toHaveClass(
+    expect(screen.getByText('Python').closest('button')).toHaveClass('border-primary');
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('button')).not.toHaveClass(
       'border-primary',
     );
   });
@@ -539,7 +533,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
+    const langchainProviderCard = screen.getByText('LangChain').closest('button');
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
@@ -615,7 +609,7 @@ describe('ProviderTypeSelector', () => {
       tag: 'agents',
     });
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
+    const langchainProviderCard = screen.getByText('LangChain').closest('button');
     if (langchainProviderCard) {
       await user.click(langchainProviderCard);
     }
@@ -652,7 +646,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
+    const langchainProviderCard = screen.getByText('LangChain').closest('button');
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
@@ -701,7 +695,7 @@ describe('ProviderTypeSelector', () => {
 
     // Provider list is always expanded - no Change button needed
 
-    const langchainProviderCard = screen.getByText('LangChain').closest('[role="button"]');
+    const langchainProviderCard = screen.getByText('LangChain').closest('button');
     expect(langchainProviderCard).toBeInTheDocument();
 
     if (langchainProviderCard) {
@@ -780,7 +774,7 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
+    const pythonProviderCard = screen.getByText('Python').closest('button');
     if (pythonProviderCard) {
       await user.click(pythonProviderCard);
     }
@@ -896,7 +890,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]');
+      const httpProviderCard = screen.getByText('HTTP/HTTPS Endpoint').closest('button');
       if (httpProviderCard) {
         await user.click(httpProviderCard);
       }
@@ -936,7 +930,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -975,7 +969,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -1001,7 +995,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -1027,7 +1021,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
+      const browserProviderCard = screen.getByText('Browser Automation').closest('button');
       if (browserProviderCard) {
         await user.click(browserProviderCard);
       }
@@ -1066,7 +1060,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
+      const mcpProviderCard = screen.getByText('MCP Server').closest('button');
       if (mcpProviderCard) {
         await user.click(mcpProviderCard);
       }
@@ -1101,7 +1095,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const websocketProviderCard = screen.getByText('WebSocket').closest('[role="button"]');
+      const websocketProviderCard = screen.getByText('WebSocket').closest('button');
       if (websocketProviderCard) {
         await user.click(websocketProviderCard);
       }
@@ -1129,7 +1123,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const browserProviderCard = screen.getByText('Browser Automation').closest('[role="button"]');
+      const browserProviderCard = screen.getByText('Browser Automation').closest('button');
       if (browserProviderCard) {
         await user.click(browserProviderCard);
       }
@@ -1161,7 +1155,7 @@ describe('ProviderTypeSelector', () => {
         />,
       );
 
-      const mcpProviderCard = screen.getByText('MCP Server').closest('[role="button"]');
+      const mcpProviderCard = screen.getByText('MCP Server').closest('button');
       if (mcpProviderCard) {
         await user.click(mcpProviderCard);
       }
