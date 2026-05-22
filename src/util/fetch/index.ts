@@ -765,8 +765,9 @@ export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedTe
 };
 
 /**
- * Supported streaming response formats. Selects a built-in content-token
- * detector so callers do not have to reverse-engineer the SSE shape.
+ * Supported text streaming response formats. Selects a built-in content-token
+ * detector so callers do not have to reverse-engineer the SSE shape. These
+ * detectors do not measure audio stream latency.
  *
  * - `openai-chat`: OpenAI Chat Completions (`/v1/chat/completions`). Fires on
  *   the first delta with a non-empty `content` string. Skips the leading

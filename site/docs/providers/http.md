@@ -1706,11 +1706,11 @@ Promptfoo offers full support for HTTP targets that stream responses in these fo
 
 ### Time to First Token (TTFT) Measurement
 
-When `stream: true` is set in the request body, promptfoo records timing metrics on every streamed response. See [the TTFT assertion docs](/docs/configuration/expected-outputs/deterministic#ttft) for precise definitions of each measured field.
+When `stream: true` is set in the request body, promptfoo records timing metrics on every streamed response. TTFT here measures streamed text output; it does not measure time to the first audio packet or audio frame. See [the TTFT assertion docs](/docs/configuration/expected-outputs/deterministic#ttft) for precise definitions of each measured field.
 
 Two measurement modes are supported:
 
-**Canonical TTFT (recommended)** — pin TTFT to the first model-emitted content token using `streamFormat`:
+**Canonical TTFT (recommended)** — pin TTFT to the first model-emitted text content token using `streamFormat`:
 
 ```yaml
 providers:

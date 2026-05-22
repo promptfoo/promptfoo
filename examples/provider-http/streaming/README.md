@@ -1,6 +1,6 @@
 # provider-http/streaming (HTTP Provider Streaming Example)
 
-This example demonstrates streaming response handling with **Time to First Token (TTFT)** measurement using promptfoo's HTTP provider.
+This example demonstrates text streaming response handling with **Time to First Token (TTFT)** measurement using promptfoo's HTTP provider.
 
 Initialize this example with:
 
@@ -52,7 +52,7 @@ OPENAI_API_KEY=your-openai-api-key
 
 ### TTFT Measurement
 
-This example uses `stream: true` in the request body to enable TTFT measurement, and `streamFormat: openai-chat` to pin TTFT to the first model-emitted content token rather than the first SSE framing frame:
+This example uses `stream: true` in the request body to enable TTFT measurement, and `streamFormat: openai-chat` to pin TTFT to the first model-emitted text content token rather than the first SSE framing frame. TTFT does not measure audio streaming latency:
 
 ```yaml
 providers:

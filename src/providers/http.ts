@@ -913,10 +913,10 @@ export const HttpProviderConfigSchema = z.object({
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   /**
-   * Select a built-in content-token detector for TTFT measurement. When set,
-   * TTFT stamps the first time a content token (not framing metadata) arrives
-   * on the stream, matching the "time to first token" definition used by ML
-   * benchmarking literature (vLLM, MLPerf, OpenAI perf docs).
+   * Select a built-in text content-token detector for TTFT measurement. When
+   * set, TTFT stamps the first time a text content token (not framing
+   * metadata) arrives on the stream. Audio stream latency is not measured by
+   * these detectors.
    *
    * - `openai-chat`: OpenAI `/v1/chat/completions` SSE
    * - `openai-responses`: OpenAI `/v1/responses` SSE

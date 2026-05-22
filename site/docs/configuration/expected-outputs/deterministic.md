@@ -816,16 +816,16 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 ### TTFT
 
-The `ttft` assertion measures **Time to First Token** (TTFT) for streaming HTTP responses and fails if the measured value exceeds the specified threshold. Duration is in milliseconds.
+The `ttft` assertion measures **Time to First Token** (TTFT) for streaming text HTTP responses and fails if the measured value exceeds the specified threshold. Duration is in milliseconds. It does not measure time to the first audio packet or audio frame.
 
 #### Precise definition
 
 Two measurement modes are supported. Choose one via the provider's `streamFormat` or `streamFirstTokenPattern` config.
 
-| Mode                                                                        | Start event                                      | End event                                       |
-| --------------------------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- |
-| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted content token in the stream |
-| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body  |
+| Mode                                                                        | Start event                                      | End event                                            |
+| --------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| **Canonical TTFT** (opt-in via `streamFormat` or `streamFirstTokenPattern`) | HTTP request dispatch (before `fetch()` returns) | First model-emitted text content token in the stream |
+| **Wire-level proxy** (default)                                              | HTTP request dispatch                            | First non-whitespace byte of the response body       |
 
 The wire-level proxy is format-agnostic and may report earlier because it fires on SSE framing frames (for example, `{"delta":{"role":"assistant"}}` or `{"type":"response.created"}`) rather than the first content delta.
 
