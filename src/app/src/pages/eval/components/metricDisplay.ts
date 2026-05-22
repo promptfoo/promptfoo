@@ -44,18 +44,21 @@ function addMetricKind(
 }
 
 function getTestVars(test: unknown): Record<string, unknown> {
-  if (
-    typeof test !== 'object' ||
-    test === null ||
-    !('vars' in test) ||
-    typeof test.vars !== 'object' ||
-    test.vars === null ||
-    Array.isArray(test.vars)
-  ) {
+  if (typeof test !== 'object' || !test) {
     return {};
   }
 
-  return test.vars as Record<string, unknown>;
+  const testObject = test as Record<string, unknown>;
+  if (!('vars' in testObject)) {
+    return {};
+  }
+
+  const vars = testObject.vars;
+  if (typeof vars !== 'object' || !vars || Array.isArray(vars)) {
+    return {};
+  }
+
+  return vars as Record<string, unknown>;
 }
 
 function collectMetricKinds(
