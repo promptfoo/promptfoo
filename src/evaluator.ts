@@ -645,6 +645,24 @@ function createRunEvalState({
   };
 }
 
+function getEvalRuntimeVars({
+  evalId,
+  promptIndex,
+  repeatIndex,
+  testIndex,
+}: {
+  evalId?: string;
+  promptIndex: number;
+  repeatIndex: number;
+  testIndex: number;
+}): Vars {
+  return {
+    ...(evalId ? { __evalId: evalId } : {}),
+    __evalStepId: `test-${testIndex}-prompt-${promptIndex}-repeat-${repeatIndex}`,
+    __repeatIndex: repeatIndex,
+  };
+}
+
 function attachConversationVar({
   conversations,
   conversationKey,
@@ -1300,8 +1318,9 @@ async function runEvalInternal({
   delay,
   nunjucksFilters: filters,
   evaluateOptions,
-  testIdx,
-  promptIdx,
+  // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
+  testIdx: testIndex,
+  promptIdx: promptIndex,
   repeatIndex,
   conversations,
   registers,
@@ -1327,6 +1346,15 @@ async function runEvalInternal({
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
+  Object.assign(
+    state.vars,
+    getEvalRuntimeVars({
+      evalId,
+      promptIndex,
+      repeatIndex,
+      testIndex,
+    }),
+  );
 
   let setup = state.setup;
   let latencyMs = 0;
@@ -1352,13 +1380,13 @@ async function runEvalInternal({
         ...state.promptForRender,
         config: rendered.setup.prompt.config,
       },
-      promptIdx,
+      promptIdx: promptIndex,
       provider,
       rateLimitRegistry,
       renderedPrompt: rendered.renderedPrompt,
       repeatIndex,
       test,
-      testIdx,
+      testIdx: testIndex,
       testSuite,
       vars: state.vars,
     });
@@ -1386,12 +1414,12 @@ async function runEvalInternal({
       fileMetadata: state.fileMetadata,
       latencyMs,
       prompt,
-      promptIdx,
+      promptIdx: promptIndex,
       rendered,
       response,
       setup,
       test,
-      testIdx,
+      testIdx: testIndex,
       vars: state.vars,
     });
 
@@ -1405,7 +1433,7 @@ async function runEvalInternal({
       isRedteam,
       latencyMs,
       prompt,
-      promptIdx,
+      promptIdx: promptIndex,
       provider,
       providerCallQueue,
       rateLimitRegistry,
@@ -1413,8 +1441,8 @@ async function runEvalInternal({
       response,
       ret,
       test,
-      testIdx,
-      timeoutMs: evaluateOptions?.timeoutMs || getEvalTimeoutMs(),
+      testIdx: testIndex,
+      timeoutMs: evaluateOptions?.timeoutMs ?? getEvalTimeoutMs(),
       traceContext,
       vars: state.vars,
     });
@@ -1435,8 +1463,8 @@ async function runEvalInternal({
       error: err,
       provider,
       test,
-      promptIdx,
-      testIdx,
+      promptIdx: promptIndex,
+      testIdx: testIndex,
     });
 
     // Don't log AbortError - these are expected when scan is aborted (e.g., target unavailable)
@@ -1454,8 +1482,8 @@ async function runEvalInternal({
         score: 0,
         namedScores: {},
         latencyMs,
-        promptIdx,
-        testIdx,
+        promptIdx: promptIndex,
+        testIdx: testIndex,
         testCase: test,
         promptId: prompt.id || '',
         metadata,
@@ -3262,7 +3290,7 @@ class Evaluator {
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const timeoutMs = context.options.timeoutMs ?? getEvalTimeoutMs();
 
     if (timeoutMs <= 0) {
       return this.processEvalStep(evalStep, index, { deferGrading, providerCallQueue }, context);
@@ -4388,7 +4416,7 @@ class Evaluator {
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasEvalStepTimeout = (options.timeoutMs ?? getEvalTimeoutMs()) > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
