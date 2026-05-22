@@ -23,6 +23,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  SkillCallEntry,
 } from '../types/index';
 
 /**
@@ -492,6 +493,12 @@ interface OpenCodeAssistantMessage {
 interface OpenCodePromptPart {
   type: string;
   text?: string;
+  tool?: string;
+  state?: {
+    status?: string;
+    input?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  };
 }
 
 interface OpenCodePromptResponse {
@@ -886,21 +893,31 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return Object.keys(query).length > 0 ? query : undefined;
   }
 
-  private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
-    return generateCacheKey('opencode:sdk:session', {
-      baseUrl: config.baseUrl,
-      workingDir: config.working_dir ? workingDir : undefined,
-      workspace: config.workspace,
+  // Shared by buildSessionKey and the response cache key so they cannot drift.
+  // Includes anything that changes which conversation history or model behavior
+  // the server applies for a prompt.
+  private historyAffectingInputs(config: OpenCodeSDKConfig): Record<string, unknown> {
+    return {
       provider_id: config.provider_id,
       model: config.model,
       tools: this.buildToolsConfig(config),
       permission: config.permission,
       agent: config.agent,
       custom_agent: config.custom_agent,
+      workspace: config.workspace,
       format: config.format,
       variant: config.variant,
-      mcp: config.mcp,
+      session_id: config.session_id,
       parent_session_id: config.parent_session_id,
+    };
+  }
+
+  private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
+    return generateCacheKey('opencode:sdk:session', {
+      ...this.historyAffectingInputs(config),
+      baseUrl: config.baseUrl,
+      workingDir: config.working_dir ? workingDir : undefined,
+      mcp: config.mcp,
     });
   }
 
@@ -1360,6 +1377,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     const tokens = assistantMessage?.tokens;
+    const skillCalls = this.deriveSkillCalls(parts);
 
     return {
       output,
@@ -1367,7 +1385,35 @@ export class OpenCodeSDKProvider implements ApiProvider {
       ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
+      ...(skillCalls.length === 0 ? {} : { metadata: { skillCalls } }),
     };
+  }
+
+  private deriveSkillCalls(parts: OpenCodePromptPart[]): SkillCallEntry[] {
+    return parts.flatMap((part) => {
+      if (part.type !== 'tool' || part.tool !== 'skill') {
+        return [];
+      }
+
+      const skillName =
+        typeof part.state?.input?.name === 'string' ? part.state.input.name.trim() : '';
+      if (!skillName) {
+        return [];
+      }
+
+      const skillDir =
+        typeof part.state?.metadata?.dir === 'string' ? part.state.metadata.dir.trim() : '';
+
+      return [
+        {
+          name: skillName,
+          input: part.state?.input,
+          ...(skillDir ? { path: path.join(skillDir, 'SKILL.md') } : {}),
+          source: 'tool',
+          ...(part.state?.status === 'error' ? { is_error: true } : {}),
+        },
+      ];
+    });
   }
 
   private handleCallError(error: unknown, callOptions?: CallApiOptionsParams): ProviderResponse {
@@ -1432,15 +1478,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       },
       {
         prompt,
-        provider_id: config.provider_id,
-        model: config.model,
-        tools: this.buildToolsConfig(config),
-        permission: config.permission,
-        agent: config.agent,
-        custom_agent: config.custom_agent,
-        workspace: config.workspace,
-        format: config.format,
-        variant: config.variant,
+        ...this.historyAffectingInputs(config),
       },
     );
 

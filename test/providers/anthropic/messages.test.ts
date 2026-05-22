@@ -3,6 +3,10 @@ import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import logger from '../../../src/logger';
+import {
+  getAnthropicAuthCacheNamespace,
+  hashAnthropicCacheValue,
+} from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
@@ -14,19 +18,21 @@ const mcpMocks = vi.hoisted(() => {
   const initialize = vi.fn();
   const cleanup = vi.fn();
   const getAllTools = vi.fn().mockReturnValue([]);
+  const callTool = vi.fn();
   const instances: any[] = [];
 
   class MockMCPClient {
     initialize = initialize;
     cleanup = cleanup;
     getAllTools = getAllTools;
+    callTool = callTool;
 
     constructor() {
       instances.push(this);
     }
   }
 
-  return { cleanup, getAllTools, initialize, instances, MockMCPClient };
+  return { callTool, cleanup, getAllTools, initialize, instances, MockMCPClient };
 });
 
 const claudeCodeAuthMocks = vi.hoisted(() => ({
@@ -87,6 +93,14 @@ const createProvider = (
   return created;
 };
 
+const anthropicCacheIdentityHash = () =>
+  hashAnthropicCacheValue({
+    apiBaseUrl: undefined,
+  });
+
+const anthropicMessagesCacheKey = (modelName: string, params: unknown) =>
+  `anthropic:messages:${modelName}:${anthropicCacheIdentityHash()}:${getAnthropicAuthCacheNamespace(TEST_API_KEY)}:${hashAnthropicCacheValue(params)}`;
+
 describe('AnthropicMessagesProvider', () => {
   let provider: AnthropicMessagesProvider;
 
@@ -97,6 +111,7 @@ describe('AnthropicMessagesProvider', () => {
     mcpMocks.instances.length = 0;
     mcpMocks.initialize.mockReset();
     mcpMocks.cleanup.mockReset();
+    mcpMocks.callTool.mockReset();
     mcpMocks.getAllTools.mockReset();
     mcpMocks.getAllTools.mockReturnValue([]);
     claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
@@ -465,6 +480,199 @@ describe('AnthropicMessagesProvider', () => {
       expect(cachedResult.output).toBe('Test response');
     });
 
+    it('should hash request params in cache keys', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022');
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Sensitive prompt sk-ant-secret');
+
+      const cacheKey = getSpy.mock.calls[0]?.[0] as string;
+      expect(cacheKey).toMatch(
+        /^anthropic:messages:claude-3-5-sonnet-20241022:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKey).not.toContain('Sensitive prompt');
+      expect(cacheKey).not.toContain('sk-ant-secret');
+      expect(setSpy).toHaveBeenCalledWith(cacheKey, expect.any(String));
+    });
+
+    it('should isolate hashed cache keys by resolved API key', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-a' },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: { apiKey: 'sk-ant-tenant-b' },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
+      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).toMatch(
+        /^anthropic:messages:claude-3-5-sonnet-20241022:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyB).toMatch(
+        /^anthropic:messages:claude-3-5-sonnet-20241022:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('Shared sensitive prompt');
+        expect(cacheKey).not.toContain('sk-ant-tenant-a');
+        expect(cacheKey).not.toContain('sk-ant-tenant-b');
+      }
+    });
+
+    it('should include beta request headers in hashed cache keys without leaking them', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          beta: ['web-search-2025-03-05'],
+        },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          beta: ['web-fetch-2025-09-10'],
+        },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).toMatch(
+        /^anthropic:messages:claude-3-5-sonnet-20241022:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyB).toMatch(
+        /^anthropic:messages:claude-3-5-sonnet-20241022:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('Shared sensitive prompt');
+        expect(cacheKey).not.toContain('web-search-2025-03-05');
+        expect(cacheKey).not.toContain('web-fetch-2025-09-10');
+      }
+    });
+
+    it('should hash custom request header values into cache keys without leaking them', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          headers: {
+            'x-api-key': 'sk-ant-header-a',
+          },
+        },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          headers: {
+            'x-api-key': 'sk-ant-header-b',
+          },
+        },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
+      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      expect(cacheKeyA).not.toContain('Shared sensitive prompt');
+      expect(cacheKeyA).not.toContain('sk-ant-header-a');
+      expect(cacheKeyA).not.toContain('sk-ant-header-b');
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve duplicate-case request headers in cache keys', async () => {
+      const providerA = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          headers: {
+            'X-API-Key': 'sk-ant-header-a',
+            'x-api-key': 'sk-ant-header-b',
+          },
+        },
+      });
+      const providerB = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          headers: {
+            'X-API-Key': 'sk-ant-header-a',
+            'x-api-key': 'sk-ant-header-c',
+          },
+        },
+      });
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
+      vi.spyOn(cache, 'set').mockResolvedValue(undefined);
+      vi.spyOn(providerA.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant A response' }],
+      } as Anthropic.Messages.Message);
+      vi.spyOn(providerB.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Tenant B response' }],
+      } as Anthropic.Messages.Message);
+
+      await providerA.callApi('Shared sensitive prompt');
+      await providerB.callApi('Shared sensitive prompt');
+
+      const [cacheKeyA, cacheKeyB] = getSpy.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('Shared sensitive prompt');
+        expect(cacheKey).not.toContain('sk-ant-header-a');
+        expect(cacheKey).not.toContain('sk-ant-header-b');
+        expect(cacheKey).not.toContain('sk-ant-header-c');
+      }
+      expect(providerA.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.messages.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('should avoid logging prompts and generated outputs in debug metadata', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Generated secret response' }],
+        model: 'claude-3-5-sonnet-20241022',
+        stop_reason: 'end_turn',
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Sensitive prompt with sk-ant-secret');
+
+      const debugLogs = JSON.stringify(debugSpy.mock.calls);
+      expect(debugLogs).not.toContain('Sensitive prompt');
+      expect(debugLogs).not.toContain('sk-ant-secret');
+      expect(debugLogs).not.toContain('Generated secret response');
+      debugSpy.mockRestore();
+    });
+
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [
@@ -498,13 +706,24 @@ describe('AnthropicMessagesProvider', () => {
       enableCache();
     });
 
-    it('should return cached response for legacy caching behavior', async () => {
+    it('should return cached plain-string responses', async () => {
       vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
         content: [],
       } as unknown as Anthropic.Messages.Message);
 
-      const cacheKey =
-        'anthropic:{"model":"claude-3-5-sonnet-20241022","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"What is the forecast in San Francisco?"}]}],"stream":false,"temperature":0,"tools":[{"name":"get_weather","description":"Get the current weather in a given location","input_schema":{"type":"object","properties":{"location":{"type":"string","description":"The city and state, e.g. San Francisco, CA"},"unit":{"type":"string","enum":["celsius","fahrenheit"]}},"required":["location"]}}]}';
+      const cacheKey = anthropicMessagesCacheKey('claude-3-5-sonnet-20241022', {
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [{ type: 'text', text: 'What is the forecast in San Francisco?' }],
+          },
+        ],
+        stream: false,
+        temperature: 0,
+        tools,
+      });
 
       await getCache().set(cacheKey, 'Test output');
 
@@ -1090,15 +1309,13 @@ describe('AnthropicMessagesProvider', () => {
         // Set up specific cache key for our test
         vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({} as any);
 
-        const specificCacheKey =
-          'anthropic:' +
-          JSON.stringify({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 1024,
-            messages: [{ role: 'user', content: [{ type: 'text', text: 'Test prompt' }] }],
-            stream: false,
-            temperature: 0,
-          });
+        const specificCacheKey = anthropicMessagesCacheKey('claude-3-5-sonnet-20241022', {
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'Test prompt' }] }],
+          stream: false,
+          temperature: 0,
+        });
 
         await getCache().set(
           specificCacheKey,
@@ -1125,6 +1342,630 @@ describe('AnthropicMessagesProvider', () => {
         const result = await provider.callApi('Test prompt');
         expect(result.finishReason).toBe('unknown_reason');
       });
+    });
+  });
+
+  describe('MCP tool execution', () => {
+    const mcpTool = {
+      name: 'search_companies',
+      description: 'Search sample company records.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+      },
+    };
+
+    beforeEach(() => {
+      disableCache();
+      mcpMocks.getAllTools.mockReturnValue([mcpTool]);
+    });
+
+    afterEach(() => {
+      enableCache();
+    });
+
+    it('executes MCP tool_use blocks and continues the Anthropic conversation with tool_result', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({
+        content: 'Found Acme Solar and Gridwise.',
+      });
+
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar and Gridwise match your query.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.output).toBe('Acme Solar and Gridwise match your query.');
+      expect(result.finishReason).toBe('stop');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 17,
+        completion: 9,
+        total: 26,
+      });
+      expect(mcpMocks.callTool).toHaveBeenCalledWith('search_companies', {
+        query: 'clean energy',
+      });
+      expect(createSpy).toHaveBeenCalledTimes(2);
+
+      const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+      expect(secondRequest.messages.slice(-2)).toEqual([
+        {
+          role: 'assistant',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_search',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_search',
+              content: 'Found Acme Solar and Gridwise.',
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('does not cache MCP continuation results by default', async () => {
+      enableCache();
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValue({
+        content: 'Fresh tool output.',
+      });
+
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_first_cache',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'First fresh answer.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_second_cache',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 11, output_tokens: 6, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Second fresh answer.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+      const cache = await getCache();
+      const getSpy = vi.spyOn(cache, 'get');
+      const setSpy = vi.spyOn(cache, 'set');
+
+      const firstResult = await provider.callApi('Find clean energy companies');
+      const secondResult = await provider.callApi('Find clean energy companies');
+
+      expect(firstResult.output).toBe('First fresh answer.');
+      expect(secondResult.output).toBe('Second fresh answer.');
+      expect(createSpy).toHaveBeenCalledTimes(4);
+      expect(mcpMocks.callTool).toHaveBeenCalledTimes(2);
+      expect(getSpy).not.toHaveBeenCalled();
+      expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('leaves mixed MCP and non-MCP tool_use blocks on the existing output path', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_search',
+            name: 'search_companies',
+            input: { query: 'clean energy' },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_weather',
+            name: 'get_weather',
+            input: { location: 'San Francisco' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find companies and weather');
+
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.output).toContain('"name":"search_companies"');
+      expect(result.output).toContain('"name":"get_weather"');
+    });
+
+    it('drops forced tool_choice on MCP continuation requests', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          tool_choice: 'required' as any,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({
+        content: 'Found Acme Solar.',
+      });
+
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_required',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'Acme Solar is a match.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find solar companies');
+
+      expect(result.output).toBe('Acme Solar is a match.');
+      expect(createSpy).toHaveBeenCalledTimes(2);
+      expect(createSpy.mock.calls[0][0]).toMatchObject({
+        tool_choice: { type: 'any' },
+      });
+      expect(createSpy.mock.calls[1][0]).not.toHaveProperty('tool_choice');
+    });
+
+    it.each([
+      {
+        label: 'isError result with content',
+        mcpResult: { content: 'lookup failed', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): lookup failed',
+      },
+      {
+        label: 'thrown error surfaced via the error field',
+        mcpResult: { content: '', error: 'lookup failed' },
+        expectedContent: 'MCP Tool Error (search_companies): lookup failed',
+      },
+      {
+        label: 'error result without content',
+        mcpResult: { content: '', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): Tool returned an error result',
+      },
+    ])('marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)', async ({
+      mcpResult,
+      expectedContent,
+    }) => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
+
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_error',
+              name: 'search_companies',
+              input: { query: 'grid storage' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'I could not complete that lookup.' }],
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find grid storage companies');
+
+      expect(result.output).toBe('I could not complete that lookup.');
+      const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+      expect(secondRequest.messages.slice(-1)).toEqual([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_error',
+              content: expectedContent,
+              is_error: true,
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_weather',
+            name: 'get_weather',
+            input: { location: 'San Francisco' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('What is the weather?');
+
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(result.finishReason).toBe('tool_calls');
+      expect(result.output).toContain('"name":"get_weather"');
+    });
+
+    it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 1,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValue({
+        content: 'Still needs another lookup.',
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_first',
+              name: 'search_companies',
+              input: { query: 'clean energy' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+        } as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_second',
+              name: 'search_companies',
+              input: { query: 'solar' },
+            },
+          ],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.error).toContain('Anthropic MCP tool execution exceeded max_tool_calls=1');
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 18,
+        completion: 9,
+        total: 27,
+      });
+      // Cost should still be tracked even when the loop cap aborts the eval —
+      // tokens were spent across both rounds.
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('disables MCP tool execution when max_tool_calls is 0', async () => {
+      // Regression: max_tool_calls: 0 is an explicit "do not auto-execute MCP
+      // tools" guard, but 0 was treated as invalid and silently widened to the
+      // default of 8, so tools ran anyway.
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 0,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_search',
+            name: 'search_companies',
+            input: { query: 'clean energy' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      // No tool was executed and no continuation request was made.
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      // The initial response is returned on the normal output path, not as an error.
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
+    });
+
+    it('blocks parallel MCP tool execution when it would exceed max_tool_calls', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 1,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_first',
+            name: 'search_companies',
+            input: { query: 'solar' },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_second',
+            name: 'search_companies',
+            input: { query: 'wind' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.error).toContain('Anthropic MCP tool execution exceeded max_tool_calls=1');
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('continues MCP tool execution through the streaming path', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          stream: true,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValueOnce({
+        content: 'Found Acme Solar.',
+      });
+
+      const streamSpy = vi
+        .spyOn(provider.anthropic.messages, 'stream')
+        .mockResolvedValueOnce({
+          finalMessage: vi.fn().mockResolvedValue({
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_stream',
+                name: 'search_companies',
+                input: { query: 'solar' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message),
+        } as any)
+        .mockResolvedValueOnce({
+          finalMessage: vi.fn().mockResolvedValue({
+            content: [{ type: 'text', text: 'Acme Solar is a match.' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message),
+        } as any);
+
+      const result = await provider.callApi('Find solar companies');
+
+      expect(result.output).toBe('Acme Solar is a match.');
+      expect(streamSpy).toHaveBeenCalledTimes(2);
+      const secondRequest = streamSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
+      expect(secondRequest.messages.slice(-1)).toEqual([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_stream',
+              content: 'Found Acme Solar.',
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('returns a streaming error once further MCP execution exceeds max_tool_calls', async () => {
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 1,
+          stream: true,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      mcpMocks.callTool.mockResolvedValue({
+        content: 'Still needs another lookup.',
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'stream')
+        .mockResolvedValueOnce({
+          finalMessage: vi.fn().mockResolvedValue({
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_stream_first',
+                name: 'search_companies',
+                input: { query: 'solar' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message),
+        } as any)
+        .mockResolvedValueOnce({
+          finalMessage: vi.fn().mockResolvedValue({
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_stream_second',
+                name: 'search_companies',
+                input: { query: 'wind' },
+              },
+            ],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message),
+        } as any);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.error).toContain('Anthropic MCP tool execution exceeded max_tool_calls=1');
+      expect(mcpMocks.callTool).toHaveBeenCalledTimes(1);
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 18,
+        completion: 9,
+        total: 27,
+      });
+      expect(result.cost).toBeGreaterThan(0);
     });
   });
 
@@ -2070,8 +2911,13 @@ describe('AnthropicMessagesProvider', () => {
         type: 'message',
         usage: { input_tokens: 10, output_tokens: 0 },
       };
-      const cacheKey =
-        'anthropic:{"model":"claude-sonnet-4-6","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"Hack something"}]}],"stream":false,"temperature":0}';
+      const cacheKey = anthropicMessagesCacheKey('claude-sonnet-4-6', {
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'Hack something' }] }],
+        stream: false,
+        temperature: 0,
+      });
       const cache = await getCache();
       await cache.set(cacheKey, JSON.stringify(refusalMessage));
 

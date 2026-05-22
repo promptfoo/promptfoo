@@ -36,6 +36,7 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -71,10 +72,30 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals } from './utils';
+import {
+  getNamedMetricTotals,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
+
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
+  (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
+);
 
 /**
- * Audio player component that handles both storage refs and base64 data
+ * Renders an audio player for evaluation outputs that may be stored in different representations.
+ *
+ * This component accepts either:
+ * - A storage/blob reference, which is resolved asynchronously, or
+ * - Inline base64/data URL audio content, which is used immediately.
+ *
+ * @param data Audio payload or reference. Supported inputs:
+ *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
+ *   - data URL (`data:audio/...`)
+ *   - raw base64 audio data
+ * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
+ * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
  */
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
@@ -124,9 +145,65 @@ function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?
   );
 }
 
-const VARIABLE_COLUMN_SIZE_PX = 200;
-const PROMPT_COLUMN_SIZE_PX = 400;
-const DESCRIPTION_COLUMN_SIZE_PX = 100;
+const METADATA_COLUMN_MIN_SIZE_PX = 160;
+const METADATA_COLUMN_MAX_SIZE_PX = 360;
+const METADATA_COLUMN_HORIZONTAL_PADDING_PX = 48;
+const METADATA_COLUMN_CHARACTER_WIDTH_PX = 8;
+const METADATA_COLUMN_WIDTH_PERCENTILE = 0.8;
+const PROMPT_COLUMN_SIZE_PX = 480;
+const MEDIA_MIME_PATTERNS = {
+  audio: /(?:^|[;,\s=:])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+  image: /(?:^|[;,\s=:])image\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+} as const;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getMetadataColumnDisplayText(value: unknown): string {
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function getLongestMetadataLineLength(value: unknown): number {
+  return getMetadataColumnDisplayText(value)
+    .split(/\r?\n/)
+    .reduce((maxLength, line) => Math.max(maxLength, line.length), 0);
+}
+
+function estimateMetadataColumnSize(header: string, values: unknown[]): number {
+  const contentLengths = values
+    .map((value) => getLongestMetadataLineLength(value))
+    .sort((a, b) => a - b);
+  const percentileIndex = Math.max(
+    0,
+    Math.ceil(contentLengths.length * METADATA_COLUMN_WIDTH_PERCENTILE) - 1,
+  );
+  const representativeContentLength = contentLengths[percentileIndex] ?? 0;
+  const representativeLength = Math.max(header.length, representativeContentLength);
+
+  return clamp(
+    representativeLength * METADATA_COLUMN_CHARACTER_WIDTH_PX +
+      METADATA_COLUMN_HORIZONTAL_PADDING_PX,
+    METADATA_COLUMN_MIN_SIZE_PX,
+    METADATA_COLUMN_MAX_SIZE_PX,
+  );
+}
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
   if (output == null) {
@@ -196,7 +273,13 @@ function TableHeader({
           {resourceId && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank" className="action">
+                <Link
+                  to={ROUTES.PROMPT_DETAIL(resourceId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View other evals and datasets for this prompt"
+                  className="action"
+                >
                   <ExternalLink className="size-4" />
                 </Link>
               </TooltipTrigger>
@@ -271,8 +354,11 @@ function renderMediaVariableCell({
 
   const { type: mediaType, format = '' } = mediaMetadata;
   const normalizedValue = normalizeMediaText(value);
+  const isRefValue = isBlobRef(value) || isStorageRef(value);
   const audioSource =
-    mediaType === 'audio' ? resolveAudioSource({ data: value, format, blobRef: value }) : null;
+    mediaType === 'audio'
+      ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
+      : null;
   const imageSrc =
     mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
 
@@ -363,12 +449,12 @@ function renderDecodedVariableCell({
     strategyId === 'audio' ||
     (typeof value === 'string' &&
       (isStorageRef(value) || isBlobRef(value)) &&
-      value.includes('audio/'));
+      MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
     (typeof value === 'string' &&
       (isStorageRef(value) || isBlobRef(value)) &&
-      value.includes('image/'));
+      MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
     <div className="cell" data-capture="true">
@@ -498,7 +584,35 @@ function formatMetricValue(
   value: number,
   options: Intl.NumberFormatOptions = { maximumFractionDigits: 0 },
 ): string {
-  return Intl.NumberFormat(undefined, options).format(value);
+  return getNumberFormatter(options).format(value);
+}
+
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormatter(
+  options: Intl.NumberFormatOptions,
+  locale?: string | string[],
+): Intl.NumberFormat {
+  let normalizedLocale = 'default';
+  const localeArray = Array.isArray(locale) ? locale : undefined;
+  if (localeArray) {
+    normalizedLocale = localeArray.join(',');
+  } else if (typeof locale === 'string') {
+    normalizedLocale = locale;
+  }
+  const normalizedOptions = Object.entries(options)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}:${String(value)}`)
+    .join('|');
+  const cacheKey = `${normalizedLocale}|${normalizedOptions}`;
+
+  let formatter = numberFormatCache.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, options);
+    numberFormatCache.set(cacheKey, formatter);
+  }
+
+  return formatter;
 }
 
 function renderFilteredSuffix(value: React.ReactNode, unit = 'filtered'): React.ReactNode {
@@ -614,9 +728,9 @@ function renderTokenMetrics({
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
-}): React.ReactNode[] {
+}): React.ReactNode {
   if (!metrics?.tokenUsage?.total) {
-    return [];
+    return null;
   }
 
   const totalTokens = metrics.tokenUsage.total;
@@ -625,16 +739,18 @@ function renderTokenMetrics({
   const filteredAverage =
     filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
 
-  return [
-    <div key="total-tokens">
-      <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-      {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
-    </div>,
-    <div key="avg-tokens">
-      <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-      {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
-    </div>,
-  ];
+  return (
+    <>
+      <div>
+        <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+      </div>
+      <div>
+        <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+      </div>
+    </>
+  );
 }
 
 function renderLatencyMetric({
@@ -1385,6 +1501,7 @@ interface ResultsTableProps {
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
+  originalRowPositionIndex?: number;
   originalPromptIndex?: number;
 }
 
@@ -1392,12 +1509,26 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+function ResultsTableColumnGroup({
+  reactTable,
+}: {
+  reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+}) {
+  return (
+    <colgroup>
+      {reactTable.getVisibleLeafColumns().map((column) => (
+        <col key={column.id} style={{ width: column.getSize() }} />
+      ))}
+    </colgroup>
+  );
+}
+
 function ResultsTableHeader({
   reactTable,
   tableWidth,
   maxTextLength,
   wordBreak,
-  theadRef,
+  headerScrollRef,
   stickyHeader,
   setStickyHeader,
   hasMinimalScrollRoom,
@@ -1407,7 +1538,7 @@ function ResultsTableHeader({
   tableWidth: number;
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
-  theadRef: React.RefObject<HTMLTableSectionElement | null>;
+  headerScrollRef: React.RefObject<HTMLDivElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
   hasMinimalScrollRoom: boolean;
@@ -1417,7 +1548,7 @@ function ResultsTableHeader({
     <div
       data-testid="results-table-header"
       className={cn(
-        'relative',
+        'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
@@ -1426,51 +1557,59 @@ function ResultsTableHeader({
         <button
           type="button"
           onClick={() => setStickyHeader(false)}
+          aria-label="Dismiss sticky header"
           className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
         >
           <X className="size-4" />
         </button>
       </div>
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-        style={{
-          wordBreak,
-          width: `${tableWidth}px`,
-          zoom,
-        }}
+      <div
+        ref={headerScrollRef}
+        data-testid="results-table-header-scroll-container"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
-        <thead ref={theadRef}>
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => {
-                const isFinalRow = headerGroup.depth === 1;
+        <table
+          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          style={{
+            wordBreak,
+            width: `${tableWidth}px`,
+            zoom,
+          }}
+        >
+          <ResultsTableColumnGroup reactTable={reactTable} />
+          <thead>
+            {reactTable.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="header">
+                {headerGroup.headers.map((header) => {
+                  const isFinalRow = headerGroup.depth === 1;
 
-                return (
-                  <th
-                    key={header.id}
-                    tabIndex={0}
-                    colSpan={header.colSpan}
-                    style={{
-                      width: header.getSize(),
-                      borderBottom: 'none',
-                      height: isFinalRow ? 'fit-content' : 'auto',
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                    <div
-                      onMouseDown={header.getResizeHandler()}
-                      onTouchStart={header.getResizeHandler()}
-                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                    />
-                  </th>
-                );
-              })}
-            </tr>
-          ))}
-        </thead>
-      </table>
+                  return (
+                    <th
+                      key={header.id}
+                      tabIndex={0}
+                      colSpan={header.colSpan}
+                      style={{
+                        width: header.getSize(),
+                        borderBottom: 'none',
+                        height: isFinalRow ? 'fit-content' : 'auto',
+                      }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                      />
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
+          </thead>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1502,6 +1641,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1525,6 +1665,7 @@ function ResultsTable({
   // Persist column sizing state to prevent header resize flicker during pagination.
   // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+  const tableRef = useRef<HTMLDivElement>(null);
 
   /**
    * Reset the pagination state when the filtered results count changes.
@@ -1594,7 +1735,9 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
+    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1603,15 +1746,104 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
+              originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];
   }, [body]);
 
+  const transformDisplayVarKeys = React.useMemo(() => {
+    const transformVarKeys = new Set<string>();
+
+    tableBody.forEach((row) => {
+      row.outputs?.forEach((output) => {
+        const transformVars = output?.metadata?.transformDisplayVars as
+          | Record<string, string>
+          | undefined;
+        if (transformVars) {
+          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
+        }
+      });
+    });
+
+    if (transformVarKeys.size === 0) {
+      return [];
+    }
+
+    const existingVarNames = new Set(head.vars);
+    return Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
+  }, [head.vars, tableBody]);
+
+  const hasDescriptionColumn = React.useMemo(
+    () => body.some((row) => row.test.description),
+    [body],
+  );
+
+  const injectVarName = config?.redteam?.injectVar || 'prompt';
+
+  const variableColumnSizes = React.useMemo(
+    () =>
+      head.vars.map((varName, idx) =>
+        estimateMetadataColumnSize(
+          varName,
+          tableBody.map((row) =>
+            getVariableCellValue({
+              row,
+              varName,
+              injectVarName,
+              fallbackValue: row.vars[idx],
+            }),
+          ),
+        ),
+      ),
+    [head.vars, injectVarName, tableBody],
+  );
+
+  const transformDisplayVarColumnSizes = React.useMemo(() => {
+    return Object.fromEntries(
+      transformDisplayVarKeys.map((varName) => [
+        varName,
+        estimateMetadataColumnSize(
+          varName.replace(/^__/, ''),
+          tableBody.map((row) => {
+            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+              | Record<string, string>
+              | undefined;
+            return transformVars?.[varName] || '';
+          }),
+        ),
+      ]),
+    ) as Record<string, number>;
+  }, [tableBody, transformDisplayVarKeys]);
+
+  const descriptionColumnSize = React.useMemo(
+    () =>
+      estimateMetadataColumnSize(
+        'Description',
+        hasDescriptionColumn ? body.map((row) => row.test.description || '') : [],
+      ),
+    [body, hasDescriptionColumn],
+  );
+
   const parseQueryParams = (queryString: string) => {
     return Object.fromEntries(new URLSearchParams(queryString));
   };
+
+  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
+  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
+  // below reads from each, and if either source still resolves to a row, the next paginate
+  // tick would bounce the user back to the deep-linked page.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('rowId')) {
+      url.searchParams.delete('rowId');
+      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+    }
+    if (parseEvalOutputPromptHash(window.location.hash)) {
+      setEvalDetailsHash('');
+    }
+  }, [navigate]);
 
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
@@ -1650,11 +1882,19 @@ function ResultsTable({
     );
   }, [filters.values]);
 
+  const hasMountedResultSetResetRef = useRef(false);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
+    if (!hasMountedResultSetResetRef.current) {
+      hasMountedResultSetResetRef.current = true;
+      return;
+    }
+
+    clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -1754,8 +1994,6 @@ function ResultsTable({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
-      const injectVarName = config?.redteam?.injectVar || 'prompt';
-
       return [
         columnHelper.group({
           id: 'vars',
@@ -1777,7 +2015,7 @@ function ResultsTable({
                   lightboxImage,
                   toggleLightbox,
                 }),
-              size: VARIABLE_COLUMN_SIZE_PX,
+              size: variableColumnSizes[idx],
             }),
           ),
         }),
@@ -1792,36 +2030,13 @@ function ResultsTable({
     renderMarkdown,
     lightboxOpen,
     lightboxImage,
-    config,
+    injectVarName,
+    variableColumnSizes,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
   const transformDisplayVarsColumns = React.useMemo(() => {
-    // Collect unique transformDisplayVars keys from all outputs
-    const transformVarKeys = new Set<string>();
-    tableBody.forEach((row) => {
-      row.outputs?.forEach((output) => {
-        const transformVars = output?.metadata?.transformDisplayVars as
-          | Record<string, string>
-          | undefined;
-        if (transformVars) {
-          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
-        }
-      });
-    });
-
-    if (transformVarKeys.size === 0) {
-      return [];
-    }
-
-    // Filter out keys that already exist in head.vars to avoid duplicate columns
-    // This handles the case where standalone mode has embeddedInjection in vars
-    // and layer mode has it in transformDisplayVars - we want one unified column
-    const existingVarNames = new Set(head.vars);
-    const varKeyArray = Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
-
-    // If all keys were filtered out (they all exist in vars), don't create a duplicate column group
-    if (varKeyArray.length === 0) {
+    if (transformDisplayVarKeys.length === 0) {
       return [];
     }
 
@@ -1829,7 +2044,7 @@ function ResultsTable({
       columnHelper.group({
         id: 'transformDisplayVars',
         header: () => <span className="font-bold">Variables</span>,
-        columns: varKeyArray.map((varName) =>
+        columns: transformDisplayVarKeys.map((varName) =>
           columnHelper.accessor(
             (row: EvaluateTableRow) => {
               // Get the value from the first output's transformDisplayVars
@@ -1856,13 +2071,13 @@ function ResultsTable({
                   </div>
                 );
               },
-              size: VARIABLE_COLUMN_SIZE_PX,
+              size: transformDisplayVarColumnSizes[varName],
             },
           ),
         ),
       }),
     ];
-  }, [columnHelper, tableBody, maxTextLength, head.vars]);
+  }, [columnHelper, maxTextLength, transformDisplayVarColumnSizes, transformDisplayVarKeys]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -1952,7 +2167,12 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.index}
+                    rowIndex={
+                      info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
+                    }
+                    rowPositionIndex={
+                      output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
+                    }
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2003,8 +2223,7 @@ function ResultsTable({
   ]);
 
   const descriptionColumn = React.useMemo(() => {
-    const hasAnyDescriptions = body.some((row) => row.test.description);
-    if (hasAnyDescriptions) {
+    if (hasDescriptionColumn) {
       return {
         accessorFn: (row: EvaluateTableRow) => row.test.description || '',
         id: 'description',
@@ -2014,11 +2233,11 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: DESCRIPTION_COLUMN_SIZE_PX,
+        size: descriptionColumnSize,
       };
     }
     return null;
-  }, [body, maxTextLength]);
+  }, [descriptionColumnSize, hasDescriptionColumn, maxTextLength]);
 
   const columns = React.useMemo(() => {
     const cols: ColumnDef<EvaluateTableRow, unknown>[] = [];
@@ -2049,22 +2268,20 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  const clearRowIdFromUrl = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
-    }
-  }, [navigate]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
+    const detailsHashTarget = parseEvalOutputPromptHash(locationHash);
     const rowId = params['rowId'];
+    const rowIndexFromQuery =
+      rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
+    // Copied detail links carry both forms:
+    // - `rowId` is the filtered-table position used to resolve the correct page.
+    // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
+    const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
 
-    if (rowId && Number.isInteger(Number(rowId))) {
-      const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
+    if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
+      const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -2134,15 +2351,14 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount, locationHash]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.
   const tableWidth = reactTable.getTotalSize();
 
-  // Listen for scroll events on the table container and sync the header horizontally
-  const tableRef = useRef<HTMLDivElement>(null);
-  const theadRef = useRef<HTMLTableSectionElement>(null);
+  // Keep the standalone header and the scrollable table body aligned in both directions.
+  const headerScrollRef = useRef<HTMLDivElement>(null);
 
   // Detect if there's minimal scroll room - in this case, disable height collapse
   // to prevent jitter feedback loop (height change affects scroll position)
@@ -2172,38 +2388,39 @@ function ResultsTable({
   }, [filteredResultsCount, checkScrollRoom]);
 
   useEffect(() => {
-    if (!tableRef.current || !theadRef.current) {
+    if (!tableRef.current || !headerScrollRef.current) {
       return;
     }
 
-    const container = tableRef.current;
-    let rafId: number | null = null;
+    const tableContainer = tableRef.current;
+    const headerContainer = headerScrollRef.current;
 
-    const handleScroll = () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
+    const syncScrollLeft = (source: HTMLDivElement, target: HTMLDivElement) => {
+      if (target.scrollLeft !== source.scrollLeft) {
+        target.scrollLeft = source.scrollLeft;
       }
-      rafId = requestAnimationFrame(() => {
-        if (theadRef.current) {
-          const xScroll = container.scrollLeft;
-          theadRef.current.style.transform = `translateX(-${xScroll}px)`;
-        }
-      });
     };
 
-    container.addEventListener('scroll', handleScroll, { passive: true });
+    const handleTableScroll = () => {
+      syncScrollLeft(tableContainer, headerContainer);
+    };
+
+    const handleHeaderScroll = () => {
+      syncScrollLeft(headerContainer, tableContainer);
+    };
+
+    tableContainer.addEventListener('scroll', handleTableScroll, { passive: true });
+    headerContainer.addEventListener('scroll', handleHeaderScroll, { passive: true });
 
     // Initial sync
-    handleScroll();
+    handleTableScroll();
     // Keep in sync on resize
-    window.addEventListener('resize', handleScroll);
+    window.addEventListener('resize', handleTableScroll);
 
     return () => {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId);
-      }
-      container.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
+      tableContainer.removeEventListener('scroll', handleTableScroll);
+      headerContainer.removeEventListener('scroll', handleHeaderScroll);
+      window.removeEventListener('resize', handleTableScroll);
     };
   }, []);
 
@@ -2227,7 +2444,7 @@ function ResultsTable({
         tableWidth={tableWidth}
         maxTextLength={maxTextLength}
         wordBreak={wordBreak}
-        theadRef={theadRef}
+        headerScrollRef={headerScrollRef}
         stickyHeader={stickyHeader}
         setStickyHeader={setStickyHeader}
         hasMinimalScrollRoom={hasMinimalScrollRoom}
@@ -2261,6 +2478,7 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
+          <ResultsTableColumnGroup reactTable={reactTable} />
           <tbody>
             {reactTable.getRowModel().rows.map((row) => (
               <ResultsTableBodyRow
@@ -2268,7 +2486,7 @@ function ResultsTable({
                 row={row}
                 pageSize={pagination.pageSize}
                 headVars={head.vars}
-                injectVarName={config?.redteam?.injectVar || 'prompt'}
+                injectVarName={injectVarName}
                 maxTextLength={maxTextLength}
                 lightboxOpen={lightboxOpen}
                 lightboxImage={lightboxImage}
@@ -2278,7 +2496,7 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="pagination sticky bottom-0 z-10 flex shrink-0 items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
+      <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}
           {filteredResultsCount === 0 ? (
@@ -2306,10 +2524,10 @@ function ResultsTable({
           </div>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* PAGE SIZE SELECTOR */}
           <div className="flex items-center gap-2">
-            <span>Results per page:</span>
+            <span className="whitespace-nowrap">Results per page:</span>
             <Select
               value={String(pagination.pageSize)}
               onValueChange={(value) => {
@@ -2321,23 +2539,19 @@ function ResultsTable({
               }}
               disabled={filteredResultsCount <= 10}
             >
-              <SelectTrigger className="w-20 h-8">
+              <SelectTrigger aria-label="Results per page" className="w-20 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
-                  50
-                </SelectItem>
-                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
-                  100
-                </SelectItem>
-                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
-                  500
-                </SelectItem>
-                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
-                  1000
-                </SelectItem>
+                {PAGE_SIZE_OPTIONS.map((size, idx) => (
+                  <SelectItem
+                    key={size}
+                    value={String(size)}
+                    disabled={filteredResultsCount <= (PAGE_SIZE_OPTIONS[idx - 1] ?? 0)}
+                  >
+                    {size}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -2349,7 +2563,7 @@ function ResultsTable({
               pageCount <= 1 && 'opacity-50 pointer-events-none',
             )}
           >
-            <span>Go to:</span>
+            <span className="whitespace-nowrap">Go to:</span>
             <NumberInput
               value={pagination.pageIndex + 1}
               onChange={(v) => {
@@ -2359,10 +2573,11 @@ function ResultsTable({
                     ...prev,
                     pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                   }));
-                  clearRowIdFromUrl();
+                  clearRowDeepLink();
                 }
               }}
               className="w-[60px] h-8 text-center"
+              aria-label="Go to page"
               min={1}
               max={pageCount || 1}
               disabled={pageCount === 1}
@@ -2375,12 +2590,13 @@ function ResultsTable({
               variant="outline"
               size="icon"
               className="rounded-r-none"
+              aria-label="Previous page"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -2391,12 +2607,13 @@ function ResultsTable({
               variant="outline"
               size="icon"
               className="rounded-l-none -ml-px"
+              aria-label="Next page"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
                   pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}

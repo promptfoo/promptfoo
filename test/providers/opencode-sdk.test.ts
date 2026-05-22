@@ -70,7 +70,16 @@ const createMockSessionResponse = (id = 'test-session-123') => ({
 // Helper to create mock prompt response
 // SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
-  parts: Array<{ type: string; text?: string }>,
+  parts: Array<{
+    type: string;
+    text?: string;
+    tool?: string;
+    state?: {
+      status?: string;
+      input?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    };
+  }>,
   tokens?: {
     total?: number;
     input?: number;
@@ -117,7 +126,6 @@ describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
   let rmSpy: MockInstance;
-  let _readdirSyncSpy: MockInstance;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -181,7 +189,7 @@ describe('OpenCodeSDKProvider', () => {
       mtimeMs: 1234567890,
     } as fs.Stats);
     rmSpy = vi.spyOn(fsPromises, 'rm').mockResolvedValue(undefined);
-    _readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
+    vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
     // Mock readFileSync to return package.json for SDK resolution
     vi.spyOn(fs, 'readFileSync').mockImplementation((filePath: fs.PathOrFileDescriptor) => {
       if (String(filePath).includes('@opencode-ai/sdk/package.json')) {
@@ -451,6 +459,69 @@ describe('OpenCodeSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Part 1\nPart 2');
+      });
+
+      it('should normalize first-class skill tool parts into skillCalls metadata', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              type: 'tool',
+              tool: 'skill',
+              state: {
+                status: 'completed',
+                input: { name: 'review-standards' },
+                metadata: {
+                  name: 'review-standards',
+                  dir: '/repo/.agents/skills/review-standards',
+                },
+              },
+            },
+            { type: 'text', text: 'Skill applied.' },
+          ]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the review-standards skill');
+
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'review-standards',
+            input: { name: 'review-standards' },
+            path: path.join('/repo/.agents/skills/review-standards', 'SKILL.md'),
+            source: 'tool',
+          },
+        ]);
+      });
+
+      it('should retain failed skill tool attempts as errored skillCalls', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([
+            {
+              type: 'tool',
+              tool: 'skill',
+              state: {
+                status: 'error',
+                input: { name: 'missing-skill' },
+              },
+            },
+          ]),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Use the missing skill');
+
+        expect(result.metadata?.skillCalls).toEqual([
+          {
+            name: 'missing-skill',
+            input: { name: 'missing-skill' },
+            source: 'tool',
+            is_error: true,
+          },
+        ]);
       });
 
       it('should handle SDK exceptions', async () => {
@@ -870,6 +941,68 @@ describe('OpenCodeSDKProvider', () => {
         // Second provider with different MCP config - should NOT use cache from first
         const result = await providerB.callApi('Test prompt');
         expect(result.output).toBe('Response B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should produce different cache keys for different session_id values', async () => {
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from session A' }]),
+        );
+
+        const providerForSessionA = new OpenCodeSDKProvider({
+          config: { session_id: 'session-A' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(resultFromSessionA.output).toBe('Response from session A');
+
+        const cachedResultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(cachedResultFromSessionA.output).toBe('Response from session A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from session B' }]),
+        );
+
+        const providerForSessionB = new OpenCodeSDKProvider({
+          config: { session_id: 'session-B' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromSessionB = await providerForSessionB.callApi('Test prompt');
+        expect(resultFromSessionB.output).toBe('Response from session B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should produce different cache keys for different parent_session_id values', async () => {
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from parent A' }]),
+        );
+
+        const providerForParentA = new OpenCodeSDKProvider({
+          config: { parent_session_id: 'parent-A' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromParentA = await providerForParentA.callApi('Test prompt');
+        expect(resultFromParentA.output).toBe('Response from parent A');
+
+        const cachedResultFromParentA = await providerForParentA.callApi('Test prompt');
+        expect(cachedResultFromParentA.output).toBe('Response from parent A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from parent B' }]),
+        );
+
+        const providerForParentB = new OpenCodeSDKProvider({
+          config: { parent_session_id: 'parent-B' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromParentB = await providerForParentB.callApi('Test prompt');
+        expect(resultFromParentB.output).toBe('Response from parent B');
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 

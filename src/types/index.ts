@@ -1,27 +1,33 @@
-// Note: This file is in the process of being deconstructed into `types/` and `validators/`
-// Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { BaseTokenUsageSchema } from '../types/shared';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { BaseTokenUsageSchema } from '../contracts/shared';
+import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
+import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { parseFilterRange } from '../util/filterRange';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
+
+export {
+  EVENT_SOURCES,
+  type EventSource,
+  EventSourceSchema,
+  isCliEventSource,
+} from './eventSource';
 
 import type { BlobRef } from '../blobs/types';
+import type { EnvOverrides } from '../contracts/env';
+import type { Prompt, PromptFunction } from '../contracts/prompts';
+import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import type { EnvOverrides } from '../types/env';
-import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -30,10 +36,6 @@ import type {
   ProviderResponse,
   ProvidersConfig,
 } from './providers';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
-
-export type { VarValue } from './shared';
-
 import type { TraceData } from './tracing';
 
 /**
@@ -86,6 +88,8 @@ const FilterRangeSchema = z
   })
   .optional();
 
+export const MAX_SUGGESTIONS_COUNT = 50;
+
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
   description: z.string().optional(),
@@ -126,8 +130,10 @@ export const CommandLineOptionsSchema = z.object({
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
+  tags: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
@@ -252,8 +258,8 @@ export interface RunEvalOptions {
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
-  eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
@@ -1379,6 +1385,13 @@ export interface OutputMetadata {
   author?: string;
 }
 
+export interface ExportedBlobAsset {
+  hash: string;
+  mimeType: string;
+  sizeBytes: number;
+  data: string;
+}
+
 // File exported as --output option
 export interface OutputFile {
   evalId: string | null;
@@ -1386,6 +1399,10 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  vars?: string[];
+  runtimeOptions?: Partial<EvaluateOptions>;
+  traces?: TraceData[];
+  blobAssets?: ExportedBlobAsset[];
 }
 
 // Live eval job state

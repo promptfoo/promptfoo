@@ -86,23 +86,56 @@ export class XAIImageProvider extends OpenAiImageProvider {
       'grok-imagine-image': 'grok-imagine-image',
       // Dated alias for grok-imagine-image, as listed by xAI's image-generation-models API.
       'grok-imagine-image-2026-03-02': 'grok-imagine-image',
+      'grok-imagine-image-quality': 'grok-imagine-image-quality',
+      // xAI exposes dated and -latest aliases for the quality model; route them to
+      // the canonical slug so fallback pricing and request routing stay consistent.
+      'grok-imagine-image-quality-latest': 'grok-imagine-image-quality',
+      'grok-imagine-image-quality-20260403': 'grok-imagine-image-quality',
       'grok-imagine-image-pro': 'grok-imagine-image-pro',
       'grok-2-image': 'grok-2-image',
       'grok-image': 'grok-2-image',
     };
-    return modelMap[this.modelName] || 'grok-2-image';
+    if (modelMap[this.modelName]) {
+      return modelMap[this.modelName];
+    }
+    // Preserve unknown Grok Imagine slugs as-is rather than silently routing
+    // them to the legacy `grok-2-image` model. This avoids surprising downgrades
+    // when xAI publishes new aliases that promptfoo has not yet indexed.
+    if (this.modelName.startsWith('grok-imagine-')) {
+      return this.modelName;
+    }
+    return 'grok-2-image';
   }
 
-  private calculateImageCost(model: string, n: number = 1): number {
-    if (model === 'grok-imagine-image') {
-      return 0.02 * n;
+  private calculateImageCost(
+    model: string,
+    n: number = 1,
+    resolution: XaiImageOptions['resolution'] = '1k',
+    sourceImageCount: number = 0,
+  ): number {
+    // grok-imagine-image-pro is redirected to the quality model after
+    // 2026-05-15; any other unrecognized grok-imagine-* slug (e.g. a future
+    // alias promptfoo has not indexed) is priced at the quality tier too,
+    // rather than falling through to legacy grok-2-image pricing.
+    const pricingModel =
+      model.startsWith('grok-imagine-') && model !== 'grok-imagine-image'
+        ? 'grok-imagine-image-quality'
+        : model;
+
+    if (pricingModel === 'grok-imagine-image') {
+      return 0.02 * n + 0.002 * sourceImageCount;
     }
-    if (model === 'grok-imagine-image-pro') {
-      return 0.07 * n;
+    if (pricingModel === 'grok-imagine-image-quality') {
+      const perImage = resolution === '2k' ? 0.07 : 0.05;
+      return perImage * n + 0.01 * sourceImageCount;
     }
 
     // Legacy grok-2-image pricing.
     return 0.07 * n;
+  }
+
+  private countSourceImages(config: XaiImageOptions): number {
+    return Number(Boolean(config.image)) + (config.images?.length || 0);
   }
 
   async callApi(
@@ -197,7 +230,15 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
 
       const reportedCost = getXAICostInUsd(data.usage);
-      const cost = cached ? 0 : (reportedCost ?? this.calculateImageCost(model, config.n || 1));
+      const cost = cached
+        ? 0
+        : (reportedCost ??
+          this.calculateImageCost(
+            model,
+            config.n || 1,
+            config.resolution,
+            this.countSourceImages(config),
+          ));
       const images = buildStructuredImageOutputs(data);
 
       return {

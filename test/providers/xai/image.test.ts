@@ -83,9 +83,18 @@ describe('XAI Image Provider', () => {
     });
 
     it('supports current Grok Imagine image aliases and pro model', () => {
-      // Both verified against xAI /v1/image-generation-models.
+      // Verified against xAI /v1/image-generation-models.
       expect(createXAIImageProvider('xai:image:grok-imagine-image-2026-03-02').id()).toBe(
         'xai:image:grok-imagine-image-2026-03-02',
+      );
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-quality').id()).toBe(
+        'xai:image:grok-imagine-image-quality',
+      );
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-quality-latest').id()).toBe(
+        'xai:image:grok-imagine-image-quality-latest',
+      );
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-quality-20260403').id()).toBe(
+        'xai:image:grok-imagine-image-quality-20260403',
       );
       expect(createXAIImageProvider('xai:image:grok-imagine-image-pro').id()).toBe(
         'xai:image:grok-imagine-image-pro',
@@ -169,7 +178,7 @@ describe('XAI Image Provider', () => {
       expect(result.cost).toBe(0.02);
     });
 
-    it('uses the pro image model without falling back to the legacy model name', async () => {
+    it('keeps the pro request slug while fallback pricing follows the quality redirect', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-pro', {
         config: { apiKey: mockApiKey },
       });
@@ -183,6 +192,74 @@ describe('XAI Image Provider', () => {
           prompt: 'Generate a cat',
           n: 1,
           response_format: 'url',
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.05);
+    });
+
+    it('routes Grok Imagine quality aliases to the canonical model slug', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-quality-latest', {
+        config: { apiKey: mockApiKey },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        expect.objectContaining({ model: 'grok-imagine-image-quality' }),
+        expect.any(Object),
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.05);
+    });
+
+    it('preserves unknown Grok Imagine slugs instead of falling back to grok-2-image', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-future-preview', {
+        config: { apiKey: mockApiKey },
+      });
+
+      await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        expect.objectContaining({ model: 'grok-imagine-image-future-preview' }),
+        expect.any(Object),
+        getRequestTimeoutMs(),
+      );
+    });
+
+    it('prices unknown Grok Imagine slugs at the quality tier, not grok-2-image', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-future-preview', {
+        config: { apiKey: mockApiKey },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      // Unknown grok-imagine-* slugs are priced like grok-imagine-image-quality
+      // ($0.05 at 1k), not the legacy grok-2-image rate ($0.07).
+      expect(result.cost).toBe(0.05);
+    });
+
+    it('supports the quality image model with resolution-sensitive fallback pricing', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-quality', {
+        config: { apiKey: mockApiKey, resolution: '2k' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        {
+          model: 'grok-imagine-image-quality',
+          prompt: 'Generate a cat',
+          n: 1,
+          response_format: 'url',
+          resolution: '2k',
         },
         {
           'Content-Type': 'application/json',
@@ -222,6 +299,53 @@ describe('XAI Image Provider', () => {
         },
         getRequestTimeoutMs(),
       );
+    });
+
+    it('includes documented source-image input pricing in fallback edit cost estimates', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-quality', {
+        config: {
+          apiKey: mockApiKey,
+          images: [
+            { url: 'https://example.com/source-1.png' },
+            { url: 'https://example.com/source-2.png' },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Combine these source images');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/edits',
+        {
+          model: 'grok-imagine-image-quality',
+          prompt: 'Combine these source images',
+          n: 1,
+          response_format: 'url',
+          images: [
+            { url: 'https://example.com/source-1.png' },
+            { url: 'https://example.com/source-2.png' },
+          ],
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.07);
+    });
+
+    it('uses quality redirect pricing for deprecated pro edit fallback costs', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-pro', {
+        config: {
+          apiKey: mockApiKey,
+          image: { url: 'https://example.com/source.png' },
+        },
+      });
+
+      const result = await provider.callApi('Restyle this source image');
+
+      expect(result.cost).toBeCloseTo(0.06, 10);
     });
 
     it('should generate an image successfully', async () => {

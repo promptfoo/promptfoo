@@ -9,9 +9,37 @@ import type {
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
   MCPServerConfig,
+  MCPToolResult,
 } from './types';
 
 export type { OAuthTokenResult };
+
+export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
+  const isPlainToolName = (tool: unknown): tool is string =>
+    typeof tool === 'string' && !tool.startsWith('file://');
+
+  return (
+    isPlainToolName(tools) || (Array.isArray(tools) && tools.every((tool) => isPlainToolName(tool)))
+  );
+}
+
+/**
+ * Returns true when an MCP tool call surfaced a failure: either the SDK call
+ * threw (`error` is set) or the tool resolved with a protocol-level
+ * `isError: true` result.
+ */
+export function isMcpErrorResult(result: MCPToolResult): boolean {
+  return Boolean(result.error || result.isError);
+}
+
+/**
+ * Resolve a human-readable message for a failed MCP tool call. Prefers the
+ * thrown-error message, falls back to the tool's own error content, and finally
+ * to a generic message for tools that signal `isError` without any detail.
+ */
+export function getMcpErrorMessage(result: MCPToolResult): string {
+  return result.error || result.content || 'Tool returned an error result';
+}
 
 /**
  * Render environment variables in server config auth fields.
@@ -53,6 +81,15 @@ function getOAuthCacheKey(auth: MCPOAuthClientCredentialsAuth | MCPOAuthPassword
 
 // Cache for discovered token endpoints
 const tokenEndpointCache = new Map<string, string>();
+
+function isValidTokenEndpoint(tokenEndpoint: string): boolean {
+  try {
+    const parsedUrl = new URL(tokenEndpoint);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Discover the OAuth token endpoint from the server's well-known metadata.
@@ -96,13 +133,13 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
-      if (metadata.token_endpoint) {
+      if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
         return metadata.token_endpoint;
       }
 
-      logger.debug(`[MCP Auth] No token_endpoint in metadata from ${discoveryUrl}`);
+      logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }

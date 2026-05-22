@@ -10,9 +10,9 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockSetSearchParams } = vi.hoisted(() => ({
+const { mockShowToast, mockNavigate } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
-  mockSetSearchParams: vi.fn(),
+  mockNavigate: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -195,7 +195,8 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
 
   await userEvent.click(showChartsButton);
 
-  expect(screen.getByRole('button', { name: 'Hide Charts' })).toBeInTheDocument();
+  const hideChartsButtonAfterOpen = screen.getByRole('button', { name: 'Hide Charts' });
+  expect(hideChartsButtonAfterOpen).toBeInTheDocument();
   expect(screen.queryByTestId('results-charts')).toBeNull();
   expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
   expect(
@@ -208,34 +209,28 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
     expect(screen.getByText(reasonText)).toBeInTheDocument();
   }
 
-  await userEvent.click(screen.getByRole('button', { name: 'Hide Charts' }));
+  await userEvent.click(hideChartsButtonAfterOpen);
 
-  expect(screen.getByRole('button', { name: 'Show Charts' })).toBeInTheDocument();
+  const showChartsButtonAfterClose = screen.getByRole('button', { name: 'Show Charts' });
+  expect(showChartsButtonAfterClose).toBeInTheDocument();
   expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   for (const reasonText of reasonTexts) {
     expect(screen.queryByText(reasonText)).toBeNull();
   }
+
+  return {
+    showChartsButton,
+    hideChartsButtonAfterOpen,
+    showChartsButtonAfterClose,
+  };
 }
 
 function createCopyEvalResponse(): Response {
-  return {
-    ok: true,
-    json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
+  return new Response(JSON.stringify({ id: 'new-eval-id', distinctTestCount: 1234 }), {
     status: 200,
     statusText: 'OK',
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic',
-    url: 'http://example.com',
-    bodyUsed: false,
-    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-    blob: () => Promise.resolve(new Blob()),
-    formData: () => Promise.resolve(new FormData()),
-    text: () => Promise.resolve(''),
-    body: null,
-    bytes: () => Promise.resolve(new Uint8Array()),
-    clone: () => createCopyEvalResponse(),
-  };
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 beforeEach(() => {
@@ -256,9 +251,8 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useSearchParams: vi
-      .fn()
-      .mockReturnValue([new URLSearchParams('filterMode=failures'), mockSetSearchParams]),
+    useNavigate: () => mockNavigate,
+    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
   };
 });
 
@@ -387,6 +381,54 @@ describe('ResultsView Share Button', () => {
       // Use getAllByText since there may be multiple Delete elements (menu item + dialog)
       expect(screen.getAllByText('Delete').length).toBeGreaterThan(0);
     });
+  });
+
+  it('hides eval actions while config is loading', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+            {
+              label: 'Test Prompt 2',
+              provider: 'openai:gpt-3.5-turbo',
+              raw: 'Test prompt 2',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: null,
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 2,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.queryByText('Eval actions')).not.toBeInTheDocument();
   });
 });
 describe('ResultsView Copy Eval', () => {
@@ -2778,12 +2820,11 @@ describe('ResultsView Browser History', () => {
     });
   });
 
-  it('should render without calling setSearchParams unnecessarily on mount', async () => {
-    // This test verifies that mounting ResultsView doesn't create unnecessary browser
-    // history entries. The component should only call setSearchParams when search text
-    // actually changes (via handleSearchTextChange), not during initialization.
+  it('should render without navigating unnecessarily on mount', async () => {
+    // Mounting ResultsView should not create a replacement navigation entry before
+    // the user changes search/view state.
 
-    mockSetSearchParams.mockClear();
+    mockNavigate.mockClear();
 
     renderWithRouter(
       <ResultsView
@@ -2796,9 +2837,6 @@ describe('ResultsView Browser History', () => {
     // Component should mount successfully
     expect(screen.getByText('Results Table')).toBeInTheDocument();
 
-    // Should not call setSearchParams during mount (search params are read, not set)
-    // The handleSearchTextChange callback (lines 217-223 in ResultsView.tsx) uses
-    // { replace: true } to prevent history pollution when search text changes
-    expect(mockSetSearchParams).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

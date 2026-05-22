@@ -17,18 +17,20 @@ export function DataTableColumnToggle<TData>({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="h-11 sm:h-8">
           <Columns3 className="mr-2 size-4" />
           Columns
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {table
-          .getAllColumns()
+          .getAllLeafColumns()
           .filter((column) => column.getCanHide())
           .map((column) => {
             const header = column.columnDef.header;
-            const headerText = typeof header === 'string' ? header : column.id;
+            const headerText =
+              column.columnDef.meta?.columnToggleLabel ??
+              (typeof header === 'string' ? header : column.id);
             const isVisible = columnVisibility[column.id] !== false;
 
             return (

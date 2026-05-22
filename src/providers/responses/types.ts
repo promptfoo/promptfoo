@@ -11,6 +11,11 @@ export interface ProcessorContext {
   config: any;
   cached: boolean;
   data: any;
+  suppressReasoningOutput?: boolean;
+}
+
+export interface ResponseProcessingOptions {
+  suppressReasoningOutput?: boolean;
 }
 
 export interface ResponseOutputItem {

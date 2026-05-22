@@ -74,7 +74,7 @@ export type XAIAgentTool =
 
 type XAIConfig = {
   region?: string;
-  reasoning_effort?: 'low' | 'high';
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
   search_parameters?: Record<string, any>;
   /** xAI Agent Tools - server-side tools for agentic workflows */
   agent_tools?: XAIAgentTool[];
@@ -297,6 +297,47 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
+// xAI's May 15, 2026 (12:00 PM PT) retirement email confirms the following
+// behaviour for the listed legacy chat slugs: requests continue to work after
+// the cutoff but redirect to grok-4.3 (low reasoning effort for the reasoning
+// variants, none for the non-reasoning variants) and are billed at standard
+// grok-4.3 pricing ($1.25 / 1M input, $2.50 / 1M output). The set mirrors
+// every id/alias pair xAI lists on `/v1/language-models` for the retired
+// models so that any spelling a user might have in their config maps to the
+// correct post-retirement billing target.
+const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
+  // grok-4-1-fast-{reasoning,non-reasoning} family
+  'grok-4-1-fast-reasoning',
+  'grok-4-1-fast-non-reasoning',
+  'grok-4-1-fast',
+  'grok-4-1-fast-latest',
+  'grok-4-1-fast-reasoning-latest',
+  'grok-4-1-fast-non-reasoning-latest',
+  // grok-4-fast-{reasoning,non-reasoning} family
+  'grok-4-fast-reasoning',
+  'grok-4-fast-non-reasoning',
+  'grok-4-fast',
+  'grok-4-fast-latest',
+  'grok-4-fast-reasoning-latest',
+  'grok-4-fast-non-reasoning-latest',
+  // grok-4 (0709) family
+  'grok-4-0709',
+  'grok-4',
+  'grok-4-latest',
+  // grok-code-fast-1 family — xAI's catalog also exposes a dated slug.
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-code-fast-1-0825',
+  // grok-3 family — xAI's catalog collapses every -beta/-fast variant into
+  // the same id, so they all share the post-retirement billing target.
+  'grok-3',
+  'grok-3-latest',
+  'grok-3-beta',
+  'grok-3-fast',
+  'grok-3-fast-latest',
+  'grok-3-fast-beta',
+]);
+
 export const GROK_3_MINI_MODELS = [
   'grok-3-mini-beta',
   'grok-3-mini',
@@ -306,8 +347,10 @@ export const GROK_3_MINI_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Models that support reasoning_effort parameter (only Grok-3 mini models)
+// Models that support reasoning_effort on the chat-completions-compatible API.
 export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-4.3',
+  'grok-4.3-latest',
   'grok-3-mini-beta',
   'grok-3-mini',
   'grok-3-mini-latest',
@@ -316,7 +359,7 @@ export const GROK_REASONING_EFFORT_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// All reasoning models (including Grok-4 which doesn't support reasoning_effort)
+// All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
   // Grok 4.20
   'grok-4.20-0309-reasoning',
@@ -372,7 +415,7 @@ export const GROK_REASONING_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Grok-4+ models that have specific parameter restrictions (no presence_penalty, frequency_penalty, stop, reasoning_effort)
+// Grok-4+ models that have specific sampling-parameter restrictions.
 export const GROK_4_MODELS = [
   // Grok 4.20
   'grok-4.20-0309-reasoning',
@@ -440,24 +483,24 @@ export function calculateXAICost(
   completionTokens?: number,
   reasoningTokens?: number,
 ): number | undefined {
-  if (!promptTokens || !completionTokens) {
+  // xAI reports reasoning separately from completion tokens and bills both at
+  // the output rate. Reasoning-only responses still have billable output.
+  const billableOutputTokens = (completionTokens ?? 0) + (reasoningTokens ?? 0);
+  if (promptTokens == null || billableOutputTokens <= 0) {
     return undefined;
   }
 
-  const model = XAI_CHAT_MODELS.find(
-    (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
-  );
+  const model = GROK_43_REDIRECTED_CHAT_MODELS.has(modelName)
+    ? XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.3')
+    : XAI_CHAT_MODELS.find(
+        (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
+      );
   if (!model || !model.cost) {
     return undefined;
   }
 
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-
-  // xAI bills reasoning tokens at the same per-token rate as completion tokens.
-  // The OpenAI base provider reports them separately in completion_tokens_details
-  // (and getTokenUsage hoists them out of `completion`), so include them here.
-  const billableOutputTokens = completionTokens + (reasoningTokens ?? 0);
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * billableOutputTokens;
@@ -492,6 +535,15 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   protected supportsReasoningEffort(): boolean {
+    // Codex Review (b7875171) suggested forwarding reasoning_effort on
+    // redirected legacy slugs because xAI's retirement email says those
+    // requests now route to grok-4.3 (which accepts the parameter). In
+    // practice the chat-completions endpoint still rejects the parameter on
+    // pre-cutoff slugs with `Model <name> does not support parameter
+    // reasoningEffort.` (verified live against grok-4-fast-reasoning, 400
+    // Client specified an invalid argument). Keep stripping until the
+    // server-side redirect is actually in effect — users who want to tune
+    // effort should target `grok-4.3` (or `grok-4.3-latest`) directly.
     return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
   }
 
@@ -507,13 +559,11 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       return result;
     }
 
-    // Filter out unsupported parameters for Grok-4
+    // Filter out unsupported sampling controls for Grok-4-family models.
     if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
-      // Grok-4 doesn't support reasoning_effort parameter
-      delete result.body.reasoning_effort;
     }
 
     // Filter reasoning_effort for models that don't support it
@@ -594,69 +644,41 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         return response;
       }
 
-      // Rest of the existing response processing logic
+      // Extract reasoning-token telemetry from the raw response body, regardless
+      // of whether the base provider hands it back as a JSON string or an object.
+      let rawData: any;
       if (typeof response.raw === 'string') {
         try {
-          const rawData = JSON.parse(response.raw);
-
-          if (
-            this.isReasoningModel() &&
-            rawData?.usage?.completion_tokens_details?.reasoning_tokens
-          ) {
-            const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-            const acceptedPredictions =
-              rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-            const rejectedPredictions =
-              rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-            if (response.tokenUsage) {
-              response.tokenUsage.completionDetails = {
-                reasoning: reasoningTokens,
-                acceptedPrediction: acceptedPredictions,
-                rejectedPrediction: rejectedPredictions,
-              };
-
-              logger.debug(
-                `XAI reasoning token details for ${this.modelName}: ` +
-                  `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-              );
-            }
-          }
+          rawData = JSON.parse(response.raw);
         } catch (err) {
           logger.error(`Failed to parse raw response JSON: ${err}`);
         }
       } else if (typeof response.raw === 'object' && response.raw !== null) {
-        const rawData = response.raw;
+        rawData = response.raw;
+      }
 
-        if (
-          this.isReasoningModel() &&
-          rawData?.usage?.completion_tokens_details?.reasoning_tokens
-        ) {
-          const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-          const acceptedPredictions =
-            rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-          const rejectedPredictions =
-            rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
+      const reasoningTokens = rawData?.usage?.completion_tokens_details?.reasoning_tokens;
+      if (this.isReasoningModel() && reasoningTokens && response.tokenUsage) {
+        const details = rawData.usage.completion_tokens_details;
+        const acceptedPredictions = details.accepted_prediction_tokens || 0;
+        const rejectedPredictions = details.rejected_prediction_tokens || 0;
 
-          if (response.tokenUsage) {
-            response.tokenUsage.completionDetails = {
-              reasoning: reasoningTokens,
-              acceptedPrediction: acceptedPredictions,
-              rejectedPrediction: rejectedPredictions,
-            };
+        response.tokenUsage.completionDetails = {
+          reasoning: reasoningTokens,
+          acceptedPrediction: acceptedPredictions,
+          rejectedPrediction: rejectedPredictions,
+        };
 
-            logger.debug(
-              `XAI reasoning token details for ${this.modelName}: ` +
-                `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-            );
-          }
-        }
+        logger.debug(
+          `XAI reasoning token details for ${this.modelName}: ` +
+            `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
+        );
       }
 
       if (response.tokenUsage && !response.cached) {
         // The OpenAI base provider does not surface the raw API body, so
         // `usage.cost_in_usd_ticks` (which xAI does return for chat completions)
-        // is not reachable here. Fall back to local pricing math, which now
+        // is not reachable here. Fall back to local pricing math, which
         // includes reasoning tokens at the output rate.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
         response.cost = calculateXAICost(

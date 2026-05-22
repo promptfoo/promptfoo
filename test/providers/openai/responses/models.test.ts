@@ -5,7 +5,14 @@ import './setup';
 import { describe, expect, it } from 'vitest';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
-const expectedAudioModels = ['gpt-audio-1.5', 'gpt-audio-mini-2025-12-15'] as const;
+const unsupportedAudioModels = [
+  'gpt-audio',
+  'gpt-audio-2025-08-28',
+  'gpt-audio-1.5',
+  'gpt-audio-mini',
+  'gpt-audio-mini-2025-12-15',
+  'gpt-audio-mini-2025-10-06',
+] as const;
 
 describe('OpenAiResponsesProvider model registry', () => {
   it('should support various model names', async () => {
@@ -42,8 +49,8 @@ describe('OpenAiResponsesProvider model registry', () => {
     );
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-mini');
-    for (const model of expectedAudioModels) {
-      expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(model);
+    for (const model of unsupportedAudioModels) {
+      expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(model);
     }
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   });
@@ -136,9 +143,9 @@ describe('OpenAiResponsesProvider model registry', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.4-pro-2026-03-05',
     );
-    // Audio models
-    for (const model of expectedAudioModels) {
-      expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(model);
+    // Audio models are Chat Completions-only while Responses audio remains unsupported.
+    for (const model of unsupportedAudioModels) {
+      expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).not.toContain(model);
     }
     // Deep research models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');

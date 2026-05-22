@@ -40,6 +40,7 @@ const defaultResultsViewSettings = {
   renderMarkdown: true,
   showPassFail: true,
   showPassReasons: false,
+  showMetricPills: true,
   showPrompts: true,
   maxImageWidth: 256,
   maxImageHeight: 256,
@@ -66,10 +67,12 @@ const resetMockStoreState = () => {
 
 beforeEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
 });
 
 afterEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
   restoreTestTimers();
 });
 
@@ -307,6 +310,32 @@ describe('EvalOutputCell', () => {
     // Check that metadata is passed correctly
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
     expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('adds row and details hints when the prompt dialog opens', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} rowPositionIndex={50} />);
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(window.location.search).toBe('?rowId=51');
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('opens the prompt dialog from a matching details hash', () => {
+    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('ignores a details hash that targets a different stable row index', () => {
+    window.history.replaceState({}, '', '/#details-row-51-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.queryByTestId('dialog-component')).not.toBeInTheDocument();
   });
 
   it('handles keyboard navigation between buttons', async () => {
@@ -872,11 +901,12 @@ describe('EvalOutputCell', () => {
     expect(container.querySelectorAll('img')).toHaveLength(0);
   });
 
-  it('allows copying row link to clipboard', async () => {
+  it('allows copying a cell deep-link to clipboard', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
     expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.hash = '#details-row-1-prompt-1';
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -888,6 +918,27 @@ describe('EvalOutputCell', () => {
     await waitFor(() => {
       expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
+  });
+
+  it('refreshes the rowId page hint when copying a cell deep-link', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    window.history.replaceState({}, '', '/eval/test-eval?rowId=99&filter=foo');
+
+    const expectedUrl = new URL(window.location.href);
+    expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.hash = '#details-row-1-prompt-1';
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByLabelText('Copy link to output'));
+
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+    });
+    const written = clipboard.writeText.mock.calls[0]?.[0];
+    expect(written).toContain('filter=foo');
+    expect(written).toContain('rowId=1');
   });
 
   it('shows checkmark after copying link', async () => {
@@ -2304,8 +2355,29 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     // Extra actions should be visible because shift key is mocked as pressed
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy link to output')).toBeInTheDocument();
-    // Copy button exists (no aria-label, so check by icon class)
-    expect(container.querySelector('.lucide-clipboard-copy')).toBeInTheDocument();
+    expect(screen.getByLabelText('Copy output to clipboard')).toBeInTheDocument();
+  });
+
+  it('keeps utility and review actions in a stable, grouped order', () => {
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const actionsArea = container.querySelector('.cell-actions');
+    expect(actionsArea).toBeInTheDocument();
+
+    const actionNames = Array.from(actionsArea?.querySelectorAll('button') ?? []).map(
+      (button) => button.getAttribute('aria-label') ?? '',
+    );
+
+    expect(actionNames).toEqual([
+      'Copy output to clipboard',
+      'Copy link to output',
+      'Toggle test highlight',
+      'Mark test passed',
+      'Mark test failed',
+      'Set test score',
+      'Edit comment',
+      'View output and test details',
+    ]);
   });
 });
 
@@ -2824,6 +2896,66 @@ describe('EvalOutputCell pass reasons setting', () => {
 
     // Pass reasons should not be visible when setting is false (default)
     expect(container.querySelector('.pass-reasons')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputCell metrics pills setting', () => {
+  const mockOnRating = vi.fn();
+
+  const createPropsWithMetrics = (): MockEvalOutputCellProps => ({
+    firstOutput: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {},
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.9,
+      text: 'Test output text',
+      testCase: {},
+    },
+    maxTextLength: 100,
+    onRating: mockOnRating,
+    output: {
+      cost: 0,
+      id: 'test-id',
+      latencyMs: 100,
+      namedScores: {
+        accuracy: 0.9,
+      },
+      pass: true,
+      failureReason: ResultFailureReason.NONE,
+      prompt: 'Test prompt',
+      provider: 'test-provider',
+      score: 0.9,
+      text: 'Test output text',
+      testCase: {},
+    },
+    promptIndex: 0,
+    rowIndex: 0,
+    searchText: '',
+    showDiffs: false,
+    showStats: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('shows metric pills by default', () => {
+    renderWithProviders(<EvalOutputCell {...createPropsWithMetrics()} />);
+
+    expect(screen.getByTestId('metric-accuracy')).toBeInTheDocument();
+  });
+
+  it('hides metric pills when the setting is disabled', () => {
+    mockResultsViewSettings.showMetricPills = false;
+
+    renderWithProviders(<EvalOutputCell {...createPropsWithMetrics()} />);
+
+    expect(screen.queryByTestId('metric-accuracy')).not.toBeInTheDocument();
   });
 });
 

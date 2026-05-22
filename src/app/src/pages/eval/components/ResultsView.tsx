@@ -12,7 +12,6 @@ import {
 } from '@app/components/ui/dialog';
 import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
 import { SearchInput } from '@app/components/ui/search-input';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -25,7 +24,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
@@ -44,7 +43,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { hashVarSchema } from './utils';
+import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -53,6 +52,13 @@ import type { ActiveView } from './EvalHeader';
 import type { ResultsFilter } from './store';
 
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
+
+const MAX_SEARCH_BADGE_LENGTH = 5;
+const MAX_FILTER_VALUE_LENGTH = 50;
+const MAX_PROMPT_LABEL_LENGTH = 60;
+
+// Default to showing charts only on sufficiently tall viewports to avoid crowding above-the-fold content.
+const MIN_VIEWPORT_HEIGHT_FOR_CHARTS = 1100;
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -65,7 +71,7 @@ interface ResultsChartsSectionProps {
   isRedteamEval: boolean;
   resultsChartsScores: number[];
   resultsChartsUnavailableReasons: string[];
-  children: (toggleButton: React.ReactNode) => React.ReactNode;
+  children: (toggleButton: React.ReactNode | null) => React.ReactNode;
 }
 
 interface AppliedFilterBadgesProps {
@@ -95,8 +101,11 @@ function getAppliedFilterLabel(
     return null;
   }
 
+  const filterValue = filter.value ?? '';
   const truncatedValue =
-    filter.value.length > 50 ? `${filter.value.slice(0, 50)}...` : filter.value;
+    filterValue.length > MAX_FILTER_VALUE_LENGTH
+      ? `${filterValue.slice(0, MAX_FILTER_VALUE_LENGTH)}...`
+      : filterValue;
 
   if (filter.type === 'metric') {
     const operatorSymbols: Record<string, string> = {
@@ -157,7 +166,7 @@ function AppliedFilterBadges({
         <button
           type="button"
           onClick={() => onRemoveFilter(filter.id)}
-          className="ml-1 hover:bg-muted rounded-full"
+          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
         >
           <X className="size-3" />
         </button>
@@ -166,7 +175,7 @@ function AppliedFilterBadges({
   });
 }
 
-function ResultsChartsSection({
+export function ResultsChartsSection({
   canRenderResultsCharts,
   isRedteamEval,
   resultsChartsScores,
@@ -174,11 +183,13 @@ function ResultsChartsSection({
   children,
 }: ResultsChartsSectionProps) {
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(
-    !isRedteamEval && window.innerHeight >= 1100 && canRenderResultsCharts,
+    !isRedteamEval &&
+      window.innerHeight >= MIN_VIEWPORT_HEIGHT_FOR_CHARTS &&
+      canRenderResultsCharts,
   );
 
   if (isRedteamEval) {
-    return null;
+    return <>{children(null)}</>;
   }
 
   const toggleButton = (
@@ -234,7 +245,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const {
     table,
@@ -271,19 +283,23 @@ export default function ResultsView({
   const [searchInputValue, setSearchInputValue] = React.useState(initialSearchText); // local, for responsive input
   const [debouncedSearchText, setDebouncedSearchText] = React.useState(initialSearchText); // debounced, for table/URL/pill
 
-  // Debounced update for URL, table, and pill
+  // Debounced update for URL, table, and pill. Search changes can change the
+  // visible result set, so drop any existing details deep-link while replacing the URL.
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearchText(text);
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (text) {
-          next.set('search', text);
-        } else {
-          next.delete('search');
-        }
-        return next;
-      },
+    setEvalDetailsHash('');
+    navigate(
+      buildEvalUrlWithSearchParams(
+        { pathname: location.pathname, search: location.search, hash: '' },
+        (params) => {
+          params.delete('rowId');
+          if (text) {
+            params.set('search', text);
+          } else {
+            params.delete('search');
+          }
+        },
+      ),
       { replace: true },
     );
   }, 300);
@@ -292,12 +308,15 @@ export default function ResultsView({
     setSearchInputValue('');
     debouncedUpdate.cancel();
     setDebouncedSearchText('');
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('search');
-        return next;
-      },
+    setEvalDetailsHash('');
+    navigate(
+      buildEvalUrlWithSearchParams(
+        { pathname: location.pathname, search: location.search, hash: '' },
+        (params) => {
+          params.delete('rowId');
+          params.delete('search');
+        },
+      ),
       { replace: true },
     );
   };
@@ -315,20 +334,23 @@ export default function ResultsView({
   const activeView: ActiveView = viewParam === 'report' ? 'report' : 'results';
   const setActiveView = React.useCallback(
     (view: ActiveView) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (view === 'results') {
-            next.delete('view');
-          } else {
-            next.set('view', view);
-          }
-          return next;
-        },
+      setEvalDetailsHash('');
+      navigate(
+        buildEvalUrlWithSearchParams(
+          { pathname: location.pathname, search: location.search, hash: '' },
+          (params) => {
+            params.delete('rowId');
+            if (view === 'results') {
+              params.delete('view');
+            } else {
+              params.set('view', view);
+            }
+          },
+        ),
         { replace: true },
       );
     },
-    [setSearchParams],
+    [location.pathname, location.search, navigate],
   );
   const [reportActions, setReportActions] = React.useState<React.ReactNode>(null);
 
@@ -415,12 +437,12 @@ export default function ResultsView({
   const promptOptions = head.prompts.map((prompt, idx) => {
     const label = prompt.label || prompt.display || prompt.raw;
     const provider = prompt.provider || 'unknown';
-    const displayLabel = [
-      label && `"${label.slice(0, 60)}${label.length > 60 ? '...' : ''}"`,
-      provider && `[${provider}]`,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    const truncatedLabel =
+      label &&
+      `"${label.slice(0, MAX_PROMPT_LABEL_LENGTH)}${
+        label.length > MAX_PROMPT_LABEL_LENGTH ? '...' : ''
+      }"`;
+    const displayLabel = [truncatedLabel, provider && `[${provider}]`].filter(Boolean).join(' ');
 
     return {
       value: `Prompt ${idx + 1}`,
@@ -752,8 +774,12 @@ export default function ResultsView({
         Edit name
       </DropdownMenuItem>
       <DropdownMenuItem
+        disabled={!config}
         onClick={() => {
-          updateConfig(config!);
+          if (!config) {
+            return;
+          }
+          updateConfig(config);
           navigate(ROUTES.SETUP);
         }}
       >
@@ -824,28 +850,6 @@ export default function ResultsView({
                     />
                     <FiltersForm />
                     <div className="flex-1" />
-                    <Select
-                      value={String(resultsTableZoom)}
-                      onValueChange={(val) => setResultsTableZoom(Number(val))}
-                    >
-                      <SelectTrigger className="w-[115px] h-8 text-xs">
-                        <span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            ZOOM
-                          </span>{' '}
-                          {Math.round(resultsTableZoom * 100)}%
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0.5">50%</SelectItem>
-                        <SelectItem value="0.75">75%</SelectItem>
-                        <SelectItem value="0.9">90%</SelectItem>
-                        <SelectItem value="1">100%</SelectItem>
-                        <SelectItem value="1.25">125%</SelectItem>
-                        <SelectItem value="1.5">150%</SelectItem>
-                        <SelectItem value="2">200%</SelectItem>
-                      </SelectContent>
-                    </Select>
                     <ColumnSelector
                       columnData={columnData}
                       selectedColumns={currentColumnState.selectedColumns}
@@ -882,13 +886,13 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 5
-                          ? debouncedSearchText.substring(0, 5) + '...'
+                        {debouncedSearchText.length > MAX_SEARCH_BADGE_LENGTH
+                          ? debouncedSearchText.substring(0, MAX_SEARCH_BADGE_LENGTH) + '...'
                           : debouncedSearchText}
                         <button
                           type="button"
                           onClick={handleClearSearch}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
@@ -900,7 +904,7 @@ export default function ResultsView({
                         <button
                           type="button"
                           onClick={() => setFilterMode('all')}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
@@ -995,7 +999,12 @@ export default function ResultsView({
         filterByDatasetId
       />
       <DownloadDialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)} />
-      <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <SettingsModal
+        open={viewSettingsModalOpen}
+        onClose={() => setViewSettingsModalOpen(false)}
+        resultsTableZoom={resultsTableZoom}
+        onResultsTableZoomChange={setResultsTableZoom}
+      />
       <ConfirmEvalNameDialog
         open={editNameDialogOpen}
         onClose={() => setEditNameDialogOpen(false)}

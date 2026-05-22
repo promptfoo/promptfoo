@@ -5,7 +5,7 @@ import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
-import { Agent } from 'undici';
+import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -18,7 +18,6 @@ import {
   maybeLoadFromExternalFile,
   pathExists,
 } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -50,6 +49,9 @@ import {
   transformToolChoice,
   transformTools,
 } from './shared';
+import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+
+export { loadTransformModule } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -983,46 +985,6 @@ interface SessionParserData {
   body?: Record<string, any> | string | null;
 }
 
-/**
- * Loads a module from a file:// reference if needed
- * This function should be called before passing transforms to createTransformResponse/createTransformRequest
- *
- * @param transform - The transform config (string or function)
- * @returns The loaded function, or the original value if not a file:// reference
- */
-export async function loadTransformModule(
-  transform: string | Function | undefined,
-): Promise<string | Function | undefined> {
-  if (!transform) {
-    return transform;
-  }
-  if (typeof transform === 'function') {
-    return transform;
-  }
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  }
-  // For string expressions, return as-is
-  return transform;
-}
-
 function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
@@ -1050,14 +1012,7 @@ export async function createSessionParser(
     return (response) => parser(response);
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(parser);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
@@ -1310,14 +1265,7 @@ export async function createValidateStatus(
 
   if (typeof validator === 'string') {
     if (validator.startsWith('file://')) {
-      let filename = validator.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
+      const { filename, functionName } = parseFileTransformReference(validator);
       try {
         const requiredModule = await importModule(
           path.resolve(cliState.basePath || '', filename),
@@ -1370,7 +1318,9 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
 /**
  * Creates an HTTPS agent with TLS configuration for secure connections
  */
-async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
+async function createHttpsAgent(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+): Promise<Dispatcher> {
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
   const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
@@ -1548,10 +1498,12 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Create an undici Agent with the TLS options
+  // Compose the decompress interceptor like the shared pooled agents do — on
+  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
+  // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  });
+  }).compose(interceptors.decompress({ skipErrorResponses: false }));
 }
 
 export class HttpProvider implements ApiProvider {
@@ -1570,8 +1522,8 @@ export class HttpProvider implements ApiProvider {
   private lastToken?: string;
   private lastTokenExpiresAt?: number;
   private tokenRefreshLock?: TokenRefreshLock;
-  private httpsAgent?: Agent;
-  private httpsAgentPromise?: Promise<Agent>;
+  private httpsAgent?: Dispatcher;
+  private httpsAgentPromise?: Promise<Dispatcher>;
   /**
    * Tracks session IDs that were fetched from the session endpoint.
    * Used to distinguish sessions we created from client-generated UUIDs.
@@ -2097,7 +2049,7 @@ export class HttpProvider implements ApiProvider {
     return sessionId;
   }
 
-  private async getHttpsAgent(): Promise<Agent | undefined> {
+  private async getHttpsAgent(): Promise<Dispatcher | undefined> {
     if (!this.config.tls) {
       return undefined;
     }
