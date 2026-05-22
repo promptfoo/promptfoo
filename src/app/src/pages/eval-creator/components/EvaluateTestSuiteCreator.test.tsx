@@ -87,8 +87,16 @@ describe('EvaluateTestSuiteCreator', () => {
     useStore.getState().reset();
   });
 
-  it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
+  it('disables Reset when a new evaluation has nothing to discard', () => {
     render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+  });
+
+  it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
+    useStore.getState().updateConfig({ prompts: ['Prompt to clear'] });
+    render(<EvaluateTestSuiteCreator />);
+
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
     const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
@@ -96,6 +104,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog when the Cancel button is clicked', async () => {
+    useStore.getState().updateConfig({ prompts: ['Prompt to keep'] });
     render(<EvaluateTestSuiteCreator />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset' });
@@ -112,6 +121,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog after the Reset button in the dialog is clicked', async () => {
+    useStore.getState().updateConfig({ prompts: ['Prompt to clear'] });
     render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
@@ -357,16 +367,21 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('Evaluation setup')).toBeInTheDocument();
   });
 
-  it('discloses that resetting also discards unsaved YAML edits', async () => {
+  it('discloses and clears unsaved YAML edits when resetting', async () => {
     render(<EvaluateTestSuiteCreator />);
 
     await userEvent.click(screen.getByRole('tab', { name: 'YAML Editor' }));
     await userEvent.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    const resetButton = screen.getByRole('button', { name: 'Reset' });
+    expect(resetButton).toBeEnabled();
+    await userEvent.click(resetButton);
 
-    expect(screen.getByRole('dialog', { name: 'Reset evaluation setup?' })).toHaveTextContent(
-      'Your unsaved YAML edits will also be discarded.',
-    );
+    const dialog = screen.getByRole('dialog', { name: 'Reset evaluation setup?' });
+    expect(dialog).toHaveTextContent('Your unsaved YAML edits will also be discarded.');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reset' }));
+
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
   });
 
   it('should show a ready state and jump to run options once required setup is complete', async () => {

@@ -139,6 +139,8 @@ const EvaluateTestSuiteCreator = () => {
   const readiness = React.useMemo(() => getSetupReadiness(config), [config]);
   const { isReadyToRun, testCount } = readiness;
   const testCasesComplete = testCount > 0 && !readiness.issues.some((issue) => issue.stepId === 3);
+  const hasResettableSetup =
+    yamlHasUnsavedChanges || JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG);
 
   const setupSteps: SetupStep[] = [
     {
@@ -183,6 +185,7 @@ const EvaluateTestSuiteCreator = () => {
 
   const handleReset = () => {
     reset();
+    setYamlHasUnsavedChanges(false);
     setResetKey((k) => k + 1);
     setResetDialogOpen(false);
   };
@@ -228,10 +231,8 @@ const EvaluateTestSuiteCreator = () => {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object' && !Array.isArray(parsedConfig)) {
               const importedConfig = parsedConfig as Partial<UnifiedConfig>;
-              const hasExistingSetup =
-                yamlHasUnsavedChanges || JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG);
 
-              if (hasExistingSetup) {
+              if (hasResettableSetup) {
                 setPendingYamlImport({ config: importedConfig, fileName: file.name });
               } else {
                 applyImportedYaml(importedConfig);
@@ -284,7 +285,11 @@ const EvaluateTestSuiteCreator = () => {
                   className="hidden"
                   aria-label="Upload YAML configuration"
                 />
-                <Button variant="outline" onClick={() => setResetDialogOpen(true)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setResetDialogOpen(true)}
+                  disabled={!hasResettableSetup}
+                >
                   Reset
                 </Button>
               </div>
