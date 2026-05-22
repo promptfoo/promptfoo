@@ -276,6 +276,45 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('stores optional moderation categories as the array accepted by evaluation', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'moderation' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const categoriesInput = screen.getByRole('textbox', { name: 'Categories (optional)' });
+    expect(categoriesInput).toHaveAccessibleDescription(/leave blank to check all categories/i);
+
+    await user.type(categoriesInput, 'hate, harassment');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'moderation', value: ['hate', 'harassment'] }]);
+  });
+
+  it('does not invite unused values for provider tool-call checks', () => {
+    initialValues = [{ type: 'is-valid-openai-tools-call' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    expect(
+      screen.getByText(/validates function or tool calls returned by the provider/i),
+    ).toBeVisible();
+  });
+
+  it('progressively reveals optional XML element requirements', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'is-xml' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Required elements (optional)' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Add required XML elements' }));
+
+    const elementsInput = screen.getByRole('textbox', { name: 'Required elements (optional)' });
+    expect(elementsInput).toHaveAccessibleDescription(/Separate required XML element names/i);
+    await user.type(elementsInput, 'answer, confidence');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'is-xml', value: 'answer, confidence' }]);
+  });
+
   it('progressively reveals optional JSON schema validation', async () => {
     const user = userEvent.setup();
     initialValues = [{ type: 'is-json' }];

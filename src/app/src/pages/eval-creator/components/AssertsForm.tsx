@@ -19,6 +19,7 @@ import {
 import { Textarea } from '@app/components/ui/textarea';
 import {
   ARRAY_VALUE_ASSERTION_TYPES,
+  COMMA_SEPARATED_VALUE_ASSERTION_TYPES,
   getAssertionValueError,
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
   STRUCTURED_VALUE_ASSERTION_TYPES,
@@ -145,6 +146,22 @@ const OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES = new Set<AssertionType>([
   'not-contains-json',
 ]);
 
+const OPTIONAL_XML_ELEMENT_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-xml',
+  'contains-xml',
+  'not-is-xml',
+  'not-contains-xml',
+]);
+
+const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-valid-function-call',
+  'is-valid-openai-function-call',
+  'is-valid-openai-tools-call',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-relevance',
+]);
+
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -163,7 +180,7 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 const formatAssertionValue = (assert: Assertion): string => {
-  if (ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && Array.isArray(assert.value)) {
+  if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assert.type) && Array.isArray(assert.value)) {
     return assert.value.map(String).join(', ');
   }
 
@@ -179,7 +196,7 @@ const formatAssertionValue = (assert: Assertion): string => {
 };
 
 const parseAssertionValue = (type: AssertionType, value: string): Assertion['value'] => {
-  if (ARRAY_VALUE_ASSERTION_TYPES.has(type)) {
+  if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(type)) {
     return value
       .split(',')
       .map((entry) => entry.trim())
@@ -302,6 +319,80 @@ const StructuredValueField = ({ assertion, error, index, onChange }: StructuredV
   );
 };
 
+const NoValueField = ({ type }: { type: AssertionType }) => {
+  const explanation =
+    type === 'answer-relevance'
+      ? 'This check uses the prompt or query variable and the generated response. No value is needed.'
+      : type === 'context-faithfulness' || type === 'context-relevance'
+        ? 'This check uses your query and context variables. No value is needed.'
+        : 'This check validates function or tool calls returned by the provider. No value is needed.';
+
+  return (
+    <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+      {explanation}
+    </p>
+  );
+};
+
+interface OptionalXmlFieldProps {
+  assertion: Assertion;
+  index: number;
+  onChange: (assertion: Assertion) => void;
+}
+
+const OptionalXmlField = ({ assertion, index, onChange }: OptionalXmlFieldProps) => {
+  if (assertion.value === undefined) {
+    return (
+      <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+        <p className="text-xs text-muted-foreground">
+          This check validates XML without requiring particular elements. Add elements only when the
+          response must include them.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange({ ...assertion, value: '' })}
+        >
+          Add required XML elements
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+          Required elements (optional)
+        </Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            const { value: _value, ...assertWithoutValue } = assertion;
+            onChange(assertWithoutValue);
+          }}
+        >
+          Remove elements
+        </Button>
+      </div>
+      <Textarea
+        id={`assert-value-${index}`}
+        aria-describedby={`assert-xml-help-${index}`}
+        value={formatAssertionValue(assertion)}
+        onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+        placeholder="answer, confidence"
+        className="min-h-20 resize-y"
+      />
+      <p id={`assert-xml-help-${index}`} className="text-xs text-muted-foreground">
+        Optional. Separate required XML element names with commas.
+      </p>
+    </div>
+  );
+};
+
 interface AssertionValueFieldsProps {
   arrayValueDraft?: string;
   assertion: Assertion;
@@ -341,6 +432,14 @@ const AssertionValueFields = ({
     );
   }
 
+  if (NO_VALUE_ASSERTION_TYPES.has(assertion.type)) {
+    return <NoValueField type={assertion.type} />;
+  }
+
+  if (OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(assertion.type)) {
+    return <OptionalXmlField assertion={assertion} index={index} onChange={onChange} />;
+  }
+
   if (OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type) && assertion.value === undefined) {
     return (
       <div className="space-y-2 rounded-md border border-dashed border-border p-3">
@@ -364,9 +463,11 @@ const AssertionValueFields = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-          {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
-            ? 'JSON schema (optional)'
-            : 'Value'}
+          {assertion.type === 'moderation' || assertion.type === 'not-moderation'
+            ? 'Categories (optional)'
+            : OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
+              ? 'JSON schema (optional)'
+              : 'Value'}
         </Label>
         {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type) && (
           <Button
@@ -385,19 +486,25 @@ const AssertionValueFields = ({
       <Textarea
         id={`assert-value-${index}`}
         aria-invalid={Boolean(error)}
-        aria-describedby={error ? `assert-value-error-${index}` : undefined}
+        aria-describedby={
+          error
+            ? `assert-value-error-${index}`
+            : assertion.type === 'moderation' || assertion.type === 'not-moderation'
+              ? `assert-moderation-help-${index}`
+              : undefined
+        }
         placeholder={
           OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
             ? 'type: object\nrequired: [answer]'
             : 'Enter expected value or criteria...'
         }
         value={
-          ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type)
+          COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assertion.type)
             ? (arrayValueDraft ?? formatAssertionValue(assertion))
             : formatAssertionValue(assertion)
         }
         onChange={(event) => {
-          if (ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type)) {
+          if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assertion.type)) {
             onArrayDraftChange(event.target.value);
           }
           onChange({
@@ -421,6 +528,12 @@ const AssertionValueFields = ({
           <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
         </p>
       )}
+      {(assertion.type === 'moderation' || assertion.type === 'not-moderation') && (
+        <p id={`assert-moderation-help-${index}`} className="text-xs text-muted-foreground">
+          Optional. Limit moderation to comma-separated categories, or leave blank to check all
+          categories.
+        </p>
+      )}
       {(assertion.type === 'regex' || assertion.type === 'not-regex') && (
         <p className="text-xs text-muted-foreground">
           Enter a regular expression pattern, e.g.{' '}
@@ -434,6 +547,8 @@ const AssertionValueFields = ({
 function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Assertion | undefined {
   if (
     OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(nextType) ||
+    OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(nextType) ||
+    NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     STRUCTURED_VALUE_ASSERTION_TYPES.has(nextType)
   ) {
@@ -443,7 +558,9 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
 
   if (
     THRESHOLD_ASSERTION_TYPES.has(assertion.type) ||
-    STRUCTURED_VALUE_ASSERTION_TYPES.has(assertion.type)
+    STRUCTURED_VALUE_ASSERTION_TYPES.has(assertion.type) ||
+    OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(assertion.type) ||
+    NO_VALUE_ASSERTION_TYPES.has(assertion.type)
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
     return { ...withoutStoredValue, type: nextType, value: '' };
@@ -466,7 +583,7 @@ function getAssertionTypeChange(
     return { assertion: simpleTypeChange };
   }
 
-  if (ARRAY_VALUE_ASSERTION_TYPES.has(nextType)) {
+  if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(nextType)) {
     const valueText = formatAssertionValue(assertion);
     return {
       arrayDraft: valueText,
@@ -478,7 +595,7 @@ function getAssertionTypeChange(
     };
   }
 
-  if (ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type)) {
+  if (COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assertion.type)) {
     return {
       assertion: { ...assertion, type: nextType, value: formatAssertionValue(assertion) },
     };
@@ -512,7 +629,9 @@ const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProp
   const [arrayValueDrafts, setArrayValueDrafts] = useState<Record<number, string>>(() =>
     Object.fromEntries(
       (initialValues || []).flatMap((assert, index) =>
-        ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) ? [[index, formatAssertionValue(assert)]] : [],
+        COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assert.type)
+          ? [[index, formatAssertionValue(assert)]]
+          : [],
       ),
     ),
   );

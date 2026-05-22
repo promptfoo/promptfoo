@@ -291,6 +291,26 @@ describe('setupReadiness', () => {
       ).toBe(false);
     });
 
+    it('rejects authored moderation categories unless they use runtime array form', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'moderation', value: 'hate' }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'moderation', value: ['hate'] }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('does not claim an exact base request count for external test files', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

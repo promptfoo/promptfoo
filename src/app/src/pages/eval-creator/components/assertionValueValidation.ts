@@ -11,6 +11,12 @@ export const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-icontains-all',
 ]);
 
+export const COMMA_SEPARATED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  ...ARRAY_VALUE_ASSERTION_TYPES,
+  'moderation',
+  'not-moderation',
+]);
+
 export const THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'cost',
   'latency',
@@ -192,6 +198,15 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
 }
 
 function getExpectedValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'moderation' || assertion.type === 'not-moderation') &&
+    assertion.value !== undefined &&
+    (!Array.isArray(assertion.value) ||
+      !assertion.value.every((value) => typeof value === 'string'))
+  ) {
+    return 'Enter moderation categories as a comma-separated list.';
+  }
+
   if (ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type) && !hasNonBlankStringArray(assertion.value)) {
     return 'Enter at least one comma-separated value for this check.';
   }
