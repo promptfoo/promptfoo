@@ -202,7 +202,7 @@ describe('ConfigurationAgent', () => {
 
       expect(mockedFetchWithProxy).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ redirect: 'manual' }),
+        expect.objectContaining({ dispatcher: expect.any(Object), redirect: 'manual' }),
       );
     });
   });

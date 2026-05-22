@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
+import { Agent, interceptors } from 'undici';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch';
 import { ALL_STRATEGIES, analyzeProbeResults, getBaseConfigForStrategy } from './strategies';
@@ -24,6 +25,7 @@ import type {
 } from './types';
 
 const DEFAULT_TIMEOUT = 10000;
+const DNS_CACHE_TTL = DEFAULT_TIMEOUT;
 const CLOUD_METADATA_HOSTS = new Set([
   'metadata.google.internal',
   'metadata.goog',
@@ -139,6 +141,46 @@ function assertHostnameAllowed(hostname: string): void {
   }
 }
 
+async function lookupAllowedHostname(
+  hostname: string,
+): Promise<Array<{ address: string; family: 4 | 6 }>> {
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+
+  return addresses.map((address) => {
+    assertHostnameAllowed(address.address);
+
+    const family = isIP(address.address);
+    if (family !== 4 && family !== 6) {
+      throw new Error('Invalid URL format');
+    }
+
+    return { address: address.address, family };
+  });
+}
+
+// The DNS interceptor replaces a checked hostname with a checked IP address
+// while preserving Host and TLS SNI for the target endpoint.
+const guardedFetchDispatcher = new Agent()
+  .compose(
+    interceptors.dns({
+      affinity: 4,
+      maxTTL: DNS_CACHE_TTL,
+      lookup: (origin, _options, callback) => {
+        lookupAllowedHostname(origin.hostname)
+          .then((addresses) =>
+            callback(
+              null,
+              addresses.map((address) => ({ ...address, ttl: DNS_CACHE_TTL })),
+            ),
+          )
+          .catch((error) =>
+            callback(error instanceof Error ? error : new Error('DNS lookup failed'), []),
+          );
+      },
+    }),
+  )
+  .compose(interceptors.decompress({ skipErrorResponses: false }));
+
 /**
  * Configuration Agent for auto-discovering endpoint configuration
  */
@@ -234,8 +276,7 @@ export class ConfigurationAgent {
   }
 
   /**
-   * Resolve hostnames before each server-side probe so DNS names cannot rebound
-   * to local, private, or metadata addresses after initial URL validation.
+   * Validate each request target before it reaches the guarded dispatcher.
    */
   private async assertUrlAllowed(url: string): Promise<void> {
     let parsedUrl: URL;
@@ -256,10 +297,7 @@ export class ConfigurationAgent {
       return;
     }
 
-    const addresses = await lookup(hostname, { all: true, verbatim: true });
-    for (const address of addresses) {
-      assertHostnameAllowed(address.address);
-    }
+    await lookupAllowedHostname(hostname);
   }
 
   /**
@@ -1065,11 +1103,13 @@ export class ConfigurationAgent {
       : controller.signal;
 
     try {
-      const response = await fetchWithProxy(url, {
+      const fetchOptions = {
         ...options,
-        redirect: 'manual',
+        dispatcher: guardedFetchDispatcher,
+        redirect: 'manual' as const,
         signal,
-      });
+      };
+      const response = await fetchWithProxy(url, fetchOptions);
       return response;
     } finally {
       clearTimeout(timeoutId);
