@@ -32,6 +32,7 @@ interface CustomTargetConfigurationProps {
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
+  setBodyError?: (error: string | React.ReactNode | null) => void;
   providerType?: string;
 }
 
@@ -403,8 +404,11 @@ const CustomTargetConfiguration = ({
   rawConfigJson,
   setRawConfigJson,
   bodyError,
+  setBodyError,
   providerType,
 }: CustomTargetConfigurationProps) => {
+  const configErrorId = React.useId();
+  const configEditorContainerRef = React.useRef<HTMLDivElement>(null);
   const [targetId, setTargetId] = useState(selectedTarget.id?.replace('file://', '') || '');
   const [docsExpanded, setDocsExpanded] = useState(false);
 
@@ -413,6 +417,20 @@ const CustomTargetConfiguration = ({
   useEffect(() => {
     setTargetId(selectedTarget.id?.replace('file://', '') || '');
   }, [selectedTarget.id]);
+
+  useEffect(() => {
+    const textarea = configEditorContainerRef.current?.querySelector('textarea');
+    if (!textarea) {
+      return;
+    }
+
+    textarea.setAttribute('aria-invalid', String(Boolean(bodyError)));
+    if (bodyError) {
+      textarea.setAttribute('aria-describedby', configErrorId);
+    } else {
+      textarea.removeAttribute('aria-describedby');
+    }
+  }, [bodyError, configErrorId]);
 
   const handleTargetIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -435,10 +453,10 @@ const CustomTargetConfiguration = ({
     setRawConfigJson(content);
     try {
       const parsedConfig = JSON.parse(content);
+      setBodyError?.(null);
       updateCustomTarget('config', parsedConfig);
-    } catch (error) {
-      // Allow invalid JSON while typing - error is shown via bodyError prop
-      console.error('Invalid JSON configuration:', error);
+    } catch {
+      setBodyError?.('Configuration must be valid JSON before this provider can be saved.');
     }
   };
 
@@ -448,9 +466,10 @@ const CustomTargetConfiguration = ({
         const parsed = JSON.parse(rawConfigJson);
         const formatted = JSON.stringify(parsed, null, 2);
         setRawConfigJson(formatted);
+        setBodyError?.(null);
         updateCustomTarget('config', parsed);
       } catch {
-        // Error state is already shown via bodyError prop
+        setBodyError?.('Configuration must be valid JSON before this provider can be saved.');
       }
     }
   };
@@ -561,6 +580,7 @@ const CustomTargetConfiguration = ({
 
           {/* JSON Editor */}
           <div
+            ref={configEditorContainerRef}
             className={cn(
               'overflow-hidden rounded-lg border',
               bodyError ? 'border-destructive' : 'border-border',
@@ -571,6 +591,7 @@ const CustomTargetConfiguration = ({
             </div>
             <div className="bg-white dark:bg-zinc-950">
               <Editor
+                textareaId="config-json"
                 value={rawConfigJson}
                 onValueChange={handleConfigChange}
                 highlight={highlightJSON}
@@ -589,7 +610,7 @@ const CustomTargetConfiguration = ({
             <Alert variant="destructive" className="py-2">
               <AlertCircle className="size-4" />
               <AlertContent>
-                <AlertDescription>{bodyError}</AlertDescription>
+                <AlertDescription id={configErrorId}>{bodyError}</AlertDescription>
               </AlertContent>
             </Alert>
           ) : (

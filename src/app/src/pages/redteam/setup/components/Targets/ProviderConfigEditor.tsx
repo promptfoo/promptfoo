@@ -206,13 +206,21 @@ function validateAgentProvider(provider: ProviderOptions): string[] {
   return usesExamplePath(provider.id) ? ['Replace the example path with your agent file path'] : [];
 }
 
-function validateCustomProvider(provider: ProviderOptions): string[] {
+function validateCustomProvider(
+  provider: ProviderOptions,
+  bodyError: React.ReactNode | null,
+): ValidationError[] {
+  const errors: ValidationError[] = [];
   if (!provider.id || provider.id.trim() === '') {
-    return ['Provider ID is required'];
+    errors.push('Provider ID is required');
   }
-  return usesExamplePath(provider.id)
-    ? ['Replace the example path with your provider file path']
-    : [];
+  if (usesExamplePath(provider.id)) {
+    errors.push('Replace the example path with your provider file path');
+  }
+  if (bodyError) {
+    errors.push(bodyError);
+  }
+  return errors;
 }
 
 function getProviderValidationResult(
@@ -234,7 +242,7 @@ function getProviderValidationResult(
   } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
     result.errors = validateAgentProvider(provider);
   } else if (['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
-    result.errors = validateCustomProvider(provider);
+    result.errors = validateCustomProvider(provider, bodyError);
   }
   if (extensionErrors) {
     result.errors.push('Extension configuration has errors');
@@ -390,6 +398,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          setBodyError={setBodyError}
           providerType={providerType}
         />
       )}
@@ -448,6 +457,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          setBodyError={setBodyError}
           providerType={providerType}
         />
       )}
@@ -462,6 +472,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          setBodyError={setBodyError}
           providerType={providerType}
         />
       )}
@@ -476,6 +487,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          setBodyError={setBodyError}
           providerType={providerType}
         />
       )}
@@ -497,6 +509,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          setBodyError={setBodyError}
           providerType={providerType}
         />
       )}

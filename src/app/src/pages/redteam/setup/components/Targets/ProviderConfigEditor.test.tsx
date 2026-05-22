@@ -14,7 +14,19 @@ vi.mock('./WebSocketEndpointConfiguration', () => ({
   default: () => <div data-testid="ws-config" />,
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
-  default: () => <div data-testid="custom-config" />,
+  default: ({ setBodyError }: { setBodyError?: (error: string | null) => void }) => (
+    <div data-testid="custom-config">
+      <button
+        type="button"
+        data-testid="set-invalid-custom-config"
+        onClick={() =>
+          setBodyError?.('Configuration must be valid JSON before this provider can be saved.')
+        }
+      >
+        Set invalid custom config
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./BrowserAutomationConfiguration', () => ({
   default: () => <div data-testid="browser-config" />,
@@ -300,6 +312,38 @@ describe('ProviderConfigEditor', () => {
 
     expect(container).toBeInTheDocument();
     expect(mockSetError).toHaveBeenCalledWith('Provider ID is required');
+    expect(mockOnValidate).toHaveBeenCalledWith(false);
+  });
+
+  it('should block saving custom providers while their JSON configuration is invalid', async () => {
+    const mockSetProvider = vi.fn();
+    const mockSetError = vi.fn();
+    const mockOnValidate = vi.fn();
+    const captureValidator = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'custom-provider', config: {} }}
+        setProvider={mockSetProvider}
+        setError={mockSetError}
+        onValidate={mockOnValidate}
+        onValidationRequest={captureValidator}
+        providerType="custom"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('set-invalid-custom-config').click();
+    });
+
+    await waitFor(() => expect(captureValidator).toHaveBeenCalledTimes(2));
+    const validateFn = captureValidator.mock.calls[
+      captureValidator.mock.calls.length - 1
+    ][0] as () => boolean;
+    expect(validateFn()).toBe(false);
+    expect(mockSetError).toHaveBeenCalledWith(
+      'Configuration must be valid JSON before this provider can be saved.',
+    );
     expect(mockOnValidate).toHaveBeenCalledWith(false);
   });
 
