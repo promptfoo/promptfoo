@@ -4,7 +4,7 @@ import { callApi } from '../utils/api';
 
 export type CloudConfigData = {
   appUrl: string | null;
-  /** Whether the user is authenticated to Promptfoo Cloud. */
+  /** Whether Promptfoo Cloud credentials are configured locally. */
   isEnabled: boolean;
   /** Whether this is an enterprise/self-hosted deployment. */
   isEnterprise?: boolean;
@@ -17,7 +17,7 @@ export interface CloudConfigState {
 }
 
 /**
- * Loads the current user's cloud status from the API. Useful for Cloud links and local status UI.
+ * Loads the local Promptfoo Cloud configuration for links and status UI.
  */
 export default function useCloudConfig(): CloudConfigState & { refetch: () => void } {
   const [state, setState] = useState<CloudConfigState>({
@@ -29,7 +29,7 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
   const fetchCloudConfig = useCallback(async () => {
     try {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
-      const response = await callApi('/user/cloud/status');
+      const response = await callApi('/user/cloud-config');
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
@@ -37,7 +37,7 @@ export default function useCloudConfig(): CloudConfigState & { refetch: () => vo
       setState({
         data: {
           appUrl: responseData.appUrl,
-          isEnabled: responseData.isAuthenticated,
+          isEnabled: responseData.isEnabled,
           isEnterprise: responseData.isEnterprise ?? false,
         },
         isLoading: false,

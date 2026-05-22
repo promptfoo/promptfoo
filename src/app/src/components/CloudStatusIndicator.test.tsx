@@ -54,7 +54,7 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByRole('button', { name: /checking cloud status/i })).toBeInTheDocument();
   });
 
-  it('shows authenticated cloud state', () => {
+  it('shows configured cloud state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: true,
@@ -69,12 +69,12 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     expect(
-      screen.getByRole('button', { name: /connected to promptfoo cloud/i }),
+      screen.getByRole('button', { name: /configured for promptfoo cloud/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
   });
 
-  it('shows authenticated enterprise state', () => {
+  it('shows configured enterprise state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: true,
@@ -89,16 +89,16 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     expect(
-      screen.getByRole('button', { name: /connected to promptfoo enterprise/i }),
+      screen.getByRole('button', { name: /configured for promptfoo enterprise/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
   });
 
-  it('shows unauthenticated cloud state', () => {
+  it('shows unconfigured cloud state while retaining its app URL', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -109,7 +109,7 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     expect(
-      screen.getByRole('button', { name: /not connected to promptfoo cloud/i }),
+      screen.getByRole('button', { name: /promptfoo cloud is not configured/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
@@ -130,7 +130,33 @@ describe('CloudStatusIndicator', () => {
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
-  it('opens cloud dashboard when authenticated and tracks telemetry', async () => {
+  it('does not open an invalid configured app URL', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: null,
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderCloudStatusIndicator();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: /promptfoo cloud configuration has an invalid application url/i,
+      }),
+    );
+
+    expect(mockWindowOpen).not.toHaveBeenCalled();
+    expect(screen.getByText(/unable to connect to cloud service/i)).toBeInTheDocument();
+    expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
+  });
+
+  it('opens cloud dashboard securely when configured and tracks telemetry', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
@@ -145,21 +171,25 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /configured for promptfoo cloud/i }));
 
-    expect(mockWindowOpen).toHaveBeenCalledWith('https://app.promptfoo.app', '_blank');
+    expect(mockWindowOpen).toHaveBeenCalledWith(
+      'https://app.promptfoo.app',
+      '_blank',
+      'noopener,noreferrer',
+    );
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
-      authenticated: true,
+      configured: true,
     });
   });
 
-  it('opens dialog when unauthenticated and tracks telemetry', async () => {
+  it('opens dialog when unconfigured and tracks telemetry', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -169,23 +199,23 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
 
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
     expect(screen.getByText(/share evaluation results with your team/i)).toBeInTheDocument();
     expect(screen.getByText(/open centralized dashboards and reports/i)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
-      authenticated: false,
+      configured: false,
     });
   });
 
-  it('opens enterprise dialog when unauthenticated and enterprise', async () => {
+  it('opens enterprise dialog when enterprise is unconfigured', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://enterprise.company.com',
         isEnterprise: true,
       },
       isLoading: false,
@@ -196,7 +226,7 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     await user.click(
-      screen.getByRole('button', { name: /not connected to promptfoo enterprise/i }),
+      screen.getByRole('button', { name: /promptfoo enterprise is not configured/i }),
     );
 
     expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
@@ -210,7 +240,7 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -220,7 +250,7 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('button', { name: 'Close' })[0]);
@@ -255,7 +285,7 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -265,7 +295,7 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
     await user.click(screen.getByRole('link', { name: 'promptfoo.app' }));
 
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
@@ -279,7 +309,7 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -289,12 +319,13 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
     await user.click(screen.getByRole('button', { name: /learn more/i }));
 
     expect(mockWindowOpen).toHaveBeenCalledWith(
       'https://www.promptfoo.dev/docs/usage/sharing/',
       '_blank',
+      'noopener,noreferrer',
     );
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
       action: 'cloud_learn_more_click',
@@ -307,7 +338,7 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -317,7 +348,7 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
     await user.click(screen.getByRole('button', { name: 'Refresh Status' }));
 
     expect(mockRefetch).toHaveBeenCalled();
@@ -332,7 +363,7 @@ describe('CloudStatusIndicator', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: true,

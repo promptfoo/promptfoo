@@ -19,9 +19,8 @@ vi.mock('@app/utils/api', () => ({
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
-const mockCloudStatus = {
-  isAuthenticated: true,
-  hasApiKey: true,
+const mockCloudConfig = {
+  isEnabled: true,
   appUrl: 'https://app.promptfoo.app',
   isEnterprise: false,
 };
@@ -32,7 +31,7 @@ describe('useCloudConfig', () => {
   });
 
   it('should initialize with isLoading=true, data=null, and error=null', () => {
-    mockCallApiResponse(mockCloudStatus);
+    mockCallApiResponse(mockCloudConfig);
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -42,7 +41,7 @@ describe('useCloudConfig', () => {
   });
 
   it('should set data and isLoading=false on successful API call', async () => {
-    mockCallApiResponse(mockCloudStatus);
+    mockCallApiResponse(mockCloudConfig);
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -57,14 +56,13 @@ describe('useCloudConfig', () => {
     });
     expect(result.current.error).toBeNull();
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
   });
 
-  it('should map unauthenticated status to isEnabled=false', async () => {
+  it('should preserve the Cloud URL when cloud is not configured', async () => {
     mockCallApiResponse({
-      isAuthenticated: false,
-      hasApiKey: false,
-      appUrl: null,
+      isEnabled: false,
+      appUrl: 'https://app.promptfoo.app',
       isEnterprise: false,
     });
 
@@ -75,7 +73,7 @@ describe('useCloudConfig', () => {
     });
 
     expect(result.current.data).toEqual({
-      appUrl: null,
+      appUrl: 'https://app.promptfoo.app',
       isEnabled: false,
       isEnterprise: false,
     });
@@ -83,8 +81,7 @@ describe('useCloudConfig', () => {
 
   it('should detect enterprise deployment', async () => {
     mockCallApiResponse({
-      isAuthenticated: true,
-      hasApiKey: true,
+      isEnabled: true,
       appUrl: 'https://enterprise.company.com',
       isEnterprise: true,
     });
@@ -101,8 +98,7 @@ describe('useCloudConfig', () => {
 
   it('should default isEnterprise to false for older responses', async () => {
     mockCallApiResponse({
-      isAuthenticated: true,
-      hasApiKey: true,
+      isEnabled: true,
       appUrl: 'https://app.promptfoo.app',
     });
 
@@ -127,7 +123,7 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Failed to fetch cloud config');
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
   });
 
   it('should handle network errors gracefully', async () => {
@@ -142,7 +138,7 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Network error');
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
   });
 
   it('should handle non-Error exceptions', async () => {
@@ -160,7 +156,7 @@ describe('useCloudConfig', () => {
   });
 
   it('should fetch cloud config on mount', async () => {
-    mockCallApiResponse(mockCloudStatus);
+    mockCallApiResponse(mockCloudConfig);
 
     renderHook(() => useCloudConfig());
 
@@ -168,19 +164,18 @@ describe('useCloudConfig', () => {
       expect(callApi).toHaveBeenCalledTimes(1);
     });
 
-    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
   });
 
   describe('refetch', () => {
     it('should refetch data when refetch is called', async () => {
-      const updatedStatus = {
-        isAuthenticated: false,
-        hasApiKey: false,
-        appUrl: null,
+      const updatedConfig = {
+        isEnabled: false,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       };
 
-      mockCallApiResponseOnce(mockCloudStatus);
+      mockCallApiResponseOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -191,7 +186,7 @@ describe('useCloudConfig', () => {
       expect(result.current.data?.isEnabled).toBe(true);
       expect(callApi).toHaveBeenCalledTimes(1);
 
-      mockCallApiResponseOnce(updatedStatus);
+      mockCallApiResponseOnce(updatedConfig);
 
       await act(async () => {
         result.current.refetch();
@@ -203,7 +198,7 @@ describe('useCloudConfig', () => {
 
       expect(result.current.error).toBeNull();
       expect(callApi).toHaveBeenCalledTimes(2);
-      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud/status');
+      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud-config');
     });
 
     it('should set isLoading=true during refetch and back to false after completion', async () => {
@@ -212,7 +207,7 @@ describe('useCloudConfig', () => {
         resolveFetch = resolve;
       });
 
-      mockCallApiResponseOnce(mockCloudStatus);
+      mockCallApiResponseOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -228,7 +223,7 @@ describe('useCloudConfig', () => {
 
       expect(result.current.isLoading).toBe(true);
 
-      resolveFetch(createMockResponse(mockCloudStatus));
+      resolveFetch(createMockResponse(mockCloudConfig));
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
@@ -236,7 +231,7 @@ describe('useCloudConfig', () => {
     });
 
     it('should handle errors during refetch', async () => {
-      mockCallApiResponseOnce(mockCloudStatus);
+      mockCallApiResponseOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -274,7 +269,7 @@ describe('useCloudConfig', () => {
       expect(result.current.data).toBeNull();
       expect(result.current.error).toBe('Initial fetch failed');
 
-      mockCallApiResponseOnce(mockCloudStatus);
+      mockCallApiResponseOnce(mockCloudConfig);
 
       await act(async () => {
         result.current.refetch();
@@ -291,7 +286,7 @@ describe('useCloudConfig', () => {
   });
 
   it('should only call the API once on mount and not on rerender', async () => {
-    mockCallApiResponseOnce(mockCloudStatus);
+    mockCallApiResponseOnce(mockCloudConfig);
 
     const { result, rerender } = renderHook(() => useCloudConfig());
 

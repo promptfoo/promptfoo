@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   clearUserEmail: vi.fn(),
   cloudConfig: {
     delete: vi.fn(),
-    getApiKey: vi.fn(),
     getApiHost: vi.fn(),
     getAppUrl: vi.fn(),
     isEnabled: vi.fn(),
@@ -295,7 +294,6 @@ function setupDefaultMocks() {
   mocks.checkModelAuditInstalled.mockResolvedValue({ installed: false, version: null });
   mocks.checkRemoteHealth.mockResolvedValue({ status: 'OK', message: 'healthy' });
   mocks.cloudConfig.getApiHost.mockReturnValue('https://api.promptfoo.dev');
-  mocks.cloudConfig.getApiKey.mockReturnValue(undefined);
   mocks.cloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.dev');
   mocks.cloudConfig.isEnabled.mockReturnValue(false);
   mocks.deleteEval.mockResolvedValue(undefined);
@@ -722,12 +720,6 @@ const smokeCases: SmokeCase[] = [
     method: 'get',
     openApiPath: '/api/user/cloud-config',
     path: '/api/user/cloud-config',
-    expectedStatus: 200,
-  },
-  {
-    method: 'get',
-    openApiPath: '/api/user/cloud/status',
-    path: '/api/user/cloud/status',
     expectedStatus: 200,
   },
   { method: 'get', openApiPath: '/api/version', path: '/api/version', expectedStatus: 200 },

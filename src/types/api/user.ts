@@ -112,17 +112,7 @@ export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
 
 // GET /api/user/cloud-config
 
-/** Response from cloud config endpoint. */
-export const CloudConfigResponseSchema = z.object({
-  appUrl: z.string(),
-  isEnabled: z.boolean(),
-});
-
-export type CloudConfigResponse = z.infer<typeof CloudConfigResponseSchema>;
-
-// GET /api/user/cloud/status
-
-/** Response from cloud authentication/status endpoint. */
+/** Browser-safe Promptfoo Cloud app URL. */
 const HttpUrlSchema = z.url().refine(
   (url) => {
     try {
@@ -134,14 +124,14 @@ const HttpUrlSchema = z.url().refine(
   { message: 'URL must use HTTP or HTTPS' },
 );
 
-export const CloudStatusResponseSchema = z.object({
-  isAuthenticated: z.boolean(),
-  hasApiKey: z.boolean(),
+/** Response from cloud config endpoint. */
+export const CloudConfigResponseSchema = z.object({
   appUrl: HttpUrlSchema.nullable(),
-  isEnterprise: z.boolean(),
+  isEnabled: z.boolean(),
+  isEnterprise: z.boolean().optional(),
 });
 
-export type CloudStatusResponse = z.infer<typeof CloudStatusResponseSchema>;
+export type CloudConfigResponse = z.infer<typeof CloudConfigResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const UserSchemas = {
@@ -171,8 +161,5 @@ export const UserSchemas = {
   },
   CloudConfig: {
     Response: CloudConfigResponseSchema,
-  },
-  CloudStatus: {
-    Response: CloudStatusResponseSchema,
   },
 } as const;

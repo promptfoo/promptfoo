@@ -34,11 +34,12 @@ export default function CloudStatusIndicator() {
   const [showDialog, setShowDialog] = useState(false);
   const { recordEvent } = useTelemetry();
 
-  const isAuthenticated = data?.isEnabled ?? false;
+  const isConfigured = data?.isEnabled ?? false;
   const appUrl = data?.appUrl ?? null;
   const isEnterprise = data?.isEnterprise ?? false;
   const serviceName = getServiceName(isEnterprise);
   const teamName = isEnterprise ? 'organization' : 'team';
+  const hasInvalidAppUrl = isConfigured && !appUrl;
 
   const statusLabel = (() => {
     if (isLoading) {
@@ -47,17 +48,20 @@ export default function CloudStatusIndicator() {
     if (error) {
       return 'Unable to check cloud status';
     }
-    if (isAuthenticated) {
-      return `Connected to ${serviceName}. Open dashboard.`;
+    if (hasInvalidAppUrl) {
+      return `${serviceName} configuration has an invalid application URL.`;
     }
-    return `Not connected to ${serviceName}. Learn more.`;
+    if (isConfigured) {
+      return `Configured for ${serviceName}. Open dashboard.`;
+    }
+    return `${serviceName} is not configured. Learn more.`;
   })();
 
   const StatusIcon = (() => {
     if (isLoading) {
       return Loader2;
     }
-    if (error || !isAuthenticated) {
+    if (error || hasInvalidAppUrl || !isConfigured) {
       return CloudOff;
     }
     return Cloud;
@@ -66,11 +70,11 @@ export default function CloudStatusIndicator() {
   const handleIconClick = () => {
     recordEvent('feature_used', {
       feature: 'cloud_status_icon_click',
-      authenticated: isAuthenticated,
+      configured: isConfigured,
     });
 
-    if (isAuthenticated && appUrl) {
-      window.open(appUrl, '_blank');
+    if (isConfigured && appUrl) {
+      window.open(appUrl, '_blank', 'noopener,noreferrer');
       return;
     }
 
@@ -101,14 +105,14 @@ export default function CloudStatusIndicator() {
             onClick={handleIconClick}
             className={cn(
               'inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-              isAuthenticated && !error && 'text-emerald-600 hover:text-emerald-700',
-              error && 'text-destructive hover:text-destructive',
+              isConfigured && appUrl && !error && 'text-emerald-600 hover:text-emerald-700',
+              (error || hasInvalidAppUrl) && 'text-destructive hover:text-destructive',
             )}
             aria-label={statusLabel}
           >
             <StatusIcon
               className={cn('size-5', isLoading && 'animate-spin')}
-              data-testid={isAuthenticated && !error ? 'CloudIcon' : 'CloudOffIcon'}
+              data-testid={isConfigured && appUrl && !error ? 'CloudIcon' : 'CloudOffIcon'}
             />
           </button>
         </TooltipTrigger>
@@ -160,7 +164,7 @@ export default function CloudStatusIndicator() {
               </AlertContent>
             </Alert>
 
-            {error && (
+            {(error || hasInvalidAppUrl) && (
               <Alert variant="destructive">
                 <AlertCircle className="size-4" />
                 <AlertContent>
@@ -180,7 +184,11 @@ export default function CloudStatusIndicator() {
                   action: 'cloud_learn_more_click',
                   source: 'cloud_status_dialog',
                 });
-                window.open('https://www.promptfoo.dev/docs/usage/sharing/', '_blank');
+                window.open(
+                  'https://www.promptfoo.dev/docs/usage/sharing/',
+                  '_blank',
+                  'noopener,noreferrer',
+                );
               }}
             >
               <ExternalLink className="mr-2 size-4" />

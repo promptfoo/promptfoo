@@ -13,7 +13,6 @@ vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
     cloudConfig: {
       delete: vi.fn(),
       getApiHost: vi.fn(),
-      getApiKey: vi.fn(),
       getAppUrl: vi.fn(),
       isEnabled: vi.fn(),
       validateAndSetApiToken: vi.fn(),
@@ -172,51 +171,45 @@ describe('User Routes', () => {
     });
   });
 
-  describe('GET /api/user/cloud/status', () => {
-    it('should return authenticated status when cloud is enabled', async () => {
+  describe('GET /api/user/cloud-config', () => {
+    it('should return configured cloud state', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedCloudConfig.getApiKey.mockReturnValue('test-api-key');
       mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
 
-      const response = await api.get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud-config');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        isAuthenticated: true,
-        hasApiKey: true,
         appUrl: 'https://app.promptfoo.app',
+        isEnabled: true,
         isEnterprise: false,
       });
     });
 
-    it('should hide appUrl when cloud is not enabled', async () => {
+    it('should retain a valid app URL when cloud is not configured', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(false);
-      mockedCloudConfig.getApiKey.mockReturnValue(undefined);
       mockedCloudConfig.getAppUrl.mockReturnValue('https://app.promptfoo.app');
 
-      const response = await api.get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud-config');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        isAuthenticated: false,
-        hasApiKey: false,
-        appUrl: null,
+        appUrl: 'https://app.promptfoo.app',
+        isEnabled: false,
         isEnterprise: false,
       });
     });
 
     it('should detect enterprise deployment for custom domains', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(true);
-      mockedCloudConfig.getApiKey.mockReturnValue('enterprise-api-key');
       mockedCloudConfig.getAppUrl.mockReturnValue('https://enterprise.company.com');
 
-      const response = await api.get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud-config');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        isAuthenticated: true,
-        hasApiKey: true,
         appUrl: 'https://enterprise.company.com',
+        isEnabled: true,
         isEnterprise: true,
       });
     });
@@ -230,10 +223,9 @@ describe('User Routes', () => {
 
       for (const url of standardUrls) {
         mockedCloudConfig.isEnabled.mockReturnValue(true);
-        mockedCloudConfig.getApiKey.mockReturnValue('test-api-key');
         mockedCloudConfig.getAppUrl.mockReturnValue(url);
 
-        const response = await api.get('/api/user/cloud/status');
+        const response = await api.get('/api/user/cloud-config');
 
         expect(response.status).toBe(200);
         expect(response.body.isEnterprise).toBe(false);
@@ -248,16 +240,14 @@ describe('User Routes', () => {
 
       for (const url of testCases) {
         mockedCloudConfig.isEnabled.mockReturnValue(false);
-        mockedCloudConfig.getApiKey.mockReturnValue(undefined);
         mockedCloudConfig.getAppUrl.mockReturnValue(url);
 
-        const response = await api.get('/api/user/cloud/status');
+        const response = await api.get('/api/user/cloud-config');
 
         expect(response.status).toBe(200);
         expect(response.body).toMatchObject({
-          isAuthenticated: false,
-          hasApiKey: false,
-          appUrl: null,
+          appUrl: url,
+          isEnabled: false,
           isEnterprise: true,
         });
       }
@@ -268,47 +258,43 @@ describe('User Routes', () => {
 
       for (const url of invalidUrls) {
         mockedCloudConfig.isEnabled.mockReturnValue(true);
-        mockedCloudConfig.getApiKey.mockReturnValue('test-api-key');
         mockedCloudConfig.getAppUrl.mockReturnValue(url);
 
-        const response = await api.get('/api/user/cloud/status');
+        const response = await api.get('/api/user/cloud-config');
 
         expect(response.status).toBe(200);
         expect(response.body).toMatchObject({
-          isAuthenticated: true,
-          hasApiKey: true,
           appUrl: null,
+          isEnabled: true,
           isEnterprise: false,
         });
       }
     });
 
-    it('should detect enterprise deployment even for unauthenticated users', async () => {
+    it('should detect enterprise deployment even when cloud is not configured', async () => {
       mockedCloudConfig.isEnabled.mockReturnValue(false);
-      mockedCloudConfig.getApiKey.mockReturnValue(undefined);
       mockedCloudConfig.getAppUrl.mockReturnValue('https://enterprise.company.com');
 
-      const response = await api.get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud-config');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
-        isAuthenticated: false,
-        hasApiKey: false,
-        appUrl: null,
+        appUrl: 'https://enterprise.company.com',
+        isEnabled: false,
         isEnterprise: true,
       });
     });
 
-    it('should handle cloud status errors without exposing details', async () => {
+    it('should handle cloud config errors without exposing details', async () => {
       mockedCloudConfig.isEnabled.mockImplementation(() => {
         throw new Error('test error');
       });
 
-      const response = await api.get('/api/user/cloud/status');
+      const response = await api.get('/api/user/cloud-config');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
-        error: 'Failed to check cloud status',
+        error: 'Failed to get cloud config',
       });
     });
   });
