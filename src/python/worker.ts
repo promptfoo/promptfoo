@@ -10,7 +10,7 @@ import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
 import { validatePythonPath } from './pythonUtils';
 
-const MAX_STDERR_BUFFER_LENGTH = 16_384;
+export const MAX_STDERR_BUFFER_LENGTH = 16_384;
 
 export class PythonWorker {
   private process: PythonShell | null = null;
