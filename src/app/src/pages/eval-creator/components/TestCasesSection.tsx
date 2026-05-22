@@ -305,6 +305,8 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     ? `test case ${testCaseNumberToDelete}`
     : 'this test case';
   const [pendingImport, setPendingImport] = React.useState<PendingTestCaseImport | null>(null);
+  const importDialogDescriptionId = React.useId();
+  const deleteDialogDescriptionId = React.useId();
   const testCaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
@@ -684,13 +686,13 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
         open={pendingImport !== null}
         onOpenChange={(open) => !open && setPendingImport(null)}
       >
-        <DialogContent>
+        <DialogContent hideDescription={false} aria-describedby={importDialogDescriptionId}>
           <DialogHeader>
             <DialogTitle>
               Import {pendingImport?.testCases.length ?? 0} test case
               {pendingImport?.testCases.length === 1 ? '' : 's'}?
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={importDialogDescriptionId}>
               {pendingImport?.fileName} will be added to your existing {testCases.length} test case
               {testCases.length === 1 ? '' : 's'}. Each test case runs across every prompt and
               provider, so larger imports increase requests and potential cost.
@@ -722,12 +724,12 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
-        <DialogContent>
+        <DialogContent hideDescription={false} aria-describedby={deleteDialogDescriptionId}>
           <DialogHeader>
             <DialogTitle>
               Delete test case{testCaseNumberToDelete ? ` ${testCaseNumberToDelete}` : ''}?
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={deleteDialogDescriptionId}>
               This removes {testCaseLabelToDelete} from this evaluation. This action cannot be
               undone.
               {testCases.length === 1 &&

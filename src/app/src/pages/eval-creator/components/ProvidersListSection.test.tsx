@@ -32,7 +32,11 @@ describe('ProvidersListSection', () => {
 
     await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
 
-    expect(screen.getByRole('dialog', { name: 'Delete Primary model?' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Delete Primary model?' }),
+    ).toHaveAccessibleDescription(
+      'This removes Primary model from this evaluation. This action cannot be undone.',
+    );
     expect(screen.getByText(/removes Primary model from this evaluation/i)).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
   });

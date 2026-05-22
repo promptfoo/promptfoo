@@ -275,7 +275,9 @@ describe('PromptsSection', () => {
     const deleteButton = screen.getByRole('button', { name: /delete prompt 2/i });
     await user.click(deleteButton);
 
-    expect(screen.getByRole('dialog', { name: 'Delete prompt 2?' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Delete prompt 2?' })).toHaveAccessibleDescription(
+      /This removes prompt 2 from this evaluation. This action cannot be undone./,
+    );
     expect(screen.getByText(/removes prompt 2 from this evaluation/i)).toBeInTheDocument();
 
     const confirmDeleteButton = screen.getByRole('button', { name: /delete/i });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -74,6 +74,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
+  const deleteDialogDescriptionId = useId();
   const providerPendingDeletion =
     providerToDelete === null ? undefined : providers[providerToDelete];
   const providerLabelToDelete = providerPendingDeletion
@@ -200,10 +201,10 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         open={providerToDelete !== null}
         onOpenChange={(open) => !open && cancelDeleteProvider()}
       >
-        <DialogContent>
+        <DialogContent hideDescription={false} aria-describedby={deleteDialogDescriptionId}>
           <DialogHeader>
             <DialogTitle>Delete {providerLabelToDelete ?? 'provider'}?</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={deleteDialogDescriptionId}>
               This removes {providerLabelToDelete ?? 'this provider'} from this evaluation. This
               action cannot be undone.
               {providers.length === 1 &&

@@ -100,7 +100,7 @@ describe('EvaluateTestSuiteCreator', () => {
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
     const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
-    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription(/This clears providers, prompts, test cases/);
   });
 
   it('should close the reset confirmation dialog when the Cancel button is clicked', async () => {
@@ -362,7 +362,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'UI Editor' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
-    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription(/YAML edits have not been saved/);
     expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Stay in YAML' }));
@@ -449,6 +449,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.upload(fileInput, mockFile);
 
     const dialog = await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' });
+    expect(dialog).toHaveAccessibleDescription(/replaces providers, prompts, test cases/);
     expect(dialog).toHaveTextContent('test.yaml');
     expect(dialog).toHaveTextContent('API key values');
     expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');

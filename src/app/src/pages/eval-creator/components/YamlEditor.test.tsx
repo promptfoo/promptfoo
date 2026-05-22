@@ -312,7 +312,7 @@ describe('YamlEditor', () => {
       await user.click(discardButton);
 
       const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
-      expect(dialog).toHaveTextContent(/edits since the last save will be lost/i);
+      expect(dialog).toHaveAccessibleDescription(/edits since the last save will be lost/i);
       expect(discardButton).not.toBeDisabled();
 
       await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }));

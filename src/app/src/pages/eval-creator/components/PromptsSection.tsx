@@ -38,6 +38,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
+  const deleteDialogDescriptionId = React.useId();
   const promptNumberToDelete = promptToDelete === null ? null : promptToDelete + 1;
   const promptLabelToDelete = promptNumberToDelete
     ? `prompt ${promptNumberToDelete}`
@@ -332,12 +333,12 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
-        <DialogContent>
+        <DialogContent hideDescription={false} aria-describedby={deleteDialogDescriptionId}>
           <DialogHeader>
             <DialogTitle>
               Delete prompt{promptNumberToDelete ? ` ${promptNumberToDelete}` : ''}?
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={deleteDialogDescriptionId}>
               This removes {promptLabelToDelete} from this evaluation. This action cannot be undone.
               {prompts.length === 1 &&
                 ' This is your only prompt; add another prompt before you can run the evaluation.'}

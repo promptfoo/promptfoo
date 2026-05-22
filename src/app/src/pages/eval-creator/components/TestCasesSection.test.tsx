@@ -833,7 +833,9 @@ describe('TestCasesSection', () => {
       const file = new File(['description: Single test'], 'test.yaml', { type: 'text/yaml' });
 
       await user.upload(fileInput, file);
-      expect(await screen.findByText('Import 1 test case?')).toBeInTheDocument();
+      expect(
+        await screen.findByRole('dialog', { name: 'Import 1 test case?' }),
+      ).toHaveAccessibleDescription(/Each test case runs across every prompt and provider/);
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
       expect(mockUpdateConfig).not.toHaveBeenCalled();
@@ -996,7 +998,9 @@ describe('TestCasesSection', () => {
         await user.click(deleteButton);
       });
 
-      expect(screen.getByRole('dialog', { name: 'Delete test case 1?' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('dialog', { name: 'Delete test case 1?' }),
+      ).toHaveAccessibleDescription(/This removes test case 1 from this evaluation./);
       expect(screen.getByText(/this is your only test case/i)).toBeInTheDocument();
       expect(screen.getByText(/add another test case before you can run/i)).toBeInTheDocument();
 
