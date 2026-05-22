@@ -741,8 +741,12 @@ describe('AssertsForm', () => {
     initialValues = [{ type: 'moderation' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
+    expect(screen.getByText(/Safety moderation \(moderation\)/i)).toBeVisible();
+    expect(screen.getByText(/external service and add cost/i)).toBeVisible();
     const categoriesInput = screen.getByRole('textbox', { name: 'Categories (optional)' });
-    expect(categoriesInput).toHaveAccessibleDescription(/leave blank to check all categories/i);
+    expect(categoriesInput).toHaveAccessibleDescription(
+      /leave blank to check all categories.*receives the user prompt and generated response.*Configure OpenAI, Azure Content Safety, Replicate/i,
+    );
 
     await user.type(categoriesInput, 'hate, harassment');
 

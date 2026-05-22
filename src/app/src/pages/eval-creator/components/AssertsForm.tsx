@@ -161,6 +161,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'context-recall': 'Context recall',
   'context-relevance': 'Context relevance',
   'g-eval': 'G-Eval criteria scoring',
+  moderation: 'Safety moderation',
   'trajectory:goal-success': 'Agent goal achieved',
   'is-valid-function-call': 'Valid function call',
   'is-valid-openai-function-call': 'Valid legacy OpenAI function call',
@@ -209,6 +210,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Scores whether retrieved context is useful for the query. This uses a grading provider and can add cost.',
   'g-eval':
     'Scores the response against your criteria in multiple grading steps. This can add cost.',
+  moderation:
+    'Checks content safety through a moderation provider. This may send content to an external service and add cost.',
   'trajectory:goal-success':
     'Judges whether a traced agent run achieved your goal. This requires trace data and a grading model, which can add cost.',
   'skill-used':
@@ -1494,7 +1497,8 @@ const AssertionValueFields = ({
       {(assertion.type === 'moderation' || assertion.type === 'not-moderation') && (
         <p id={`assert-moderation-help-${index}`} className="text-xs text-muted-foreground">
           Optional. Limit moderation to comma-separated categories, or leave blank to check all
-          categories.
+          categories. The moderation provider receives the user prompt and generated response.
+          Configure OpenAI, Azure Content Safety, Replicate, or another provider in YAML.
         </p>
       )}
       {(assertion.type === 'regex' || assertion.type === 'not-regex') && (
