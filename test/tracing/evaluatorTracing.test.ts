@@ -9,6 +9,7 @@ import {
   resetTracingState,
   startOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
+import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
@@ -45,6 +46,9 @@ describe('evaluatorTracing', () => {
     mockStartOTLPReceiver.mockResolvedValue(undefined);
     mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
+    vi.mocked(getTraceStore).mockReturnValue({
+      createTrace: mockCreateTrace,
+    } as unknown as ReturnType<typeof getTraceStore>);
     resetTracingState();
     // Reset environment variables
     mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: undefined });
