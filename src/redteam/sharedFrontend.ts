@@ -54,7 +54,6 @@ export function getUnifiedConfig(
     delete tls.jksInputType;
     delete tls.pfxInputType;
     delete tls.caInputType;
-    delete tls.jksContent;
     delete tls.jksFileName;
     delete tls.jksExtractConfigured;
     delete tls.certificateType;

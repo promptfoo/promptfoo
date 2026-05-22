@@ -388,6 +388,7 @@ describe('getUnifiedConfig', () => {
       expect(tls.rejectUnauthorized).toBe(false);
       expect(tls.cert).toBe('my-cert');
       expect(tls.certPath).toBe('/path/to/cert');
+      expect(tls.jksContent).toBe('base64-jks');
 
       // UI-only fields stripped
       expect(tls.enabled).toBeUndefined();
@@ -396,7 +397,6 @@ describe('getUnifiedConfig', () => {
       expect(tls.jksInputType).toBeUndefined();
       expect(tls.pfxInputType).toBeUndefined();
       expect(tls.caInputType).toBeUndefined();
-      expect(tls.jksContent).toBeUndefined();
       expect(tls.jksFileName).toBeUndefined();
       expect(tls.jksExtractConfigured).toBeUndefined();
       expect(tls.certificateType).toBeUndefined();

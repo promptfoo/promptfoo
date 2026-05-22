@@ -36,6 +36,17 @@ interface TlsHttpsConfigTabProps {
   updateCustomTarget: (field: string, value: unknown) => void;
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
+
 const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   selectedTarget,
   updateCustomTarget,
@@ -626,9 +637,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                               reader.onload = async (event) => {
                                 try {
                                   const arrayBuffer = event.target?.result as ArrayBuffer;
-                                  const base64 = btoa(
-                                    String.fromCharCode(...new Uint8Array(arrayBuffer)),
-                                  );
+                                  const base64 = arrayBufferToBase64(arrayBuffer);
 
                                   updateCustomTarget('tls', {
                                     ...tls,
@@ -836,9 +845,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                             const reader = new FileReader();
                             reader.onload = (event) => {
                               const arrayBuffer = event.target?.result as ArrayBuffer;
-                              const base64 = btoa(
-                                String.fromCharCode(...new Uint8Array(arrayBuffer)),
-                              );
+                              const base64 = arrayBufferToBase64(arrayBuffer);
                               updateCustomTarget('tls', {
                                 ...tls,
                                 pfx: base64,
