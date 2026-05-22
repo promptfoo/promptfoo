@@ -3,6 +3,7 @@ import { DEFAULT_CONFIG, useStore } from './evalConfig';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
+    localStorage.clear();
     // Reset the store state before each test
     useStore.getState().reset();
   });
@@ -55,6 +56,39 @@ describe('evalConfig store', () => {
 
       const { config } = useStore.getState();
       expect(config).toEqual(DEFAULT_CONFIG);
+    });
+
+    it('does not persist environment values used for the current evaluation', () => {
+      useStore.getState().updateConfig({
+        description: 'Session config',
+        env: { OPENAI_API_KEY: 'session-only-key' },
+      });
+
+      expect(useStore.getState().config.env).toEqual({ OPENAI_API_KEY: 'session-only-key' });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.description).toBe('Session config');
+      expect(persistedState.state.config.env).toEqual({});
+    });
+
+    it('removes environment values from previously persisted browser state on rehydrate', async () => {
+      localStorage.setItem(
+        'promptfoo',
+        JSON.stringify({
+          state: {
+            config: {
+              description: 'Previously saved config',
+              env: { OPENAI_API_KEY: 'old-persisted-key' },
+            },
+          },
+          version: 0,
+        }),
+      );
+
+      await useStore.persist.rehydrate();
+
+      expect(useStore.getState().config.description).toBe('Previously saved config');
+      expect(useStore.getState().config.env).toEqual({});
     });
   });
 

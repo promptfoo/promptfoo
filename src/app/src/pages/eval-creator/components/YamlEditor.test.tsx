@@ -27,12 +27,13 @@ const mockGetTestSuite = vi.fn().mockReturnValue({
   prompts: ['test prompt'],
   tests: [{ description: 'test case' }],
 });
+const mockSetConfig = vi.fn();
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: vi.fn(() => ({
     config: {}, // Mock config object
     getTestSuite: mockGetTestSuite,
-    updateConfig: vi.fn(),
+    setConfig: mockSetConfig,
     setState: vi.fn(),
   })),
 }));
@@ -94,6 +95,9 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: /Download YAML/ })).toBeInTheDocument();
     expect(screen.getByText('Run in CLI')).toBeInTheDocument();
     expect(screen.getByText('promptfoo eval -c promptfooconfig.yaml')).toBeInTheDocument();
+    expect(
+      screen.getByText(/downloaded or copied YAML includes any credentials/i),
+    ).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
@@ -125,6 +129,7 @@ describe('YamlEditor', () => {
     await user.paste('description: Saved with shortcut');
     await user.keyboard('{Control>}s{/Control}');
 
+    expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });
@@ -301,12 +306,11 @@ describe('YamlEditor', () => {
 
     it('should disable both Save and Discard buttons after successful save', async () => {
       const user = userEvent.setup();
-      const mockUpdateConfig = vi.fn();
       vi.mocked(
         vi.fn(() => ({
           config: {},
           getTestSuite: mockGetTestSuite,
-          updateConfig: mockUpdateConfig,
+          setConfig: mockSetConfig,
           setState: vi.fn(),
         })),
       );

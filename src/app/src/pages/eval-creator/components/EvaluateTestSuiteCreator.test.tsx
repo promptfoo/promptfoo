@@ -57,10 +57,10 @@ vi.mock('./TestCasesSection', () => ({
   )),
 }));
 vi.mock('./YamlEditor', () => ({
-  // YamlEditor expects initialConfig prop.
-  default: vi.fn(() => (
+  default: vi.fn(({ onDirtyChange }) => (
     <div data-testid="mock-yaml-editor">
       <pre>YAML Editor</pre>
+      <button onClick={() => onDirtyChange?.(true)}>Mock Change YAML</button>
     </div>
   )),
 }));
@@ -331,6 +331,32 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
   });
 
+  it('should require confirmation before leaving YAML with unsaved changes', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'UI Editor' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Stay in YAML' }));
+    expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'UI Editor' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' })).getByRole(
+        'button',
+        { name: 'Discard and switch' },
+      ),
+    );
+
+    expect(screen.queryByTestId('mock-yaml-editor')).toBeNull();
+    expect(screen.getByText('Evaluation setup')).toBeInTheDocument();
+  });
+
   it('should show a ready state and jump to run options once required setup is complete', async () => {
     useStore.getState().updateConfig({
       providers: [{ id: 'openai:gpt-4.1' }],
@@ -366,6 +392,10 @@ describe('EvaluateTestSuiteCreator', () => {
 
   it('should successfully upload and parse a valid YAML file', async () => {
     const user = userEvent.setup();
+    useStore.getState().updateConfig({
+      prompts: ['This should be replaced'],
+      env: { OPENAI_API_KEY: 'remove-with-old-config' },
+    });
     render(<EvaluateTestSuiteCreator />);
 
     const mockYamlContent = 'description: Test Config\nproviders:\n  - id: test-provider';
@@ -375,10 +405,12 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.upload(fileInput, mockFile);
 
     await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+      expect(showToastMock).toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
     });
 
     expect(useStore.getState().config.description).toBe('Test Config');
+    expect(useStore.getState().config.prompts).toBeUndefined();
+    expect(useStore.getState().config.env).toBeUndefined();
   });
 
   it('should handle invalid YAML with error toast', async () => {
@@ -460,7 +492,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.upload(fileInput, mockFile);
 
     await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+      expect(showToastMock).toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
     });
 
     // File input should be reset to allow re-uploading

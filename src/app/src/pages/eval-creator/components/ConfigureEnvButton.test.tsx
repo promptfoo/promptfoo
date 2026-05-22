@@ -20,6 +20,11 @@ describe('ConfigureEnvButton', () => {
   it('should open the provider settings dialog when the API keys button is clicked', async () => {
     render(<ConfigureEnvButton />);
     await openProviderSettingsDialog();
+
+    expect(
+      screen.getByText(/API keys are available to this evaluation until you reload the page/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/YAML download includes any keys/i)).toBeInTheDocument();
   });
 
   it('should update the environment configuration and close the dialog when the Save button is clicked after editing environment fields', async () => {

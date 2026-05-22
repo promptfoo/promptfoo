@@ -17,6 +17,7 @@ interface YamlEditorProps {
   initialConfig?: unknown;
   readOnly?: boolean;
   initialYaml?: string;
+  onDirtyChange?: (hasUnsavedChanges: boolean) => void;
 }
 
 // Schema comment that should always be at the top of the YAML file
@@ -38,7 +39,12 @@ const formatYamlWithSchema = (config: unknown): string => {
   return ensureSchemaComment(yamlContent);
 };
 
-const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
+const YamlEditorComponent = ({
+  initialConfig,
+  readOnly = false,
+  initialYaml,
+  onDirtyChange,
+}: YamlEditorProps) => {
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
@@ -47,7 +53,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
-  const { getTestSuite, updateConfig } = useStore();
+  const { getTestSuite, setConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -56,9 +62,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
 
       if (parsedConfig && typeof parsedConfig === 'object') {
-        // Simply update the config with the parsed YAML
-        // The store will handle the mapping
-        updateConfig(parsedConfig as Partial<UnifiedConfig>);
+        setConfig(parsedConfig as Partial<UnifiedConfig>);
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');
@@ -140,8 +144,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
   // Track unsaved changes
   React.useEffect(() => {
-    setHasUnsavedChanges(code !== originalCode);
-  }, [code, originalCode]);
+    const isDirty = code !== originalCode;
+    setHasUnsavedChanges(isDirty);
+    onDirtyChange?.(isDirty);
+  }, [code, onDirtyChange, originalCode]);
 
   React.useEffect(() => {
     // react-simple-code-editor does not expose arbitrary textarea props directly.
@@ -207,6 +213,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
                 aria-label="Copy CLI command"
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              The downloaded or copied YAML includes any credentials shown in this editor. Remove
+              secret values before sharing the file.
+            </p>
           </AlertContent>
         </Alert>
       )}

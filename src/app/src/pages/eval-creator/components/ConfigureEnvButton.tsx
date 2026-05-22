@@ -102,6 +102,11 @@ const ConfigureEnvButton = () => {
             data-testid="configure-env-dialog-scroll-body"
             className="min-h-0 flex-1 overflow-y-auto py-4"
           >
+            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+              API keys are available to this evaluation until you reload the page and are not
+              restored in later browser sessions. A YAML download includes any keys currently
+              configured here, so review it before sharing.
+            </p>
             <div className="border border-border rounded-lg overflow-hidden">
               <EnvSection title="OpenAI" defaultOpen>
                 <EnvField

@@ -75,10 +75,12 @@ const EvaluateTestSuiteCreator = () => {
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
+  const [yamlHasUnsavedChanges, setYamlHasUnsavedChanges] = useState(false);
+  const [discardYamlDialogOpen, setDiscardYamlDialogOpen] = useState(false);
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, setConfig, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
@@ -176,6 +178,23 @@ const EvaluateTestSuiteCreator = () => {
     setResetDialogOpen(false);
   };
 
+  const handleEditorTabChange = (value: string) => {
+    const nextTab = value as EditorTab;
+    if (editorTab === 'yaml' && nextTab === 'ui' && yamlHasUnsavedChanges) {
+      setDiscardYamlDialogOpen(true);
+      return;
+    }
+
+    setEditorTab(nextTab);
+  };
+
+  const handleDiscardYamlAndSwitch = () => {
+    setDiscardYamlDialogOpen(false);
+    setYamlHasUnsavedChanges(false);
+    setResetKey((key) => key + 1);
+    setEditorTab('ui');
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -191,9 +210,9 @@ const EvaluateTestSuiteCreator = () => {
           try {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object') {
-              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+              setConfig(parsedConfig as Partial<UnifiedConfig>);
               setResetKey((k) => k + 1);
-              showToast('Configuration loaded successfully', 'success');
+              showToast('Configuration replaced from YAML', 'success');
             } else {
               showToast('Invalid YAML configuration', 'error');
             }
@@ -216,11 +235,7 @@ const EvaluateTestSuiteCreator = () => {
 
   return (
     <PageContainer>
-      <Tabs
-        value={editorTab}
-        onValueChange={(value) => setEditorTab(value as EditorTab)}
-        className="w-full"
-      >
+      <Tabs value={editorTab} onValueChange={handleEditorTabChange} className="w-full">
         {/* Header */}
         <PageHeader>
           <div className="container max-w-7xl mx-auto px-4 py-6 lg:py-10">
@@ -691,7 +706,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* YAML Editor Tab */}
         <TabsContent value="yaml">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <YamlEditor key={resetKey} />
+            <YamlEditor key={resetKey} onDirtyChange={setYamlHasUnsavedChanges} />
           </div>
         </TabsContent>
       </Tabs>
@@ -712,6 +727,26 @@ const EvaluateTestSuiteCreator = () => {
             </Button>
             <Button variant="destructive" onClick={handleReset}>
               Reset
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={discardYamlDialogOpen} onOpenChange={setDiscardYamlDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
+            <DialogDescription>
+              Your YAML edits have not been saved. Stay in the YAML editor to save them, or discard
+              them before returning to the UI editor.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardYamlDialogOpen(false)}>
+              Stay in YAML
+            </Button>
+            <Button variant="destructive" onClick={handleDiscardYamlAndSwitch}>
+              Discard and switch
             </Button>
           </DialogFooter>
         </DialogContent>

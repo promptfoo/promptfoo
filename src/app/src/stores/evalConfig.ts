@@ -28,6 +28,11 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
+const omitPersistedEnvironmentValues = (config: Partial<UnifiedConfig>) => ({
+  ...config,
+  env: {},
+});
+
 export const useStore = create<EvalConfigState>()(
   persist(
     (set, get) => ({
@@ -64,6 +69,21 @@ export const useStore = create<EvalConfigState>()(
     {
       name: 'promptfoo',
       skipHydration: true,
+      partialize: (state) => ({
+        config: omitPersistedEnvironmentValues(state.config),
+      }),
+      merge: (persistedState, currentState) => {
+        const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
+
+        return {
+          ...currentState,
+          ...(persistedState as Partial<EvalConfigState> | undefined),
+          config: omitPersistedEnvironmentValues({
+            ...DEFAULT_CONFIG,
+            ...persistedConfig,
+          }),
+        };
+      },
     },
   ),
 );
