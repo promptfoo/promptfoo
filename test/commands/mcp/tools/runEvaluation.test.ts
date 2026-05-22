@@ -271,9 +271,10 @@ describe('runEvaluation tool', () => {
       expect(payload.data.configuration.options.maxConcurrency).toBe(1);
     });
 
-    it('should filter config providers before doEval checks cloud permissions', async () => {
+    it('should keep source config providers unchanged while filtering executable providers', async () => {
       const { doEval } = await import('../../../../src/commands/eval');
       let observedConfigProviders: unknown;
+      let observedExecutableProviders: unknown;
 
       vi.mocked(doEval).mockImplementationOnce(
         async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
@@ -287,6 +288,7 @@ describe('runEvaluation tool', () => {
 
           await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
           observedConfigProviders = config.providers;
+          observedExecutableProviders = testSuite.providers;
           await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
           return createMockEvalResult() as any;
         },
@@ -309,7 +311,61 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBe(false);
-      expect(observedConfigProviders).toEqual([{ id: 'allowed-provider' }]);
+      expect(observedConfigProviders).toEqual([
+        { id: 'allowed-provider' },
+        { id: 'blocked-provider' },
+      ]);
+      expect(observedExecutableProviders).toEqual([{ id: 'allowed-provider' }]);
+    });
+
+    it('should not persist expanded file provider contents after filtering a resolved provider', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      let observedConfigProviders: unknown;
+      let observedExecutableProviders: unknown;
+
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const selectedProvider = {
+            id: () => 'cloud:resolved-provider',
+            label: 'resolved-target',
+          };
+          const testSuite = {
+            ...createMockTestSuite(),
+            providers: [selectedProvider, { id: () => 'blocked-provider' }],
+          };
+          const config = {
+            providers: ['file://providers-with-secrets.yaml'],
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any, config as any);
+          observedConfigProviders = config.providers;
+          observedExecutableProviders = testSuite.providers;
+          await customization?.afterFilterTestSuite?.(testSuite as any, config as any);
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        providerFilter: 'resolved-target',
+      });
+
+      expect(result.isError).toBe(false);
+      expect(observedConfigProviders).toEqual(['file://providers-with-secrets.yaml']);
+      expect(observedExecutableProviders).toEqual([
+        expect.objectContaining({ label: 'resolved-target' }),
+      ]);
     });
 
     it('should return the same suite metadata shape for unfiltered evals', async () => {
