@@ -23,6 +23,7 @@ vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
 import Eval from '../../../src/models/eval';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
 import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
+import { EVAL_TABLE_MAX_PAGE_SIZE, EvalSchemas } from '../../../src/types/api/eval';
 
 // Setup mocked functions
 const mockedEvalFindById = vi.fn() as MockedFunction<typeof Eval.findById>;
@@ -352,18 +353,23 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     });
   });
 
-  it('should handle pagination parameters correctly for exports', async () => {
-    mockReq.query = { format: 'csv', limit: '100', offset: '50' };
+  it('should ignore pagination parameters for exports if limit exceeds the table page size', async () => {
+    mockReq.query = {
+      format: 'csv',
+      limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1),
+      offset: '50',
+    };
+    const query = EvalSchemas.Table.Query.parse(mockReq.query);
 
     const eval_ = await Eval.findById(mockReq.params!.id as string);
 
     // When format is specified, should ignore pagination and get all data
     await eval_!.getTablePage({
-      offset: 0, // Should be 0 for export
-      limit: Number.MAX_SAFE_INTEGER, // Should be MAX for export
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
+      offset: query.format ? 0 : query.offset,
+      limit: query.format ? Number.MAX_SAFE_INTEGER : query.limit,
+      filterMode: query.filterMode,
+      searchQuery: query.search,
+      filters: query.filter,
     });
 
     expect(eval_!.getTablePage).toHaveBeenCalledWith(
