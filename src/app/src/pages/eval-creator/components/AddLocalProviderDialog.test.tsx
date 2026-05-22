@@ -42,7 +42,7 @@ describe('AddLocalProviderDialog', () => {
     render(<AddLocalProviderDialog {...defaultProps} />);
 
     expect(
-      screen.getByText(/Enter the absolute path to your local provider implementation/),
+      screen.getByText(/JavaScript\/TypeScript, Python, Go, or Ruby provider file/),
     ).toBeInTheDocument();
   });
 
@@ -57,6 +57,9 @@ describe('AddLocalProviderDialog', () => {
     render(<AddLocalProviderDialog {...defaultProps} />);
 
     expect(screen.getByText(/Example: \/home\/user\/projects\/my-provider.py/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Provider Path')).toHaveAccessibleDescription(
+      'Example: /home/user/projects/my-provider.py',
+    );
   });
 
   it('renders Cancel and Add Provider buttons', () => {
@@ -101,6 +104,9 @@ describe('AddLocalProviderDialog', () => {
     await user.click(addButton);
 
     expect(screen.getByText('Path is required')).toBeInTheDocument();
+    expect(screen.getByLabelText('Provider Path')).toHaveAccessibleDescription('Path is required');
+    expect(screen.getByLabelText('Provider Path')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('alert')).toHaveTextContent('Path is required');
     expect(defaultProps.onAdd).not.toHaveBeenCalled();
   });
 
@@ -421,6 +427,7 @@ describe('AddLocalProviderDialog', () => {
     await user.click(addButton);
 
     expect(input).toHaveClass('border-destructive');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('accepts .jsx files via isJavascriptFile', async () => {
