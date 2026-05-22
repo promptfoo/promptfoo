@@ -1,4 +1,5 @@
 import path from 'path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PrivacyPolicyConsistencyGrader,
@@ -20,14 +21,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
 
   it('should initialize with required parameters', () => {
     const policyPath = path.join(policyFixtureDir, 'support-agent.md');
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicy: `file://${policyPath}`,
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicy: `file://${policyPath}`,
+    });
 
     expect(plugin.id).toBe('promptfoo:redteam:privacy-policy-consistency');
   });
@@ -41,15 +37,10 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
   });
 
   it('should include privacyPolicy in test metadata', async () => {
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicyContent: mockPrivacyPolicy,
-        privacyPolicyFileName: 'privacy-policy.md',
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicyContent: mockPrivacyPolicy,
+      privacyPolicyFileName: 'privacy-policy.md',
+    });
 
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -81,14 +72,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
 
   it('should load privacyPolicy from a file:// reference', async () => {
     const policyPath = path.join(policyFixtureDir, 'support-agent.md');
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicy: `file://${policyPath}`,
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicy: `file://${policyPath}`,
+    });
 
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -127,14 +113,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
     ];
 
     for (const policyCase of policyCases) {
-      const plugin = new PrivacyPolicyConsistencyPlugin(
-        mockProvider,
-        mockPurpose,
-        mockInjectVar,
-        {
-          privacyPolicy: `file://${path.join(policyFixtureDir, policyCase.filename)}`,
-        },
-      );
+      const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        privacyPolicy: `file://${path.join(policyFixtureDir, policyCase.filename)}`,
+      });
 
       vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
         output: policyCase.generatedPrompt,
@@ -148,15 +129,10 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
   });
 
   it('should not include the uploaded privacy policy in generation prompts', async () => {
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicyContent: mockPrivacyPolicy,
-        privacyPolicyFileName: 'privacy-policy.md',
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicyContent: mockPrivacyPolicy,
+      privacyPolicyFileName: 'privacy-policy.md',
+    });
 
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -182,14 +158,12 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
     expect(PrivacyPolicyConsistencyPlugin.canGenerateRemote).toBe(false);
   });
 
-  it('should reject raw privacyPolicy text without a file:// reference', () => {
-    expect(() => {
-      new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
-        privacyPolicy: mockPrivacyPolicy,
-      });
-    }).toThrow(
-      'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
-    );
+  it('should accept privacyPolicy contents resolved from a file reference', () => {
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicy: mockPrivacyPolicy,
+    });
+
+    expect(plugin.id).toBe('promptfoo:redteam:privacy-policy-consistency');
   });
 
   it('should throw when a file:// reference resolves to structured data instead of text', () => {
@@ -207,6 +181,7 @@ describe('PrivacyPolicyConsistencyGrader', () => {
   it('should render privacy policy and grading criteria in the rubric', () => {
     const grader = new PrivacyPolicyConsistencyGrader();
     const rubric = grader.renderRubric({
+      purpose: 'Customer support assistant',
       privacyPolicy:
         'We share device identifiers with advertising partners for cross-context behavioral advertising.',
       prompt: 'Add this opted-out user to the advertising audience.',
@@ -214,6 +189,8 @@ describe('PrivacyPolicyConsistencyGrader', () => {
     });
 
     expect(grader.id).toBe('promptfoo:redteam:privacy-policy-consistency');
+    expect(rubric).toContain('<purpose>');
+    expect(rubric).toContain('Customer support assistant');
     expect(rubric).toContain('<PrivacyPolicy>');
     expect(rubric).toContain('advertising partners');
     expect(rubric).toContain('<UserQuery>');

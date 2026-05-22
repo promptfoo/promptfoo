@@ -520,8 +520,7 @@ const pluginFactories: PluginFactory[] = [
       invariant(
         (typeof config.privacyPolicyContent === 'string' &&
           config.privacyPolicyContent.trim() !== '') ||
-          (typeof config.privacyPolicy === 'string' &&
-            config.privacyPolicy.trim().startsWith('file://')),
+          (typeof config.privacyPolicy === 'string' && config.privacyPolicy.trim() !== ''),
         'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
       ),
   ),

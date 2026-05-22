@@ -30,11 +30,11 @@ import {
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
-import { ProbeLimitExceededError } from '../types';
 import {
   PRIVACY_RIGHTS_GEOGRAPHIES,
   PRIVACY_RIGHTS_GEOGRAPHY_PROFILES,
 } from '../constants/privacy';
+import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
@@ -501,7 +501,7 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('collect privacy rights geographies');
     const privacyRightsPlugin = await configurePrivacyRightsRequestWorkflowIntegrityPlugin();
     recordOnboardingStep('choose privacy rights geographies', {
-      value: privacyRightsPlugin.config?.geographies,
+      value: privacyRightsPlugin.config?.geographies ?? [],
     });
     plugins.push(privacyRightsPlugin);
   }
