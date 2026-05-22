@@ -330,6 +330,10 @@ describe('PromptsSection', () => {
         'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.',
       ],
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Starter prompt added. Each prompt runs across every test case and provider.',
+      'success',
+    );
   });
 
   it('opens prompt file selection from a keyboard-operable import button', async () => {

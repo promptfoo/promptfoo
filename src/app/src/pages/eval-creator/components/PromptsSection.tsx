@@ -212,6 +212,10 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                     const examplePrompt =
                       'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.';
                     setPrompts([...prompts, examplePrompt]);
+                    showToast(
+                      'Starter prompt added. Each prompt runs across every test case and provider.',
+                      'success',
+                    );
                   }}
                 >
                   Add Starter Prompt
