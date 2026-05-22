@@ -2790,7 +2790,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         serverRequests: state.serverRequests,
         notificationCount: state.notificationCount,
       },
-      ...(skillMetadata ? getCodexSkillMetadataFields(skillMetadata) : {}),
+      ...getCodexSkillMetadataFields(skillMetadata),
     };
   }
 

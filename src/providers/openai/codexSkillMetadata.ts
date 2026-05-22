@@ -115,10 +115,14 @@ export function buildCodexSkillMetadata(
   return { attemptedSkillCalls, skillCalls };
 }
 
-export function getCodexSkillMetadataFields(skillMetadata: CodexSkillMetadata): {
+export function getCodexSkillMetadataFields(skillMetadata: CodexSkillMetadata | undefined): {
   attemptedSkillCalls?: SkillCallEntry[];
   skillCalls?: SkillCallEntry[];
 } {
+  if (!skillMetadata) {
+    return {};
+  }
+
   return {
     ...(skillMetadata.skillCalls.length > 0 ? { skillCalls: skillMetadata.skillCalls } : {}),
     ...(skillMetadata.attemptedSkillCalls.length > skillMetadata.skillCalls.length
