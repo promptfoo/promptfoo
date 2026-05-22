@@ -2,7 +2,7 @@ import path from 'path';
 
 import type { SkillCallEntry } from '../../types/index';
 
-interface CodexSkillPathCandidate {
+export interface CodexSkillPathCandidate {
   name: string;
   path: string;
 }
