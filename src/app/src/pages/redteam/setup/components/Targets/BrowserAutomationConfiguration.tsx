@@ -1,4 +1,7 @@
+import { useId } from 'react';
+
 import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
@@ -32,12 +35,55 @@ interface BrowserStep {
 interface BrowserAutomationConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
+  fieldErrors?: BrowserAutomationFieldErrors;
+}
+
+export interface BrowserStepFieldErrors {
+  action?: string;
+  name?: string;
+  parentSelector?: string;
+  path?: string;
+  selector?: string;
+  text?: string;
+  url?: string;
+}
+
+export interface BrowserAutomationFieldErrors {
+  steps?: string;
+  stepErrors?: Record<number, BrowserStepFieldErrors>;
+}
+
+function BrowserFieldError({ id, error }: { id: string; error?: string }) {
+  if (!error) {
+    return null;
+  }
+
+  return (
+    <HelperText id={id} error>
+      {error}
+    </HelperText>
+  );
 }
 
 const BrowserAutomationConfiguration = ({
   selectedTarget,
   updateCustomTarget,
+  fieldErrors = {},
 }: BrowserAutomationConfigurationProps) => {
+  const fieldErrorIdPrefix = useId();
+  const getStepError = (index: number, field: keyof BrowserStepFieldErrors) =>
+    fieldErrors.stepErrors?.[index]?.[field];
+  const getStepErrorId = (index: number, field: keyof BrowserStepFieldErrors) =>
+    `${fieldErrorIdPrefix}-step-${index}-${field}`;
+  const getStepErrorProps = (index: number, field: keyof BrowserStepFieldErrors) => {
+    const error = getStepError(index, field);
+
+    return {
+      'aria-invalid': Boolean(error),
+      'aria-describedby': error ? getStepErrorId(index, field) : undefined,
+    };
+  };
+
   return (
     <div className="mt-4">
       <h3 className="mb-4 text-lg font-semibold">Browser Automation Configuration</h3>
@@ -91,6 +137,11 @@ const BrowserAutomationConfiguration = ({
 
         <div className="mt-6">
           <h4 className="mb-2 font-medium">Browser Steps</h4>
+          {fieldErrors.steps && (
+            <HelperText error className="mb-3">
+              {fieldErrors.steps}
+            </HelperText>
+          )}
 
           {selectedTarget.config.steps?.map((step: BrowserStep, index: number) => (
             <div key={index} className="mb-4 rounded-lg border border-border p-4">
@@ -108,7 +159,10 @@ const BrowserAutomationConfiguration = ({
                       updateCustomTarget('steps', newSteps);
                     }}
                   >
-                    <SelectTrigger id={`step-${index}-action`}>
+                    <SelectTrigger
+                      id={`step-${index}-action`}
+                      {...getStepErrorProps(index, 'action')}
+                    >
                       <SelectValue placeholder="Select action" />
                     </SelectTrigger>
                     <SelectContent>
@@ -116,10 +170,15 @@ const BrowserAutomationConfiguration = ({
                       <SelectItem value="click">Click</SelectItem>
                       <SelectItem value="type">Type</SelectItem>
                       <SelectItem value="extract">Extract</SelectItem>
+                      <SelectItem value="screenshot">Screenshot</SelectItem>
                       <SelectItem value="wait">Wait</SelectItem>
                       <SelectItem value="waitForNewChildren">Wait for New Children</SelectItem>
                     </SelectContent>
                   </Select>
+                  <BrowserFieldError
+                    id={getStepErrorId(index, 'action')}
+                    error={getStepError(index, 'action')}
+                  />
                 </div>
 
                 <Button
@@ -154,6 +213,11 @@ const BrowserAutomationConfiguration = ({
                         updateCustomTarget('steps', newSteps);
                       }}
                       placeholder="https://example.com"
+                      {...getStepErrorProps(index, 'url')}
+                    />
+                    <BrowserFieldError
+                      id={getStepErrorId(index, 'url')}
+                      error={getStepError(index, 'url')}
                     />
                   </div>
                 )}
@@ -176,6 +240,11 @@ const BrowserAutomationConfiguration = ({
                           updateCustomTarget('steps', newSteps);
                         }}
                         placeholder="#search-input"
+                        {...getStepErrorProps(index, 'selector')}
+                      />
+                      <BrowserFieldError
+                        id={getStepErrorId(index, 'selector')}
+                        error={getStepError(index, 'selector')}
                       />
                     </div>
                     {step.action === 'click' && (
@@ -220,6 +289,11 @@ const BrowserAutomationConfiguration = ({
                         updateCustomTarget('steps', newSteps);
                       }}
                       placeholder="{{prompt}}"
+                      {...getStepErrorProps(index, 'text')}
+                    />
+                    <BrowserFieldError
+                      id={getStepErrorId(index, 'text')}
+                      error={getStepError(index, 'text')}
                     />
                   </div>
                 )}
@@ -255,6 +329,35 @@ const BrowserAutomationConfiguration = ({
                         updateCustomTarget('steps', newSteps);
                       }}
                       placeholder="searchResults"
+                      {...getStepErrorProps(index, 'name')}
+                    />
+                    <BrowserFieldError
+                      id={getStepErrorId(index, 'name')}
+                      error={getStepError(index, 'name')}
+                    />
+                  </div>
+                )}
+
+                {step.action === 'screenshot' && (
+                  <div className="space-y-2">
+                    <Label htmlFor={`step-${index}-path`}>Screenshot File Path</Label>
+                    <Input
+                      id={`step-${index}-path`}
+                      value={step.args?.path || ''}
+                      onChange={(e) => {
+                        const newSteps = [...(selectedTarget.config.steps || [])];
+                        newSteps[index] = {
+                          ...step,
+                          args: { ...step.args, path: e.target.value },
+                        };
+                        updateCustomTarget('steps', newSteps);
+                      }}
+                      placeholder="screenshots/result.png"
+                      {...getStepErrorProps(index, 'path')}
+                    />
+                    <BrowserFieldError
+                      id={getStepErrorId(index, 'path')}
+                      error={getStepError(index, 'path')}
                     />
                   </div>
                 )}
@@ -275,6 +378,11 @@ const BrowserAutomationConfiguration = ({
                           updateCustomTarget('steps', newSteps);
                         }}
                         placeholder="#results"
+                        {...getStepErrorProps(index, 'parentSelector')}
+                      />
+                      <BrowserFieldError
+                        id={getStepErrorId(index, 'parentSelector')}
+                        error={getStepError(index, 'parentSelector')}
                       />
                     </div>
                     <div className="space-y-2">
@@ -318,7 +426,10 @@ const BrowserAutomationConfiguration = ({
           <Button
             variant="outline"
             onClick={() => {
-              const newSteps = [...(selectedTarget.config.steps || []), { action: '', args: {} }];
+              const newSteps = [
+                ...(selectedTarget.config.steps || []),
+                { action: 'navigate', args: { url: '' } },
+              ];
               updateCustomTarget('steps', newSteps);
             }}
             className="mt-2"

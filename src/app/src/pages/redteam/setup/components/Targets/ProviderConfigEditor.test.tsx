@@ -56,7 +56,11 @@ vi.mock('./CustomTargetConfiguration', () => ({
   ),
 }));
 vi.mock('./BrowserAutomationConfiguration', () => ({
-  default: () => <div data-testid="browser-config" />,
+  default: ({
+    fieldErrors,
+  }: {
+    fieldErrors?: { stepErrors?: Record<number, { url?: string }> };
+  }) => <div data-testid="browser-config">{fieldErrors?.stepErrors?.[0]?.url}</div>,
 }));
 vi.mock('./FoundationModelConfiguration', () => ({
   default: ({
@@ -174,6 +178,69 @@ describe('ProviderConfigEditor', () => {
       const message = await screen.findByTestId('http-body-error');
       expect(message).toHaveTextContent(/replaces with each test input at run time/i);
       expect(message).not.toHaveTextContent(/attack payload/i);
+    });
+
+    it('requires browser users to replace the starter application URL before saving', async () => {
+      const setError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'browser',
+            config: {
+              steps: [{ action: 'navigate', args: { url: 'https://example.com' } }],
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={setError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="browser"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(setError).toHaveBeenCalledWith(
+        'Step 1: replace example.com with your application URL.',
+      );
+      expect(
+        await screen.findByText('Step 1: replace example.com with your application URL.'),
+      ).toBeInTheDocument();
+    });
+
+    it('allows edited browser URLs that happen to mention example.com', () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'browser',
+            config: {
+              steps: [
+                {
+                  action: 'navigate',
+                  args: { url: 'https://myapp.test/redirect?source=example.com' },
+                },
+              ],
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="browser"
+          mode="eval"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
     });
 
     it('should return false from validate() when provider ID contains only whitespace characters for foundation model providers', () => {

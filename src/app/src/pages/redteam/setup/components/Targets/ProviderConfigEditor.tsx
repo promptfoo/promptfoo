@@ -11,6 +11,7 @@ import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
+import type { BrowserAutomationFieldErrors } from './BrowserAutomationConfiguration';
 import type { FoundationModelFieldErrors } from './FoundationModelConfiguration';
 
 export interface ProviderConfigEditorProps {
@@ -73,6 +74,7 @@ interface ProviderValidationResult {
   foundationFieldErrors: FoundationModelFieldErrors;
   agentIdError: string | null;
   customIdError: string | null;
+  browserFieldErrors: BrowserAutomationFieldErrors;
 }
 
 const hasConfiguredInputs = (provider: ProviderOptions): boolean =>
@@ -176,7 +178,13 @@ function validateFoundationModelProvider(
     errors.push(foundationFieldErrors.topP);
   }
 
-  return { errors, foundationFieldErrors, agentIdError: null, customIdError: null };
+  return {
+    errors,
+    foundationFieldErrors,
+    agentIdError: null,
+    customIdError: null,
+    browserFieldErrors: {},
+  };
 }
 
 function validateHttpProvider(
@@ -206,6 +214,81 @@ function validateAgentProvider(provider: ProviderOptions): string[] {
     return ['Enter a Python agent path beginning with file://'];
   }
   return usesExamplePath(provider.id) ? ['Replace the example path with your agent file path'] : [];
+}
+
+const BROWSER_STARTER_URL = 'https://example.com';
+
+type BrowserStep = NonNullable<ProviderOptions['config']['steps']>[number];
+type AddBrowserStepError = (
+  index: number,
+  field: keyof NonNullable<BrowserAutomationFieldErrors['stepErrors']>[number],
+  message: string,
+) => void;
+
+function validateBrowserStep(step: BrowserStep, index: number, addStepError: AddBrowserStepError) {
+  const prefix = `Step ${index + 1}:`;
+  if (!step.action) {
+    addStepError(index, 'action', `${prefix} choose an action type.`);
+    return;
+  }
+
+  if (step.action === 'navigate') {
+    if (!step.args?.url?.trim()) {
+      addStepError(index, 'url', `${prefix} enter a URL to navigate to.`);
+    } else if (step.args.url.trim() === BROWSER_STARTER_URL) {
+      addStepError(index, 'url', `${prefix} replace example.com with your application URL.`);
+    }
+  }
+  if (['click', 'type'].includes(step.action) && !step.args?.selector?.trim()) {
+    addStepError(index, 'selector', `${prefix} enter a CSS selector.`);
+  }
+  if (step.action === 'type' && !step.args?.text?.trim()) {
+    addStepError(index, 'text', `${prefix} enter text to type.`);
+  }
+  if (step.action === 'extract') {
+    if (!step.args?.selector?.trim() && !step.args?.script?.trim()) {
+      addStepError(index, 'selector', `${prefix} enter a CSS selector to extract.`);
+    }
+    if (!step.name?.trim()) {
+      addStepError(index, 'name', `${prefix} name the extracted value.`);
+    }
+  }
+  if (step.action === 'screenshot' && !step.args?.path?.trim()) {
+    addStepError(index, 'path', `${prefix} enter a screenshot file path.`);
+  }
+  if (step.action === 'waitForNewChildren' && !step.args?.parentSelector?.trim()) {
+    addStepError(index, 'parentSelector', `${prefix} enter a parent selector.`);
+  }
+}
+
+function validateBrowserProvider(provider: ProviderOptions): {
+  errors: string[];
+  fieldErrors: BrowserAutomationFieldErrors;
+} {
+  const errors: string[] = [];
+  const fieldErrors: BrowserAutomationFieldErrors = { stepErrors: {} };
+  const steps = provider.config.steps;
+
+  if (!Array.isArray(steps) || steps.length === 0) {
+    fieldErrors.steps = 'Add at least one browser step before saving this provider.';
+    return { errors: [fieldErrors.steps], fieldErrors };
+  }
+
+  const addStepError = (
+    index: number,
+    field: keyof NonNullable<BrowserAutomationFieldErrors['stepErrors']>[number],
+    message: string,
+  ) => {
+    fieldErrors.stepErrors![index] = {
+      ...fieldErrors.stepErrors![index],
+      [field]: message,
+    };
+    errors.push(message);
+  };
+
+  steps.forEach((step, index) => validateBrowserStep(step, index, addStepError));
+
+  return { errors, fieldErrors };
 }
 
 function getCustomProviderIdError(provider: ProviderOptions): string | null {
@@ -246,6 +329,7 @@ function getProviderValidationResult(
     foundationFieldErrors: {},
     agentIdError: null,
     customIdError: null,
+    browserFieldErrors: {},
   };
   if (providerType === 'http') {
     result.errors = validateHttpProvider(provider, bodyError, validateUrl);
@@ -253,6 +337,10 @@ function getProviderValidationResult(
     if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
       result.errors.push('Valid WebSocket URL is required');
     }
+  } else if (providerType === 'browser') {
+    const browserValidation = validateBrowserProvider(provider);
+    result.errors = browserValidation.errors;
+    result.browserFieldErrors = browserValidation.fieldErrors;
   } else if (FOUNDATION_MODEL_TYPES.includes(providerType || '')) {
     result = validateFoundationModelProvider(provider, providerType);
   } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
@@ -295,6 +383,7 @@ function ProviderConfigEditor({
   );
   const [agentIdError, setAgentIdError] = useState<string | null>(null);
   const [customIdError, setCustomIdError] = useState<string | null>(null);
+  const [browserFieldErrors, setBrowserFieldErrors] = useState<BrowserAutomationFieldErrors>({});
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -355,6 +444,9 @@ function ProviderConfigEditor({
           setBodyError(null);
         }
       }
+    } else if (field === 'steps') {
+      setBrowserFieldErrors({});
+      updatedTarget.config.steps = value as typeof updatedTarget.config.steps;
     } else {
       updateGenericProviderField(updatedTarget, field, value);
     }
@@ -389,6 +481,7 @@ function ProviderConfigEditor({
       foundationFieldErrors: nextFoundationFieldErrors,
       agentIdError: nextAgentIdError,
       customIdError: nextCustomIdError,
+      browserFieldErrors: nextBrowserFieldErrors,
     } = getProviderValidationResult(
       provider,
       providerType,
@@ -399,6 +492,7 @@ function ProviderConfigEditor({
     setFoundationFieldErrors(nextFoundationFieldErrors);
     setAgentIdError(nextAgentIdError);
     setCustomIdError(nextCustomIdError);
+    setBrowserFieldErrors(nextBrowserFieldErrors);
     const hasErrors = errors.length > 0;
     if (setError) {
       const stringErrors = errors.filter((e): e is string => typeof e === 'string');
@@ -464,6 +558,7 @@ function ProviderConfigEditor({
         <BrowserAutomationConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
+          fieldErrors={browserFieldErrors}
         />
       )}
 

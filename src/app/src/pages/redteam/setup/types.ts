@@ -126,6 +126,7 @@ interface BrowserStep {
     url?: string;
     selector?: string;
     text?: string;
+    script?: string;
     path?: string;
     ms?: number;
     fullPage?: boolean;

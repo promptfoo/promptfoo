@@ -1,0 +1,70 @@
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
+
+import type { ProviderOptions } from '../../types';
+
+const providerWithSteps = (steps: ProviderOptions['config']['steps']): ProviderOptions => ({
+  id: 'browser',
+  config: { steps },
+});
+
+describe('BrowserAutomationConfiguration', () => {
+  it('associates navigation validation with the URL that needs correction', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([
+          { action: 'navigate', args: { url: 'https://example.com' } },
+        ])}
+        updateCustomTarget={vi.fn()}
+        fieldErrors={{
+          stepErrors: {
+            0: { url: 'Step 1: replace example.com with your application URL.' },
+          },
+        }}
+      />,
+    );
+
+    const url = screen.getByLabelText('URL');
+    expect(url).toHaveAttribute('aria-invalid', 'true');
+    expect(url).toHaveAccessibleDescription(
+      'Step 1: replace example.com with your application URL.',
+    );
+  });
+
+  it('starts added steps as editable navigation steps rather than invalid blank actions', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
+
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([])}
+        updateCustomTarget={updateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Step' }));
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('steps', [
+      { action: 'navigate', args: { url: '' } },
+    ]);
+  });
+
+  it('exposes the runtime-supported screenshot action fields', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([{ action: 'screenshot', args: { path: '' } }])}
+        updateCustomTarget={vi.fn()}
+        fieldErrors={{
+          stepErrors: { 0: { path: 'Step 1: enter a screenshot file path.' } },
+        }}
+      />,
+    );
+
+    expect(screen.getByLabelText('Screenshot File Path')).toHaveAccessibleDescription(
+      'Step 1: enter a screenshot file path.',
+    );
+  });
+});
