@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
@@ -1138,6 +1138,28 @@ describe('ResultsTable Row Navigation', () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
+
+  it('preserves the details hash through Strict Mode effect replay', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(
+      <StrictMode>
+        <ResultsTable {...defaultProps} />
+      </StrictMode>,
+    );
 
     await waitFor(() => {
       expect(mockFetchEvalData).toHaveBeenCalledWith(

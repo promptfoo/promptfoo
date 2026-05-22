@@ -1850,13 +1850,30 @@ function ResultsTable({
     );
   }, [filters.values]);
 
-  const hasMountedResultSetResetRef = useRef(false);
+  // Reset only when these controls change. Strict Mode replays effects in dev
+  // with the same inputs, and that replay must not clear an initial deep link.
+  const previousResultSetControlsRef = useRef({
+    failureFilter,
+    filterMode,
+    debouncedSearchText,
+    appliedFiltersString,
+  });
   const shouldSkipRowJumpAfterResultSetResetRef = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
-    if (!hasMountedResultSetResetRef.current) {
-      hasMountedResultSetResetRef.current = true;
+    const previousControls = previousResultSetControlsRef.current;
+    previousResultSetControlsRef.current = {
+      failureFilter,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+    };
+    if (
+      previousControls.failureFilter === failureFilter &&
+      previousControls.filterMode === filterMode &&
+      previousControls.debouncedSearchText === debouncedSearchText &&
+      previousControls.appliedFiltersString === appliedFiltersString
+    ) {
       return;
     }
 
