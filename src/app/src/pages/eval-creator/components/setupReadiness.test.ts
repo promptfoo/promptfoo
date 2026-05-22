@@ -240,6 +240,26 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('rejects text score thresholds outside their supported range', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'rouge-n' as const, value: 'answer', threshold: 1.1 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'bleu' as const, value: 'answer', threshold: 0.6 }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('requires the threshold property used by runtime cost checks', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

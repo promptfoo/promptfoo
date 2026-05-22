@@ -37,6 +37,13 @@ export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
 
 export const WORD_COUNT_ASSERTION_TYPES = new Set<AssertionType>(['word-count', 'not-word-count']);
 
+export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'bleu',
+  'not-bleu',
+  'rouge-n',
+  'not-rouge-n',
+]);
+
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-sql',
   'contains-sql',
@@ -150,6 +157,17 @@ function getThresholdError(assertion: Assertion): string | undefined {
       assertion.threshold < 0)
   ) {
     return 'Enter a threshold value of 0 or greater.';
+  }
+
+  if (
+    TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0 ||
+      assertion.threshold > 1)
+  ) {
+    return 'Enter a score threshold from 0 to 1.';
   }
 
   return undefined;

@@ -315,6 +315,41 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('progressively configures deterministic text-score thresholds', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'bleu', value: 'Expected translation' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Reference answer (required)' })).toHaveValue(
+      'Expected translation',
+    );
+    const threshold = screen.getByRole('spinbutton', { name: 'Score threshold (optional)' });
+    expect(threshold).toHaveAccessibleDescription(/default to 0.5.*BLEU rewards precision/i);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+
+    await user.type(threshold, '0.7');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'bleu', value: 'Expected translation', threshold: 0.7 },
+    ]);
+  });
+
+  it('explains the different default threshold for ROUGE-N coverage scoring', () => {
+    initialValues = [{ type: 'rouge-n', value: 'Required summary facts' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(
+      screen.getByRole('spinbutton', { name: 'Score threshold (optional)' }),
+    ).toHaveAccessibleDescription(/default to 0.75.*ROUGE-N rewards coverage/i);
+  });
+
   it('stores word count limits in the runtime range shape without model-grading cost', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();

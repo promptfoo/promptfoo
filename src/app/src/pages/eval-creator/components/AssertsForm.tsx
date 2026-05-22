@@ -23,6 +23,7 @@ import {
   getAssertionValueError,
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
   STRUCTURED_VALUE_ASSERTION_TYPES,
+  TEXT_SCORE_ASSERTION_TYPES,
   THRESHOLD_ASSERTION_TYPES,
   WORD_COUNT_ASSERTION_TYPES,
 } from './assertionValueValidation';
@@ -144,6 +145,8 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'max-score': 'Choose highest score',
   'finish-reason': 'Finish reason',
   webhook: 'Webhook validation',
+  bleu: 'BLEU precision score',
+  'rouge-n': 'ROUGE-N coverage score',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
@@ -166,6 +169,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Checks why generation stopped using normalized provider finish reasons, such as natural completion or tool calls.',
   webhook:
     'Sends each generated response and its test-case variables to the URL below for validation. Use only an endpoint you trust.',
+  bleu: 'Measures precision against a reference answer without model grading or additional cost.',
+  'rouge-n': 'Measures coverage of a reference answer without model grading or additional cost.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
@@ -660,6 +665,63 @@ const WebhookField = ({ assertion, error, index, onChange }: SpecializedValueFie
   );
 };
 
+const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
+  const isRouge = assertion.type === 'rouge-n' || assertion.type === 'not-rouge-n';
+  const defaultThreshold = isRouge ? '0.75' : '0.5';
+  const helpId = `assert-text-score-help-${index}`;
+  const errorId = `assert-value-error-${index}`;
+  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`assert-reference-${index}`} className="text-sm font-medium">
+          Reference answer (required)
+        </Label>
+        <Textarea
+          id={`assert-reference-${index}`}
+          value={formatAssertionValue(assertion)}
+          onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+          placeholder="Enter an expected response to compare against..."
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionIds}
+          className="min-h-20 resize-y"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`assert-text-score-threshold-${index}`} className="text-sm font-medium">
+          Score threshold (optional)
+        </Label>
+        <Input
+          id={`assert-text-score-threshold-${index}`}
+          type="number"
+          min="0"
+          max="1"
+          step="0.01"
+          value={formatAssertionThreshold(assertion)}
+          onChange={(event) =>
+            onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
+          }
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionIds}
+        />
+      </div>
+      {error && (
+        <HelperText id={errorId} error>
+          {error}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        Scores range from 0 to 1 and default to {defaultThreshold}.{' '}
+        {isRouge
+          ? 'ROUGE-N rewards coverage of the reference answer.'
+          : 'BLEU rewards precision against the reference answer.'}{' '}
+        Configure multiple references in YAML.
+      </p>
+    </div>
+  );
+};
+
 const SpecializedValueField = ({
   assertion,
   error,
@@ -678,6 +740,10 @@ const SpecializedValueField = ({
 
   if (DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type)) {
     return <WebhookField assertion={assertion} error={error} index={index} onChange={onChange} />;
+  }
+
+  if (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type)) {
+    return <TextScoreField assertion={assertion} error={error} index={index} onChange={onChange} />;
   }
 
   return <NoValueField type={assertion.type} />;
@@ -795,7 +861,8 @@ const AssertionValueFields = ({
   if (
     NO_VALUE_ASSERTION_TYPES.has(assertion.type) ||
     GUIDED_FINISH_REASON_TYPES.has(assertion.type) ||
-    DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type)
+    DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type) ||
+    TEXT_SCORE_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -930,6 +997,11 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
     return { ...withoutStoredValue, type: nextType };
+  }
+
+  if (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) && !TEXT_SCORE_ASSERTION_TYPES.has(nextType)) {
+    const { threshold: _threshold, ...withoutThreshold } = assertion;
+    return { ...withoutThreshold, type: nextType };
   }
 
   if (
