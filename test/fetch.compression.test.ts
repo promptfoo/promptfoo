@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { HttpProvider } from '../src/providers/http';
 import { clearAgentCache, fetchWithProxy } from '../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
@@ -192,5 +193,17 @@ describe('fetchWithProxy compressed responses', () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(await response.text())).toEqual(payload);
+  });
+
+  it('decodes HttpProvider responses when TLS config supplies the dispatcher', async () => {
+    const url = await startCompressedServer('gzip', 200);
+    const provider = new HttpProvider(url, {
+      config: {
+        method: 'GET',
+        tls: { rejectUnauthorized: false },
+      },
+    });
+
+    await expect(provider.callApi('unused')).resolves.toMatchObject({ output: payload });
   });
 });
