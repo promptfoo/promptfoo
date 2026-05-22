@@ -204,7 +204,7 @@ export default function AddProviderDialog({
                 ? 'A provider is a model, agent, or endpoint. Choose what each prompt and test case will run against.'
                 : initialProvider
                   ? 'Update the connection and model settings used for this evaluation.'
-                  : 'Configure how Promptfoo connects to this provider. Add more providers later to compare outputs.'}
+                  : 'Configure how Promptfoo connects to this provider. This provider receives every prompt and test case when you run. Add more providers later to compare outputs.'}
             </DialogDescription>
           </DialogHeader>
 
