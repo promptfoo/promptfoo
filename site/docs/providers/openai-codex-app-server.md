@@ -203,7 +203,7 @@ providers:
           multi_agent: true
 ```
 
-`features.goals` enables the experimental goals feature; it is newer than the flags on the public feature-flags page, so run `codex features list` to confirm its current stage and default. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
+`features.goals` enables Codex's experimental goals capability; its lifecycle stage and default shift between Codex versions, so run `codex features list` to confirm them for the build you target. `features.multi_agent` toggles subagent collaboration tools; it is stable and enabled by default in current Codex releases, so set it explicitly only to pin that default or disable it with `false`.
 
 ## Server Request Policy
 
