@@ -282,12 +282,61 @@ describeEvaluator('evaluator execution control', () => {
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
+    const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 10000 });
+
+    await secondCallStarted;
+
+    expect(addPromptsSpy).toHaveBeenCalledTimes(2);
+    expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
+    const refreshedEval = await Eval.findById(evalRecord.id);
+    expect(refreshedEval?.prompts[0].metrics?.testPassCount).toBe(1);
+
+    releaseSecondCall();
+    await evalPromise;
+  });
+
+  it('persists updated prompt metrics between grouped eval steps without deferred grading', async () => {
+    let releaseSecondCall!: () => void;
+    let markSecondCallStarted!: () => void;
+    const secondCallStarted = new Promise<void>((resolve) => {
+      markSecondCallStarted = resolve;
+    });
+
+    let callCount = 0;
+    const mockApiProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn(async () => {
+        callCount += 1;
+        if (callCount === 2) {
+          markSecondCallStarted();
+          await new Promise<void>((resolve) => {
+            releaseSecondCall = resolve;
+          });
+        }
+
+        return {
+          output: 'Test output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}, {}],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addPromptsSpy = vi.spyOn(evalRecord, 'addPrompts');
     const evalPromise = evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
     await secondCallStarted;
 
-    expect(addPromptsSpy).toHaveBeenCalledTimes(1);
-    expect(addPromptsSpy.mock.calls[0][0][0].metrics?.testPassCount).toBe(1);
+    expect(addPromptsSpy).toHaveBeenCalledTimes(2);
+    expect(addPromptsSpy.mock.calls[1][0][0].metrics?.testPassCount).toBe(1);
+    const refreshedEval = await Eval.findById(evalRecord.id);
+    expect(refreshedEval?.prompts[0].metrics?.testPassCount).toBe(1);
 
     releaseSecondCall();
     await evalPromise;

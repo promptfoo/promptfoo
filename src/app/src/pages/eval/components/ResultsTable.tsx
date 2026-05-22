@@ -1436,7 +1436,8 @@ function ResultsTableHeader({
                       style={{
                         width: header.getSize(),
                         borderLeft: headerIndex === 0 ? undefined : 'none',
-                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                        borderBottom:
+                          !isMetadataCol && isFinalRow ? '2px solid var(--border-color)' : 'none',
                         height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >
@@ -2227,7 +2228,7 @@ function ResultsTable({
           zoom,
           borderTopWidth: '1px',
           borderTopStyle: 'solid',
-          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
+          borderColor: 'var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,

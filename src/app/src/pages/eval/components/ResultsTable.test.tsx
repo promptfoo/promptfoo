@@ -337,12 +337,20 @@ describe('ResultsTable Metrics Display', () => {
 
     const promptHeaderCell = screen.getByText('test-provider').closest('th');
 
-    expect(promptHeaderCell).toHaveStyle({
-      borderBottom: '2px solid #888',
-    });
+    expect(promptHeaderCell).toHaveAttribute(
+      'style',
+      expect.stringContaining('border-bottom: 2px solid var(--border-color)'),
+    );
   });
 
-  it('keeps the header/body boundary border on the scroll container', () => {
+  it('keeps the header/body boundary border visible with sticky headers', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+    }));
+
     const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
     const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
 
