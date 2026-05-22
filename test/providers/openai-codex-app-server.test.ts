@@ -3661,7 +3661,7 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
-  it('keeps the longer streamed output when the SDK aggregate diverges', async () => {
+  it('preserves streamed and SDK output evidence when their aggregates diverge', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
@@ -3739,6 +3739,7 @@ describe('OpenAICodexAppServerProvider', () => {
         expect.objectContaining({
           type: 'command_execution',
           aggregated_output: 'streamed line one\nstreamed line two',
+          sdk_aggregated_output: 'truncated',
         }),
       ]),
     );
@@ -3747,6 +3748,7 @@ describe('OpenAICodexAppServerProvider', () => {
         expect.objectContaining({
           type: 'commandExecution',
           aggregatedOutput: 'streamed line one\nstreamed line two',
+          sdkAggregatedOutput: 'truncated',
         }),
       ]),
     );
@@ -3778,7 +3780,8 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     // A short streamed delta, then a completed item whose SDK aggregate
-    // diverges from and is longer than that delta — so the SDK value is kept.
+    // diverges from and is longer than that delta. Both observations are
+    // evidence: the stream stays primary and the SDK aggregate is retained.
     server.send({
       method: 'item/commandExecution/outputDelta',
       params: {
@@ -3839,7 +3842,8 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'sdk reports a much longer divergent output + late delta',
+          aggregated_output: 'short + late delta',
+          sdk_aggregated_output: 'sdk reports a much longer divergent output',
         }),
       ]),
     );
@@ -3847,7 +3851,8 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'commandExecution',
-          aggregatedOutput: 'sdk reports a much longer divergent output + late delta',
+          aggregatedOutput: 'short + late delta',
+          sdkAggregatedOutput: 'sdk reports a much longer divergent output',
         }),
       ]),
     );

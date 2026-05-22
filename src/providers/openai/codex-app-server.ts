@@ -2369,19 +2369,24 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       !aggregatedOutput.startsWith(item.aggregatedOutput)
     ) {
       // The streamed deltas and the SDK's completed-item aggregate diverged
-      // (neither is a prefix of the other). Rather than silently discarding
-      // streamed output, keep whichever captured more and log the mismatch.
-      const useStreamed = aggregatedOutput.length > item.aggregatedOutput.length;
+      // (neither is a prefix of the other). Keep the observed stream as the
+      // primary transcript, while retaining the SDK value as separate
+      // evidence instead of silently dropping either observation.
       logger.debug(
         '[CodexAppServer] commandExecution output deltas diverged from the SDK aggregate',
         {
           itemId: item.id,
           streamedLength: aggregatedOutput.length,
           sdkLength: item.aggregatedOutput.length,
-          kept: useStreamed ? 'streamed' : 'sdk',
+          primaryOutput: 'streamed',
+          sdkAggregatePreserved: true,
         },
       );
-      return useStreamed ? { ...item, aggregatedOutput } : item;
+      return {
+        ...item,
+        aggregatedOutput,
+        sdkAggregatedOutput: item.aggregatedOutput,
+      };
     }
 
     return {
@@ -2829,6 +2834,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           exitCode: item.exitCode,
           durationMs: item.durationMs,
           aggregatedOutput: item.aggregatedOutput,
+          sdkAggregatedOutput: item.sdkAggregatedOutput,
         }) as Record<string, unknown>;
       case 'fileChange':
         return this.sanitizeForMetadata({
@@ -2890,6 +2896,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           exit_code: item.exitCode,
           duration_ms: item.durationMs,
           aggregated_output: item.aggregatedOutput,
+          sdk_aggregated_output: item.sdkAggregatedOutput,
         }) as Record<string, unknown>;
       case 'fileChange':
         return this.sanitizeForMetadata({
