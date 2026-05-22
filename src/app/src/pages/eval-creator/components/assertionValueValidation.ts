@@ -135,7 +135,7 @@ const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
   'not-similar:euclidean',
 ]);
 
-const REQUIRED_MATCHER_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+export const NAMED_MATCHER_ASSERTION_TYPES = new Set<AssertionType>([
   'skill-used',
   'not-skill-used',
   'trajectory:tool-used',
@@ -381,12 +381,14 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
   }
 
   if (
-    REQUIRED_MATCHER_VALUE_ASSERTION_TYPES.has(assertion.type) &&
+    NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
     !hasNonBlankStringArray(assertion.value) &&
     !(isRecord(assertion.value) && hasMatcherName(assertion.value))
   ) {
-    return 'Enter a skill or tool name to match.';
+    return assertion.type.includes('skill')
+      ? 'Enter the expected skill name.'
+      : 'Enter the expected traced tool name.';
   }
 
   return undefined;

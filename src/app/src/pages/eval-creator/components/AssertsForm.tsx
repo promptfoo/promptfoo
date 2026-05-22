@@ -22,6 +22,7 @@ import {
   COMMA_SEPARATED_VALUE_ASSERTION_TYPES,
   getAssertionValueError,
   MODEL_JUDGE_SCORE_ASSERTION_TYPES,
+  NAMED_MATCHER_ASSERTION_TYPES,
   PI_SCORE_ASSERTION_TYPES,
   RAG_SCORE_ASSERTION_TYPES,
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
@@ -161,6 +162,14 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'context-relevance': 'Context relevance',
   'g-eval': 'G-Eval criteria scoring',
   'trajectory:goal-success': 'Agent goal achieved',
+  'is-valid-function-call': 'Valid function call',
+  'is-valid-openai-function-call': 'Valid legacy OpenAI function call',
+  'is-valid-openai-tools-call': 'Valid OpenAI tool calls',
+  'skill-used': 'Skill used',
+  'trajectory:tool-used': 'Tool used in trace',
+  'trajectory:tool-args-match': 'Tool arguments match',
+  'trajectory:tool-sequence': 'Tool order in trace',
+  'trajectory:step-count': 'Trace step count',
 };
 
 const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
@@ -202,6 +211,16 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Scores the response against your criteria in multiple grading steps. This can add cost.',
   'trajectory:goal-success':
     'Judges whether a traced agent run achieved your goal. This requires trace data and a grading model, which can add cost.',
+  'skill-used':
+    'Checks provider-reported skill metadata rather than response text. Configure patterns or count bounds in YAML.',
+  'trajectory:tool-used':
+    'Checks whether a captured agent trace includes a tool call. This requires trace data.',
+  'trajectory:tool-args-match':
+    'Checks the arguments sent to a traced tool call. This requires trace data.',
+  'trajectory:tool-sequence':
+    'Checks whether traced tool calls occurred in the expected order. This requires trace data.',
+  'trajectory:step-count':
+    'Counts matching steps in a captured agent trace. This requires trace data.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
   'perplexity-score':
     'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
@@ -482,36 +501,68 @@ interface StructuredValueFieldProps {
   onChange: (value: Assertion['value']) => void;
 }
 
+function getStructuredFieldCopy(type: AssertionType): {
+  description: string;
+  label: string;
+  placeholder: string;
+} {
+  if (type.includes('sql')) {
+    return {
+      label: 'SQL validation settings (JSON, optional)',
+      placeholder: '{\n  "databaseType": "PostgreSQL"\n}',
+      description:
+        'Optional. Leave blank to validate SQL syntax using the default database parser.',
+    };
+  }
+  if (type.includes('tool-args-match')) {
+    return {
+      label: 'Expected tool call (JSON, required)',
+      placeholder: '{\n  "name": "search_orders",\n  "args": { "order_id": "123" }\n}',
+      description: 'Requires trace data. Enter a tool name or pattern and the expected arguments.',
+    };
+  }
+  if (type.includes('tool-sequence')) {
+    return {
+      label: 'Expected tool sequence (JSON, required)',
+      placeholder: '{\n  "steps": ["search_orders", "compose_reply"]\n}',
+      description: 'Requires trace data. Enter tools in the order they must appear.',
+    };
+  }
+
+  return {
+    label: 'Expected step count (JSON, required)',
+    placeholder: '{\n  "type": "tool",\n  "min": 1\n}',
+    description: 'Requires trace data. Enter minimum or maximum matching step counts.',
+  };
+}
+
 const StructuredValueField = ({ assertion, error, index, onChange }: StructuredValueFieldProps) => {
-  const isSql = assertion.type.includes('sql');
-  const label = isSql ? 'SQL validation settings (JSON, optional)' : 'Expected trace data (JSON)';
-  const descriptionId = error ? `assert-value-error-${index}` : `assert-structured-help-${index}`;
+  const copy = getStructuredFieldCopy(assertion.type);
+  const errorId = `assert-value-error-${index}`;
+  const helpId = `assert-structured-help-${index}`;
 
   return (
     <div className="space-y-2">
       <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-        {label}
+        {copy.label}
       </Label>
       <Textarea
         id={`assert-value-${index}`}
         value={formatStructuredValue(assertion)}
         onChange={(event) => onChange(parseStructuredValue(event.target.value))}
-        placeholder={isSql ? '{\n  "databaseType": "PostgreSQL"\n}' : '{\n  "name": "search"\n}'}
+        placeholder={copy.placeholder}
         aria-invalid={Boolean(error)}
-        aria-describedby={descriptionId}
+        aria-describedby={error ? `${errorId} ${helpId}` : helpId}
         className="min-h-24 resize-y font-mono"
       />
-      {error ? (
-        <HelperText id={`assert-value-error-${index}`} error>
+      {error && (
+        <HelperText id={errorId} error>
           {error}
         </HelperText>
-      ) : (
-        <p id={descriptionId} className="text-xs text-muted-foreground">
-          {isSql
-            ? 'Optional. Leave blank to validate SQL syntax using the default database parser.'
-            : 'Required. Enter valid JSON describing the expected tool activity.'}
-        </p>
       )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        {copy.description}
+      </p>
     </div>
   );
 };
@@ -1078,6 +1129,62 @@ const TrajectoryGoalSuccessField = ({
   );
 };
 
+const NamedMatcherField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
+  const isSkill = assertion.type.includes('skill');
+  const hasAdvancedValue =
+    assertion.value !== undefined &&
+    typeof assertion.value === 'object' &&
+    (Array.isArray(assertion.value) || assertion.value !== null);
+  const errorId = `assert-value-error-${index}`;
+  const helpId = `assert-matcher-help-${index}`;
+  const noun = isSkill ? 'skill' : 'tool';
+
+  if (hasAdvancedValue) {
+    return (
+      <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+        <p className="text-xs text-muted-foreground">
+          An advanced {noun} matcher is configured. Edit it in YAML or replace it with one {noun}{' '}
+          name.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange({ ...assertion, value: '' })}
+        >
+          Replace with one {noun} name
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`assert-matcher-name-${index}`} className="text-sm font-medium">
+        Expected {noun} name (required)
+      </Label>
+      <Input
+        id={`assert-matcher-name-${index}`}
+        value={formatAssertionValue(assertion)}
+        onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+        placeholder={isSkill ? 'research' : 'search_orders'}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${errorId} ${helpId}` : helpId}
+      />
+      {error && (
+        <HelperText id={errorId} error>
+          {error}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        {isSkill
+          ? 'Checks provider skill metadata. Use YAML for multiple skills, patterns, or count bounds.'
+          : 'Requires trace data. Use YAML for multiple tools, patterns, or count bounds.'}
+      </p>
+    </div>
+  );
+};
+
 const SpecializedValueField = ({
   assertion,
   error,
@@ -1124,6 +1231,12 @@ const SpecializedValueField = ({
         index={index}
         onChange={onChange}
       />
+    );
+  }
+
+  if (NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type)) {
+    return (
+      <NamedMatcherField assertion={assertion} error={error} index={index} onChange={onChange} />
     );
   }
 
@@ -1281,7 +1394,8 @@ const AssertionValueFields = ({
     PI_SCORE_ASSERTION_TYPES.has(assertion.type) ||
     RAG_SCORE_ASSERTION_TYPES.has(assertion.type) ||
     MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type) ||
-    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) ||
+    NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -1403,6 +1517,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     RAG_SCORE_ASSERTION_TYPES.has(nextType) ||
     MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(nextType) ||
     TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(nextType) ||
+    NAMED_MATCHER_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -1440,6 +1555,14 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     !TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(nextType)
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
+    return { ...withoutStoredValue, type: nextType, value: '' };
+  }
+
+  if (
+    NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type) &&
+    !NAMED_MATCHER_ASSERTION_TYPES.has(nextType)
+  ) {
+    const { value: _value, ...withoutStoredValue } = assertion;
     return { ...withoutStoredValue, type: nextType, value: '' };
   }
 

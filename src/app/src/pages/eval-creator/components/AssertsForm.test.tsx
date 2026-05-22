@@ -613,9 +613,11 @@ describe('AssertsForm', () => {
       />,
     );
 
-    const valueInput = screen.getByRole('textbox', { name: 'Expected trace data (JSON)' });
+    const valueInput = screen.getByRole('textbox', {
+      name: 'Expected step count (JSON, required)',
+    });
     expect(valueInput).toHaveAccessibleDescription(
-      'Enter JSON with a minimum or maximum trajectory step count.',
+      /Enter JSON with a minimum or maximum trajectory step count.*Requires trace data/i,
     );
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
 
@@ -624,6 +626,43 @@ describe('AssertsForm', () => {
 
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:step-count', value: { min: 1 } }]);
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('asks for one traced tool name while disclosing advanced matcher options', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'trajectory:tool-used' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    const toolName = screen.getByRole('textbox', { name: 'Expected tool name (required)' });
+    expect(toolName).toHaveAccessibleDescription(
+      /Enter the expected traced tool name.*Requires trace data.*multiple tools/i,
+    );
+    await user.type(toolName, 'search_orders');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'trajectory:tool-used', value: 'search_orders' },
+    ]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('preserves advanced imported tool matchers until replaced with one name', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'trajectory:tool-used', value: { name: 'search_orders', min: 1 } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Expected tool name (required)' })).toBeNull();
+    expect(screen.getByText(/advanced tool matcher is configured/i)).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Replace with one tool name' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:tool-used', value: '' }]);
   });
 
   it('guides traced goal success checks with their required goal and threshold', async () => {
