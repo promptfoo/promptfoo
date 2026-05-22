@@ -653,12 +653,13 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 
 ### skill-used {#skill-used}
 
-The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?".
+The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?". Errored skill tool attempts can still appear in provider metadata for diagnostics, but they do not satisfy `skill-used`.
 
 Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
 

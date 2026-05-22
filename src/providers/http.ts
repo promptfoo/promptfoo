@@ -5,7 +5,7 @@ import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
-import { Agent } from 'undici';
+import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -1348,7 +1348,9 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
 /**
  * Creates an HTTPS agent with TLS configuration for secure connections
  */
-async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
+async function createHttpsAgent(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+): Promise<Dispatcher> {
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
   const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
@@ -1526,10 +1528,12 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Create an undici Agent with the TLS options
+  // Compose the decompress interceptor like the shared pooled agents do — on
+  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
+  // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  });
+  }).compose(interceptors.decompress({ skipErrorResponses: false }));
 }
 
 // Streaming responses are never cached, so the wrapper result's delete hook
@@ -1573,8 +1577,8 @@ export class HttpProvider implements ApiProvider {
   private lastToken?: string;
   private lastTokenExpiresAt?: number;
   private tokenRefreshLock?: TokenRefreshLock;
-  private httpsAgent?: Agent;
-  private httpsAgentPromise?: Promise<Agent>;
+  private httpsAgent?: Dispatcher;
+  private httpsAgentPromise?: Promise<Dispatcher>;
   /**
    * Tracks session IDs that were fetched from the session endpoint.
    * Used to distinguish sessions we created from client-generated UUIDs.
@@ -2153,7 +2157,7 @@ export class HttpProvider implements ApiProvider {
     return sessionId;
   }
 
-  private async getHttpsAgent(): Promise<Agent | undefined> {
+  private async getHttpsAgent(): Promise<Dispatcher | undefined> {
     if (!this.config.tls) {
       return undefined;
     }
