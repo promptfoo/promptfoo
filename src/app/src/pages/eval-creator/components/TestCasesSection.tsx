@@ -30,6 +30,18 @@ interface TestCasesSectionProps {
   onOpenYamlEditor?: () => void;
 }
 
+interface ParsedTestCaseImport {
+  isYaml: boolean;
+  skippedCount: number;
+  testCases: TestCase[];
+}
+
+interface PendingTestCaseImport {
+  fileName: string;
+  skippedCount: number;
+  testCases: TestCase[];
+}
+
 // Validation function for TestCase structure
 function isValidTestCase(obj: unknown): obj is TestCase {
   if (!obj || typeof obj !== 'object') {
@@ -80,6 +92,59 @@ const getManagedTestsLabel = (tests: unknown): string => {
   return 'YAML test configuration';
 };
 
+async function parseImportedTestCases(
+  fileName: string,
+  text: string,
+): Promise<ParsedTestCaseImport> {
+  if (fileName.endsWith('.csv')) {
+    const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
+    const rows: CsvRow[] = parseCsv(text, { columns: true });
+    return {
+      isYaml: false,
+      skippedCount: 0,
+      testCases: rows.map((row) => testCaseFromCsvRow(row) as TestCase),
+    };
+  }
+
+  const yaml = await import('js-yaml');
+  const parsedYaml = yaml.load(text);
+
+  if (Array.isArray(parsedYaml)) {
+    const validTestCases = parsedYaml.filter(isValidTestCase);
+    if (validTestCases.length === 0) {
+      throw new Error(
+        'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
+      );
+    }
+    return {
+      isYaml: true,
+      skippedCount: parsedYaml.length - validTestCases.length,
+      testCases: validTestCases,
+    };
+  }
+
+  if (parsedYaml && isValidTestCase(parsedYaml)) {
+    return { isYaml: true, skippedCount: 0, testCases: [parsedYaml] };
+  }
+
+  throw new Error(
+    'Invalid YAML format. Expected an array of test cases or a single test case object with valid structure.',
+  );
+}
+
+function getImportErrorMessage(fileName: string, error: unknown): string {
+  if (fileName.endsWith('.csv')) {
+    return 'Failed to parse CSV file. Please ensure it has valid CSV format with headers.';
+  }
+
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  if (errorMessage.includes('Invalid YAML') || errorMessage.includes('No valid test cases')) {
+    return errorMessage;
+  }
+
+  return 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.';
+}
+
 const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
@@ -98,6 +163,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const [pendingImport, setPendingImport] = React.useState<PendingTestCaseImport | null>(null);
   const testCaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
@@ -131,103 +197,79 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
       }
 
       const fileName = file.name.toLowerCase();
+      const isYamlFile = fileName.endsWith('.yaml') || fileName.endsWith('.yml');
+      if (!fileName.endsWith('.csv') && !isYamlFile) {
+        showToast(
+          'Unsupported file type. Please upload a CSV (.csv) or YAML (.yaml, .yml) file.',
+          'error',
+        );
+        event.target.value = '';
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
         const text = e.target?.result?.toString();
         if (!text || text.trim() === '') {
           showToast('The file appears to be empty. Please select a file with content.', 'error');
-          event.target.value = ''; // Reset file input
+          event.target.value = '';
           return;
         }
 
         try {
-          let newTestCases: TestCase[] = [];
-
-          if (fileName.endsWith('.csv')) {
-            // Handle CSV files
-            const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
-            const rows: CsvRow[] = parseCsv(text, { columns: true });
-            newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
-          } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            // Handle YAML files
-            const yaml = await import('js-yaml');
-            const parsedYaml = yaml.load(text);
-
-            if (Array.isArray(parsedYaml)) {
-              // Validate array of test cases
-              const validTestCases = parsedYaml.filter(isValidTestCase);
-              if (validTestCases.length === 0) {
-                throw new Error(
-                  'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
-                );
-              }
-              if (validTestCases.length < parsedYaml.length) {
-                showToast(
-                  `Warning: ${parsedYaml.length - validTestCases.length} invalid test cases were skipped.`,
-                  'warning',
-                );
-              }
-              newTestCases = validTestCases;
-            } else if (parsedYaml && isValidTestCase(parsedYaml)) {
-              // Single test case
-              newTestCases = [parsedYaml];
-            } else {
-              throw new Error(
-                'Invalid YAML format. Expected an array of test cases or a single test case object with valid structure.',
-              );
-            }
-          } else {
-            showToast(
-              'Unsupported file type. Please upload a CSV (.csv) or YAML (.yaml, .yml) file.',
-              'error',
-            );
-            event.target.value = ''; // Reset file input
-            return;
-          }
+          const parsedImport = await parseImportedTestCases(fileName, text);
+          let newTestCases = parsedImport.testCases;
 
           if (newTestCases.length === 0) {
             showToast('No test cases found in the file.', 'warning');
-            event.target.value = ''; // Reset file input
+            event.target.value = '';
             return;
           }
 
-          // Add description only for YAML files if missing
-          if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
+          if (parsedImport.isYaml) {
             newTestCases = newTestCases.map((tc, idx) => ({
               ...tc,
               description: tc.description || `Test Case #${testCases.length + idx + 1}`,
             }));
           }
 
-          setTestCases([...testCases, ...newTestCases]);
-          showToast(
-            `Successfully imported ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}`,
-            'success',
-          );
+          setPendingImport({
+            fileName: file.name,
+            skippedCount: parsedImport.skippedCount,
+            testCases: newTestCases,
+          });
         } catch (error) {
           console.error('Error parsing file:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (fileName.endsWith('.csv')) {
-            showToast(
-              'Failed to parse CSV file. Please ensure it has valid CSV format with headers.',
-              'error',
-            );
-          } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            showToast(
-              errorMessage.includes('Invalid YAML') || errorMessage.includes('No valid test cases')
-                ? errorMessage
-                : 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.',
-              'error',
-            );
-          }
+          showToast(getImportErrorMessage(fileName, error), 'error');
         }
 
-        // Reset file input
+        event.target.value = '';
+      };
+      reader.onerror = () => {
+        showToast('Unable to read this file. Please try again or choose another file.', 'error');
         event.target.value = '';
       };
       reader.readAsText(file);
     }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) {
+      return;
+    }
+
+    setTestCases([...testCases, ...pendingImport.testCases]);
+    if (pendingImport.skippedCount > 0) {
+      showToast(
+        `Warning: ${pendingImport.skippedCount} invalid test cases were skipped.`,
+        'warning',
+      );
+    }
+    showToast(
+      `Successfully imported ${pendingImport.testCases.length} test case${pendingImport.testCases.length === 1 ? '' : 's'}`,
+      'success',
+    );
+    setPendingImport(null);
   };
 
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
@@ -514,6 +556,46 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
           }}
         />
       )}
+
+      <Dialog
+        open={pendingImport !== null}
+        onOpenChange={(open) => !open && setPendingImport(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Import {pendingImport?.testCases.length ?? 0} test case
+              {pendingImport?.testCases.length === 1 ? '' : 's'}?
+            </DialogTitle>
+            <DialogDescription>
+              {pendingImport?.fileName} will be added to your existing {testCases.length} test case
+              {testCases.length === 1 ? '' : 's'}. Each test case runs across every prompt and
+              provider, so larger imports increase requests and potential cost.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingImport && pendingImport.skippedCount > 0 && (
+            <Alert variant="warning">
+              <AlertContent>
+                <AlertTitle>Some entries will not be imported</AlertTitle>
+                <AlertDescription>
+                  {pendingImport.skippedCount} invalid test case
+                  {pendingImport.skippedCount === 1 ? ' was' : 's were'} skipped while reading this
+                  file.
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingImport(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmImport}>
+              Import {pendingImport?.testCases.length ?? 0} test case
+              {pendingImport?.testCases.length === 1 ? '' : 's'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>

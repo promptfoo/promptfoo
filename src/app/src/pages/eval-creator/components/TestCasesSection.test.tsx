@@ -263,6 +263,29 @@ describe('TestCasesSection', () => {
       return readAsTextMock;
     };
 
+    const createFileReaderErrorMock = () => {
+      global.FileReader = class MockFileReader {
+        onerror: ((event: ProgressEvent<FileReader>) => unknown) | null = null;
+
+        readAsText() {
+          setTimeout(() => {
+            this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+          }, 0);
+        }
+      } as unknown as typeof FileReader;
+    };
+
+    const confirmPendingImport = async (
+      user: ReturnType<typeof userEvent.setup>,
+      count: number,
+    ) => {
+      const plural = count === 1 ? '' : 's';
+      const confirmButton = await screen.findByRole('button', {
+        name: `Import ${count} test case${plural}`,
+      });
+      await user.click(confirmButton);
+    };
+
     it('accepts CSV, YAML, and YML files', () => {
       render(
         <TooltipProvider delayDuration={0}>
@@ -321,6 +344,31 @@ describe('TestCasesSection', () => {
       });
 
       // Check that file input was reset
+      expect(fileInput.value).toBe('');
+    });
+
+    it('reports file read failures with a recoverable message', async () => {
+      const user = userEvent.setup();
+      createFileReaderErrorMock();
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      const fileInput = screen.getByLabelText(
+        'Upload test cases from CSV or YAML',
+      ) as HTMLInputElement;
+
+      await user.upload(fileInput, new File(['unreadable'], 'test.csv', { type: 'text/csv' }));
+
+      await waitFor(() => {
+        expect(mockShowToast).toHaveBeenCalledWith(
+          'Unable to read this file. Please try again or choose another file.',
+          'error',
+        );
+      });
       expect(fileInput.value).toBe('');
     });
 
@@ -422,6 +470,11 @@ describe('TestCasesSection', () => {
       });
 
       await user.upload(fileInput, file);
+      expect(
+        await screen.findByText(/larger imports increase requests and potential cost/i),
+      ).toBeInTheDocument();
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
+      await confirmPendingImport(user, 2);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -473,6 +526,7 @@ describe('TestCasesSection', () => {
       const file = new File(['- description: Math test'], 'test.yaml', { type: 'text/yaml' });
 
       await user.upload(fileInput, file);
+      await confirmPendingImport(user, 2);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -518,6 +572,7 @@ describe('TestCasesSection', () => {
       const file = new File(['description: Single test'], 'test.yml', { type: 'text/yaml' });
 
       await user.upload(fileInput, file);
+      await confirmPendingImport(user, 1);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -575,6 +630,8 @@ describe('TestCasesSection', () => {
       const file = new File(['- description: Test'], 'test.yaml', { type: 'text/yaml' });
 
       await user.upload(fileInput, file);
+      expect(await screen.findByText('Some entries will not be imported')).toBeInTheDocument();
+      await confirmPendingImport(user, 2);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -626,6 +683,7 @@ describe('TestCasesSection', () => {
       const file = new File(['invalid'], 'test.yaml', { type: 'text/yaml' });
 
       await user.upload(fileInput, file);
+      await confirmPendingImport(user, 1);
 
       await waitFor(() => {
         // The first object is actually valid (it's an object), so we expect a warning about skipped items
@@ -635,6 +693,37 @@ describe('TestCasesSection', () => {
         );
         expect(mockShowToast).toHaveBeenCalledWith('Successfully imported 1 test case', 'success');
       });
+    });
+
+    it('lets users cancel a parsed import before it changes the evaluation', async () => {
+      const user = userEvent.setup();
+      vi.mocked(yaml.load).mockReturnValue({
+        description: 'Single test',
+        vars: { input: 'hello' },
+      });
+      createFileReaderMock('description: Single test');
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      const fileInput = screen.getByLabelText(
+        'Upload test cases from CSV or YAML',
+      ) as HTMLInputElement;
+      const file = new File(['description: Single test'], 'test.yaml', { type: 'text/yaml' });
+
+      await user.upload(fileInput, file);
+      expect(await screen.findByText('Import 1 test case?')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
+      expect(screen.queryByText('Import 1 test case?')).not.toBeInTheDocument();
+      expect(mockShowToast).not.toHaveBeenCalledWith(
+        'Successfully imported 1 test case',
+        'success',
+      );
     });
 
     it('handles YAML file with all invalid test cases', async () => {
