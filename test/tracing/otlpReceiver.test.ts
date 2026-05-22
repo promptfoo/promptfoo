@@ -642,6 +642,63 @@ describe('OTLPReceiver', () => {
         },
       );
     });
+
+    it('keeps live formats and redaction patterns when receiver options merge', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      redactingReceiver.mergeOptions({
+        acceptFormats: ['protobuf'],
+        redactAttributes: ['password'],
+      });
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'b'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      attributes: [
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer abc' } },
+                        { key: 'http.password', value: { stringValue: 'pw123' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+              'http.password': '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
   });
 
   describe('Base64 to hex conversion', () => {

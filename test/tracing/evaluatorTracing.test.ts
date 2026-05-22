@@ -406,7 +406,7 @@ describe('evaluatorTracing', () => {
       });
     });
 
-    it('should refresh receiver options when tracing is already running', async () => {
+    it('should merge receiver options when tracing is already running', async () => {
       await startOtlpReceiverIfNeeded({
         providers: [],
         prompts: [],
