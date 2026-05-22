@@ -349,8 +349,9 @@ const FoundationModelConfiguration = ({
           >
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Servers are saved under <code>config.mcp</code> and enabled when at least one server
-                is configured.
+                Each server becomes active after you enter a Command, Path, or URL. Active servers
+                are saved under <code>config.mcp</code> and available during Bedrock Converse
+                evaluations.
               </p>
               <Button type="button" variant="outline" onClick={addMCPServer}>
                 Add MCP Server
@@ -366,10 +367,22 @@ const FoundationModelConfiguration = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => removeMCPServer(index)}
+                        aria-label={`Remove MCP server ${index + 1}`}
                       >
                         Remove
                       </Button>
                     </div>
+
+                    <HelperText
+                      id={`mcp-server-${index}-status`}
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {isServerConfigured(server)
+                        ? 'Active. This server will be available during Bedrock Converse evaluations.'
+                        : 'Not active. Enter a command, path, or URL to enable this server.'}
+                    </HelperText>
 
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="space-y-2">
@@ -390,6 +403,7 @@ const FoundationModelConfiguration = ({
                             updateMCPServer(index, 'command', e.target.value || undefined)
                           }
                           placeholder="npx"
+                          aria-describedby={`mcp-server-${index}-status`}
                         />
                       </div>
 
@@ -421,6 +435,7 @@ const FoundationModelConfiguration = ({
                             updateMCPServer(index, 'url', e.target.value || undefined)
                           }
                           placeholder="https://example.com/mcp"
+                          aria-describedby={`mcp-server-${index}-status`}
                         />
                       </div>
 
@@ -433,6 +448,7 @@ const FoundationModelConfiguration = ({
                             updateMCPServer(index, 'path', e.target.value || undefined)
                           }
                           placeholder="./mcp-server.js"
+                          aria-describedby={`mcp-server-${index}-status`}
                         />
                       </div>
                     </div>

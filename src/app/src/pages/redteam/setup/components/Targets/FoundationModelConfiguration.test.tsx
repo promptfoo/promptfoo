@@ -563,6 +563,13 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const commandInput = screen.getByLabelText(/Command/i);
+    expect(commandInput).toHaveAccessibleDescription(
+      'Not active. Enter a command, path, or URL to enable this server.',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Not active. Enter a command, path, or URL to enable this server.',
+    );
+    expect(screen.getByRole('button', { name: 'Remove MCP server 1' })).toBeInTheDocument();
     await user.click(commandInput);
     await user.paste('npx');
 
@@ -596,6 +603,9 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const commandInput = screen.getByLabelText(/Command/i);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Active. This server will be available during Bedrock Converse evaluations.',
+    );
     await user.clear(commandInput);
 
     const calls = vi.mocked(mockUpdateCustomTarget).mock.calls;
