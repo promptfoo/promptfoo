@@ -50,6 +50,12 @@ describe('RunOptionsSection', () => {
 
     expect(screen.getByLabelText('Evaluation name or description')).toBeInTheDocument();
     expect(screen.getByLabelText('Delay between calls (ms)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Delay between calls (ms)')).toHaveAccessibleDescription(
+      'Add a delay to reduce rate-limit errors.',
+    );
+    expect(screen.getByLabelText('Maximum concurrent requests')).toHaveAccessibleDescription(
+      'Controls how many requests run at once.',
+    );
   });
 
   it('surfaces required corrections before running', () => {
@@ -86,6 +92,9 @@ describe('RunOptionsSection', () => {
     expect(delayInput).toHaveValue(1.5);
     expect(delayInput).toHaveAttribute('aria-invalid', 'true');
     expect(delayInput).toHaveAccessibleDescription(
+      'Enter a whole number of milliseconds, 0 or greater.',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
       'Enter a whole number of milliseconds, 0 or greater.',
     );
     expect(onChange).not.toHaveBeenCalled();
@@ -128,6 +137,9 @@ describe('RunOptionsSection', () => {
 
     expect(concurrencyInput).toHaveAttribute('aria-invalid', 'true');
     expect(concurrencyInput).toHaveAccessibleDescription(
+      'Enter a whole number of concurrent requests, 1 or greater.',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
       'Enter a whole number of concurrent requests, 1 or greater.',
     );
     expect(onChange).not.toHaveBeenCalled();

@@ -158,18 +158,18 @@ export function RunOptionsSection({
                   onChange={(e) => handleDelayChange(e.target.value)}
                   disabled={!canSetDelay}
                   aria-invalid={Boolean(delayError)}
-                  aria-describedby={delayError ? 'delay-error' : undefined}
+                  aria-describedby={delayError ? 'delay-error' : 'delay-help'}
                 />
                 {delayError ? (
-                  <HelperText id="delay-error" error>
+                  <HelperText id="delay-error" error role="alert">
                     {delayError}
                   </HelperText>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <HelperText id="delay-help">
                     {canSetDelay
                       ? 'Add a delay to reduce rate-limit errors.'
                       : 'Set maximum concurrent requests to 1 before adding a delay.'}
-                  </p>
+                  </HelperText>
                 )}
               </div>
 
@@ -190,18 +190,20 @@ export function RunOptionsSection({
                   onChange={(e) => handleMaxConcurrencyChange(e.target.value)}
                   disabled={!canSetMaxConcurrency}
                   aria-invalid={Boolean(maxConcurrencyError)}
-                  aria-describedby={maxConcurrencyError ? 'max-concurrency-error' : undefined}
+                  aria-describedby={
+                    maxConcurrencyError ? 'max-concurrency-error' : 'max-concurrency-help'
+                  }
                 />
                 {maxConcurrencyError ? (
-                  <HelperText id="max-concurrency-error" error>
+                  <HelperText id="max-concurrency-error" error role="alert">
                     {maxConcurrencyError}
                   </HelperText>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
+                  <HelperText id="max-concurrency-help">
                     {canSetMaxConcurrency
                       ? 'Controls how many requests run at once.'
                       : 'Set delay to 0 before increasing concurrency.'}
-                  </p>
+                  </HelperText>
                 )}
               </div>
             </div>
