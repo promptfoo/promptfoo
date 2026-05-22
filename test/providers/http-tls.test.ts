@@ -14,15 +14,22 @@ vi.mock('../../src/cache', async (importOriginal) => {
 });
 
 vi.mock('undici', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('undici')>();
   return {
-    ...(await importOriginal()),
+    ...actual,
 
     Agent: vi.fn().mockImplementation(function (options) {
-      return {
-        options,
-        dispatcher: 'mock-agent',
-      };
+      // createHttpsAgent composes the decompress interceptor onto the Agent,
+      // so the mock instance needs a compose() that returns itself — that
+      // keeps the existing `dispatcher: 'mock-agent'` assertions valid.
+      const agent: any = { options, dispatcher: 'mock-agent' };
+      agent.compose = vi.fn(() => agent);
+      return agent;
     }),
+    interceptors: {
+      ...actual.interceptors,
+      decompress: vi.fn(() => ({ name: 'decompress' })),
+    },
   };
 });
 
@@ -396,6 +403,26 @@ describe('HttpProvider with TLS Configuration', () => {
         undefined,
         undefined,
       );
+    });
+
+    it('composes the decompress interceptor onto the TLS dispatcher', async () => {
+      // Regression: createHttpsAgent returned a bare Agent with no decompress
+      // interceptor, so on Node 26 (where undici no longer auto-decompresses)
+      // a gzip/br response over an mTLS dispatcher came back as raw bytes.
+      const undici = await import('undici');
+
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          method: 'GET',
+          tls: { rejectUnauthorized: false },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(undici.interceptors.decompress).toHaveBeenCalledWith({ skipErrorResponses: false });
+      const agentInstance = vi.mocked(undici.Agent).mock.results[0].value as any;
+      expect(agentInstance.compose).toHaveBeenCalledWith({ name: 'decompress' });
     });
   });
 
