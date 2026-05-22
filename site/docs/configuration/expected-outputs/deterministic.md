@@ -1012,6 +1012,10 @@ Configuration options:
 If `tokens-used` needs provider response usage and the provider does not return token
 usage metadata, the assertion throws instead of assuming zero tokens.
 
+For traced usage, matching token-bearing spans are deduplicated by hierarchy: when a
+matched parent and matched descendant both report token totals, Promptfoo counts the
+descendant so nested aggregate spans do not double-count the same usage.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
