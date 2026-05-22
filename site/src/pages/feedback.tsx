@@ -6,6 +6,7 @@ import Container from '@mui/material/Container';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
+import ThirdPartyContentGate from '../components/ThirdPartyContentGate';
 
 const FeedbackPageContent = () => {
   const { colorMode } = useColorMode();
@@ -47,28 +48,36 @@ const FeedbackPageContent = () => {
           </Typography>
         </Box>
 
-        <Box
-          sx={{
-            boxShadow:
-              colorMode === 'dark'
-                ? '0 4px 20px rgba(0, 0, 0, 0.3)'
-                : '0 4px 20px rgba(0, 0, 0, 0.1)',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            mb: 4,
-          }}
+        <ThirdPartyContentGate
+          description="Load the hosted feedback form when you are ready to share your thoughts."
+          loadLabel="Load feedback form"
+          minHeight={iframeStyle.height}
+          serviceName="Google Forms"
+          title="Feedback Form"
         >
-          <iframe
-            src="https://docs.google.com/forms/d/e/1FAIpQLScAnqlqX-ep-aOn6umjXXDVafc1sLTOEd5W6rMAPKllLk0CIA/viewform?embedded=1"
-            title="Promptfoo Feedback Form"
-            sandbox="allow-scripts allow-forms allow-same-origin"
-            style={iframeStyle}
-            loading="lazy"
-            scrolling="no"
+          <Box
+            sx={{
+              boxShadow:
+                colorMode === 'dark'
+                  ? '0 4px 20px rgba(0, 0, 0, 0.3)'
+                  : '0 4px 20px rgba(0, 0, 0, 0.1)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              mb: 4,
+            }}
           >
-            Loading…
-          </iframe>
-        </Box>
+            <iframe
+              src="https://docs.google.com/forms/d/e/1FAIpQLScAnqlqX-ep-aOn6umjXXDVafc1sLTOEd5W6rMAPKllLk0CIA/viewform?embedded=1"
+              title="Promptfoo Feedback Form"
+              sandbox="allow-scripts allow-forms allow-same-origin"
+              style={iframeStyle}
+              loading="lazy"
+              scrolling="no"
+            >
+              Loading…
+            </iframe>
+          </Box>
+        </ThirdPartyContentGate>
       </Container>
     </ThemeProvider>
   );

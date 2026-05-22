@@ -992,6 +992,15 @@ describe('consent.js', () => {
       expect(source).toContain('ThirdPartyContentGate');
       expect(source).not.toContain('useConsentGate');
     });
+
+    it('gates the hosted feedback form before its iframe is mounted', () => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, '../../src/pages/feedback.tsx'),
+        'utf-8',
+      );
+      expect(source).toContain('ThirdPartyContentGate');
+      expect(source).toContain('Google Forms');
+    });
   });
 
   // ── consent.js is loaded synchronously ──
