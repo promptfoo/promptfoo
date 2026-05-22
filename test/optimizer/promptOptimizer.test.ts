@@ -297,58 +297,17 @@ describe('prompt optimizer', () => {
   });
 
   it('preserves config evaluation runtime options for internal optimizer evals', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
-
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
-    );
-
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
-    };
-
-    await optimizePromptTestSuite(
-      {
-        evaluateOptions: {
-          cache: true,
-          delay: 50,
-          maxConcurrency: 1,
-          repeat: 2,
-          showProgressBar: true,
-        },
+    const internalEvalOptions = await collectInternalEvalOptions({
+      evaluateOptions: {
+        cache: true,
+        delay: 50,
+        maxConcurrency: 1,
+        repeat: 2,
+        showProgressBar: true,
       },
-      testSuite,
-    );
+    });
 
-    expect(vi.mocked(evaluate).mock.calls[0][2]).toEqual(
+    expect(internalEvalOptions[0]).toEqual(
       expect.objectContaining({
         cache: false,
         delay: 50,
@@ -362,57 +321,16 @@ describe('prompt optimizer', () => {
   });
 
   it('forces concurrency to 1 for internal evals when a delay is configured', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
-
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
-    );
-
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
-    };
-
     // delay is set but maxConcurrency is not; the optimizer must still apply the
     // `eval` command rule that pins concurrency to 1 so the delay rate-limits.
-    await optimizePromptTestSuite(
-      {
-        evaluateOptions: {
-          delay: 25,
-        },
+    const internalEvalOptions = await collectInternalEvalOptions({
+      evaluateOptions: {
+        delay: 25,
       },
-      testSuite,
-    );
+    });
 
-    for (const call of vi.mocked(evaluate).mock.calls) {
-      expect(call[2]).toEqual(
+    for (const options of internalEvalOptions) {
+      expect(options).toEqual(
         expect.objectContaining({
           delay: 25,
           maxConcurrency: 1,
@@ -422,56 +340,15 @@ describe('prompt optimizer', () => {
   });
 
   it('preserves configured concurrency when the internal eval delay is not positive', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
-
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
-    );
-
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
-    };
-
-    await optimizePromptTestSuite(
-      {
-        evaluateOptions: {
-          delay: -25,
-          maxConcurrency: 4,
-        },
+    const internalEvalOptions = await collectInternalEvalOptions({
+      evaluateOptions: {
+        delay: -25,
+        maxConcurrency: 4,
       },
-      testSuite,
-    );
+    });
 
-    for (const call of vi.mocked(evaluate).mock.calls) {
-      expect(call[2]).toEqual(
+    for (const options of internalEvalOptions) {
+      expect(options).toEqual(
         expect.objectContaining({
           delay: -25,
           maxConcurrency: 4,
@@ -481,48 +358,12 @@ describe('prompt optimizer', () => {
   });
 
   it('marks internal optimizer evals as redteam when the config has a redteam block', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
+    const internalEvalOptions = await collectInternalEvalOptions({
+      redteam: { plugins: [{ id: 'harmful' }] },
     });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
 
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
-    );
-
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
-    };
-
-    await optimizePromptTestSuite({ redteam: { plugins: [{ id: 'harmful' }] } }, testSuite);
-
-    for (const call of vi.mocked(evaluate).mock.calls) {
-      expect(call[2]).toEqual(
+    for (const options of internalEvalOptions) {
+      expect(options).toEqual(
         expect.objectContaining({
           isRedteam: true,
         }),
@@ -531,49 +372,15 @@ describe('prompt optimizer', () => {
   });
 
   it('marks internal optimizer evals as redteam when the test suite has a redteam block', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
-
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
+    const internalEvalOptions = await collectInternalEvalOptions(
+      {},
+      {
+        redteam: { plugins: [{ id: 'harmful' }] },
+      },
     );
 
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
-      redteam: { plugins: [{ id: 'harmful' }] },
-    };
-
-    await optimizePromptTestSuite({}, testSuite);
-
-    for (const call of vi.mocked(evaluate).mock.calls) {
-      expect(call[2]).toEqual(
+    for (const options of internalEvalOptions) {
+      expect(options).toEqual(
         expect.objectContaining({
           isRedteam: true,
         }),
@@ -582,47 +389,9 @@ describe('prompt optimizer', () => {
   });
 
   it('does not mark internal optimizer evals as redteam for a non-redteam config', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: optimizerResponse('Optimized Seed'),
-    });
-    vi.mocked(provider.callApi)
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
-      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } as any);
+    const internalEvalOptions = await collectInternalEvalOptions();
 
-    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
-    const candidateEval = evalWith(
-      [
-        completedPrompt('Seed', 'Seed', 0.5),
-        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
-      ],
-      [],
-    );
-
-    vi.mocked(evaluate)
-      .mockResolvedValueOnce(baselineEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval)
-      .mockResolvedValueOnce(candidateEval);
-
-    const testSuite: TestSuite = {
-      providers: [createMockProvider({ id: 'target-provider' })],
-      prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
-    };
-
-    await optimizePromptTestSuite({}, testSuite);
-
-    expect(vi.mocked(evaluate).mock.calls[0][2]).toEqual(
+    expect(internalEvalOptions[0]).toEqual(
       expect.objectContaining({
         isRedteam: false,
       }),
@@ -1047,6 +816,47 @@ function evalWith(prompts: CompletedPrompt[], results: EvaluateResult[]): Eval {
   evalRecord.prompts = prompts;
   evalRecord.results = results as any;
   return evalRecord;
+}
+
+async function collectInternalEvalOptions(
+  config: Parameters<typeof optimizePromptTestSuite>[0] = {},
+  testSuiteOverrides: Partial<TestSuite> = {},
+) {
+  const provider = createMockProvider({
+    id: 'optimizer-provider',
+    response: optimizerResponse('Optimized Seed'),
+  });
+  vi.mocked(provider.callApi)
+    .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+    .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+    .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+  vi.mocked(getDefaultProviders).mockResolvedValue({
+    embeddingProvider: provider,
+    gradingJsonProvider: provider,
+    gradingProvider: provider,
+    moderationProvider: provider,
+    suggestionsProvider: provider,
+    synthesizeProvider: provider,
+  } as any);
+
+  const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+  const candidateEval = evalWith(
+    [
+      completedPrompt('Seed', 'Seed', 0.5),
+      completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+    ],
+    [],
+  );
+  vi.mocked(evaluate).mockResolvedValue(candidateEval).mockResolvedValueOnce(baselineEval);
+
+  await optimizePromptTestSuite(config, {
+    providers: [createMockProvider({ id: 'target-provider' })],
+    prompts: [{ raw: 'Seed', label: 'Seed' }],
+    tests: [{}],
+    ...testSuiteOverrides,
+  });
+
+  return vi.mocked(evaluate).mock.calls.map((call) => call[2]);
 }
 
 function optimizerResponse(prompt: string) {
