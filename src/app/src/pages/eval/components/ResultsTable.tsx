@@ -1801,19 +1801,24 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
-  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
-  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
-  // below reads from each, and if either source still resolves to a row, the next paginate
-  // tick would bounce the user back to the deep-linked page.
+  // Clear both deep-link forms in the browser URL before synchronizing React Router.
+  // The row-jump effect below reads the live URL in this same effect cycle.
   const clearRowDeepLink = React.useCallback(() => {
     const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+    const hasDetailsHash = parseEvalOutputPromptHash(url.hash) !== null;
+    if (!url.searchParams.has('rowId') && !hasDetailsHash) {
+      return;
     }
-    if (parseEvalOutputPromptHash(window.location.hash)) {
+
+    url.searchParams.delete('rowId');
+    if (hasDetailsHash) {
       setEvalDetailsHash('');
+      url.hash = '';
+    } else {
+      window.history.replaceState(window.history.state, '', url);
     }
+
+    navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
   }, [navigate]);
 
   // Create a stable reference for applied filters to avoid unnecessary re-renders
@@ -1853,12 +1858,32 @@ function ResultsTable({
     );
   }, [filters.values]);
 
-  const hasMountedResultSetResetRef = useRef(false);
+  const isFilteringActive =
+    Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // Reset only when these controls change. Strict Mode replays effects in dev
+  // with the same inputs, and that replay must not clear an initial deep link.
+  const previousResultSetControlsRef = useRef({
+    failureFilter,
+    filterMode,
+    debouncedSearchText,
+    appliedFiltersString,
+  });
+
   React.useEffect(() => {
-    if (!hasMountedResultSetResetRef.current) {
-      hasMountedResultSetResetRef.current = true;
+    const previousControls = previousResultSetControlsRef.current;
+    previousResultSetControlsRef.current = {
+      failureFilter,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+    };
+    if (
+      previousControls.failureFilter === failureFilter &&
+      previousControls.filterMode === filterMode &&
+      previousControls.debouncedSearchText === debouncedSearchText &&
+      previousControls.appliedFiltersString === appliedFiltersString
+    ) {
       return;
     }
 
@@ -2242,14 +2267,22 @@ function ResultsTable({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
-    const detailsHashTarget = parseEvalOutputPromptHash(locationHash);
+    const detailsHashTarget = parseEvalOutputPromptHash(window.location.hash);
     const rowId = params['rowId'];
     const rowIndexFromQuery =
       rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
     // Copied detail links carry both forms:
     // - `rowId` is the filtered-table position used to resolve the correct page.
     // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
-    const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
+    //
+    // The hash encodes the row's GLOBAL test index, not its position within the
+    // currently filtered/searched table. When a filter or search is active, that global
+    // index does not map to a filtered-table page, so paging by it would land on the
+    // wrong page. In that case require `rowId` (the explicit filtered position) for page
+    // resolution; the dialog can still open via the hash if the target row happens to be
+    // on the current page.
+    const requestedRowIndex =
+      rowIndexFromQuery ?? (isFilteringActive ? undefined : detailsHashTarget?.rowIndex);
 
     if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
       const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
@@ -2322,7 +2355,18 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount, locationHash]);
+  }, [
+    pagination.pageIndex,
+    pagination.pageSize,
+    reactTable,
+    filteredResultsCount,
+    locationHash,
+    debouncedSearchText,
+    failureFilter,
+    filterMode,
+    appliedFiltersString,
+    filters.appliedCount,
+  ]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.
@@ -2402,13 +2446,11 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {filteredResultsCount === 0 &&
-        !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
-          <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
-            <p>No results found for the current filters.</p>
-          </div>
-        )}
+      {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
+        <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
+          <p>No results found for the current filters.</p>
+        </div>
+      )}
       <div className="h-4" />
       <ResultsTableHeader
         reactTable={reactTable}
