@@ -25,6 +25,8 @@ interface AddProviderDialogProps {
   initialProvider?: ProviderOptions;
 }
 
+type DiscardDestination = 'close' | 'select';
+
 const PROVIDER_PREFIX_TYPES: ReadonlyArray<readonly [string, string]> = [
   ['openai:', 'openai'],
   ['anthropic:', 'anthropic'],
@@ -77,6 +79,7 @@ export default function AddProviderDialog({
   );
   const [error, setError] = useState<string | null>(null);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const [discardDestination, setDiscardDestination] = useState<DiscardDestination>('close');
   const validationMessageId = useId();
   const validateProviderRef = useRef<(() => boolean) | null>(null);
 
@@ -95,6 +98,7 @@ export default function AddProviderDialog({
       }
       setError(null);
       setDiscardDialogOpen(false);
+      setDiscardDestination('close');
     }
   }, [open, initialProvider]);
 
@@ -128,6 +132,7 @@ export default function AddProviderDialog({
 
   const requestClose = () => {
     if (hasUnsavedChanges) {
+      setDiscardDestination('close');
       setDiscardDialogOpen(true);
       return;
     }
@@ -138,10 +143,28 @@ export default function AddProviderDialog({
     setError(null);
     validateProviderRef.current = null;
     if (step === 'configure') {
+      if (hasUnsavedChanges) {
+        setDiscardDestination('select');
+        setDiscardDialogOpen(true);
+        return;
+      }
       setStep('select');
     } else {
       requestClose();
     }
+  };
+
+  const handleConfirmDiscard = () => {
+    setDiscardDialogOpen(false);
+    if (discardDestination === 'select') {
+      setProvider({ id: '__selecting__', config: {} } as ProviderOptions);
+      setProviderType(undefined);
+      setStep('select');
+      setDiscardDestination('close');
+      return;
+    }
+
+    onClose();
   };
 
   return (
@@ -253,14 +276,8 @@ export default function AddProviderDialog({
             <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
               Continue editing
             </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setDiscardDialogOpen(false);
-                onClose();
-              }}
-            >
-              Discard changes
+            <Button variant="destructive" onClick={handleConfirmDiscard}>
+              {discardDestination === 'select' ? 'Discard and choose type' : 'Discard changes'}
             </Button>
           </DialogFooter>
         </DialogContent>

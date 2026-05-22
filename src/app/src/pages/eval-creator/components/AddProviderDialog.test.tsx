@@ -198,7 +198,7 @@ describe('AddProviderDialog layout', () => {
     expect(screen.queryByText('Discard provider changes?')).toBeNull();
   });
 
-  it('confirms before discarding a selected provider', async () => {
+  it('confirms before returning to type selection with a selected provider', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
 
@@ -210,12 +210,19 @@ describe('AddProviderDialog layout', () => {
 
     await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.getByText('Configure Provider')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Discard and choose type' }));
+    expect(screen.getByText('Select Provider Type')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -234,7 +241,6 @@ describe('AddProviderDialog layout', () => {
 
     await user.click(screen.getByRole('button', { name: 'Change Provider Settings' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
