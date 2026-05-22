@@ -142,7 +142,7 @@ async function main() {
     console.log('Generating image with gpt-image-1...');
     const imageData = await generateImage();
     const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
     if (imageData.b64_json) {
       // If we get base64 data, save it directly
       const buffer = Buffer.from(imageData.b64_json, 'base64');
