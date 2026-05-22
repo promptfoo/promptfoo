@@ -416,12 +416,17 @@ function MetricChart({ table }: ChartProps) {
 
     const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
     const labels = namedScoreKeys;
+    // Compute each metric's max once; it depends only on the key, not the prompt.
+    const maxValueByKey = new Map(
+      namedScoreKeys.map((key) => [
+        key,
+        Math.max(...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0)),
+      ]),
+    );
     const datasets = table.head.prompts.map((prompt, promptIdx) => {
       const data = namedScoreKeys.map((key) => {
         const value = prompt.metrics?.namedScores[key] || 0;
-        const maxValue = Math.max(
-          ...table.head.prompts.map((p) => p.metrics?.namedScores[key] || 0),
-        );
+        const maxValue = maxValueByKey.get(key) ?? 0;
         return maxValue > 0 ? value / maxValue : 0;
       });
       return {
