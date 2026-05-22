@@ -394,7 +394,7 @@ describe('Eval', () => {
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
-  it('clears a details row hint when selecting another eval', async () => {
+  it('clears a details row hint from a selected eval without rewriting the source URL', async () => {
     vi.mocked(useTableStore).mockReturnValue({
       ...baseMockTableStore,
       table: mockTable,
@@ -414,7 +414,8 @@ describe('Eval', () => {
       getByTestId('select-recent-eval').click();
     });
 
-    const [nextLocation] = mockNavigate.mock.calls.at(-1) ?? [];
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const [nextLocation] = mockNavigate.mock.calls[0];
     expect(nextLocation).toEqual(
       expect.objectContaining({
         pathname: '/eval/eval-2',
@@ -423,7 +424,9 @@ describe('Eval', () => {
     );
     expect(new URLSearchParams(nextLocation.search).get('search')).toBe('weather');
     expect(new URLSearchParams(nextLocation.search).has('rowId')).toBe(false);
-    expect(window.location.hash).toBe('');
+    expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
+      initialUrl,
+    );
   });
 
   it('does not rewrite a details hash on a zero-filter store update', async () => {

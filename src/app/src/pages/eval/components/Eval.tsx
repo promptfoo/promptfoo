@@ -136,20 +136,19 @@ export default function Eval({ fetchId }: EvalOptions) {
    * Updates the URL with the selected eval id, triggering a re-render of the Eval component.
    */
   const handleRecentEvalSelection = useCallback(
-    async (id: string) => {
+    (id: string) => {
       // A selected eval has a different result set, so row-scoped deep links from the
-      // previous eval must not carry into it.
-      setEvalDetailsHash('');
+      // previous eval must not carry into the destination URL.
       navigate(
         buildEvalUrlWithSearchParams(
-          { pathname: EVAL_ROUTES.DETAIL(id), search: window.location.search, hash: '' },
+          { pathname: EVAL_ROUTES.DETAIL(id), search: location.search, hash: '' },
           (params) => {
             params.delete('rowId');
           },
         ),
       );
     },
-    [navigate],
+    [location.search, navigate],
   );
 
   const replaceSearchParams = useCallback(
