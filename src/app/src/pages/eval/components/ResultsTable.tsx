@@ -2246,7 +2246,17 @@ function ResultsTable({
     // Copied detail links carry both forms:
     // - `rowId` is the filtered-table position used to resolve the correct page.
     // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
-    const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
+    //
+    // The hash encodes the row's GLOBAL test index, not its position within the
+    // currently filtered/searched table. When a filter or search is active, that global
+    // index does not map to a filtered-table page, so paging by it would land on the
+    // wrong page. In that case require `rowId` (the explicit filtered position) for page
+    // resolution; the dialog can still open via the hash if the target row happens to be
+    // on the current page.
+    const isFilteringActive =
+      Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
+    const requestedRowIndex =
+      rowIndexFromQuery ?? (isFilteringActive ? undefined : detailsHashTarget?.rowIndex);
 
     if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
       const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
@@ -2319,7 +2329,16 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount, locationHash]);
+  }, [
+    pagination.pageIndex,
+    pagination.pageSize,
+    reactTable,
+    filteredResultsCount,
+    locationHash,
+    debouncedSearchText,
+    filterMode,
+    filters.appliedCount,
+  ]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.

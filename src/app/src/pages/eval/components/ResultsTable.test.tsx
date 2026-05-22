@@ -1186,6 +1186,50 @@ describe('ResultsTable Row Navigation', () => {
     );
   });
 
+  // Regression test: the details hash encodes a row's GLOBAL test index, while
+  // pagination operates on filtered-table positions. When a filter or search is active
+  // and only the hash is present (no `rowId`), the global index must NOT be used to
+  // resolve a page — doing so pages/clamps a global index as if it were a filtered one
+  // and lands on the wrong page. `rowId` is required for page resolution in that case.
+  it('does not page by a hash-only deep link when a filter is active', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} filterMode="failures" />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // With the bug, the row-jump effect treats global test index 50 as a filtered
+    // position and pages to pageIndex 1; with the fix it stays on page 1 (pageIndex 0).
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
+
+    // The hash is left intact so the dialog can still open if the target row happens to
+    // be on the current page.
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
+
+  it('still pages by a hash-only deep link when no filter is active', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+  });
+
   it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 
