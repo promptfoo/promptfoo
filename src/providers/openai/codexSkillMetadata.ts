@@ -7,9 +7,9 @@ interface CodexSkillPathCandidate {
   path: string;
 }
 
-export interface CodexCommandSkillItemAdapter<T> {
-  getCommand: (item: T) => string | undefined;
-  isSuccessfulCommand: (item: T) => boolean;
+export interface CodexCommandSkillItemAdapter {
+  getCommand: (item: unknown) => string | undefined;
+  isSuccessfulCommand: (item: unknown) => boolean;
 }
 
 export interface CodexSkillMetadata {
@@ -94,26 +94,21 @@ export function extractCodexSkillPathCandidates(
   return Array.from(matches.values());
 }
 
-export function buildCodexSkillMetadata<T>(
+export function buildCodexSkillMetadata(
   items: unknown,
   skillRootPrefixes: readonly string[],
-  itemAdapter: CodexCommandSkillItemAdapter<T>,
+  itemAdapter: CodexCommandSkillItemAdapter,
 ): CodexSkillMetadata | undefined {
   if (!Array.isArray(items) || items.length === 0) {
     return undefined;
   }
 
-  const commandItems = items as T[];
-  const attemptedSkillCalls = extractCodexSkillCallsFromItems(
-    commandItems,
-    skillRootPrefixes,
-    itemAdapter,
-  );
-  const skillCalls = extractCodexSkillCallsFromItems(commandItems, skillRootPrefixes, itemAdapter, {
+  const attemptedSkillCalls = extractCodexSkillCallsFromItems(items, skillRootPrefixes, itemAdapter);
+  const skillCalls = extractCodexSkillCallsFromItems(items, skillRootPrefixes, itemAdapter, {
     requireSuccessfulCommand: true,
   });
 
-  if (skillCalls.length === 0 && attemptedSkillCalls.length <= skillCalls.length) {
+  if (skillCalls.length === 0 && attemptedSkillCalls.length === 0) {
     return undefined;
   }
 
@@ -132,10 +127,10 @@ export function getCodexSkillMetadataFields(skillMetadata: CodexSkillMetadata): 
   };
 }
 
-function extractCodexSkillCallsFromItems<T>(
-  items: T[],
+function extractCodexSkillCallsFromItems(
+  items: readonly unknown[],
   skillRootPrefixes: readonly string[],
-  itemAdapter: CodexCommandSkillItemAdapter<T>,
+  itemAdapter: CodexCommandSkillItemAdapter,
   options: { requireSuccessfulCommand?: boolean } = {},
 ): SkillCallEntry[] {
   const skillCalls = new Map<string, CodexSkillPathCandidate>();
