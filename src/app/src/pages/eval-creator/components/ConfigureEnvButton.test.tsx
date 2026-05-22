@@ -72,7 +72,9 @@ describe('ConfigureEnvButton', () => {
     await userEvent.click(cancelButton);
 
     const discardDialog = screen.getByRole('dialog', { name: 'Discard provider setting changes?' });
-    expect(discardDialog).toHaveTextContent('unsaved API keys or endpoint settings');
+    expect(discardDialog).toHaveAccessibleDescription(
+      'Any unsaved API keys or endpoint settings you entered will be lost.',
+    );
     expect(useStore.getState().config.env).toEqual(initialConfig.env);
 
     await userEvent.click(
