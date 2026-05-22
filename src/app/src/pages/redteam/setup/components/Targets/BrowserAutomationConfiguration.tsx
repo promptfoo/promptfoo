@@ -59,7 +59,7 @@ function BrowserFieldError({ id, error }: { id: string; error?: string }) {
   }
 
   return (
-    <HelperText id={id} error>
+    <HelperText id={id} error role="alert">
       {error}
     </HelperText>
   );
@@ -71,6 +71,7 @@ const BrowserAutomationConfiguration = ({
   fieldErrors = {},
 }: BrowserAutomationConfigurationProps) => {
   const fieldErrorIdPrefix = useId();
+  const stepsErrorId = `${fieldErrorIdPrefix}-steps`;
   const getStepError = (index: number, field: keyof BrowserStepFieldErrors) =>
     fieldErrors.stepErrors?.[index]?.[field];
   const getStepErrorId = (index: number, field: keyof BrowserStepFieldErrors) =>
@@ -138,7 +139,7 @@ const BrowserAutomationConfiguration = ({
         <div className="mt-6">
           <h4 className="mb-2 font-medium">Browser Steps</h4>
           {fieldErrors.steps && (
-            <HelperText error className="mb-3">
+            <HelperText id={stepsErrorId} error role="alert" className="mb-3">
               {fieldErrors.steps}
             </HelperText>
           )}
@@ -425,6 +426,7 @@ const BrowserAutomationConfiguration = ({
 
           <Button
             variant="outline"
+            aria-describedby={fieldErrors.steps ? stepsErrorId : undefined}
             onClick={() => {
               const newSteps = [
                 ...(selectedTarget.config.steps || []),

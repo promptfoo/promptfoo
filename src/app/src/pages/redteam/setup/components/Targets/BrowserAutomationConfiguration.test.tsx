@@ -32,6 +32,26 @@ describe('BrowserAutomationConfiguration', () => {
     expect(url).toHaveAccessibleDescription(
       'Step 1: replace example.com with your application URL.',
     );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Step 1: replace example.com with your application URL.',
+    );
+  });
+
+  it('directs an empty step-list error to the action that fixes it', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([])}
+        updateCustomTarget={vi.fn()}
+        fieldErrors={{ steps: 'Add at least one browser step before saving this provider.' }}
+      />,
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Add at least one browser step before saving this provider.',
+    );
+    expect(screen.getByRole('button', { name: 'Add Step' })).toHaveAccessibleDescription(
+      'Add at least one browser step before saving this provider.',
+    );
   });
 
   it('starts added steps as editable navigation steps rather than invalid blank actions', async () => {
