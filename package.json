@@ -122,9 +122,6 @@
     "webpack-dev-server": {
       "express": "^4.22.1"
     },
-    "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.95.2"
-    },
     "@isaacs/brace-expansion": ">=5.0.1",
     "brace-expansion@5": "^5.0.6",
     "fast-xml-parser": "$fast-xml-parser",
