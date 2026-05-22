@@ -42,7 +42,7 @@ See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 - **Columns** - Toggle variable and prompt visibility
 - **Truncation** - Max text length, word wrap
 - **Rendering** - Markdown, JSON prettification
-- **Inference details** - Tokens, latency, cost, tokens/sec
+- **Inference details** - Tokens, latency, cost, tokens/sec; display costs in dollars or cents and optionally show runs per cost unit
 - **Media** - Image size limits; double-click for lightbox
 
 ## Cell Actions

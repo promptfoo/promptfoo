@@ -160,6 +160,29 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('$1.23')).toBeInTheDocument();
   });
 
+  it('displays total cost in cents', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      costDisplayUnit: 'cents',
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('123.46¢')).toBeInTheDocument();
+  });
+
+  it('displays average cost and runs per unit when enabled', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      showRunsPerCostUnit: true,
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('Avg Cost:')).toBeInTheDocument();
+    expect(screen.getByText(/8\.1 runs\/\$1/)).toBeInTheDocument();
+  });
+
   it('displays total tokens with correct formatting', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
@@ -2548,6 +2571,11 @@ describe('ResultsTable Filtered Metrics Display', () => {
   };
 
   beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
@@ -2637,6 +2665,17 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredLatencyElement).toBeInTheDocument();
     expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
   });
+
+  it('displays filtered cost in cents', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      costDisplayUnit: 'cents',
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('(61.73¢ filtered)')).toBeInTheDocument();
+  });
 });
 
 describe('ResultsTable - No Filters Applied', () => {
@@ -2690,6 +2729,11 @@ describe('ResultsTable - No Filters Applied', () => {
   };
 
   beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',

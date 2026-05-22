@@ -6,6 +6,8 @@ interface SettingsState {
   maxTextLength: number;
   wordBreak: string;
   showInferenceDetails: boolean;
+  costDisplayUnit: string;
+  showRunsPerCostUnit: boolean;
   renderMarkdown: boolean;
   prettifyJson: boolean;
   showPrompts: boolean;
@@ -25,6 +27,10 @@ export const useSettingsState = (isOpen: boolean) => {
     setWordBreak,
     showInferenceDetails,
     setShowInferenceDetails,
+    costDisplayUnit,
+    setCostDisplayUnit,
+    showRunsPerCostUnit,
+    setShowRunsPerCostUnit,
     renderMarkdown,
     setRenderMarkdown,
     prettifyJson,
@@ -57,6 +63,8 @@ export const useSettingsState = (isOpen: boolean) => {
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    costDisplayUnit,
+    showRunsPerCostUnit,
     renderMarkdown,
     prettifyJson,
     showPrompts,
@@ -73,6 +81,8 @@ export const useSettingsState = (isOpen: boolean) => {
         maxTextLength,
         wordBreak,
         showInferenceDetails,
+        costDisplayUnit,
+        showRunsPerCostUnit,
         renderMarkdown,
         prettifyJson,
         showPrompts,
@@ -88,6 +98,8 @@ export const useSettingsState = (isOpen: boolean) => {
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    costDisplayUnit,
+    showRunsPerCostUnit,
     renderMarkdown,
     prettifyJson,
     showPrompts,
@@ -104,6 +116,8 @@ export const useSettingsState = (isOpen: boolean) => {
       maxTextLength !== initialState.maxTextLength ||
       wordBreak !== initialState.wordBreak ||
       showInferenceDetails !== initialState.showInferenceDetails ||
+      costDisplayUnit !== initialState.costDisplayUnit ||
+      showRunsPerCostUnit !== initialState.showRunsPerCostUnit ||
       renderMarkdown !== initialState.renderMarkdown ||
       prettifyJson !== initialState.prettifyJson ||
       showPrompts !== initialState.showPrompts ||
@@ -117,6 +131,8 @@ export const useSettingsState = (isOpen: boolean) => {
     maxTextLength,
     wordBreak,
     showInferenceDetails,
+    costDisplayUnit,
+    showRunsPerCostUnit,
     renderMarkdown,
     prettifyJson,
     showPrompts,
@@ -148,6 +164,8 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPassFail(true);
     setShowPassReasons(false);
     setShowInferenceDetails(true);
+    setCostDisplayUnit('dollars');
+    setShowRunsPerCostUnit(false);
     setMaxTextLength(500);
     setLocalMaxTextLength(500);
     setMaxImageWidth(500);
@@ -161,6 +179,8 @@ export const useSettingsState = (isOpen: boolean) => {
     setShowPassFail,
     setShowPassReasons,
     setShowInferenceDetails,
+    setCostDisplayUnit,
+    setShowRunsPerCostUnit,
     setMaxTextLength,
     setMaxImageWidth,
     setMaxImageHeight,

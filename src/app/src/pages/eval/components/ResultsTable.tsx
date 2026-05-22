@@ -16,6 +16,13 @@ import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
+import {
+  type CostDisplayUnit,
+  calculateRunsPerCostUnit,
+  formatRunsPerCostUnit,
+  formatUsdCost,
+  getCostDisplayValue,
+} from '@app/utils/cost';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -544,43 +551,58 @@ function renderCostMetric({
   metrics,
   filteredMetrics,
   testCount,
+  costDisplayUnit,
+  showRunsPerCostUnit,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
+  costDisplayUnit: CostDisplayUnit;
+  showRunsPerCostUnit: boolean;
 }): React.ReactNode {
   if (!metrics?.cost) {
     return null;
   }
 
   const totalAverage = testCount?.total ? metrics.cost / testCount.total : 0;
-  const totalCost = formatMetricValue(metrics.cost, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: metrics.cost >= 1 ? 2 : 4,
+  const getCostFormatOptions = (costUsd: number, minimumFractionDigits: number) => ({
+    minimumFractionDigits,
+    maximumFractionDigits: getCostDisplayValue(costUsd, costDisplayUnit) >= 1 ? 2 : 4,
   });
-  const averageCost = formatMetricValue(totalAverage, {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: testCount?.total && totalAverage >= 1 ? 2 : 4,
+  const totalCost = formatUsdCost(metrics.cost, costDisplayUnit, {
+    ...getCostFormatOptions(metrics.cost, 2),
   });
+  const averageCost = formatUsdCost(totalAverage, costDisplayUnit, {
+    ...getCostFormatOptions(totalAverage, 1),
+  });
+  const averageRuns = showRunsPerCostUnit
+    ? calculateRunsPerCostUnit(totalAverage, costDisplayUnit)
+    : undefined;
+  const filteredCost = filteredMetrics?.cost
+    ? formatUsdCost(filteredMetrics.cost, costDisplayUnit, {
+        ...getCostFormatOptions(filteredMetrics.cost, 2),
+      })
+    : undefined;
 
   return (
-    <div>
-      <strong>Total Cost:</strong>{' '}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="cursor-help">${totalCost}</span>
-        </TooltipTrigger>
-        <TooltipContent>{`Average: $${averageCost} per test`}</TooltipContent>
-      </Tooltip>
-      {filteredMetrics?.cost && testCount?.filtered
-        ? renderFilteredSuffix(
-            `$${formatMetricValue(filteredMetrics.cost, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: filteredMetrics.cost >= 1 ? 2 : 4,
-            })}`,
-          )
-        : null}
-    </div>
+    <>
+      <div>
+        <strong>Total Cost:</strong>{' '}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help">{totalCost}</span>
+          </TooltipTrigger>
+          <TooltipContent>{`Average: ${averageCost} per run`}</TooltipContent>
+        </Tooltip>
+        {filteredCost && testCount?.filtered ? renderFilteredSuffix(filteredCost) : null}
+      </div>
+      {averageRuns === undefined ? null : (
+        <div>
+          <strong>Avg Cost:</strong> {averageCost} per run ·{' '}
+          {formatRunsPerCostUnit(averageRuns, costDisplayUnit)}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -892,6 +914,8 @@ function renderPromptMetricDetails({
   numAsserts,
   numGoodAsserts,
   testCounts,
+  costDisplayUnit,
+  showRunsPerCostUnit,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
@@ -901,6 +925,8 @@ function renderPromptMetricDetails({
   numAsserts: number[];
   numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
+  costDisplayUnit: CostDisplayUnit;
+  showRunsPerCostUnit: boolean;
 }): React.ReactNode {
   if (!showStats) {
     return null;
@@ -914,6 +940,8 @@ function renderPromptMetricDetails({
         metrics,
         filteredMetrics,
         testCount: testCounts[idx],
+        costDisplayUnit,
+        showRunsPerCostUnit,
       })}
       {renderTokenMetrics({
         metrics,
@@ -984,6 +1012,8 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+  const { costDisplayUnit = 'dollars', showRunsPerCostUnit = false } =
+    useResultsViewSettingsStore();
 
   return (
     <div className="output-header">
@@ -1058,6 +1088,8 @@ function PromptColumnHeader({
         numAsserts,
         numGoodAsserts,
         testCounts,
+        costDisplayUnit,
+        showRunsPerCostUnit,
       })}
       {filterMode === 'failures' && headPromptCount > 1 && (
         <label className="flex items-center gap-2 text-xs cursor-pointer">

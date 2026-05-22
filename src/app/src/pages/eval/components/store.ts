@@ -13,6 +13,7 @@ import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
 import { hasHumanRating } from './utils';
+import type { CostDisplayUnit } from '@app/utils/cost';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -408,6 +409,10 @@ interface SettingsState {
   setWordBreak: (wordBreak: 'break-word' | 'break-all') => void;
   showInferenceDetails: boolean;
   setShowInferenceDetails: (showInferenceDetails: boolean) => void;
+  costDisplayUnit: CostDisplayUnit;
+  setCostDisplayUnit: (costDisplayUnit: CostDisplayUnit) => void;
+  showRunsPerCostUnit: boolean;
+  setShowRunsPerCostUnit: (showRunsPerCostUnit: boolean) => void;
   renderMarkdown: boolean;
   setRenderMarkdown: (renderMarkdown: boolean) => void;
   prettifyJson: boolean;
@@ -453,6 +458,11 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       showInferenceDetails: true,
       setShowInferenceDetails: (showInferenceDetails: boolean) =>
         set(() => ({ showInferenceDetails })),
+      costDisplayUnit: 'dollars',
+      setCostDisplayUnit: (costDisplayUnit: CostDisplayUnit) => set(() => ({ costDisplayUnit })),
+      showRunsPerCostUnit: false,
+      setShowRunsPerCostUnit: (showRunsPerCostUnit: boolean) =>
+        set(() => ({ showRunsPerCostUnit })),
       renderMarkdown: false,
       setRenderMarkdown: (renderMarkdown: boolean) => set(() => ({ renderMarkdown })),
       prettifyJson: false,

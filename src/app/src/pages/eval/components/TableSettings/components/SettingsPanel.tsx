@@ -24,6 +24,10 @@ const SettingsPanel = () => {
     setShowPassReasons,
     showInferenceDetails,
     setShowInferenceDetails,
+    costDisplayUnit,
+    setCostDisplayUnit,
+    showRunsPerCostUnit,
+    setShowRunsPerCostUnit,
     maxTextLength,
     setMaxTextLength,
     renderMarkdown,
@@ -130,6 +134,20 @@ const SettingsPanel = () => {
           checked={prettifyJson}
           onChange={setPrettifyJson}
           tooltipText="Format JSON with indentation"
+        />
+
+        <CompactToggle
+          label="Cost in cents"
+          checked={costDisplayUnit === 'cents'}
+          onChange={(checked) => setCostDisplayUnit(checked ? 'cents' : 'dollars')}
+          tooltipText="Change cost display units without changing stored costs"
+        />
+
+        <CompactToggle
+          label="Runs per cost unit"
+          checked={showRunsPerCostUnit}
+          onChange={setShowRunsPerCostUnit}
+          tooltipText="Show runs per $1 or 1 cent with cost details"
         />
 
         <CompactToggle

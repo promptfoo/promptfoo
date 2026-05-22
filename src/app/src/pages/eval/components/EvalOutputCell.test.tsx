@@ -43,6 +43,8 @@ const defaultResultsViewSettings = {
   showPrompts: true,
   maxImageWidth: 256,
   maxImageHeight: 256,
+  costDisplayUnit: 'dollars',
+  showRunsPerCostUnit: false,
 };
 
 const defaultTableStoreState = {
@@ -188,6 +190,61 @@ describe('EvalOutputCell', () => {
     };
 
     expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
+  });
+
+  it('shows compact dollar costs without runs by default', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          cost: 0.00012,
+        }}
+      />,
+    );
+
+    expect(screen.getByText('$0.00012')).toBeInTheDocument();
+    expect(screen.queryByText(/runs\//)).not.toBeInTheDocument();
+  });
+
+  it('shows cents and runs per cent when cost display settings enable them', () => {
+    Object.assign(mockResultsViewSettings, {
+      costDisplayUnit: 'cents',
+      showRunsPerCostUnit: true,
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          cost: 0.00012,
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/0\.012¢/)).toBeInTheDocument();
+    expect(screen.getByText(/83\.3 runs\/1¢/)).toBeInTheDocument();
+  });
+
+  it('keeps cost and runs hidden when inference details are hidden', () => {
+    Object.assign(mockResultsViewSettings, {
+      showRunsPerCostUnit: true,
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        showStats={false}
+        output={{
+          ...defaultProps.output,
+          cost: 0.00012,
+        }}
+      />,
+    );
+
+    expect(screen.queryByText('Cost:')).not.toBeInTheDocument();
+    expect(screen.queryByText(/runs\//)).not.toBeInTheDocument();
   });
 
   it('passes metadata correctly to the dialog', async () => {
