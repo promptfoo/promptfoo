@@ -198,7 +198,12 @@ const YamlEditorComponent = ({
             </Button>
           </div>
           {hasUnsavedChanges && (
-            <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+            <span
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="text-sm text-amber-600 dark:text-amber-400 font-medium"
+            >
               ● Unsaved changes
             </span>
           )}

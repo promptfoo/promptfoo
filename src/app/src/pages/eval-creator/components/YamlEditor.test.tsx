@@ -352,9 +352,12 @@ describe('YamlEditor', () => {
       await user.paste('description: Modified content');
 
       // Unsaved changes indicator should appear
-      const unsavedChanges = screen.getByText(/Unsaved changes/);
+      const unsavedChanges = screen.getByRole('status');
 
       expect(unsavedChanges).toBeInTheDocument();
+      expect(unsavedChanges).toHaveTextContent('Unsaved changes');
+      expect(unsavedChanges).toHaveAttribute('aria-live', 'polite');
+      expect(unsavedChanges).toHaveAttribute('aria-atomic', 'true');
       expect(unsavedChanges.parentElement).toHaveClass(
         'flex-col',
         'sm:flex-row',
