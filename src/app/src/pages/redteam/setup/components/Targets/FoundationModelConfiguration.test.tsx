@@ -46,9 +46,17 @@ describe('FoundationModelConfiguration', () => {
     expect(maxTokensInput).toHaveValue(1024);
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
+    expect(apiKeyInput).toHaveAttribute('type', 'password');
+    expect(apiKeyInput).toHaveAttribute('autocomplete', 'new-password');
+    expect(apiKeyInput).toHaveAccessibleDescription(/included in this provider configuration/i);
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
+    expect(apiBaseUrlInput).toHaveAccessibleDescription(/For proxies, local models/i);
     expect(screen.getByText(/Prefer the OPENAI_API_KEY environment variable/i)).toBeInTheDocument();
     expect(screen.getByText(/not restored after a page reload/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show API Key' }));
+    expect(apiKeyInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide API Key' })).toBeInTheDocument();
 
     await user.click(temperatureInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -96,6 +104,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: 'Model ID' });
     expect(modelIdInput).toHaveValue('test-model-id');
     expect(modelIdInput).toBeRequired();
+    expect(modelIdInput).toHaveAccessibleDescription(/Specify the model to use/i);
   });
 
   it('should call updateCustomTarget with the correct arguments when the user types a new model ID', async () => {
@@ -194,15 +203,19 @@ describe('FoundationModelConfiguration', () => {
 
     const modelIdInput = screen.getByLabelText(/Model ID/i);
     expect(modelIdInput).toHaveAttribute('aria-invalid', 'true');
-    expect(modelIdInput).toHaveAccessibleDescription('Model ID is required');
+    expect(modelIdInput).toHaveAccessibleDescription(/Model ID is required.*Specify the model/i);
 
     const temperatureInput = await screen.findByLabelText('Temperature');
     expect(temperatureInput).toHaveAttribute('aria-invalid', 'true');
-    expect(temperatureInput).toHaveAccessibleDescription('Temperature must be between 0 and 2');
+    expect(temperatureInput).toHaveAccessibleDescription(
+      /Temperature must be between 0 and 2.*Controls randomness/i,
+    );
 
     const maxTokensInput = screen.getByLabelText('Max Tokens');
     expect(maxTokensInput).toHaveAttribute('aria-invalid', 'true');
-    expect(maxTokensInput).toHaveAccessibleDescription('Max tokens must be greater than 0');
+    expect(maxTokensInput).toHaveAccessibleDescription(
+      /Max tokens must be greater than 0.*Maximum number of tokens/i,
+    );
   });
 
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
@@ -330,6 +343,32 @@ describe('FoundationModelConfiguration', () => {
       'href',
       'https://www.promptfoo.dev/docs/providers/vertex',
     );
+  });
+
+  it('masks a revealed API key again when the configured model changes', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    await user.click(screen.getByRole('button', { name: 'Show API Key' }));
+    expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
+
+    rerender(
+      <FoundationModelConfiguration
+        selectedTarget={{ ...initialTarget, id: 'openai:gpt-5.4' }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Show API Key' })).toBeInTheDocument();
   });
 
   it('should prioritize Google AI Studio when both Google AI Studio and Vertex API keys are present', () => {

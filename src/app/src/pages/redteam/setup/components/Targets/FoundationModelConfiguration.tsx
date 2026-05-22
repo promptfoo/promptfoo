@@ -94,13 +94,19 @@ const FoundationModelConfiguration = ({
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
     isBedrock && Boolean(selectedTarget.config?.region || selectedTarget.config?.profile),
   );
+  const [showApiKey, setShowApiKey] = useState(false);
   const fieldErrorIdPrefix = React.useId();
   const hasAdvancedFieldErrors = Boolean(
     fieldErrors.temperature || fieldErrors.maxTokens || fieldErrors.topP,
   );
+  const getDescriptionIds = (field: string, hasError = false) =>
+    hasError
+      ? `${fieldErrorIdPrefix}-${field}-error ${fieldErrorIdPrefix}-${field}-help`
+      : `${fieldErrorIdPrefix}-${field}-help`;
 
   useEffect(() => {
     setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
+    setShowApiKey(false);
   }, [isBedrock, selectedTarget.id]);
 
   useEffect(() => {
@@ -309,14 +315,14 @@ const FoundationModelConfiguration = ({
             onChange={handleModelIdChange}
             placeholder={providerInfo.placeholder}
             aria-invalid={Boolean(fieldErrors.modelId)}
-            aria-describedby={fieldErrors.modelId ? `${fieldErrorIdPrefix}-model-id` : undefined}
+            aria-describedby={getDescriptionIds('model-id', Boolean(fieldErrors.modelId))}
           />
           {fieldErrors.modelId && (
-            <HelperText id={`${fieldErrorIdPrefix}-model-id`} error>
+            <HelperText id={`${fieldErrorIdPrefix}-model-id-error`} error>
               {fieldErrors.modelId}
             </HelperText>
           )}
-          <p className="text-sm text-muted-foreground">
+          <HelperText id={`${fieldErrorIdPrefix}-model-id-help`} className="text-sm">
             {isBedrock
               ? `Saved as ${buildBedrockProviderId(bedrockApiMode, modelId || '<model>')}. `
               : 'Specify the model to use. '}
@@ -330,7 +336,7 @@ const FoundationModelConfiguration = ({
               {providerInfo.name} documentation
             </a>{' '}
             for available models.
-          </p>
+          </HelperText>
         </div>
 
         {isBedrock && bedrockApiMode === 'converse' && (
@@ -514,16 +520,19 @@ const FoundationModelConfiguration = ({
                   updateCustomTarget('temperature', parseOptionalNumber(e.target.value))
                 }
                 aria-invalid={Boolean(fieldErrors.temperature)}
-                aria-describedby={
-                  fieldErrors.temperature ? `${fieldErrorIdPrefix}-temperature` : undefined
-                }
+                aria-describedby={getDescriptionIds(
+                  'temperature',
+                  Boolean(fieldErrors.temperature),
+                )}
               />
               {fieldErrors.temperature && (
-                <HelperText id={`${fieldErrorIdPrefix}-temperature`} error>
+                <HelperText id={`${fieldErrorIdPrefix}-temperature-error`} error>
                   {fieldErrors.temperature}
                 </HelperText>
               )}
-              <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
+              <HelperText id={`${fieldErrorIdPrefix}-temperature-help`} className="text-sm">
+                Controls randomness (0.0 to 2.0)
+              </HelperText>
             </div>
 
             <div className="space-y-2">
@@ -537,16 +546,16 @@ const FoundationModelConfiguration = ({
                   updateCustomTarget('max_tokens', parseOptionalInteger(e.target.value))
                 }
                 aria-invalid={Boolean(fieldErrors.maxTokens)}
-                aria-describedby={
-                  fieldErrors.maxTokens ? `${fieldErrorIdPrefix}-max-tokens` : undefined
-                }
+                aria-describedby={getDescriptionIds('max-tokens', Boolean(fieldErrors.maxTokens))}
               />
               {fieldErrors.maxTokens && (
-                <HelperText id={`${fieldErrorIdPrefix}-max-tokens`} error>
+                <HelperText id={`${fieldErrorIdPrefix}-max-tokens-error`} error>
                   {fieldErrors.maxTokens}
                 </HelperText>
               )}
-              <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
+              <HelperText id={`${fieldErrorIdPrefix}-max-tokens-help`} className="text-sm">
+                Maximum number of tokens to generate
+              </HelperText>
             </div>
 
             <div className="space-y-2">
@@ -560,31 +569,45 @@ const FoundationModelConfiguration = ({
                 value={selectedTarget.config?.top_p ?? ''}
                 onChange={(e) => updateCustomTarget('top_p', parseOptionalNumber(e.target.value))}
                 aria-invalid={Boolean(fieldErrors.topP)}
-                aria-describedby={fieldErrors.topP ? `${fieldErrorIdPrefix}-top-p` : undefined}
+                aria-describedby={getDescriptionIds('top-p', Boolean(fieldErrors.topP))}
               />
               {fieldErrors.topP && (
-                <HelperText id={`${fieldErrorIdPrefix}-top-p`} error>
+                <HelperText id={`${fieldErrorIdPrefix}-top-p-error`} error>
                   {fieldErrors.topP}
                 </HelperText>
               )}
-              <p className="text-sm text-muted-foreground">
+              <HelperText id={`${fieldErrorIdPrefix}-top-p-help`} className="text-sm">
                 Nucleus sampling parameter (0.0 to 1.0)
-              </p>
+              </HelperText>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="api-key">API Key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                value={selectedTarget.config?.apiKey ?? ''}
-                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-              />
-              <p className="text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Input
+                  id="api-key"
+                  type={showApiKey ? 'text' : 'password'}
+                  value={selectedTarget.config?.apiKey ?? ''}
+                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  aria-describedby={`${fieldErrorIdPrefix}-api-key-help`}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowApiKey((shown) => !shown)}
+                  aria-label={`${showApiKey ? 'Hide' : 'Show'} API Key`}
+                >
+                  {showApiKey ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+              <HelperText id={`${fieldErrorIdPrefix}-api-key-help`} className="text-sm">
                 Optional. Prefer the {providerInfo.envVar} environment variable. A key entered here
                 is included in this provider configuration and any copied or downloaded YAML, and is
                 not restored after a page reload.
-              </p>
+              </HelperText>
             </div>
 
             <div className="space-y-2">
@@ -595,10 +618,11 @@ const FoundationModelConfiguration = ({
                 value={selectedTarget.config?.apiBaseUrl ?? ''}
                 onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
                 placeholder="https://api.openai.com/v1"
+                aria-describedby={`${fieldErrorIdPrefix}-api-base-url-help`}
               />
-              <p className="text-sm text-muted-foreground">
+              <HelperText id={`${fieldErrorIdPrefix}-api-base-url-help`} className="text-sm">
                 For proxies, local models (Ollama, LMStudio), or custom API endpoints
-              </p>
+              </HelperText>
             </div>
           </div>
         </SetupSection>
