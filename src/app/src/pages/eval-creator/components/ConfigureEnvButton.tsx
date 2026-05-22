@@ -9,6 +9,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -92,19 +93,36 @@ const ConfigureEnvButton = () => {
   const defaultEnv = config.env || {};
   const [dialogOpen, setDialogOpen] = useState(false);
   const [env, setEnv] = useState<Record<string, string>>(defaultEnv as Record<string, string>);
+  const [cleanEnv, setCleanEnv] = useState<Record<string, string>>(
+    defaultEnv as Record<string, string>,
+  );
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+  const hasUnsavedChanges = JSON.stringify(env) !== JSON.stringify(cleanEnv);
 
   const handleOpen = () => {
-    setEnv(defaultEnv as Record<string, string>);
+    const currentEnv = defaultEnv as Record<string, string>;
+    setEnv(currentEnv);
+    setCleanEnv(currentEnv);
+    setDiscardDialogOpen(false);
     setDialogOpen(true);
   };
 
-  const handleClose = () => {
+  const closeDialog = () => {
     setDialogOpen(false);
+  };
+
+  const requestClose = () => {
+    if (hasUnsavedChanges) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    closeDialog();
   };
 
   const handleSave = () => {
     updateConfig({ env });
-    handleClose();
+    setCleanEnv(env);
+    closeDialog();
   };
 
   const handleEnvChange = (key: string, value: string) => {
@@ -118,7 +136,7 @@ const ConfigureEnvButton = () => {
         API keys
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => !open && handleClose()}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => !open && requestClose()}>
         <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Provider Settings</DialogTitle>
@@ -221,10 +239,38 @@ const ConfigureEnvButton = () => {
           </div>
 
           <DialogFooter data-testid="configure-env-dialog-footer" className="shrink-0">
-            <Button variant="outline" onClick={handleClose}>
+            <Button variant="outline" onClick={requestClose}>
               Cancel
             </Button>
             <Button onClick={handleSave}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={discardDialogOpen}
+        onOpenChange={(open) => !open && setDiscardDialogOpen(false)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard provider setting changes?</DialogTitle>
+            <DialogDescription>
+              Any unsaved API keys or endpoint settings you entered will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
+              Continue editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDiscardDialogOpen(false);
+                closeDialog();
+              }}
+            >
+              Discard changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

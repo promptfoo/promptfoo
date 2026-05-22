@@ -53,7 +53,7 @@ describe('ConfigureEnvButton', () => {
     });
   });
 
-  it('should close the dialog without updating the environment configuration when the Cancel button is clicked', async () => {
+  it('should confirm before discarding edited provider settings and leave the saved configuration unchanged', async () => {
     const initialEnv = { OPENAI_API_KEY: 'initial-openai-key' };
     useStore.getState().updateConfig({ env: initialEnv });
     const initialConfig = useStore.getState().config;
@@ -68,12 +68,34 @@ describe('ConfigureEnvButton', () => {
     const cancelButton = screen.getByRole('button', { name: /cancel/i });
     await userEvent.click(cancelButton);
 
+    const discardDialog = screen.getByRole('dialog', { name: 'Discard provider setting changes?' });
+    expect(discardDialog).toHaveTextContent('unsaved API keys or endpoint settings');
+    expect(useStore.getState().config.env).toEqual(initialConfig.env);
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Discard changes',
+      }),
+    );
+
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     const currentConfig = useStore.getState().config;
     expect(currentConfig.env).toEqual(initialConfig.env);
+  });
+
+  it('closes immediately when no provider setting changes have been made', async () => {
+    render(<ConfigureEnvButton />);
+
+    await openProviderSettingsDialog();
+    await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(screen.queryByText('Discard provider setting changes?')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 
   it('should pre-fill environment fields with values from config.env when the dialog is opened', async () => {
