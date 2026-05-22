@@ -171,7 +171,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   useEffect(() => {
     const unsubscribe = useTableStore.subscribe(
       (state) => state.filters,
-      (_filters) => {
+      (_filters, previousFilters) => {
         if (isHydratingFiltersRef.current) {
           return;
         }
@@ -181,12 +181,15 @@ export default function Eval({ fetchId }: EvalOptions) {
 
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
+          const didClearAppliedFilters = previousFilters.appliedCount > 0;
           // `replaceSearchParams` also drops `rowId` and the details hash, so it must
-          // still run when those are present even if there is no `filter` param.
+          // still run when those are present after a filter clear even if there is no
+          // `filter` param.
           if (
-            _searchParams.has('filter') ||
-            _searchParams.has('rowId') ||
-            Boolean(window.location.hash)
+            didClearAppliedFilters &&
+            (_searchParams.has('filter') ||
+              _searchParams.has('rowId') ||
+              Boolean(window.location.hash))
           ) {
             replaceSearchParams((params) => {
               params.delete('filter');
