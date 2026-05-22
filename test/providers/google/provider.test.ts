@@ -199,13 +199,15 @@ describe('GoogleProvider', () => {
       expect(endpoint).toContain('/v1alpha/');
     });
 
-    it('should use v1alpha for gemini-3 models', () => {
+    it('should use v1beta for gemini-3 models', () => {
+      // Regression: dash-named gemini-3-* models resolve to v1beta, the same
+      // as dotted gemini-3.x IDs. v1beta is Google's primary Gemini 3 endpoint.
       const gemini3Provider = new GoogleProvider('gemini-3-pro', {
         config: { apiKey: 'test-key' },
       });
 
       const endpoint = gemini3Provider.getApiEndpoint('generateContent');
-      expect(endpoint).toContain('/v1alpha/');
+      expect(endpoint).toContain('/v1beta/');
     });
 
     it('should use v1beta for gemini-3.1 models', () => {
