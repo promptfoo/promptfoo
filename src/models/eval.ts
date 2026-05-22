@@ -97,25 +97,14 @@ export function escapeJsonPathKey(key: string): string {
 }
 
 /**
- * Builds a safe JSON path for use in SQLite json_extract() queries.
+ * Builds a JSON path for use as a bound SQLite json_extract() parameter.
  *
- * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
- * because SQLite's json_extract() function only accepts JSON paths as string literals,
- * not as parameterized values.
- *
- * Safety is ensured through double escaping:
- * 1. JSON path characters are escaped (backslashes and double quotes)
- * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
- *
- * @param field - The JSON field name from user input
- * @returns A sql.raw() fragment containing the safely escaped JSON path
+ * The field name still needs JSON-path escaping so special characters remain
+ * inside the quoted key. SQL safety comes from passing the returned path through
+ * Drizzle's `sql` templates as a value, never as raw SQL.
  */
-export function buildSafeJsonPath(field: string): ReturnType<typeof sql.raw> {
-  const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
-  // Escape single quotes for SQL string literal (standard SQL escaping)
-  const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-  // sql.raw() is safe here because we've fully escaped the content
-  return sql.raw(`'${sqlSafeJsonPath}'`);
+export function buildSafeJsonPath(field: string): string {
+  return `$."${escapeJsonPathKey(field)}"`;
 }
 
 /**
@@ -256,8 +245,7 @@ export class EvalQueries {
     }
 
     try {
-      const escapedKey = escapeJsonPathKey(trimmedKey);
-      const jsonPath = `$."${escapedKey}"`;
+      const jsonPath = buildSafeJsonPath(trimmedKey);
 
       const query = sql`
         SELECT DISTINCT
