@@ -424,6 +424,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const confirmDeleteTestCase = () => {
     if (testCaseToDelete !== null) {
       setTestCases(testCases.filter((_, i) => i !== testCaseToDelete));
+      showToast(
+        `Test case ${testCaseToDelete + 1} deleted. Future runs no longer include it.`,
+        'success',
+      );
       setTestCaseToDelete(null);
     }
     setDeleteDialogOpen(false);
@@ -735,7 +739,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             </DialogTitle>
             <DialogDescription id={deleteDialogDescriptionId}>
               This removes {testCaseLabelToDelete} from this evaluation. This action cannot be
-              undone.
+              undone. Future runs will no longer evaluate it across prompts and providers.
               {testCases.length === 1 &&
                 ' This is your only test case; add another test case before you can run the evaluation.'}
             </DialogDescription>

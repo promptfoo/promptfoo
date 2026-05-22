@@ -1004,7 +1004,9 @@ describe('TestCasesSection', () => {
 
       expect(
         screen.getByRole('dialog', { name: 'Delete test case 1?' }),
-      ).toHaveAccessibleDescription(/This removes test case 1 from this evaluation./);
+      ).toHaveAccessibleDescription(
+        /This removes test case 1 from this evaluation. This action cannot be undone. Future runs will no longer evaluate it across prompts and providers./,
+      );
       expect(screen.getByText(/this is your only test case/i)).toBeInTheDocument();
       expect(screen.getByText(/add another test case before you can run/i)).toBeInTheDocument();
 
@@ -1018,6 +1020,10 @@ describe('TestCasesSection', () => {
       expect(mockUpdateConfig).toHaveBeenCalledWith({
         tests: [],
       });
+      expect(mockShowToast).toHaveBeenCalledWith(
+        'Test case 1 deleted. Future runs no longer include it.',
+        'success',
+      );
     });
   });
 });
