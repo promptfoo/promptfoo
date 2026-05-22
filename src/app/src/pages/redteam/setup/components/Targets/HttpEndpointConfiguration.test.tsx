@@ -1,17 +1,23 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { callApi } from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+}));
+
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ textareaId, value, onValueChange }: any) => (
+  default: ({ textareaId, value, onValueChange, readOnly }: any) => (
     <textarea
       id={textareaId}
       data-testid="code-editor"
       value={value}
+      readOnly={readOnly}
       onChange={(e) => onValueChange(e.target.value)}
     />
   ),
@@ -146,6 +152,46 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
+    expect(screen.getByLabelText(/Example Request/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Example Response/)).toBeInTheDocument();
+  });
+
+  it('labels generated configuration and announces generation errors', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: 'http',
+        config: { url: 'https://api.example.com/chat', method: 'POST' },
+      }),
+    } as Response);
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+
+    expect(await screen.findByLabelText('Generated Configuration')).toHaveAttribute('readonly');
+
+    vi.mocked(callApi).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'Example request could not be parsed' }),
+    } as Response);
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Error: Example request could not be parsed',
+    );
   });
 
   it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {

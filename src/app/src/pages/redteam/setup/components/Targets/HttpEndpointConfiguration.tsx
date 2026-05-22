@@ -960,11 +960,15 @@ ${exampleRequest}`;
             </p>
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               <div>
-                <p className="mb-2 text-lg font-semibold">
+                <Label
+                  htmlFor="http-config-example-request"
+                  className="mb-2 block text-lg font-semibold"
+                >
                   Example Request (paste your HTTP request here)
-                </p>
+                </Label>
                 <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
+                    textareaId="http-config-example-request"
                     value={request}
                     onValueChange={(val) => setRequest(val)}
                     highlight={(code) => code}
@@ -978,11 +982,15 @@ ${exampleRequest}`;
                 </div>
               </div>
               <div>
-                <p className="mb-2 text-lg font-semibold">
+                <Label
+                  htmlFor="http-config-example-response"
+                  className="mb-2 block text-lg font-semibold"
+                >
                   Example Response (optional, improves accuracy)
-                </p>
+                </Label>
                 <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
+                    textareaId="http-config-example-response"
                     value={response}
                     onValueChange={(val) => setResponse(val)}
                     highlight={(code) => code}
@@ -997,13 +1005,20 @@ ${exampleRequest}`;
               </div>
               {error && (
                 <div className="col-span-2">
-                  <p className="text-destructive">Error: {error}</p>
+                  <p role="alert" className="text-destructive">
+                    Error: {error}
+                  </p>
                 </div>
               )}
               {generatedConfig && (
                 <div className="col-span-2">
                   <div className="mb-2 mt-4 flex items-center">
-                    <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
+                    <Label
+                      htmlFor="http-generated-configuration"
+                      className="flex-1 text-lg font-semibold"
+                    >
+                      Generated Configuration
+                    </Label>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1020,6 +1035,7 @@ ${exampleRequest}`;
                   </div>
                   <div className="h-80 overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                     <Editor
+                      textareaId="http-generated-configuration"
                       value={yaml.dump(generatedConfig.config)}
                       onValueChange={() => {}} // Read-only
                       highlight={(code) => code}
