@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 TASK_LOADERS = {
     "memory_poison": "agent_threat_bench_memory_poison",
     "autonomy_hijack": "agent_threat_bench_autonomy_hijack",
@@ -16,7 +15,9 @@ def generate_tests():
     tests = []
     for task_name, task_loader in _task_loaders().items():
         dataset = task_loader().dataset
-        tests.extend(_test_case(task_name, dataset[index]) for index in range(len(dataset)))
+        tests.extend(
+            _test_case(task_name, dataset[index]) for index in range(len(dataset))
+        )
     return tests
 
 

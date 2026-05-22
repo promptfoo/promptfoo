@@ -115,7 +115,11 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     if eval_log is None:
         return {
             "error": f"Inspect completed but no .eval log was found in {log_dir}.",
-            "metadata": {"inspect_log_path": str(log_dir), "status": "error", "task": task},
+            "metadata": {
+                "inspect_log_path": str(log_dir),
+                "status": "error",
+                "task": task,
+            },
         }
 
     dump_result = _dump_eval_log(inspect_cmd, eval_log, base_path)
@@ -127,7 +131,11 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     except json.JSONDecodeError as exc:
         return {
             "error": f"Could not parse Inspect log dump JSON for {eval_log}: {exc}",
-            "metadata": {"inspect_log_path": str(eval_log), "status": "error", "task": task},
+            "metadata": {
+                "inspect_log_path": str(eval_log),
+                "status": "error",
+                "task": task,
+            },
         }
 
     parsed = _parse_inspect_log(log_json)
@@ -293,7 +301,9 @@ def _parse_inspect_log(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _sample_scores(sample: dict[str, Any]) -> tuple[dict[str, float] | None, str | None]:
+def _sample_scores(
+    sample: dict[str, Any],
+) -> tuple[dict[str, float] | None, str | None]:
     scores = sample.get("scores") or {}
     preferred_score = scores.get(SCORER)
     if preferred_score is None:
@@ -303,7 +313,10 @@ def _sample_scores(sample: dict[str, Any]) -> tuple[dict[str, float] | None, str
 
     value = preferred_score.get("value") if isinstance(preferred_score, dict) else None
     if not isinstance(value, dict):
-        return None, f"Inspect recorded {SCORER}, but its value was not a metric object."
+        return (
+            None,
+            f"Inspect recorded {SCORER}, but its value was not a metric object.",
+        )
 
     parsed_scores = {}
     for metric in ("utility", "security"):
@@ -349,7 +362,10 @@ def _final_answer(sample: dict[str, Any]) -> str | None:
 
 
 def _token_usage(data: dict[str, Any], sample: dict[str, Any]) -> dict[str, int] | None:
-    usage_sources = [sample.get("model_usage"), (data.get("stats") or {}).get("model_usage")]
+    usage_sources = [
+        sample.get("model_usage"),
+        (data.get("stats") or {}).get("model_usage"),
+    ]
     totals = {"prompt": 0, "completion": 0, "total": 0}
     found = False
     for usage_by_model in usage_sources:
