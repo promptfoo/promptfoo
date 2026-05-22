@@ -180,6 +180,36 @@ describe('RunTestSuiteButton', () => {
     );
   });
 
+  it('explains when a completed evaluation has no saved results to open', async () => {
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: '123' } },
+      {
+        path: '/eval/job/123/',
+        response: { status: 'complete', result: null, evalId: null, logs: [] },
+      },
+    ]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Evaluation' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await timers.advanceByAsync(1500);
+    });
+
+    const message =
+      'The evaluation completed, but no saved results are available to open. Review the setup and run it again.';
+    expect(mockShowToast).toHaveBeenCalledWith(message, 'warning');
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeEnabled();
+  });
+
   it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
     useStore.getState().updateConfig({

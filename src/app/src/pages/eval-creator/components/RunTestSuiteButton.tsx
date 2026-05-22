@@ -36,6 +36,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
+  const [runWarning, setRunWarning] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
 
@@ -67,6 +68,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
   const runTestSuite = async () => {
     setIsRunning(true);
     setRunError(null);
+    setRunWarning(null);
     setProgressPercent(0);
 
     const testSuite = {
@@ -137,6 +139,11 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
             signalEvalCompleted();
             if (progressData.evalId) {
               navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
+            } else {
+              const message =
+                'The evaluation completed, but no saved results are available to open. Review the setup and run it again.';
+              setRunWarning(message);
+              showToast(message, 'warning');
             }
           } else if (progressData.status === 'error') {
             clearPollInterval();
@@ -195,6 +202,13 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
         <Alert variant="destructive">
           <AlertContent>
             <AlertDescription>{runError}</AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
+      {runWarning && (
+        <Alert variant="warning">
+          <AlertContent>
+            <AlertDescription>{runWarning}</AlertDescription>
           </AlertContent>
         </Alert>
       )}
