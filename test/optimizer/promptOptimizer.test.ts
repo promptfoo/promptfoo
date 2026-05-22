@@ -339,6 +339,7 @@ describe('prompt optimizer', () => {
     await optimizePromptTestSuite(
       {
         evaluateOptions: {
+          cache: true,
           delay: 50,
           maxConcurrency: 1,
           repeat: 2,
@@ -350,6 +351,7 @@ describe('prompt optimizer', () => {
 
     expect(vi.mocked(evaluate).mock.calls[0][2]).toEqual(
       expect.objectContaining({
+        cache: true,
         delay: 50,
         eventSource: 'library',
         maxConcurrency: 1,
