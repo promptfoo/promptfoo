@@ -23,7 +23,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import { TestCaseSchema } from '@promptfoo/types';
-import { getFirstAssertionValueError } from './assertionValueValidation';
+import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 
@@ -433,7 +433,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                     (v) => !testCaseVars.includes(v) && !defaultTestVars.includes(v),
                   );
                   const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
-                  const assertionError = getFirstAssertionValueError(testCase.assert);
+                  const assertionError = getFirstRunnableAssertionValueError(testCase.assert);
                   const hasAssertionError = Boolean(assertionError);
                   const hasTestCaseIssue = hasMissingVars || hasAssertionError;
 

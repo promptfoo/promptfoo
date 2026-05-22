@@ -209,6 +209,39 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('allows authored LLM rubric assertions that use runtime rubric defaults', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        tests: [{ assert: [{ type: 'llm-rubric' }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.testCasesWithInvalidAssertions).toEqual([]);
+    });
+
+    it('blocks authored model-graded assertions that require expected text', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        tests: [{ assert: [{ type: 'factuality' }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.testCasesWithInvalidAssertions).toEqual([0]);
+    });
+
+    it('accepts a non-empty authored G-Eval criteria list', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        tests: [{ assert: [{ type: 'g-eval', value: ['Be concise', 'Be accurate'] }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.testCasesWithInvalidAssertions).toEqual([]);
+    });
+
     it('does not claim an exact base request count for external test files', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

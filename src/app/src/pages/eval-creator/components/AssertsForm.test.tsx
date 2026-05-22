@@ -142,10 +142,9 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'contains-any', value: ['hello', 'world'] }]);
   });
 
-  it('requires grading criteria for an LLM rubric before the test case can be saved', async () => {
-    const user = userEvent.setup();
+  it('allows the default LLM rubric while disclosing optional criteria and cost', async () => {
     const onValidityChange = vi.fn();
-    initialValues = [{ type: 'llm-rubric', value: '' }];
+    initialValues = [{ type: 'llm-rubric' }];
     renderComponent(
       <AssertsForm
         onAdd={onAdd}
@@ -155,16 +154,26 @@ describe('AssertsForm', () => {
     );
 
     const valueInput = screen.getByRole('textbox', { name: 'Value' });
-    expect(valueInput).toHaveAttribute('aria-invalid', 'true');
-    expect(
-      screen.getByText('Enter grading criteria before using an LLM rubric.'),
-    ).toBeInTheDocument();
-    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
-
-    await user.type(valueInput, 'Answer accurately and cite the source.');
-
     expect(valueInput).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.getByText(/leave blank for the default rubric/i)).toBeInTheDocument();
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('requires expected text for model-graded checks that cannot run without it', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'factuality', value: '' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Value' })).toHaveAccessibleDescription(
+      'Enter an expected value before saving this check.',
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
   });
 
   it('allows an explicit exact-match check for an intentionally empty response', async () => {

@@ -122,7 +122,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   contains: 'Passes when the response includes the text you enter below.',
   equals: 'Passes only when the response exactly matches the value below.',
   'is-json': 'Passes when the response is valid JSON. No value is needed.',
-  'llm-rubric': 'A model judges the response using your criteria. This can add cost.',
+  'llm-rubric':
+    'A model judges the response. Add criteria to tailor the judge, or leave blank for the default rubric. This can add cost.',
   similar: 'A model checks semantic similarity to your expected answer. This can add cost.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',

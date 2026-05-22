@@ -1,4 +1,4 @@
-import { getFirstAssertionValueError } from './assertionValueValidation';
+import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
@@ -71,7 +71,7 @@ function hasInvalidAssertionValue(testCase: unknown): boolean {
     return false;
   }
 
-  return Boolean(getFirstAssertionValueError(testCase.assert));
+  return Boolean(getFirstRunnableAssertionValueError(testCase.assert));
 }
 
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
