@@ -803,7 +803,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
     provider?: ApiProvider,
     renderedValue?: AssertionValue,
     additionalRubric?: string,
-    skipRefusalCheck?: boolean,
+    _skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{
     grade: GradingResult;
@@ -894,7 +894,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
       provider,
       renderedValue,
       additionalRubric,
-      skipRefusalCheck,
+      true,
       enrichedGradingContext,
     );
 

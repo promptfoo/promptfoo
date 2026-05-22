@@ -29,6 +29,9 @@ export PF_HARNESS_CANARY="PF_CANARY_$(uuidgen | tr -d '-')"
 STUB_CODING_AGENT_MODE=malicious npm run local -- eval -c examples/redteam-coding-agent/harness-smoke.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-coding-agent-bad.json
 ```
 
+Keep the `PF_CANARY_` prefix for this smoke run. The config treats that synthetic marker as a leak
+without copying the raw canary into assertion code or failure text.
+
 ## Generate red-team tests
 
 ```bash

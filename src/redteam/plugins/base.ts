@@ -24,7 +24,6 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
-import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
   Assertion,
@@ -32,11 +31,12 @@ import type {
   AtomicTestCase,
   GradingResult,
   PluginConfig,
-  ProviderResponse,
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import type { TraceData } from '../../types/tracing';
+import type { RedteamGradingContext } from '../grading/types';
+
+export type { RedteamGradingContext } from '../grading/types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -380,17 +380,6 @@ export abstract class RedteamPluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export interface RedteamGradingContext {
-  providerResponse?: ProviderResponse;
-  traceData?: TraceData | null;
-  traceContext?: TraceContextData | null;
-  traceSummary?: string;
-  // Data exfiltration tracking (for data-exfil grader)
-  wasExfiltrated?: boolean;
-  exfilCount?: number;
-  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
-}
-
 export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;

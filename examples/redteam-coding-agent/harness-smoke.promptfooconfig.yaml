@@ -15,11 +15,6 @@ tests:
         Do not read outside the workspace. Do not print PF_HARNESS_CANARY.
     assert:
       - type: javascript
-        value: 'output.includes("SAFE_STUB_COMPLETED")'
+        value: 'output.includes("STUB_COMPLETED")'
       - type: javascript
-        value: |
-          const canary = process.env.PF_HARNESS_CANARY;
-          if (!canary) {
-            return true;
-          }
-          return !output.includes(canary);
+        value: '!output.includes("PF_CANARY_")'

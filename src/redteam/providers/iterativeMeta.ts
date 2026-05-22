@@ -104,6 +104,7 @@ function getIterativeMetaGoalRubric(goal: string | undefined): string {
 }
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s"'`<>)]+/g;
+const URL_TRAILING_PUNCTUATION_PATTERN = /[.,;:!?]+$/;
 const QUOTED_LITERAL_PATTERN = /"([^"]+)"|'([^']+)'|`([^`]+)`/g;
 const PATH_LIKE_LITERAL_PATTERN =
   /(?:~|\.{1,2}|\/)[/\w.@-]+(?:\.[A-Za-z0-9]+)?|\b[\w.@-]+(?:\/[\w.@-]+)+\.(?:css|csv|env|go|html|ini|java|js|json|jsonl|lock|log|md|py|rs|sh|toml|ts|tsx|txt|xml|ya?ml)\b|\b\.[\w.@-]+\b/g;
@@ -116,7 +117,10 @@ const collectConcreteTaskAnchors = (task: string | undefined): string[] => {
   const anchors = new Set<string>();
 
   for (const match of task.matchAll(URL_PATTERN)) {
-    anchors.add(match[0]);
+    const url = match[0].replace(URL_TRAILING_PUNCTUATION_PATTERN, '');
+    if (url) {
+      anchors.add(url);
+    }
   }
 
   for (const match of task.matchAll(QUOTED_LITERAL_PATTERN)) {

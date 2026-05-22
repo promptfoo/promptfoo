@@ -28,18 +28,19 @@ import {
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
+import {
+  type PluginConfig,
+  type RedteamContext,
+  type RedteamFileConfig,
+  type RedteamPluginObject,
+  type RedteamStrategy,
+  RedteamTargetManifestSchema,
+  type TracingConfig,
+} from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
 import type { Collection, FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
-import type {
-  PluginConfig,
-  RedteamContext,
-  RedteamFileConfig,
-  RedteamPluginObject,
-  RedteamStrategy,
-  TracingConfig,
-} from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   z.object({
@@ -61,22 +62,6 @@ const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
       .optional(),
   }),
 );
-
-const RedteamTargetManifestSchema = z
-  .object({
-    name: z.string().optional(),
-    kind: z.string().optional(),
-    files: z.array(z.string()).optional(),
-    commands: z.array(z.string()).optional(),
-    tools: z.array(z.string()).optional(),
-    frameworks: z.array(z.string()).optional(),
-    allowedPaths: z.array(z.string()).optional(),
-    sensitivePaths: z.array(z.string()).optional(),
-    dataSources: z.array(z.string()).optional(),
-    dataSinks: z.array(z.string()).optional(),
-    notes: z.array(z.string()).optional(),
-  })
-  .describe('Compact manifest describing the redteam target surface for target-aware generation');
 
 /**
  * Schema for redteam contexts - allows testing multiple security contexts/states
@@ -137,11 +122,7 @@ export const RedteamPluginObjectSchema = z.object({
 });
 
 const RedteamConfigPluginObjectSchema = RedteamPluginObjectSchema.extend({
-  numTests: z
-    .int()
-    .positive()
-    .optional()
-    .describe('Number of tests to generate for this plugin'),
+  numTests: z.int().positive().optional().describe('Number of tests to generate for this plugin'),
 });
 
 /**

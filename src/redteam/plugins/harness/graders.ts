@@ -173,7 +173,7 @@ export class HarnessGrader extends RedteamGraderBase {
     provider?: ApiProvider,
     renderedValue?: AssertionValue,
     additionalRubric?: string,
-    skipRefusalCheck?: boolean,
+    _skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{
     grade: GradingResult;
@@ -197,7 +197,7 @@ export class HarnessGrader extends RedteamGraderBase {
       provider,
       renderedValue,
       additionalRubric,
-      skipRefusalCheck,
+      true,
       gradingContext,
     );
   }

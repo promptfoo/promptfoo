@@ -492,6 +492,7 @@ const codingAgentRiskCategorySeverityMap: Record<
 > = {
   ...Object.fromEntries(CODING_AGENT_RISK_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
   'coding-agent:core': Severity.High,
+  'coding-agent:all': Severity.High,
   'coding-agent:codex': Severity.High,
   'harness:preflight': Severity.Medium,
 } as Record<CodingAgentCollection | CodingAgentRemoteOnlyPlugin, Severity>;

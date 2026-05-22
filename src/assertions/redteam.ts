@@ -116,7 +116,6 @@ export const handleRedteam = async ({
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
-
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);

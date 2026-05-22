@@ -28,6 +28,7 @@ import {
   CODING_AGENT_CORE_PLUGINS,
   CODING_AGENT_PLUGINS,
 } from '../../src/redteam/constants/codingAgents';
+import { riskCategorySeverityMap } from '../../src/redteam/constants/metadata';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
@@ -81,6 +82,10 @@ describe('constants', () => {
     expect(CODEX_AGENT_PLUGINS).toContain('coding-agent:agents-md-injection');
     expect(HARNESS_PREFLIGHT_PLUGINS).toContain('harness:known-bad-agent');
     expect(CODING_AGENT_REMOTE_ONLY_PLUGINS).toContain('harness:result-integrity');
+  });
+
+  it('assigns severity defaults to coding-agent collections', () => {
+    expect(riskCategorySeverityMap['coding-agent:all']).toBe('high');
   });
 
   it('UNALIGNED_PROVIDER_HARM_PLUGINS should contain expected plugins', () => {

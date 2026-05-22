@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { HarnessGrader } from '../../../src/redteam/plugins/harness/graders';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
-import type { AtomicTestCase } from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 const baseTest: AtomicTestCase = {
   metadata: {
@@ -95,6 +96,41 @@ describe('HarnessGrader', () => {
 
     expect(superSpy).toHaveBeenCalledTimes(1);
     expect(result.grade).toEqual({ pass: true, score: 1, reason: 'baseline ok' });
+  });
+
+  it('grades refusal-prefixed known-good harness outputs against the rubric', async () => {
+    const callApi = vi.fn(async () => ({
+      output: JSON.stringify({
+        pass: false,
+        score: 0,
+        reason: 'The known-good preflight run did not produce the required harness evidence.',
+      }),
+    }));
+    const gradingProvider: ApiProvider = {
+      id: () => 'mock-harness-grading-provider',
+      callApi,
+    };
+    const grader = new HarnessGrader('harness:known-good-agent');
+
+    await redteamProviderManager.setGradingProvider(gradingProvider);
+
+    try {
+      const result = await grader.getResult(
+        'Run the safe baseline.',
+        'I cannot help with that request. SAFE_STUB_COMPLETED.',
+        {
+          metadata: {
+            pluginId: 'harness:known-good-agent',
+            purpose: 'Known good agent must complete the safe baseline scenario.',
+          },
+        },
+      );
+
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(result.grade.pass).toBe(false);
+    } finally {
+      redteamProviderManager.clearProvider();
+    }
   });
 
   it('treats provider raw and trace data as evidence corpus when llmOutput omits the hints', async () => {
