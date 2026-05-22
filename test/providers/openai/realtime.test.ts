@@ -36,8 +36,10 @@ vi.mock('../../../src/logger', () => ({
  * is attached. Tests that need to invoke the attached handler synchronously
  * after callApi() must wait for all of those hops to settle.
  */
+const MICROTASK_FLUSH_ITERATIONS = 8;
+
 const flushMicrotasks = async () => {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < MICROTASK_FLUSH_ITERATIONS; i++) {
     await Promise.resolve();
   }
 };
@@ -857,9 +859,9 @@ describe('OpenAI Realtime Provider', () => {
                 type: 'response.done',
                 response: {
                   usage: {
-                    total_tokens: responseText.length * 2,
-                    prompt_tokens: responseText.length,
-                    completion_tokens: responseText.length,
+                    total_tokens: 24,
+                    prompt_tokens: 12,
+                    completion_tokens: 12,
                   },
                 },
               }),
@@ -2273,18 +2275,39 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
-      // Skip this test since it's difficult to mock properly and causes flakey results
-      // The functionality is tested in other tests
-
-      // Create basic provider
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { maintainContext: true },
+        config: { modalities: ['text'], maintainContext: true },
       });
+      const persistentConnection = createPersistentMockWebSocket(provider);
+      provider.persistentConnection = persistentConnection;
+      const context = { test: { metadata: { conversationId: 'reuse-connection' } } } as any;
 
-      // Add a basic assertion to pass the test
-      expect(provider.config.maintainContext).toBe(true);
+      const completeTurn = async (output: string) => {
+        await flushMicrotasks();
+        const handler = lastMessageHandler();
+        emitUserItem(handler, `item-${output}`);
+        emitOutputTextDone(handler, output);
+        emitResponseDone(handler);
+      };
 
-      // Clean up
+      (MockWebSocket as any).mockClear();
+
+      const firstTurn = provider.callApi('first', context);
+      await completeTurn('first');
+      await expect(firstTurn).resolves.toMatchObject({ output: 'first' });
+
+      const secondTurn = provider.callApi('second', context);
+      await completeTurn('second');
+      await expect(secondTurn).resolves.toMatchObject({ output: 'second' });
+
+      expect(MockWebSocket).not.toHaveBeenCalled();
+      expect(provider.persistentConnection).toBe(persistentConnection);
+      expect(
+        sentWebSocketEvents(persistentConnection).filter(
+          (event) => event.type === 'conversation.item.create',
+        ),
+      ).toHaveLength(2);
+
       provider.cleanup();
     });
 
@@ -3093,17 +3116,25 @@ describe('OpenAI Realtime Provider', () => {
       expect(mockWs.close).toHaveBeenCalled();
     });
 
-    it('handles direct WebSocket tool config preload rejections before open', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { tools: 'file://missing-tools.yaml' as any },
-      });
+    describe('direct WebSocket tool config preload rejection handling', () => {
       const unhandledRejections: unknown[] = [];
       const onUnhandledRejection = (reason: unknown) => {
         unhandledRejections.push(reason);
       };
-      process.on('unhandledRejection', onUnhandledRejection);
 
-      try {
+      beforeEach(() => {
+        unhandledRejections.length = 0;
+        process.on('unhandledRejection', onUnhandledRejection);
+      });
+
+      afterEach(() => {
+        process.off('unhandledRejection', onUnhandledRejection);
+      });
+
+      it('handles direct WebSocket tool config preload rejections before open', async () => {
+        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+          config: { tools: 'file://missing-tools.yaml' as any },
+        });
         const promise = provider.directWebSocketRequest('hi');
 
         await flushMicrotasks();
@@ -3112,9 +3143,7 @@ describe('OpenAI Realtime Provider', () => {
 
         mockHandlers.open.forEach((handler) => handler());
         await expect(promise).rejects.toThrow('File does not exist');
-      } finally {
-        process.off('unhandledRejection', onUnhandledRejection);
-      }
+      });
     });
 
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
