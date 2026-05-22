@@ -762,6 +762,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         }
         if ((hasSuccessfulCallback || mcpErrors.length > 0) && results.length > 0) {
+          // Keep callback text for direct provider callers while `error` makes MCP failures
+          // hard evaluator errors instead of gradable model output.
           return {
             output: results.join('\n'),
             ...(mcpErrors.length > 0 ? { error: mcpErrors.join('; ') } : {}),

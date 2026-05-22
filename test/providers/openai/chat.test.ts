@@ -782,7 +782,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         callToolResult: { content: '', isError: true },
         expectedOutput: 'MCP Tool Error (read_file): Tool returned an error result',
       },
-    ])('should surface MCP tool error results in chat tool callbacks ($label)', async ({
+    ])('should surface MCP tool error results as provider errors in chat tool callbacks ($label)', async ({
       callToolResult,
       expectedOutput,
     }) => {
@@ -823,6 +823,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
         path: '../../../etc/passwd',
       });
+      // Direct provider callers can still inspect tool text even though evals treat the error as hard.
       expect(result.output).toBe(expectedOutput);
       expect(result.error).toBe(expectedOutput);
     });
