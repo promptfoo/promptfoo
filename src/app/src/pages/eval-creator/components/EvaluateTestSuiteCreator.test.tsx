@@ -559,8 +559,31 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.upload(fileInput, mockFile);
 
     await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Invalid YAML configuration', 'error');
+      expect(showToastMock).toHaveBeenCalledWith(
+        'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+        'error',
+      );
     });
+  });
+
+  it('should reject a test-case list uploaded as a full YAML configuration', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(['- vars:\n    topic: safety'], 'test-cases.yaml', {
+      type: 'application/yaml',
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+        'error',
+      );
+    });
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
   });
 
   it('should reset file input after upload to allow re-uploading same file', async () => {

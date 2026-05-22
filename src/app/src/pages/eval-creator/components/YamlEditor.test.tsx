@@ -94,6 +94,8 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: /Discard Changes/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Download YAML/ })).toBeInTheDocument();
     expect(screen.getByText('Run in CLI')).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('Run in CLI');
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('promptfoo eval -c promptfooconfig.yaml')).toBeInTheDocument();
     expect(
       screen.getByText(/downloaded or copied YAML includes any credentials/i),
@@ -132,6 +134,25 @@ describe('YamlEditor', () => {
     expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
+  });
+
+  it('rejects a test-case list saved as a full YAML configuration', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    await user.clear(editor);
+    await user.type(editor, '- vars:\n    topic: safety');
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(mockSetConfig).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+    );
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.',
+      'error',
+    );
   });
 
   it('initializes with initialConfig', () => {

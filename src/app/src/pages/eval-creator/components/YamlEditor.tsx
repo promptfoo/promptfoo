@@ -33,6 +33,8 @@ const YAML_SCHEMA_COMMENT =
   '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
 const YAML_DOWNLOAD_FILE_NAME = 'promptfooconfig.yaml';
 const EVAL_CLI_COMMAND = `promptfoo eval -c ${YAML_DOWNLOAD_FILE_NAME}`;
+const INVALID_FULL_CONFIG_YAML_MESSAGE =
+  'Invalid YAML configuration. Expected top-level fields such as providers, prompts, and tests.';
 
 // Ensure the schema comment is at the top of YAML content
 const ensureSchemaComment = (yamlContent: string): string => {
@@ -70,16 +72,15 @@ const YamlEditorComponent = ({
       const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
       const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
 
-      if (parsedConfig && typeof parsedConfig === 'object') {
+      if (parsedConfig && typeof parsedConfig === 'object' && !Array.isArray(parsedConfig)) {
         setConfig(parsedConfig as Partial<UnifiedConfig>);
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');
         return true;
       } else {
-        const errorMsg = 'Invalid YAML configuration';
-        setParseError(errorMsg);
-        showToast(errorMsg, 'error');
+        setParseError(INVALID_FULL_CONFIG_YAML_MESSAGE);
+        showToast(INVALID_FULL_CONFIG_YAML_MESSAGE, 'error');
         return false;
       }
     } catch (err) {
@@ -206,7 +207,7 @@ const YamlEditorComponent = ({
       )}
 
       {!readOnly && (
-        <Alert variant="info" className="items-start">
+        <Alert variant="info" role="note" className="items-start">
           <TerminalIcon className="size-4 mt-0.5" />
           <AlertContent className="space-y-2">
             <p className="font-medium text-sm">Run in CLI</p>
