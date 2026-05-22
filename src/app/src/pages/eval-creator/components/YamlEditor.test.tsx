@@ -1,7 +1,7 @@
 import React from 'react';
 
 import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -259,7 +259,7 @@ describe('YamlEditor', () => {
       expect(saveButton).not.toBeDisabled();
     });
 
-    it('should disable Discard Changes button after discarding changes', async () => {
+    it('should confirm before discarding changes and disable the button after confirmation', async () => {
       const user = userEvent.setup();
       render(<YamlEditorComponent />);
 
@@ -275,9 +275,31 @@ describe('YamlEditor', () => {
 
       await user.click(discardButton);
 
+      const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
+      expect(dialog).toHaveTextContent(/edits since the last save will be lost/i);
+      expect(discardButton).not.toBeDisabled();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }));
+
       // Button should be disabled again
       expect(discardButton).toBeDisabled();
       expect(mockShowToast).toHaveBeenCalledWith('Changes discarded', 'info');
+    });
+
+    it('keeps unsaved YAML edits when discard is canceled', async () => {
+      const user = userEvent.setup();
+      render(<YamlEditorComponent />);
+
+      const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+      await user.clear(editor);
+      await user.type(editor, 'description: Keep this draft');
+
+      await user.click(screen.getByRole('button', { name: /Discard Changes/ }));
+      await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+
+      expect(editor.value).toContain('description: Keep this draft');
+      expect(screen.getByRole('button', { name: /Discard Changes/ })).not.toBeDisabled();
+      expect(mockShowToast).not.toHaveBeenCalledWith('Changes discarded', 'info');
     });
 
     it('should show unsaved changes indicator when hasUnsavedChanges is true', async () => {

@@ -4,6 +4,14 @@ import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert'
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
 import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
 import Prism from '@app/lib/prism';
@@ -49,6 +57,7 @@ const YamlEditorComponent = ({
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const [discardDialogOpen, setDiscardDialogOpen] = React.useState(false);
   const textareaId = React.useId();
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
@@ -90,10 +99,11 @@ const YamlEditorComponent = ({
     }
   };
 
-  const handleCancel = () => {
+  const handleConfirmDiscard = () => {
     setCode(originalCode);
     setHasUnsavedChanges(false);
     setParseError(null);
+    setDiscardDialogOpen(false);
     showToast('Changes discarded', 'info');
   };
 
@@ -176,7 +186,7 @@ const YamlEditorComponent = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={handleCancel}
+              onClick={() => setDiscardDialogOpen(true)}
               disabled={!hasUnsavedChanges}
             >
               <CancelIcon className="size-4 mr-2" />
@@ -282,6 +292,25 @@ const YamlEditorComponent = ({
           <CopyButton value={code} aria-label="Copy YAML configuration" />
         </div>
       </div>
+
+      <Dialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
+            <DialogDescription>
+              Your edits since the last save will be lost. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
+              Continue editing
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDiscard}>
+              Discard changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
