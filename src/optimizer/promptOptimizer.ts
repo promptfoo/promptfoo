@@ -11,6 +11,8 @@ import {
   type Prompt,
   type TestSuite,
 } from '../types/index';
+import { filterByRange } from '../util/filterRange';
+import { warnEmptyFilterRange } from '../util/filterRangeWarn';
 import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
 import { isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
@@ -613,9 +615,34 @@ function createRuntimeOptimizationTestSuite(
     : testSuite;
 }
 
+function applyFilterRangeBeforeValidationSplit(
+  config: Partial<UnifiedConfig>,
+  testSuite: TestSuite,
+  validationSplit: number | undefined,
+): { filterRangeApplied: boolean; testSuite: TestSuite } {
+  const filterRange = config.evaluateOptions?.filterRange;
+  if (
+    validationSplit === undefined ||
+    testSuite.scenarios?.length ||
+    !Array.isArray(testSuite.tests) ||
+    filterRange === undefined
+  ) {
+    return { filterRangeApplied: false, testSuite };
+  }
+
+  return {
+    filterRangeApplied: true,
+    testSuite: {
+      ...testSuite,
+      tests: filterByRange(testSuite.tests, filterRange, warnEmptyFilterRange),
+    },
+  };
+}
+
 function createEvaluationOptions(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
+  omitFilterRange = false,
 ): InternalEvaluateOptions {
   const options: InternalEvaluateOptions = {
     ...config.evaluateOptions,
@@ -625,6 +652,9 @@ function createEvaluationOptions(
     silent: true,
     isRedteam: testSuite.redteam != null,
   };
+  if (omitFilterRange) {
+    options.filterRange = undefined;
+  }
   // Match the `eval` command: a configured delay only rate-limits API calls
   // when concurrency is forced to 1, otherwise delayed evals still run in parallel.
   if (typeof options.delay === 'number' && options.delay > 0) {
@@ -649,20 +679,24 @@ export async function optimizePromptTestSuite(
   }
 
   const selectedTestSuite = createSelectedOptimizationTestSuite(runtimeTestSuite, options);
+  // Partition an already filtered explicit test set; forwarding the original
+  // range into each partition would apply absolute indices a second time.
+  const { testSuite: partitionableTestSuite, filterRangeApplied } =
+    applyFilterRangeBeforeValidationSplit(config, selectedTestSuite, options.validationSplit);
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
-    createValidationPartition(selectedTestSuite, options.validationSplit);
+    createValidationPartition(partitionableTestSuite, options.validationSplit);
 
   logger.info('Running baseline evaluation for prompt optimization...');
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(config, { persisted: false }),
-    createEvaluationOptions(config, runtimeTestSuite),
+    createEvaluationOptions(config, runtimeTestSuite, filterRangeApplied),
   );
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(config, { persisted: false }),
-        createEvaluationOptions(config, runtimeTestSuite),
+        createEvaluationOptions(config, runtimeTestSuite, filterRangeApplied),
       )
     : undefined;
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
@@ -725,7 +759,7 @@ export async function optimizePromptTestSuite(
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(config, { persisted: false }),
-      createEvaluationOptions(config, runtimeTestSuite),
+      createEvaluationOptions(config, runtimeTestSuite, filterRangeApplied),
     );
     const candidateValidationEval = validationTestSuite
       ? await evaluate(
@@ -738,7 +772,7 @@ export async function optimizePromptTestSuite(
             ),
           ),
           new Eval(config, { persisted: false }),
-          createEvaluationOptions(config, runtimeTestSuite),
+          createEvaluationOptions(config, runtimeTestSuite, filterRangeApplied),
         )
       : undefined;
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =

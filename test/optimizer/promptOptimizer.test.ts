@@ -707,6 +707,64 @@ describe('prompt optimizer', () => {
     expect(result.improved).toBe(false);
   });
 
+  it('applies filterRange once before splitting validation tests', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Filtered candidate'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Filtered candidate'))
+      .mockResolvedValueOnce(optimizerResponse('Filtered candidate 2'))
+      .mockResolvedValueOnce(optimizerResponse('Filtered candidate 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Base', 'Base', 0.6)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Base', 'Base', 0.6),
+        completedPrompt('Filtered candidate', 'Base [optimized 1]', 0.7),
+      ],
+      [],
+    );
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValue(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Base', label: 'Base' }],
+      tests: Array.from({ length: 5 }, (_, index) => ({ vars: { id: String(index) } })),
+    };
+
+    const result = await optimizePromptTestSuite(
+      { evaluateOptions: { filterRange: '1:5' } },
+      testSuite,
+      { validationSplit: 0.5 },
+    );
+
+    expect(result.searchTestCount).toBe(2);
+    expect(result.validationTestCount).toBe(2);
+    expect(vi.mocked(evaluate).mock.calls[0][0].tests?.map((test) => test.vars?.id)).toEqual([
+      '1',
+      '2',
+    ]);
+    expect(vi.mocked(evaluate).mock.calls[1][0].tests?.map((test) => test.vars?.id)).toEqual([
+      '3',
+      '4',
+    ]);
+    for (const call of vi.mocked(evaluate).mock.calls) {
+      expect(call[2]?.filterRange).toBeUndefined();
+    }
+  });
+
   it('keeps the baseline when validation and search scores both tie', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
