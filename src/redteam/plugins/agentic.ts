@@ -420,9 +420,10 @@ function inferredTraceFindings(
 function evidenceCandidateMatchesPlugin(value: unknown, pluginId: AgenticRuntimePluginId): boolean {
   return parseEvidenceCandidates(value).some(
     (evidence) =>
-      normalizePluginId(evidence.pluginId) === pluginId ||
-      (Array.isArray(evidence.findings) &&
-        evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId)),
+      hasVerifierEvidence(evidence) &&
+      (normalizePluginId(evidence.pluginId) === pluginId ||
+        (Array.isArray(evidence.findings) &&
+          evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId))),
   );
 }
 

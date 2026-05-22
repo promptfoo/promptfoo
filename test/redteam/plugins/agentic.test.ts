@@ -407,6 +407,44 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
   });
 
+  it('does not treat plugin-id-only OTEL evidence JSON as verifier evidence', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without verifier evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-evidence-json-marker-only',
+          testCaseId: 'case-evidence-json-marker-only',
+          traceId: '77777777777777777777777777777777',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({ pluginId }),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
   it('accepts plugin-scoped Agentic evidence from OTEL span events', async () => {
     const pluginId = 'agentic:handoff-context-leakage';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
