@@ -608,7 +608,8 @@ thead {
 
 /* Add these additional styles */
 .results-table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .results-table thead th {
