@@ -3581,13 +3581,18 @@ class Evaluator {
     prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
   }) {
+    let lastPromptsFlush = 0;
     for (const evalStep of serialRunEvalOptions) {
       checkAbort();
       logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
       await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
       processedIndices.add(idx);
-      await this.evalRecord.addPrompts(prompts);
+      const now = Date.now();
+      if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+        lastPromptsFlush = now;
+        await this.evalRecord.addPrompts(prompts);
+      }
     }
   }
 
