@@ -122,7 +122,7 @@ export async function transformMCPConfigToClaudeCode(
     return {};
   }
 
-  if (config.tools?.length || config.exclude_tools?.length) {
+  if (config.tools !== undefined || config.exclude_tools !== undefined) {
     throw new Error(
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
     );

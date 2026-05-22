@@ -277,6 +277,22 @@ describe('transformMCPConfigToClaudeCode', () => {
         exclude_tools: ['dangerous_tool'],
       }),
     ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        tools: [],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        exclude_tools: [],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
   });
 });
 
