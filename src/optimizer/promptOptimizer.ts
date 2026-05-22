@@ -634,6 +634,11 @@ export async function optimizePromptTestSuite(
     new Eval(config, { persisted: false }),
     createEvaluationOptions(config),
   );
+  if (baselineEval.results.length === 0) {
+    throw new Error(
+      'No eval test cases match the selected prompt/provider — check your prompts/providers filters.',
+    );
+  }
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),

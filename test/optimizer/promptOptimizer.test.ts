@@ -608,6 +608,39 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it('throws a clear error when prompt/provider filters scope every test away from the selected pair', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    // The configured test exists (so the preflight test count is non-zero) but
+    // its prompt filter scopes it away from the selected prompt, so the baseline
+    // evaluation schedules zero result rows.
+    vi.mocked(evaluate).mockResolvedValueOnce(emptyEval([completedPrompt('Seed', 'Seed', 0)]));
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{ prompts: ['some-other-prompt'] }],
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'No eval test cases match the selected prompt/provider — check your prompts/providers filters.',
+    );
+    // The optimizer must fail fast instead of running candidate rounds against
+    // empty evidence.
+    expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(1);
+  });
+
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
@@ -777,7 +810,27 @@ function evalResult(promptIdx: number, success: boolean, reason: string): Evalua
 function evalWith(prompts: CompletedPrompt[], results: EvaluateResult[]): Eval {
   const evalRecord = new Eval({}, { persisted: false, prompts });
   evalRecord.prompts = prompts;
-  evalRecord.results = results as any;
+  // A real evaluator run that produced these prompts always schedules at least
+  // one result row. Backfill a placeholder per prompt when a test does not care
+  // about result contents, so the optimizer's zero-runnable-tests guard only
+  // fires for genuinely empty evals (see `emptyEval`).
+  const backfilledResults =
+    results.length === 0
+      ? prompts.map((_prompt, promptIdx) => evalResult(promptIdx, true, 'placeholder result'))
+      : results;
+  evalRecord.results = backfilledResults as any;
+  return evalRecord;
+}
+
+/**
+ * Builds an Eval whose results are genuinely empty, mirroring an evaluator run
+ * where prompt/provider filters scoped every configured test away from the
+ * selected pair.
+ */
+function emptyEval(prompts: CompletedPrompt[]): Eval {
+  const evalRecord = new Eval({}, { persisted: false, prompts });
+  evalRecord.prompts = prompts;
+  evalRecord.results = [];
   return evalRecord;
 }
 
