@@ -11,9 +11,11 @@ import type { ProviderOptions } from '../../types';
 vi.mock('./HttpEndpointConfiguration', () => ({
   default: ({
     bodyError,
+    urlError,
     updateCustomTarget,
   }: {
     bodyError?: React.ReactNode;
+    urlError?: string | null;
     updateCustomTarget?: (field: string, value: unknown) => void;
   }) => (
     <div data-testid="http-config">
@@ -25,11 +27,16 @@ vi.mock('./HttpEndpointConfiguration', () => ({
         Set body without prompt
       </button>
       {bodyError && <div data-testid="http-body-error">{bodyError}</div>}
+      {urlError && <div data-testid="http-url-error">{urlError}</div>}
     </div>
   ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
-  default: () => <div data-testid="ws-config" />,
+  default: ({ urlError }: { urlError?: string | null }) => (
+    <div data-testid="ws-config">
+      {urlError && <div data-testid="ws-url-error">{urlError}</div>}
+    </div>
+  ),
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
   default: ({
@@ -178,6 +185,61 @@ describe('ProviderConfigEditor', () => {
       const message = await screen.findByTestId('http-body-error');
       expect(message).toHaveTextContent(/replaces with each test input at run time/i);
       expect(message).not.toHaveTextContent(/attack payload/i);
+    });
+
+    it('places required raw HTTP request feedback at the active request field', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'http', config: { request: '' } }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(screen.getByTestId('http-body-error')).toHaveTextContent(
+        'HTTP request content is required',
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenLastCalledWith('HTTP request content is required');
+    });
+
+    it('places required WebSocket URL feedback at the active URL field', () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'websocket', config: { url: '' } }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="websocket"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(screen.getByTestId('ws-url-error')).toHaveTextContent(
+        'Valid WebSocket URL is required',
+      );
     });
 
     it('requires browser users to replace the starter application URL before saving', async () => {
@@ -557,6 +619,7 @@ describe('ProviderConfigEditor', () => {
     expect(mockSetError).toHaveBeenCalledWith('Valid URL is required');
     expect(mockOnValidate).toHaveBeenCalledTimes(1);
     expect(mockOnValidate).toHaveBeenCalledWith(false);
+    expect(screen.getByTestId('http-url-error')).toHaveTextContent('Valid URL is required');
   });
 
   it("should set error and render CustomTargetConfiguration when validateAll is true and a 'go' provider has an empty ID", () => {

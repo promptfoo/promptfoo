@@ -319,7 +319,8 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
       />,
     );
 
-    const rawRequestField = screen.getByLabelText('Raw HTTP request');
+    const rawRequestField = screen.getByRole('textbox', { name: 'Raw HTTP request' });
+    expect(rawRequestField).toBeRequired();
     expect(rawRequestField).toHaveAttribute('aria-invalid', 'true');
     expect(rawRequestField).toHaveAccessibleDescription(
       'Raw request must contain {{prompt}} template variable',

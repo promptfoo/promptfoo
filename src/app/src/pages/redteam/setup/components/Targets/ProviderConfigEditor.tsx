@@ -74,6 +74,8 @@ interface ProviderValidationResult {
   foundationFieldErrors: FoundationModelFieldErrors;
   agentIdError: string | null;
   customIdError: string | null;
+  urlError: string | null;
+  requestError: string | null;
   browserFieldErrors: BrowserAutomationFieldErrors;
 }
 
@@ -183,6 +185,8 @@ function validateFoundationModelProvider(
     foundationFieldErrors,
     agentIdError: null,
     customIdError: null,
+    urlError: null,
+    requestError: null,
     browserFieldErrors: {},
   };
 }
@@ -191,19 +195,23 @@ function validateHttpProvider(
   provider: ProviderOptions,
   bodyError: React.ReactNode | null,
   validateUrl: (url: string) => boolean,
-): ValidationError[] {
+): Pick<ProviderValidationResult, 'errors' | 'urlError' | 'requestError'> {
   const errors: ValidationError[] = [];
+  let urlError: string | null = null;
+  let requestError: string | null = null;
   if (provider.config.request === undefined) {
     if (!provider.config.url || !validateUrl(provider.config.url)) {
-      errors.push('Valid URL is required');
+      urlError = 'Valid URL is required';
+      errors.push(urlError);
     }
   } else if (!provider.config.request || provider.config.request.trim() === '') {
-    errors.push('HTTP request content is required');
+    requestError = 'HTTP request content is required';
+    errors.push(requestError);
   }
-  if (bodyError) {
+  if (bodyError && bodyError !== requestError) {
     errors.push(bodyError);
   }
-  return errors;
+  return { errors, urlError, requestError };
 }
 
 function validateAgentProvider(provider: ProviderOptions): string[] {
@@ -329,13 +337,16 @@ function getProviderValidationResult(
     foundationFieldErrors: {},
     agentIdError: null,
     customIdError: null,
+    urlError: null,
+    requestError: null,
     browserFieldErrors: {},
   };
   if (providerType === 'http') {
-    result.errors = validateHttpProvider(provider, bodyError, validateUrl);
+    result = { ...result, ...validateHttpProvider(provider, bodyError, validateUrl) };
   } else if (providerType === 'websocket') {
     if (!provider.config.url || !validateUrl(provider.config.url, 'websocket')) {
-      result.errors.push('Valid WebSocket URL is required');
+      result.urlError = 'Valid WebSocket URL is required';
+      result.errors.push(result.urlError);
     }
   } else if (providerType === 'browser') {
     const browserValidation = validateBrowserProvider(provider);
@@ -481,6 +492,8 @@ function ProviderConfigEditor({
       foundationFieldErrors: nextFoundationFieldErrors,
       agentIdError: nextAgentIdError,
       customIdError: nextCustomIdError,
+      urlError: nextUrlError,
+      requestError: nextRequestError,
       browserFieldErrors: nextBrowserFieldErrors,
     } = getProviderValidationResult(
       provider,
@@ -492,6 +505,10 @@ function ProviderConfigEditor({
     setFoundationFieldErrors(nextFoundationFieldErrors);
     setAgentIdError(nextAgentIdError);
     setCustomIdError(nextCustomIdError);
+    setUrlError(nextUrlError);
+    if (nextRequestError) {
+      setBodyError(nextRequestError);
+    }
     setBrowserFieldErrors(nextBrowserFieldErrors);
     const hasErrors = errors.length > 0;
     if (setError) {

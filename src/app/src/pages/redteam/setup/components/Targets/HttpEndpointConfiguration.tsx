@@ -710,10 +710,14 @@ ${exampleRequest}`;
             </div>
             <Label htmlFor="raw-http-request" className="mb-2 block">
               Raw HTTP request
+              <span aria-hidden="true" className="ml-1 text-destructive">
+                *
+              </span>
             </Label>
             <textarea
               ref={rawRequestRef}
               id="raw-http-request"
+              required
               value={selectedTarget.config.request || ''}
               onChange={(e) => handleRawRequestChange(e.target.value)}
               placeholder={placeholderText}

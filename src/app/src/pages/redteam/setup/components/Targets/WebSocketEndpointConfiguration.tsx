@@ -64,9 +64,15 @@ const WebSocketEndpointConfiguration = ({
       <h3 className="mb-4 text-lg font-semibold">Custom WebSocket Endpoint Configuration</h3>
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">
-          <Label htmlFor="websocket-url">WebSocket URL</Label>
+          <Label htmlFor="websocket-url">
+            WebSocket URL
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
+          </Label>
           <Input
             id="websocket-url"
+            required
             value={selectedTarget.config.url}
             onChange={(e) => updateWebSocketTarget('url', e.target.value)}
             aria-invalid={Boolean(urlError)}

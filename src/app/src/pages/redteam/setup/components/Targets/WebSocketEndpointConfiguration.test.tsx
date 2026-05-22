@@ -42,7 +42,8 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
 
-    const urlField = screen.getByLabelText('WebSocket URL');
+    const urlField = screen.getByRole('textbox', { name: 'WebSocket URL' });
+    expect(urlField).toBeRequired();
     await user.click(urlField);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('wss://foo.bar');
@@ -59,7 +60,8 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
 
-    const urlField = screen.getByLabelText('WebSocket URL');
+    const urlField = screen.getByRole('textbox', { name: 'WebSocket URL' });
+    expect(urlField).toBeRequired();
     expect(urlField).toHaveAttribute('aria-invalid', 'true');
     expect(urlField).toHaveAccessibleDescription(
       'Please enter a valid WebSocket URL (ws:// or wss://)',
