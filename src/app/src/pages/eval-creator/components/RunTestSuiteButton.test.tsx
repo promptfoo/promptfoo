@@ -46,6 +46,7 @@ describe('RunTestSuiteButton', () => {
     renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription('Add at least one provider to evaluate.');
   });
 
   it('should be disabled when there are prompts but no tests', () => {
@@ -102,7 +103,9 @@ describe('RunTestSuiteButton', () => {
 
     const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute('aria-describedby', 'run-eval-help');
+    expect(button).toHaveAccessibleDescription(
+      'Test case 1 is missing values required by your prompts.',
+    );
   });
 
   it('blocks an imported test case whose assertion is missing a runnable value', () => {
@@ -116,9 +119,7 @@ describe('RunTestSuiteButton', () => {
 
     const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription(
-      'Resolve the required setup items above to run this evaluation.',
-    );
+    expect(button).toHaveAccessibleDescription('Add required assertion values in test case 1.');
   });
 
   it('should accept prompt variables supplied by default test values', () => {

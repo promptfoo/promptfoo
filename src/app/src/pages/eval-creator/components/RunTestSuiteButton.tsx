@@ -60,6 +60,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
   const readiness = getSetupReadiness(config);
 
   const isDisabled = isRunning || !readiness.isReadyToRun || Boolean(disabledReason);
+  const setupDisabledReason = readiness.issues[0]?.message;
   const progressMessage =
     progressPercent === 0
       ? 'Starting evaluation and preparing requests.'
@@ -200,7 +201,7 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
         </p>
       ) : !isRunning && isDisabled ? (
         <p id="run-eval-help" className="text-xs text-muted-foreground">
-          Resolve the required setup items above to run this evaluation.
+          {setupDisabledReason || 'Resolve the required setup items above to run this evaluation.'}
         </p>
       ) : null}
       {runError && (
