@@ -81,6 +81,8 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
 
     expect(firstNameField).toBeVisible();
     expect(firstValueField).toBeVisible();
+    expect(firstNameField).toHaveAccessibleName('Header 1 name');
+    expect(firstValueField).toHaveAccessibleName('Header 1 value');
   });
 
   it('stacks the raw-request toggle above import controls on narrow screens', () => {
@@ -231,6 +233,24 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(firstValueField).toBeVisible();
     expect(urlInput).toHaveAttribute('aria-invalid', 'true');
     expect(urlInput).toHaveAccessibleDescription(newUrlError);
+  });
+
+  it('exposes request body format selection and response parser labels', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const formatGroup = screen.getByRole('group', { name: 'Request body format' });
+    expect(formatGroup).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'JSON' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Text' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByLabelText('Response Parser')).toBeInTheDocument();
   });
 
   it('connects raw request validation feedback to the raw request field', () => {
