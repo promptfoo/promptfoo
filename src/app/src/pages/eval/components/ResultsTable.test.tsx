@@ -50,16 +50,32 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
+const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => ({
   ...(await vi.importActual('react-router-dom')),
-  useNavigate: vi.fn(() => vi.fn()),
+  useNavigate: () => mockNavigate,
 }));
 
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(
-    ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
+    ({
+      onRating,
+      rowIndex,
+      rowPositionIndex,
+      searchText,
+    }: {
+      onRating: any;
+      rowIndex?: number;
+      rowPositionIndex?: number;
+      searchText?: string;
+    }) => {
       return (
-        <div data-testid="eval-output-cell" data-searchtext={searchText}>
+        <div
+          data-testid="eval-output-cell"
+          data-rowindex={rowIndex}
+          data-rowpositionindex={rowPositionIndex}
+          data-searchtext={searchText}
+        >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
           </button>
@@ -1127,33 +1143,326 @@ describe('ResultsTable Metadata Search', () => {
 });
 
 describe('ResultsTable Row Navigation', () => {
-  it('clears row-id URL parameter when changing pages', () => {
-    const mockURL = new URL('http://localhost/?rowId=3');
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
 
-    const mockReplaceState = vi.fn();
-    const originalHistory = window.history;
-    Object.defineProperty(window, 'history', {
-      value: { ...originalHistory, replaceState: mockReplaceState },
-      configurable: true,
-      writable: true,
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+    mockNavigate.mockReset();
+  });
+
+  // Renders ResultsTable wired up with a deep-link to row 51 (page 2 with pageSize 50).
+  const setupDeepLinkedTable = (
+    initialUrl: string,
+    mockFetchEvalData = vi.fn(),
+    filteredResultsCount = 120,
+  ) => {
+    window.history.replaceState({}, '', initialUrl);
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                originalRowIndex: 0,
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            testIdx: 0,
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      filteredResultsCount,
+      totalResultsCount: 120,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    return mockFetchEvalData;
+  };
+
+  it('uses a details hash to fetch the page containing the requested row', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+  });
+
+  it('preserves the details hash on initial mount', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
     });
 
-    const clearRowIdFromUrl = () => {
-      const url = new URL(mockURL);
-      if (url.searchParams.has('rowId')) {
-        url.searchParams.delete('rowId');
-        window.history.replaceState({}, '', url);
-      }
-    };
+    expect(window.location.hash).toBe('#details-row-51-prompt-1');
+  });
 
-    clearRowIdFromUrl();
+  it('does not request a negative page when a details hash has no filtered rows', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1', vi.fn(), 0);
 
-    expect(mockReplaceState).toHaveBeenCalled();
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    Object.defineProperty(window, 'history', {
-      value: originalHistory,
-      configurable: true,
-      writable: true,
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: -1,
+      }),
+    );
+  });
+
+  it('uses rowId pagination when a details hash keeps a stable test index', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=2#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockFetchEvalData).not.toHaveBeenCalledWith(
+      '123',
+      expect.objectContaining({
+        pageIndex: 1,
+      }),
+    );
+  });
+
+  it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+  });
+
+  it('uses the row test index for detail hashes after paged data is loaded', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                originalRowIndex: 0,
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            testIdx: 50,
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 120,
+      totalResultsCount: 120,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '50');
+  });
+
+  it('falls back to the loaded row index when legacy rows omit a test index', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+  });
+
+  // Regression test for the pagination-trap bug introduced when locationHash was kept in
+  // local state and only updated via `hashchange`. Because `history.replaceState` does not
+  // fire `hashchange`, the state went stale and the row-jump effect kept forcing the user
+  // back to the deep-linked page on every paginate click. Clearing both the legacy `rowId`
+  // query param and the deep-link hash on page-nav clicks is what unblocks the user.
+  it('lets the user paginate away after landing on a deep-linked URL', async () => {
+    const user = userEvent.setup();
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // The deep link drove a fetch for page 2.
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 1 }),
+      );
+    });
+    mockFetchEvalData.mockClear();
+
+    await user.click(screen.getByRole('button', { name: /next page/i }));
+
+    // After clicking Next, the table must request page 3 (pageIndex 2). If the bounce-back
+    // bug regresses, the effect would force pagination back to pageIndex 1 and this fetch
+    // would never fire (or would fire with pageIndex 1).
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 2 }),
+      );
+    });
+
+    // The deep-link hash should be cleared so the next paginate click is also unimpeded.
+    expect(window.location.hash).toBe('');
+  });
+
+  it('clears the legacy rowId query param when paginating', async () => {
+    const user = userEvent.setup();
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=51');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ pageIndex: 1 }),
+      );
+    });
+
+    await user.click(screen.getByRole('button', { name: /next page/i }));
+
+    await waitFor(() => {
+      const navTargets = mockNavigate.mock.calls.map(([target]) => target);
+      const cleared = navTargets.some(
+        (target) => typeof target === 'object' && target?.search === '',
+      );
+      expect(cleared).toBe(true);
     });
   });
 });
