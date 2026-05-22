@@ -1548,46 +1548,38 @@ function ResultsTableHeader({
         >
           <ResultsTableColumnGroup reactTable={reactTable} />
           <thead>
-            {reactTable.getHeaderGroups().map((headerGroup) => {
-              let promptHeaderBorderDrawn = false;
+            {reactTable.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id} className="header">
+                {headerGroup.headers.map((header, headerIndex) => {
+                  const isMetadataCol = isMetadataColumn(header.column.id);
+                  const isFinalRow = headerGroup.depth === 1;
 
-              return (
-                <tr key={headerGroup.id} className="header">
-                  {headerGroup.headers.map((header) => {
-                    const isFinalRow = headerGroup.depth === 1;
-                    const isPromptHeader = isFinalRow && header.column.parent?.id === 'prompts';
-                    const shouldHidePromptBorder = isPromptHeader && promptHeaderBorderDrawn;
-
-                    if (isPromptHeader && !promptHeaderBorderDrawn) {
-                      promptHeaderBorderDrawn = true;
-                    }
-
-                    return (
-                      <th
-                        key={header.id}
-                        tabIndex={0}
-                        colSpan={header.colSpan}
-                        style={{
-                          width: header.getSize(),
-                          borderLeftWidth: shouldHidePromptBorder ? 0 : undefined,
-                          borderBottom: isFinalRow ? '2px solid var(--border-color)' : 'none',
-                          height: isFinalRow ? 'fit-content' : 'auto',
-                        }}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                        <div
-                          onMouseDown={header.getResizeHandler()}
-                          onTouchStart={header.getResizeHandler()}
-                          className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                        />
-                      </th>
-                    );
-                  })}
-                </tr>
-              );
-            })}
+                  return (
+                    <th
+                      key={header.id}
+                      tabIndex={0}
+                      colSpan={header.colSpan}
+                      style={{
+                        width: header.getSize(),
+                        borderLeft: headerIndex === 0 ? undefined : 'none',
+                        borderBottom:
+                          !isMetadataCol && isFinalRow ? '2px solid var(--border-color)' : 'none',
+                        height: isFinalRow ? 'fit-content' : 'auto',
+                      }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                      />
+                    </th>
+                  );
+                })}
+              </tr>
+            ))}
           </thead>
         </table>
       </div>
@@ -2298,8 +2290,7 @@ function ResultsTable({
         }
       };
 
-      const tableContainer =
-        document.querySelector('.results-table')?.parentElement || document.body;
+      const tableContainer = document.getElementById('results-table-container') || document.body;
 
       const observer = new MutationObserver(() => {
         if (hasScrolled) {
@@ -2437,7 +2428,7 @@ function ResultsTable({
           zoom,
           borderTopWidth: '1px',
           borderTopStyle: 'solid',
-          borderColor: stickyHeader ? 'transparent' : 'var(--border-color)',
+          borderColor: 'var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,

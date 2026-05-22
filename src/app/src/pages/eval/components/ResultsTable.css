@@ -609,7 +609,8 @@ thead {
 /* Keep body rows collapsed, while the detached sticky-header table can manage
  * its own edge styling without doubling grid lines in the results body. */
 .results-table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .results-table-header-table {

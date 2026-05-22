@@ -349,48 +349,18 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
   });
 
-  it('keeps the sticky header divider visible for metadata and prompt columns', () => {
-    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-      inComparisonMode: false,
-      renderMarkdown: true,
-      stickyHeader: true,
-      setStickyHeader: vi.fn(),
-    }));
-
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      inComparisonMode: false,
-      setTable: vi.fn(),
-      table: {
-        ...mockTable,
-        head: {
-          ...mockTable.head,
-          vars: ['question'],
-        },
-      },
-      version: 4,
-      renderMarkdown: true,
-      fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
-    }));
-
+  it('keeps the prompt header divider visible above streamed result rows', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    const variableHeaderCell = screen.getByText('question').closest('th');
     const promptHeaderCell = screen.getByText('test-provider').closest('th');
 
-    expect(variableHeaderCell).not.toHaveStyle({ borderBottom: 'none' });
-    expect(promptHeaderCell).not.toHaveStyle({ borderBottom: 'none' });
+    expect(promptHeaderCell).toHaveAttribute(
+      'style',
+      expect.stringContaining('border-bottom: 2px solid var(--border-color)'),
+    );
   });
 
-  it('keeps results container border geometry stable while the sticky header is active', () => {
+  it('keeps the header/body boundary border visible with sticky headers', () => {
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
       renderMarkdown: true,
@@ -403,7 +373,7 @@ describe('ResultsTable Metrics Display', () => {
 
     expect(tableContainer.style.borderTopWidth).toBe('1px');
     expect(tableContainer.style.borderTopStyle).toBe('solid');
-    expect(tableContainer.style.borderColor).toBe('transparent');
+    expect(tableContainer.style.borderColor).toBe('var(--border-color)');
   });
 
   it('keeps adjacent prompt header cells from drawing duplicate left borders', () => {
@@ -439,7 +409,7 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     const secondPromptHeaderCell = screen.getByText('test-provider-2').closest('th');
 
-    expect(secondPromptHeaderCell?.style.borderLeftWidth).toBe('0px');
+    expect((secondPromptHeaderCell as HTMLElement).style.borderLeftStyle).toBe('none');
   });
 
   describe('Keyboard Navigation', () => {
@@ -1225,6 +1195,23 @@ describe('ResultsTable Row Navigation', () => {
         }),
       );
     });
+  });
+
+  it('observes the body table while waiting for a deep-linked row to render', () => {
+    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe');
+    setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(observeSpy).toHaveBeenCalledWith(
+      document.getElementById('results-table-container'),
+      expect.objectContaining({
+        childList: true,
+        subtree: true,
+      }),
+    );
+
+    observeSpy.mockRestore();
   });
 
   it('preserves the details hash on initial mount', async () => {
