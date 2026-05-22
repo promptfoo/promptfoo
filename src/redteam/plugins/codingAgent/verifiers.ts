@@ -579,13 +579,22 @@ function isShellToolName(toolName: string): boolean {
   return SHELL_TOOL_NAMES.has(toolName.trim().toLowerCase());
 }
 
-function getToolCommand(toolInput: unknown): string | undefined {
-  if (typeof toolInput === 'string') {
-    return getString(toolInput);
-  }
+const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|[_:-])(?:edit|editor|patch|write)(?:[_:-]|$)/;
 
-  const inputObject = getObject(toolInput);
-  return inputObject ? (getString(inputObject.command) ?? getString(inputObject.cmd)) : undefined;
+function isFileWriteToolName(toolName: string): boolean {
+  const normalized = toolName
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+  return FILE_WRITE_TOOL_SEGMENT_PATTERN.test(normalized);
+}
+
+function getToolCommand(toolInput: unknown): string | undefined {
+  const inputObject = getObject(parseProviderRaw(toolInput));
+  return (
+    (inputObject ? (getString(inputObject.command) ?? getString(inputObject.cmd)) : undefined) ??
+    getString(toolInput)
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -777,7 +786,13 @@ function providerRawCommandEvidence(
 }
 
 function providerRawToolName(itemObject: Record<string, unknown>): string {
-  return getString(itemObject.tool) ?? getString(itemObject.name) ?? 'tool';
+  const functionCall = getObject(itemObject.function);
+  return (
+    getString(itemObject.tool) ??
+    getString(itemObject.name) ??
+    getString(functionCall?.name) ??
+    'tool'
+  );
 }
 
 function providerRawToolInputEvidence(
@@ -785,14 +800,18 @@ function providerRawToolInputEvidence(
   itemNumber: number,
 ): TargetEvidence | undefined {
   const toolName = providerRawToolName(itemObject);
+  const functionCall = getObject(itemObject.function);
   const rawToolInput =
     itemObject.input ??
     itemObject.arguments ??
     itemObject.args ??
+    functionCall?.arguments ??
+    functionCall?.input ??
     itemObject.content ??
     itemObject.text;
   const toolCommand = isShellToolName(toolName) ? getToolCommand(rawToolInput) : undefined;
-  const toolInput = toolCommand ?? coerceToolPayload(rawToolInput);
+  const toolInput =
+    toolCommand ?? (isFileWriteToolName(toolName) ? coerceToolPayload(rawToolInput) : undefined);
 
   return toolInput
     ? {
