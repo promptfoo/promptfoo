@@ -1107,6 +1107,23 @@ describe('fetchWithCache', () => {
       expect(secondResult.deleteFromCache).toBeInstanceOf(Function);
     });
 
+    it('should include response context when JSON parsing fails', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        text: () => Promise.resolve('error code: 1006'),
+        headers: new Headers({ 'content-type': 'text/plain' }),
+      } as Response);
+
+      const error = await fetchWithCache(url, {}, 1000, 'json').catch((err: unknown) => err);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(`Error parsing response from ${url}:`);
+      expect((error as Error).message).toContain('HTTP 403 Forbidden');
+      expect((error as Error).message).toContain('Received text: error code: 1006');
+    });
+
     it('should retry on transient body-read error then succeed', async () => {
       const responseText = JSON.stringify(response);
       const textMockFail = vi

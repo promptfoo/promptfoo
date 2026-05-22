@@ -18,6 +18,7 @@ import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
+import { optimizeCommand } from './commands/optimize';
 import { providersCommand } from './commands/providers';
 import { setupRetryCommand } from './commands/retry';
 import { shareCommand } from './commands/share';
@@ -106,6 +107,7 @@ async function main() {
   listCommand(program);
   logsCommand(program);
   modelScanCommand(program);
+  optimizeCommand(program, defaultConfig, defaultConfigPath);
   providersCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
