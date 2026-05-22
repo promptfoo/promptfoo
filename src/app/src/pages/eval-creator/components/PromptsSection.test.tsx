@@ -107,7 +107,11 @@ describe('PromptsSection', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'No prompts added yet. Variables in a prompt become inputs for each test case.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('shows a YAML-managed state for scalar prompt configs and opens the YAML editor', async () => {
@@ -143,7 +147,7 @@ describe('PromptsSection', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
+    expect(screen.getByText(/No prompts added yet/)).toBeInTheDocument();
 
     await openPromptDialog(user);
 
@@ -163,7 +167,7 @@ describe('PromptsSection', () => {
     updateStoreAndRerender([newPromptText], rerender);
 
     expect(screen.getByText(/Write a story about a robot/)).toBeInTheDocument();
-    expect(screen.queryByText('No prompts added yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No prompts added yet/)).not.toBeInTheDocument();
   });
 
   it('should update an existing prompt when a prompt row is clicked, the PromptDialog is edited, and the changes are submitted', async () => {
@@ -282,7 +286,7 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
   });
 
-  it("should add an example prompt to the list when the 'Add Example' button is clicked and the prompts list is empty", async () => {
+  it("should add a starter prompt when the 'Add Starter Prompt' button is clicked and the prompts list is empty", async () => {
     const user = userEvent.setup();
     setupStore([]);
 
@@ -292,7 +296,7 @@ describe('PromptsSection', () => {
       </TooltipProvider>,
     );
 
-    const addExampleButton = screen.getByRole('button', { name: /add example/i });
+    const addExampleButton = screen.getByRole('button', { name: 'Add Starter Prompt' });
     await user.click(addExampleButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
@@ -393,5 +397,18 @@ describe('PromptsSection', () => {
     );
 
     expect(screen.getByText(/This is a prompt with an unclosed variable/)).toBeInTheDocument();
+  });
+
+  it('highlights prompt variables that use supported whitespace syntax', () => {
+    setupStore(['Tell a story about {{ animal }} in {{location}}.']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('{{ animal }}')).toHaveClass('font-mono');
+    expect(screen.getByText('{{location}}')).toHaveClass('font-mono');
   });
 });

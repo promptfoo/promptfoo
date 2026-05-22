@@ -120,8 +120,8 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   // Highlight template variables in prompt text
   const highlightVars = (text: string) => {
     const truncated = text.length > 250 ? text.slice(0, 250) + ' ...' : text;
-    return truncated.split(/({{\w+}})/g).map((part: string, i: number) =>
-      /{{\s*(\w+)\s*}}/g.test(part) ? (
+    return truncated.split(/({{\s*\w+\s*}})/g).map((part: string, i: number) =>
+      /^{{\s*\w+\s*}}$/.test(part) ? (
         <span
           key={i}
           className="rounded border border-primary/20 bg-primary/10 px-1 py-0.5 font-mono text-xs text-foreground"
@@ -198,7 +198,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                     setPrompts([...prompts, examplePrompt]);
                   }}
                 >
-                  Add Example
+                  Add Starter Prompt
                 </Button>
               )}
             </>
@@ -210,7 +210,9 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
       <div className="rounded-lg border border-border overflow-hidden">
         {canEditInlinePrompts ? (
           prompts.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">No prompts added yet.</div>
+            <div className="p-8 text-center text-muted-foreground">
+              No prompts added yet. Variables in a prompt become inputs for each test case.
+            </div>
           ) : (
             <div className="divide-y divide-border">
               {prompts.map((prompt, index) => (
