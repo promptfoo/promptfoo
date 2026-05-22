@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { HttpProvider } from '../src/providers/http';
 import { clearAgentCache, fetchWithProxy } from '../src/util/fetch/index';
 import { mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
@@ -91,6 +92,7 @@ describe('fetchWithProxy compressed responses', () => {
     ['deflate', 200],
     ['gzip', 500],
     ['br', 500],
+    ['deflate', 500],
   ] as const)('decodes %s responses with HTTP %s', async (encoding, statusCode) => {
     const url = await startCompressedServer(encoding, statusCode);
     const response = await fetchWithProxy(url);
@@ -151,12 +153,16 @@ describe('fetchWithProxy compressed responses', () => {
   });
 
   it('preserves streamed native Request bodies on the pooled dispatcher path', async () => {
-    let received = '';
+    let resolveReceived!: (value: string) => void;
+    const receivedPromise = new Promise<string>((resolve) => {
+      resolveReceived = resolve;
+    });
+
     const url = await startServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on('data', (chunk) => chunks.push(chunk));
       req.on('end', () => {
-        received = Buffer.concat(chunks).toString('utf8');
+        resolveReceived(Buffer.concat(chunks).toString('utf8'));
         const body = gzipSync(Buffer.from(JSON.stringify(payload)));
         res.writeHead(200, {
           'content-encoding': 'gzip',
@@ -173,7 +179,7 @@ describe('fetchWithProxy compressed responses', () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(await response.text())).toEqual(payload);
-    expect(received).toBe('hello-streamed');
+    expect(await receivedPromise).toBe('hello-streamed');
   });
 
   it('lets callers clear an inherited aborted signal with signal: null', async () => {
@@ -187,5 +193,17 @@ describe('fetchWithProxy compressed responses', () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(await response.text())).toEqual(payload);
+  });
+
+  it('decodes HttpProvider responses when TLS config supplies the dispatcher', async () => {
+    const url = await startCompressedServer('gzip', 200);
+    const provider = new HttpProvider(url, {
+      config: {
+        method: 'GET',
+        tls: { rejectUnauthorized: false },
+      },
+    });
+
+    await expect(provider.callApi('unused')).resolves.toMatchObject({ output: payload });
   });
 });
