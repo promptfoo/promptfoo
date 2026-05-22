@@ -192,6 +192,16 @@ function normalizeAcceptFormats(acceptFormats?: OTLPFormat[]): OTLPFormat[] {
   return normalized.length > 0 ? normalized : [...DEFAULT_ACCEPT_FORMATS];
 }
 
+function normalizeRedactAttributePatterns(redactAttributes?: string[]): string[] {
+  return [
+    ...new Set(
+      (redactAttributes ?? [])
+        .map((pattern) => (typeof pattern === 'string' ? pattern.trim().toLowerCase() : ''))
+        .filter((pattern) => pattern.length > 0),
+    ),
+  ];
+}
+
 function getRequestFormat(contentType: string | string[] | undefined): OTLPFormat | null {
   const rawContentType = Array.isArray(contentType) ? contentType[0] : contentType;
   const mimeType = rawContentType?.split(';', 1)[0]?.trim().toLowerCase();
@@ -226,9 +236,20 @@ export class OTLPReceiver {
   }
 
   setRedactAttributes(redactAttributes?: string[]): void {
-    this.redactAttributePatterns = (redactAttributes ?? [])
-      .map((pattern) => (typeof pattern === 'string' ? pattern.trim().toLowerCase() : ''))
-      .filter((pattern) => pattern.length > 0);
+    this.redactAttributePatterns = normalizeRedactAttributePatterns(redactAttributes);
+  }
+
+  mergeOptions(options: OTLPReceiverOptions = {}): void {
+    this.acceptFormats = normalizeAcceptFormats([
+      ...this.acceptFormats,
+      ...(options.acceptFormats ?? []),
+    ]);
+    this.redactAttributePatterns = [
+      ...new Set([
+        ...this.redactAttributePatterns,
+        ...normalizeRedactAttributePatterns(options.redactAttributes),
+      ]),
+    ];
   }
 
   private shouldRedactAttribute(key: string): boolean {
@@ -922,8 +943,9 @@ let otlpReceiver: OTLPReceiver | null = null;
 
 function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   if (otlpReceiver) {
-    otlpReceiver.setAcceptFormats(options?.acceptFormats);
-    otlpReceiver.setRedactAttributes(options?.redactAttributes);
+    // The singleton can serve overlapping evals. Preserve options already in use
+    // while adding formats and redaction patterns requested by the new eval.
+    otlpReceiver.mergeOptions(options);
     return otlpReceiver;
   }
 
@@ -950,8 +972,9 @@ export function updateOTLPReceiverOptions(options?: {
     return;
   }
 
-  otlpReceiver.setAcceptFormats(options?.acceptFormats);
-  otlpReceiver.setRedactAttributes(options?.redactAttributes);
+  // A live receiver can serve overlapping evals, so refreshes must not drop
+  // formats or redaction patterns that another active eval still depends on.
+  otlpReceiver.mergeOptions(options);
 }
 
 export async function stopOTLPReceiver(): Promise<void> {
