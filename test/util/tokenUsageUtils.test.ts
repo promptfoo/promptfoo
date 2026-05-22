@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
@@ -277,6 +278,29 @@ describe('tokenUsageUtils', () => {
 
       expect(target.total).toBe(0);
       expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('accumulateAssertionTokenUsage', () => {
+    it('infers one grading request when a tokensUsed payload omits numRequests', () => {
+      const assertions = createEmptyTokenUsage().assertions!;
+
+      accumulateAssertionTokenUsage(assertions, { total: 7, prompt: 4, completion: 3 });
+
+      expect(assertions).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 1,
+      });
+    });
+
+    it('preserves an explicitly reported zero request count', () => {
+      const assertions = createEmptyTokenUsage().assertions!;
+
+      accumulateAssertionTokenUsage(assertions, { total: 7, numRequests: 0 });
+
+      expect(assertions.numRequests).toBe(0);
     });
   });
 

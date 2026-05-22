@@ -170,7 +170,9 @@ export function accumulateAssertionTokenUsage(
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
-  target.numRequests = addNumbers(target.numRequests, update.numRequests);
+  // A tokensUsed payload represents at least one grading request unless its
+  // producer explicitly reports a count (including an intentional zero).
+  target.numRequests = addNumbers(target.numRequests, update.numRequests ?? 1);
 
   // Handle completion details
   if (update.completionDetails) {

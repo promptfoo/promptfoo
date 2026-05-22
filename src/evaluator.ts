@@ -546,8 +546,7 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
 
   if (checkResult.tokensUsed) {
     accumulateAssertionTokenUsage(row.tokenUsage.assertions, checkResult.tokensUsed);
-  }
-  if (checkResult.tokensUsed?.numRequests === undefined) {
+  } else {
     row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
   }
   row.gradingResult = checkResult;

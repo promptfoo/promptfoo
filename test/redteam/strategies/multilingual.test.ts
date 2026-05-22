@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
@@ -10,6 +11,12 @@ import {
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 vi.mock('../../../src/cache');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 vi.mock('../../../src/redteam/providers/shared');
 vi.mock('../../../src/redteam/remoteGeneration');
 
@@ -143,5 +150,58 @@ describe('multilingual strategy token usage', () => {
       completion: 6,
       numRequests: 1,
     });
+  });
+
+  it('warns when local generation cannot produce all requested translations', async () => {
+    const mockProvider = createMockProvider({
+      id: 'mock',
+      response: createProviderResponse({
+        output: '{}',
+      }),
+    });
+    vi.mocked(redteamProviderManager.getMultilingualProvider).mockResolvedValue(mockProvider);
+
+    const result = await addMultilingualWithMetadata(
+      [{ vars: { prompt: 'hello' } }] as any,
+      'prompt',
+      { languages: ['es'] },
+    );
+
+    expect(result.result).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[Multilingual] Generated fewer translated test cases than requested',
+      { expected: 1, generated: 0, source: 'local' },
+    );
+  });
+
+  it('warns when remote generation returns partial language coverage', async () => {
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGeneration.getRemoteGenerationUrl).mockReturnValue('https://example.test/task');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        result: [
+          {
+            vars: { prompt: 'hola' },
+            metadata: { originalText: 'hello', language: 'es' },
+          },
+        ],
+        task: 'multilingual',
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await addMultilingualWithMetadata(
+      [{ vars: { prompt: 'hello' } }] as any,
+      'prompt',
+      { languages: ['es', 'fr'], remoteChunkSize: 1 },
+    );
+
+    expect(result.result).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '[Multilingual] Generated fewer translated test cases than requested',
+      { expected: 2, generated: 1, source: 'remote' },
+    );
   });
 });

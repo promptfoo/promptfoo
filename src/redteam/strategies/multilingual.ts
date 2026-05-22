@@ -22,6 +22,20 @@ type MultilingualResult = {
   tokenUsage?: TokenUsage;
 };
 
+function warnIfTranslationCoverageDropped(
+  source: 'local' | 'remote',
+  expected: number,
+  generated: number,
+): void {
+  if (generated < expected) {
+    logger.warn('[Multilingual] Generated fewer translated test cases than requested', {
+      expected,
+      generated,
+      source,
+    });
+  }
+}
+
 /**
  * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
  *
@@ -612,6 +626,16 @@ export async function addMultilingualWithMetadata(
     return { result: testCases };
   }
 
+  const languages =
+    Array.isArray(config.languages) && config.languages.length > 0
+      ? config.languages
+      : DEFAULT_LANGUAGES;
+  invariant(
+    Array.isArray(languages),
+    'multilingual strategy: `languages` must be an array of strings',
+  );
+  const expectedTranslationCount = testCases.length * languages.length;
+
   // Fallback: No language modifiers found - use old translation logic
   // This maintains backward compatibility for users who specify language differently
   const totalTokenUsage = createEmptyTokenUsage();
@@ -625,6 +649,11 @@ export async function addMultilingualWithMetadata(
       });
     }
     if (multilingualResult.result.length > 0) {
+      warnIfTranslationCoverageDropped(
+        'remote',
+        expectedTranslationCount,
+        multilingualResult.result.length,
+      );
       return {
         result: multilingualResult.result,
         ...(hasTokenUsage ? { tokenUsage: totalTokenUsage } : {}),
@@ -632,15 +661,6 @@ export async function addMultilingualWithMetadata(
     }
     logger.debug(`Remote multilingual generation returned 0 results, falling back to local`);
   }
-
-  const languages =
-    Array.isArray(config.languages) && config.languages.length > 0
-      ? config.languages
-      : DEFAULT_LANGUAGES;
-  invariant(
-    Array.isArray(languages),
-    'multilingual strategy: `languages` must be an array of strings',
-  );
 
   const translatedTestCases: TestCase[] = [];
   const batchSize = getBatchSize(config);
@@ -744,6 +764,7 @@ export async function addMultilingualWithMetadata(
   logger.debug(
     `Multilingual strategy: ${translatedTestCases.length} test cases generated from ${testCases.length} inputs`,
   );
+  warnIfTranslationCoverageDropped('local', expectedTranslationCount, translatedTestCases.length);
 
   return {
     result: translatedTestCases,
