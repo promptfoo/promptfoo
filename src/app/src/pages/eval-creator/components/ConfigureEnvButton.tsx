@@ -266,7 +266,9 @@ const ConfigureEnvButton = () => {
             <Button variant="outline" onClick={requestClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>Save</Button>
+            <Button onClick={handleSave} disabled={!hasUnsavedChanges}>
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

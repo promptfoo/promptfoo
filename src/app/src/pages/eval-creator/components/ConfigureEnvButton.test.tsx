@@ -50,9 +50,11 @@ describe('ConfigureEnvButton', () => {
 
     const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);
     const newOpenAiKey = 'new-openai-key-12345';
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
     await userEvent.type(openaiApiKeyInput, newOpenAiKey);
 
     const saveButton = screen.getByRole('button', { name: /save/i });
+    expect(saveButton).toBeEnabled();
     await userEvent.click(saveButton);
 
     await waitFor(() => {
@@ -109,6 +111,7 @@ describe('ConfigureEnvButton', () => {
     render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
+    expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
     expect(screen.queryByText('Discard provider setting changes?')).toBeNull();
