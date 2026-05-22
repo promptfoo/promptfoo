@@ -26,7 +26,7 @@ describe('PromptDialog', () => {
     expect(textField).toHaveValue(mockProps.prompt);
 
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add Another' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add and create another' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
@@ -53,7 +53,7 @@ describe('PromptDialog', () => {
     expect(mockProps.onCancel).toHaveBeenCalled();
   });
 
-  it('should call onAdd, clear the text field, and focus the text field when the Add Another button is clicked', async () => {
+  it('acknowledges a saved prompt and focuses the field when adding another', async () => {
     const user = userEvent.setup();
     render(<PromptDialog {...mockProps} />);
 
@@ -62,12 +62,18 @@ describe('PromptDialog', () => {
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('New prompt text');
 
-    const addButton = screen.getByRole('button', { name: 'Add Another' });
+    const addButton = screen.getByRole('button', { name: 'Add and create another' });
     await user.click(addButton);
 
     expect(mockProps.onAdd).toHaveBeenCalledWith('New prompt text');
     expect(textField).toHaveValue('');
     expect(textField).toHaveFocus();
+    expect(screen.getByRole('status')).toHaveTextContent('Prompt added. Enter the next prompt.');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Discard prompt changes?')).toBeNull();
+    expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('should call onCancel when the "Cancel" button is clicked', async () => {
@@ -78,11 +84,42 @@ describe('PromptDialog', () => {
     expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("should disable the 'Add' and 'Add Another' buttons when the text field is empty", () => {
+  it('confirms before discarding unsaved prompt changes', async () => {
+    const user = userEvent.setup();
+    render(<PromptDialog {...mockProps} prompt="" />);
+
+    await user.type(screen.getByRole('textbox'), 'Draft prompt');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByText('Discard prompt changes?')).toBeInTheDocument();
+    expect(mockProps.onCancel).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.queryByText('Discard prompt changes?')).toBeNull();
+    expect(screen.getByRole('textbox')).toHaveValue('Draft prompt');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets an abandoned add draft when the dialog is reopened', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<PromptDialog {...mockProps} prompt="" />);
+
+    await user.type(screen.getByRole('textbox'), 'Discard this');
+    rerender(<PromptDialog {...mockProps} prompt="" open={false} />);
+    rerender(<PromptDialog {...mockProps} prompt="" open={true} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
+  it("should disable the 'Add' and 'Add and create another' buttons when the text field is empty", () => {
     render(<PromptDialog {...mockProps} prompt="" />);
 
     const addButton = screen.getByRole('button', { name: 'Add' });
-    const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
 
     expect(addButton).toBeDisabled();
     expect(addAnotherButton).toBeDisabled();
@@ -98,7 +135,7 @@ describe('PromptDialog', () => {
     expect(textField).toHaveAttribute('aria-invalid', 'true');
     expect(textField).toHaveAccessibleDescription('Prompt must include text, not only spaces.');
     expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Add Another' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add and create another' })).toBeDisabled();
     expect(mockProps.onAdd).not.toHaveBeenCalled();
   });
 
