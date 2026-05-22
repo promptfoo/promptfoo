@@ -124,6 +124,41 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 250');
   });
 
+  it('avoids double counting nested trace spans that repeat token totals', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 250, source: 'trace' } },
+      renderedValue: { max: 250, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'parent',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 100,
+              attributes: { 'gen_ai.usage.total_tokens': 250 },
+            },
+            {
+              spanId: 'child',
+              parentSpanId: 'parent',
+              name: 'llm.completion',
+              startTime: 10,
+              endTime: 90,
+              attributes: { 'gen_ai.usage.total_tokens': 250 },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 250');
+  });
+
   it('falls back to providerResponse.tokenUsage when no trace is present', () => {
     const params: AssertionParams = {
       ...baseParams,
