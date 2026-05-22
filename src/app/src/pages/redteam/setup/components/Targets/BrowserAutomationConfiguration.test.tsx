@@ -46,7 +46,8 @@ describe('BrowserAutomationConfiguration', () => {
       />,
     );
 
-    const url = screen.getByLabelText('URL');
+    const url = screen.getByLabelText(/URL/);
+    expect(url).toBeRequired();
     expect(url).toHaveAttribute('aria-invalid', 'true');
     expect(url).toHaveAccessibleDescription(
       'Step 1: replace example.com with your application URL.',
@@ -102,9 +103,10 @@ describe('BrowserAutomationConfiguration', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Screenshot File Path')).toHaveAccessibleDescription(
+    expect(screen.getByLabelText(/Screenshot File Path/)).toHaveAccessibleDescription(
       'Step 1: enter a screenshot file path.',
     );
+    expect(screen.getByLabelText(/Screenshot File Path/)).toBeRequired();
   });
 
   it('discloses and saves advanced extraction scripts within extract steps', () => {
@@ -123,7 +125,8 @@ describe('BrowserAutomationConfiguration', () => {
     );
 
     const script = screen.getByLabelText('JavaScript Extraction Script (advanced)');
-    expect(screen.getByLabelText('CSS Selector (optional with script)')).toHaveValue('.result');
+    expect(screen.getByLabelText('CSS Selector (optional with script)')).not.toBeRequired();
+    expect(screen.getByLabelText(/Variable Name/)).toBeRequired();
     expect(script).toHaveValue('return document.title;');
     expect(script).toHaveAccessibleDescription(
       /Runs in the target page context and takes priority over the CSS selector/i,
@@ -138,5 +141,21 @@ describe('BrowserAutomationConfiguration', () => {
         name: 'result',
       },
     ]);
+  });
+
+  it('marks fields required by typed and wait-for-children steps', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([
+          { action: 'type', args: { selector: '', text: '' } },
+          { action: 'waitForNewChildren', args: { parentSelector: '' } },
+        ])}
+        updateCustomTarget={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/^Selector/)).toBeRequired();
+    expect(screen.getByLabelText(/Text/)).toBeRequired();
+    expect(screen.getByLabelText(/Parent Selector/)).toBeRequired();
   });
 });

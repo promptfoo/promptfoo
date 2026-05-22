@@ -67,6 +67,14 @@ function BrowserFieldError({ id, error }: { id: string; error?: string }) {
   );
 }
 
+function RequiredIndicator() {
+  return (
+    <span aria-hidden="true" className="ml-1 text-destructive">
+      *
+    </span>
+  );
+}
+
 const BrowserAutomationConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -159,7 +167,10 @@ const BrowserAutomationConfiguration = ({
             <div key={index} className="mb-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-4">
                 <div className="min-w-[200px]">
-                  <Label htmlFor={`step-${index}-action`}>Action Type</Label>
+                  <Label htmlFor={`step-${index}-action`}>
+                    Action Type
+                    <RequiredIndicator />
+                  </Label>
                   <Select
                     value={step.action || ''}
                     onValueChange={(value) => {
@@ -173,6 +184,7 @@ const BrowserAutomationConfiguration = ({
                   >
                     <SelectTrigger
                       id={`step-${index}-action`}
+                      aria-required="true"
                       {...getStepErrorProps(index, 'action')}
                     >
                       <SelectValue placeholder="Select action" />
@@ -212,9 +224,13 @@ const BrowserAutomationConfiguration = ({
               <div className="mt-4">
                 {step.action === 'navigate' && (
                   <div className="space-y-2">
-                    <Label htmlFor={`step-${index}-url`}>URL</Label>
+                    <Label htmlFor={`step-${index}-url`}>
+                      URL
+                      <RequiredIndicator />
+                    </Label>
                     <Input
                       id={`step-${index}-url`}
+                      required
                       value={step.args?.url || ''}
                       onChange={(e) => {
                         const newSteps = [...(selectedTarget.config.steps || [])];
@@ -243,9 +259,13 @@ const BrowserAutomationConfiguration = ({
                         {step.action === 'extract'
                           ? 'CSS Selector (optional with script)'
                           : 'Selector'}
+                        {(step.action !== 'extract' || !step.args?.script?.trim()) && (
+                          <RequiredIndicator />
+                        )}
                       </Label>
                       <Input
                         id={`step-${index}-selector`}
+                        required={step.action !== 'extract' || !step.args?.script?.trim()}
                         value={step.args?.selector || ''}
                         onChange={(e) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
@@ -292,9 +312,13 @@ const BrowserAutomationConfiguration = ({
 
                 {step.action === 'type' && (
                   <div className="mt-4 space-y-2">
-                    <Label htmlFor={`step-${index}-text`}>Text</Label>
+                    <Label htmlFor={`step-${index}-text`}>
+                      Text
+                      <RequiredIndicator />
+                    </Label>
                     <Input
                       id={`step-${index}-text`}
+                      required
                       value={step.args?.text || ''}
                       onChange={(e) => {
                         const newSteps = [...(selectedTarget.config.steps || [])];
@@ -336,9 +360,13 @@ const BrowserAutomationConfiguration = ({
                 {step.action === 'extract' && (
                   <div className="mt-4 space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`step-${index}-var-name`}>Variable Name</Label>
+                      <Label htmlFor={`step-${index}-var-name`}>
+                        Variable Name
+                        <RequiredIndicator />
+                      </Label>
                       <Input
                         id={`step-${index}-var-name`}
+                        required
                         value={step.name || ''}
                         onChange={(e) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
@@ -382,9 +410,13 @@ const BrowserAutomationConfiguration = ({
 
                 {step.action === 'screenshot' && (
                   <div className="space-y-2">
-                    <Label htmlFor={`step-${index}-path`}>Screenshot File Path</Label>
+                    <Label htmlFor={`step-${index}-path`}>
+                      Screenshot File Path
+                      <RequiredIndicator />
+                    </Label>
                     <Input
                       id={`step-${index}-path`}
+                      required
                       value={step.args?.path || ''}
                       onChange={(e) => {
                         const newSteps = [...(selectedTarget.config.steps || [])];
@@ -407,9 +439,13 @@ const BrowserAutomationConfiguration = ({
                 {step.action === 'waitForNewChildren' && (
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor={`step-${index}-parent-selector`}>Parent Selector</Label>
+                      <Label htmlFor={`step-${index}-parent-selector`}>
+                        Parent Selector
+                        <RequiredIndicator />
+                      </Label>
                       <Input
                         id={`step-${index}-parent-selector`}
+                        required
                         value={step.args?.parentSelector || ''}
                         onChange={(e) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
