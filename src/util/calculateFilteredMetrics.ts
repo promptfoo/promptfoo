@@ -200,6 +200,23 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 }
 
 /**
+ * SQL expression yielding a result's `grading_result.namedScoreWeights` object,
+ * or an empty object when it is missing or malformed.
+ *
+ * Shared by the weighted SQL fast path and the unweighted JS fallback selector
+ * so both define the weighted/unweighted partition boundary identically.
+ */
+const namedScoreWeightsJson = sql`
+  CASE
+    WHEN grading_result IS NOT NULL
+      AND json_valid(grading_result)
+      AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
+    THEN json_extract(grading_result, '$.namedScoreWeights')
+    ELSE json('{}')
+  END
+`;
+
+/**
  * Aggregate named scores using SQL json_each().
  * This is MUCH more efficient than fetching all results and parsing in JavaScript.
  *
@@ -230,15 +247,7 @@ async function aggregateNamedScores(
       SUM(CAST(weight_entries.value AS REAL)) as metric_weight_total
     FROM eval_results
     JOIN json_each(eval_results.named_scores) as score_entries
-    JOIN json_each(
-      CASE
-        WHEN grading_result IS NOT NULL
-          AND json_valid(grading_result)
-          AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
-        THEN json_extract(grading_result, '$.namedScoreWeights')
-        ELSE json('{}')
-      END
-    ) as weight_entries
+    JOIN json_each(${namedScoreWeightsJson}) as weight_entries
       ON weight_entries.key = score_entries.key
       AND weight_entries.type IN ('integer', 'real')
     WHERE ${whereSql}
@@ -336,15 +345,7 @@ async function aggregateUnweightedNamedScores(
       AND EXISTS (
         SELECT 1
         FROM json_each(eval_results.named_scores) as score_entries
-        LEFT JOIN json_each(
-          CASE
-            WHEN grading_result IS NOT NULL
-              AND json_valid(grading_result)
-              AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
-            THEN json_extract(grading_result, '$.namedScoreWeights')
-            ELSE json('{}')
-          END
-        ) as weight_entries
+        LEFT JOIN json_each(${namedScoreWeightsJson}) as weight_entries
           ON weight_entries.key = score_entries.key
         WHERE weight_entries.key IS NULL
           OR weight_entries.type NOT IN ('integer', 'real')
