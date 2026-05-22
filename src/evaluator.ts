@@ -651,8 +651,9 @@ function createRunEvalState({
  * exposed to prompt/provider rendering.
  *
  * The names returned here (`__evalId`, `__evalStepId`, `__repeatIndex`) are
- * reserved by promptfoo: a user/test/dataset var with one of these names is
- * overwritten by the runtime value, and `runEvalInternal` warns when it is.
+ * reserved by promptfoo: an input or stored register var with one of these
+ * names is overwritten by the runtime value, and `runEvalInternal` warns when
+ * it is.
  *
  * Note: `__evalStepId` encodes the per-(repeat, combination) test index
  * (`test-<idx>-prompt-<idx>-repeat-<idx>`). It is a positional step identifier,
@@ -1315,6 +1316,10 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
+type RunEvalInternalOptions = RunEvalOptions & {
+  warnedReservedRuntimeVars?: Set<string>;
+};
+
 async function runEvalInternal({
   provider,
   prompt, // raw prompt
@@ -1335,7 +1340,8 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  warnedReservedRuntimeVars,
+}: RunEvalInternalOptions): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1357,17 +1363,16 @@ async function runEvalInternal({
     repeatIndex,
     testIndex,
   });
-  // Warn before overwriting: these runtime var names are reserved by promptfoo.
-  // Only the keys actually injected for this step are checked (`__evalId` is
-  // omitted when no evalId is set); collisions are reported in a single warning
-  // to avoid log spam across a large eval.
-  const incomingVars = test.vars ?? {};
-  const collidingReservedVars = Object.keys(runtimeVars).filter((name) =>
-    Object.hasOwn(incomingVars, name),
+  // Warn before overwriting only keys actually injected for this step
+  // (`__evalId` is omitted when no evalId is set). The evaluator shares a set
+  // across steps so each reserved key is reported at most once per eval.
+  const collidingReservedVars = Object.keys(runtimeVars).filter(
+    (name) => Object.hasOwn(state.vars, name) && !warnedReservedRuntimeVars?.has(name),
   );
   if (collidingReservedVars.length > 0) {
+    collidingReservedVars.forEach((name) => warnedReservedRuntimeVars?.add(name));
     logger.warn(
-      `Test var(s) ${collidingReservedVars.map((name) => `"${name}"`).join(', ')} collide with ` +
+      `Input var(s) ${collidingReservedVars.map((name) => `"${name}"`).join(', ')} collide with ` +
         `reserved promptfoo runtime vars and will be overridden. Rename them to avoid the conflict.`,
     );
   }
@@ -2945,6 +2950,7 @@ class Evaluator {
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private readonly warnedReservedRuntimeVars = new Set<string>();
 
   constructor(testSuite: TestSuite, evalRecord: Eval, options: InternalEvaluateOptions) {
     this.testSuite = testSuite;
@@ -3181,6 +3187,7 @@ class Evaluator {
       ...evalStep,
       deferGrading,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      warnedReservedRuntimeVars: this.warnedReservedRuntimeVars,
     });
     onRowsReady?.();
     return rows;

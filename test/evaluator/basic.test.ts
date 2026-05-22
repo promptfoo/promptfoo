@@ -5,6 +5,7 @@ import fs from 'fs';
 
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
+import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { type TestSuite } from '../../src/types/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
@@ -69,6 +70,28 @@ describeEvaluator('evaluator basic flows', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  it('warns only once per reserved runtime var across evaluation steps', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('{{__evalStepId}} one'), toPrompt('{{__evalStepId}} two')],
+      tests: [
+        {
+          vars: { __evalStepId: 'spoofed-step-id' },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { repeat: 2 });
+
+    const collisionWarnings = warnSpy.mock.calls.filter(([message]) =>
+      String(message).includes('__evalStepId'),
+    );
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+    expect(collisionWarnings).toHaveLength(1);
   });
 
   it('evaluate with vars - no escaping', async () => {

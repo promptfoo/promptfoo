@@ -146,6 +146,24 @@ describe('runEval', () => {
     expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('__evalId'));
   });
 
+  it('warns when a stored register collides with a reserved runtime var name', async () => {
+    const logger = (await import('../../src/logger')).default;
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {
+        __evalStepId: 'stored-output',
+      },
+    });
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalStepId'));
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {
