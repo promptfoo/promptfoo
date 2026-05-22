@@ -261,7 +261,10 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('1. Providers')).toBeInTheDocument();
     expect(screen.getByText('2. Prompts')).toBeInTheDocument();
     expect(screen.getByText('3. Test cases')).toBeInTheDocument();
-    expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
+    const setupProgress = screen.getByRole('status', { name: 'Setup progress' });
+    expect(setupProgress).toHaveTextContent('0 of 3 required steps complete');
+    expect(setupProgress).toHaveAttribute('aria-live', 'polite');
+    expect(setupProgress).toHaveAttribute('aria-atomic', 'true');
     expect(screen.getByText('Add at least one provider to evaluate.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Continue to Providers' })).toBeNull();
     expect(screen.getByRole('button', { name: /Choose Providers Required/i })).toHaveAttribute(
@@ -277,7 +280,9 @@ describe('EvaluateTestSuiteCreator', () => {
 
     render(<EvaluateTestSuiteCreator />);
 
-    expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Setup progress' })).toHaveTextContent(
+      '1 of 3 required steps complete',
+    );
     expect(screen.getByText('Add at least one prompt or input.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
 
@@ -354,7 +359,9 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
 
     expect(screen.getByTestId('mock-prompts-section')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Viewing step 2: Write Prompts.');
+    expect(screen.getByRole('status', { name: 'Current setup step' })).toHaveTextContent(
+      'Viewing step 2: Write Prompts.',
+    );
     expect(screen.getByRole('button', { name: 'Prompts: Missing' })).toHaveAttribute(
       'aria-current',
       'step',

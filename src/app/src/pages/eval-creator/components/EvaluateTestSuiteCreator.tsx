@@ -349,16 +349,23 @@ const EvaluateTestSuiteCreator = () => {
               <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between lg:p-5">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Evaluation setup</p>
-                  <h2 className="text-xl font-semibold">
-                    {isReadyToRun
-                      ? 'Ready to run'
-                      : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {isReadyToRun
-                      ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
-                      : nextSetupIssue?.message || `Next up: ${nextRecommendedStep.title}.`}
-                  </p>
+                  <div
+                    role="status"
+                    aria-label="Setup progress"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    <h2 className="text-xl font-semibold">
+                      {isReadyToRun
+                        ? 'Ready to run'
+                        : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      {isReadyToRun
+                        ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
+                        : nextSetupIssue?.message || `Next up: ${nextRecommendedStep.title}.`}
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -414,7 +421,13 @@ const EvaluateTestSuiteCreator = () => {
               </CardContent>
             </Card>
 
-            <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+            <p
+              role="status"
+              aria-label="Current setup step"
+              aria-live="polite"
+              aria-atomic="true"
+              className="sr-only"
+            >
               Viewing step {activeSetupStep.id}: {activeSetupStep.title}.
             </p>
 
