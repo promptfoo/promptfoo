@@ -35,6 +35,8 @@ export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
   'not-latency',
 ]);
 
+export const WORD_COUNT_ASSERTION_TYPES = new Set<AssertionType>(['word-count', 'not-word-count']);
+
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-sql',
   'contains-sql',
@@ -153,6 +155,47 @@ function getThresholdError(assertion: Assertion): string | undefined {
   return undefined;
 }
 
+function isUsableWordCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function getWordCountError(assertion: Assertion): string | undefined {
+  if (!WORD_COUNT_ASSERTION_TYPES.has(assertion.type)) {
+    return undefined;
+  }
+
+  if (isUsableWordCount(assertion.value)) {
+    return undefined;
+  }
+
+  if (typeof assertion.value === 'string' && assertion.value.trim() !== '') {
+    const parsedValue = Number(assertion.value);
+    return isUsableWordCount(parsedValue)
+      ? undefined
+      : 'Enter word counts as whole numbers, 0 or greater.';
+  }
+
+  if (!isRecord(assertion.value)) {
+    return 'Enter an exact word count or at least one limit.';
+  }
+
+  const { min, max } = assertion.value;
+  if (min === undefined && max === undefined) {
+    return 'Enter an exact word count or at least one limit.';
+  }
+  if (
+    (min !== undefined && !isUsableWordCount(min)) ||
+    (max !== undefined && !isUsableWordCount(max))
+  ) {
+    return 'Enter word counts as whole numbers, 0 or greater.';
+  }
+  if (typeof min === 'number' && typeof max === 'number' && min > max) {
+    return 'Minimum word count cannot exceed maximum word count.';
+  }
+
+  return undefined;
+}
+
 function getStructuredValueError(assertion: Assertion): string | undefined {
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
@@ -265,6 +308,7 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
 export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
   return (
     getThresholdError(assertion) ||
+    getWordCountError(assertion) ||
     getStructuredValueError(assertion) ||
     getExpectedValueError(assertion)
   );

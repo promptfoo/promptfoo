@@ -24,6 +24,7 @@ import {
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
   STRUCTURED_VALUE_ASSERTION_TYPES,
   THRESHOLD_ASSERTION_TYPES,
+  WORD_COUNT_ASSERTION_TYPES,
 } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
@@ -87,6 +88,7 @@ const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
       'perplexity-score',
       'rouge-n',
       'webhook',
+      'word-count',
     ],
   },
   {
@@ -119,6 +121,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'not-similar': 'Not semantically similar',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
+  'word-count': 'Word count limits',
 };
 
 const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
@@ -132,6 +135,7 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Fails when a model finds semantic similarity to your expected answer. This can add cost.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
+  'word-count': 'Checks response length without model grading or additional cost.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
   'perplexity-score':
     'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
@@ -233,6 +237,35 @@ const formatAssertionThreshold = (assert: Assertion): string =>
 const parseAssertionThreshold = (value: string): number | undefined =>
   value.trim() === '' ? undefined : Number(value);
 
+const formatWordCountExact = (assert: Assertion): string =>
+  typeof assert.value === 'number' || typeof assert.value === 'string' ? String(assert.value) : '';
+
+const formatWordCountLimit = (assert: Assertion, limit: 'min' | 'max'): string =>
+  assert.value &&
+  typeof assert.value === 'object' &&
+  !Array.isArray(assert.value) &&
+  typeof assert.value[limit] === 'number'
+    ? String(assert.value[limit])
+    : '';
+
+const updateWordCountLimit = (
+  value: Assertion['value'],
+  limit: 'min' | 'max',
+  inputValue: string,
+): Assertion['value'] => {
+  const nextLimits =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...value }
+      : ({} as Record<string, number>);
+  const parsedValue = parseAssertionThreshold(inputValue);
+  if (parsedValue === undefined) {
+    delete nextLimits[limit];
+  } else {
+    nextLimits[limit] = parsedValue;
+  }
+  return Object.keys(nextLimits).length > 0 ? nextLimits : undefined;
+};
+
 const formatStructuredValue = (assert: Assertion): string => {
   if (typeof assert.value === 'string') {
     return assert.value;
@@ -293,6 +326,68 @@ const ThresholdField = ({ assertion, error, index, onChange }: ThresholdFieldPro
             : isCost
               ? 'Maximum estimated cost for each provider response.'
               : 'Optional. Without a threshold, this check reports a metric only.'}
+        </p>
+      )}
+    </div>
+  );
+};
+
+interface WordCountFieldProps {
+  assertion: Assertion;
+  error?: string;
+  index: number;
+  onChange: (value: Assertion['value']) => void;
+}
+
+const WordCountField = ({ assertion, error, index, onChange }: WordCountFieldProps) => {
+  const descriptionId = error ? `assert-value-error-${index}` : `assert-word-count-help-${index}`;
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`assert-word-count-exact-${index}`} className="text-sm font-medium">
+          Exact word count
+        </Label>
+        <Input
+          id={`assert-word-count-exact-${index}`}
+          type="number"
+          min="0"
+          step="1"
+          value={formatWordCountExact(assertion)}
+          onChange={(event) => onChange(parseAssertionThreshold(event.target.value))}
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionId}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">Or set an inclusive range:</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {(['min', 'max'] as const).map((limit) => (
+          <div key={limit} className="space-y-2">
+            <Label htmlFor={`assert-word-count-${limit}-${index}`} className="text-sm font-medium">
+              {limit === 'min' ? 'Minimum words' : 'Maximum words'}
+            </Label>
+            <Input
+              id={`assert-word-count-${limit}-${index}`}
+              type="number"
+              min="0"
+              step="1"
+              value={formatWordCountLimit(assertion, limit)}
+              onChange={(event) =>
+                onChange(updateWordCountLimit(assertion.value, limit, event.target.value))
+              }
+              aria-invalid={Boolean(error)}
+              aria-describedby={descriptionId}
+            />
+          </div>
+        ))}
+      </div>
+      {error ? (
+        <HelperText id={`assert-value-error-${index}`} error>
+          {error}
+        </HelperText>
+      ) : (
+        <p id={descriptionId} className="text-xs text-muted-foreground">
+          Enter an exact count, or a minimum and/or maximum. Editing a range clears an exact count.
         </p>
       )}
     </div>
@@ -445,6 +540,17 @@ const AssertionValueFields = ({
     );
   }
 
+  if (WORD_COUNT_ASSERTION_TYPES.has(assertion.type)) {
+    return (
+      <WordCountField
+        assertion={assertion}
+        error={error}
+        index={index}
+        onChange={(value) => onChange({ ...assertion, value })}
+      />
+    );
+  }
+
   if (STRUCTURED_VALUE_ASSERTION_TYPES.has(assertion.type)) {
     return (
       <StructuredValueField
@@ -574,6 +680,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
+    WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
     STRUCTURED_VALUE_ASSERTION_TYPES.has(nextType)
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
@@ -582,6 +689,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
 
   if (
     THRESHOLD_ASSERTION_TYPES.has(assertion.type) ||
+    WORD_COUNT_ASSERTION_TYPES.has(assertion.type) ||
     STRUCTURED_VALUE_ASSERTION_TYPES.has(assertion.type) ||
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(assertion.type) ||
     NO_VALUE_ASSERTION_TYPES.has(assertion.type)

@@ -320,6 +320,32 @@ describe('setupReadiness', () => {
       ).toBe(false);
     });
 
+    it('requires a valid exact or bounded word count before running', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a concise reply'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'word-count' }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'word-count', value: { max: 120 } }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'word-count', value: { min: 20, max: 10 } }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+    });
+
     it('rejects authored moderation categories unless they use runtime array form', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],

@@ -232,6 +232,48 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('stores word count limits in the runtime range shape without model-grading cost', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'word-count' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.queryByText('Model-graded: may add cost')).toBeNull();
+    expect(screen.getByRole('spinbutton', { name: 'Maximum words' })).toHaveAccessibleDescription(
+      'Enter an exact word count or at least one limit.',
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.type(screen.getByRole('spinbutton', { name: 'Maximum words' }), '120');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'word-count', value: { max: 120 } }]);
+    expect(screen.getByRole('spinbutton', { name: 'Maximum words' })).toHaveAccessibleDescription(
+      /Enter an exact count, or a minimum and\/or maximum/,
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('supports an exact word count from an imported configuration', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'word-count', value: 50 }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByRole('spinbutton', { name: 'Exact word count' })).toHaveValue(50);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
   it('stores structured trajectory matchers as JSON objects required by evaluation', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();
