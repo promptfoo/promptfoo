@@ -7,6 +7,24 @@ export const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-contains-all',
 ]);
 
+export const THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
+  'cost',
+  'latency',
+  'perplexity',
+  'perplexity-score',
+  'not-cost',
+  'not-latency',
+  'not-perplexity',
+  'not-perplexity-score',
+]);
+
+export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
+  'cost',
+  'latency',
+  'not-cost',
+  'not-latency',
+]);
+
 const REQUIRED_TEXT_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'contains',
   'icontains',
@@ -23,6 +41,28 @@ const REQUIRED_TEXT_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 export function getAssertionValueError(assertion: Assertion): string | undefined {
+  if (REQUIRED_THRESHOLD_ASSERTION_TYPES.has(assertion.type)) {
+    if (
+      typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0
+    ) {
+      return assertion.type === 'latency'
+        ? 'Enter a maximum latency in milliseconds, 0 or greater.'
+        : 'Enter a maximum cost, 0 or greater.';
+    }
+  }
+
+  if (
+    THRESHOLD_ASSERTION_TYPES.has(assertion.type) &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0)
+  ) {
+    return 'Enter a threshold value of 0 or greater.';
+  }
+
   if (
     ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type) &&
     (!Array.isArray(assertion.value) || assertion.value.length === 0)

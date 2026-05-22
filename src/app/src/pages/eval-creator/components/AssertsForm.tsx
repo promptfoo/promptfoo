@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { HelperText } from '@app/components/ui/helper-text';
 import { DeleteIcon } from '@app/components/ui/icons';
+import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
   Select,
@@ -16,7 +17,12 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
-import { ARRAY_VALUE_ASSERTION_TYPES, getAssertionValueError } from './assertionValueValidation';
+import {
+  ARRAY_VALUE_ASSERTION_TYPES,
+  getAssertionValueError,
+  REQUIRED_THRESHOLD_ASSERTION_TYPES,
+  THRESHOLD_ASSERTION_TYPES,
+} from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -118,6 +124,11 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   'is-json': 'Passes when the response is valid JSON. No value is needed.',
   'llm-rubric': 'A model judges the response using your criteria. This can add cost.',
   similar: 'A model checks semantic similarity to your expected answer. This can add cost.',
+  latency: 'Fails when a response takes longer than your maximum duration.',
+  cost: 'Fails when one provider response costs more than your maximum amount.',
+  perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
+  'perplexity-score':
+    'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
 };
 
 const getAssertionLabel = (type: AssertionType): string => {
@@ -175,6 +186,64 @@ const parseAssertionValue = (type: AssertionType, value: string): Assertion['val
 
   return value;
 };
+
+const formatAssertionThreshold = (assert: Assertion): string =>
+  typeof assert.threshold === 'number' ? String(assert.threshold) : '';
+
+const parseAssertionThreshold = (value: string): number | undefined =>
+  value.trim() === '' ? undefined : Number(value);
+
+interface ThresholdFieldProps {
+  assertion: Assertion;
+  error?: string;
+  index: number;
+  onChange: (threshold: number | undefined) => void;
+}
+
+const ThresholdField = ({ assertion, error, index, onChange }: ThresholdFieldProps) => {
+  const isLatency = assertion.type === 'latency' || assertion.type === 'not-latency';
+  const isCost = assertion.type === 'cost' || assertion.type === 'not-cost';
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`assert-threshold-${index}`} className="text-sm font-medium">
+        Threshold
+        {REQUIRED_THRESHOLD_ASSERTION_TYPES.has(assertion.type) && ' (required)'}
+      </Label>
+      <Input
+        id={`assert-threshold-${index}`}
+        type="number"
+        min="0"
+        step={isLatency ? '1' : 'any'}
+        placeholder={isLatency ? '1000' : '0.01'}
+        value={formatAssertionThreshold(assertion)}
+        onChange={(event) => onChange(parseAssertionThreshold(event.target.value))}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `assert-value-error-${index}` : undefined}
+      />
+      {error ? (
+        <HelperText id={`assert-value-error-${index}`} error>
+          {error}
+        </HelperText>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {isLatency
+            ? 'Maximum duration for each provider response, in milliseconds.'
+            : isCost
+              ? 'Maximum estimated cost for each provider response.'
+              : 'Optional. Without a threshold, this check reports a metric only.'}
+        </p>
+      )}
+    </div>
+  );
+};
+
+const ModelGradedBadge = ({ type }: { type: AssertionType }) =>
+  LLM_ASSERTION_TYPES.has(type) ? (
+    <Badge variant="secondary" className="text-xs">
+      Model-graded: may add cost
+    </Badge>
+  ) : null;
 
 const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
@@ -234,11 +303,7 @@ const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProp
                     <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
                       Type
                     </Label>
-                    {LLM_ASSERTION_TYPES.has(assert.type) && (
-                      <Badge variant="secondary" className="text-xs">
-                        Model-graded: may add cost
-                      </Badge>
-                    )}
+                    <ModelGradedBadge type={assert.type} />
                   </div>
                   <Button
                     variant="ghost"
@@ -267,6 +332,16 @@ const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProp
                       ) {
                         const { value: _value, ...assertWithoutValue } = a;
                         return { ...assertWithoutValue, type: nextType };
+                      }
+
+                      if (THRESHOLD_ASSERTION_TYPES.has(nextType)) {
+                        const { value: _value, ...assertWithoutValue } = a;
+                        return { ...assertWithoutValue, type: nextType };
+                      }
+
+                      if (THRESHOLD_ASSERTION_TYPES.has(a.type)) {
+                        const { threshold: _threshold, ...assertWithoutThreshold } = a;
+                        return { ...assertWithoutThreshold, type: nextType, value: '' };
                       }
 
                       if (ARRAY_VALUE_ASSERTION_TYPES.has(nextType)) {
@@ -314,8 +389,21 @@ const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProp
                   <p className="text-xs text-muted-foreground">{ASSERTION_HELP[assert.type]}</p>
                 )}
 
-                {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type) &&
-                assert.value === undefined ? (
+                {THRESHOLD_ASSERTION_TYPES.has(assert.type) ? (
+                  <ThresholdField
+                    assertion={assert}
+                    error={assertionErrors[index]}
+                    index={index}
+                    onChange={(threshold) => {
+                      const newAsserts = asserts.map((a, i) =>
+                        i === index ? { ...a, threshold } : a,
+                      );
+                      setAsserts(newAsserts);
+                      onAdd(newAsserts);
+                    }}
+                  />
+                ) : OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type) &&
+                  assert.value === undefined ? (
                   <div className="space-y-2 rounded-md border border-dashed border-border p-3">
                     <p className="text-xs text-muted-foreground">
                       This check validates JSON without requiring a schema. Add one only when you

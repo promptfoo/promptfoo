@@ -191,6 +191,24 @@ describe('setupReadiness', () => {
       });
     });
 
+    it('requires the threshold property used by runtime cost checks', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        tests: [{ assert: [{ type: 'cost', value: 0.01 }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.testCasesWithInvalidAssertions).toEqual([0]);
+      expect(
+        getSetupReadiness({
+          providers: ['openai:gpt-4.1'],
+          prompts: ['Write a summary'],
+          tests: [{ assert: [{ type: 'cost', threshold: 0.01 }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('does not claim an exact base request count for external test files', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

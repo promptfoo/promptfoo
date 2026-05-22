@@ -29,7 +29,7 @@ describe('AssertsForm', () => {
     initialValues = [
       { type: 'equals', value: 'expected output' },
       { type: 'contains-all', value: ['foo', 'bar'] },
-      { type: 'latency', value: 1000 },
+      { type: 'latency', threshold: 1000 },
     ];
 
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
@@ -38,7 +38,7 @@ describe('AssertsForm', () => {
     const valueInputs = screen.getAllByRole('textbox', { name: 'Value' });
 
     expect(typeInputs).toHaveLength(initialValues.length);
-    expect(valueInputs).toHaveLength(initialValues.length);
+    expect(valueInputs).toHaveLength(2);
 
     // Radix Select displays the value as text content, not as input value
     expect(typeInputs[0]).toHaveTextContent('equals');
@@ -48,7 +48,7 @@ describe('AssertsForm', () => {
     expect(valueInputs[1]).toHaveValue('foo, bar');
 
     expect(typeInputs[2]).toHaveTextContent('latency');
-    expect(valueInputs[2]).toHaveValue(String(1000));
+    expect(screen.getByRole('spinbutton', { name: /Threshold/ })).toHaveValue(1000);
   });
 
   it('starts new assertions as a deterministic text check that requires an expected value', async () => {
@@ -197,6 +197,30 @@ describe('AssertsForm', () => {
       screen.getByText('Enter at least one comma-separated value for this check.'),
     ).toBeInTheDocument();
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+  });
+
+  it('stores a required latency threshold in the property used by evaluation', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'latency' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    const thresholdInput = screen.getByRole('spinbutton', { name: /Threshold/ });
+    expect(thresholdInput).toHaveAccessibleDescription(
+      'Enter a maximum latency in milliseconds, 0 or greater.',
+    );
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.type(thresholdInput, '250');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'latency', threshold: 250 }]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
   it('progressively reveals optional JSON schema validation', async () => {
