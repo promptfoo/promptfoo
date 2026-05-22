@@ -15,9 +15,13 @@ permissions:
 jobs:
   security-scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The pinned scanner action installs the promptfoo CLI at runtime before the
+    # remote scan starts. The global install can exceed 15 minutes as the CLI's
+    # dependency graph grows, so keep enough headroom for install plus scan.
+    timeout-minutes: 45
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      PROMPTFOO_DISABLE_UPDATE: true
     permissions:
       contents: read
       pull-requests: write
