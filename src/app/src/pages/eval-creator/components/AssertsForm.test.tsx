@@ -28,7 +28,7 @@ describe('AssertsForm', () => {
   it('should render all assertions from initialValues as rows with the correct type and value fields populated', () => {
     initialValues = [
       { type: 'equals', value: 'expected output' },
-      { type: 'contains-all', value: '["foo", "bar"]' },
+      { type: 'contains-all', value: ['foo', 'bar'] },
       { type: 'latency', value: 1000 },
     ];
 
@@ -45,7 +45,7 @@ describe('AssertsForm', () => {
     expect(valueInputs[0]).toHaveValue('expected output');
 
     expect(typeInputs[1]).toHaveTextContent('contains-all');
-    expect(valueInputs[1]).toHaveValue('["foo", "bar"]');
+    expect(valueInputs[1]).toHaveValue('foo, bar');
 
     expect(typeInputs[2]).toHaveTextContent('latency');
     expect(valueInputs[2]).toHaveValue(String(1000));
@@ -117,6 +117,49 @@ describe('AssertsForm', () => {
     expect(await screen.findByText('Recommended starting checks')).toBeInTheDocument();
     expect(screen.getByText('Model-graded quality')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Equals exactly \(equals\)/ })).toBeInTheDocument();
+  });
+
+  it('stores comma-separated list assertions as the array required by evaluation', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'contains-any', value: [] }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const valueInput = screen.getByRole('textbox', { name: 'Value' });
+    await user.type(valueInput, 'hello, world');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'contains-any', value: ['hello', 'world'] }]);
+  });
+
+  it('progressively reveals optional JSON schema validation', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'is-json' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'JSON schema (optional)' })).toBeNull();
+    expect(screen.getByText(/validates JSON without requiring a schema/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add optional JSON schema' }));
+
+    const schemaInput = screen.getByRole('textbox', { name: 'JSON schema (optional)' });
+    await user.type(schemaInput, 'type: object');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'is-json', value: 'type: object' }]);
+
+    await user.click(screen.getByRole('button', { name: 'Remove schema' }));
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'is-json' }]);
+    expect(screen.queryByRole('textbox', { name: 'JSON schema (optional)' })).toBeNull();
+  });
+
+  it('drops an incompatible expected value when switching to basic JSON validation', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'equals', value: 'previous exact answer' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(await screen.findByRole('option', { name: /Valid JSON \(is-json\)/ }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'is-json' }]);
+    expect(screen.getByRole('button', { name: 'Add optional JSON schema' })).toBeInTheDocument();
   });
 
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {

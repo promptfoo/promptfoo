@@ -130,6 +130,13 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-contains-all',
 ]);
 
+const OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-json',
+  'contains-json',
+  'not-is-json',
+  'not-contains-json',
+]);
+
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -147,8 +154,42 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
+const formatAssertionValue = (assert: Assertion): string => {
+  if (ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && Array.isArray(assert.value)) {
+    return assert.value.map(String).join(', ');
+  }
+
+  if (typeof assert.value === 'string' || typeof assert.value === 'number') {
+    return String(assert.value);
+  }
+
+  if (assert.value && typeof assert.value === 'object') {
+    return JSON.stringify(assert.value, null, 2);
+  }
+
+  return '';
+};
+
+const parseAssertionValue = (type: AssertionType, value: string): Assertion['value'] => {
+  if (ARRAY_VALUE_ASSERTION_TYPES.has(type)) {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  return value;
+};
+
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
+  const [arrayValueDrafts, setArrayValueDrafts] = useState<Record<number, string>>(() =>
+    Object.fromEntries(
+      (initialValues || []).flatMap((assert, index) =>
+        ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) ? [[index, formatAssertionValue(assert)]] : [],
+      ),
+    ),
+  );
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
@@ -159,6 +200,17 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const handleRemoveAssert = (indexToRemove: number) => {
     const newAsserts = asserts.filter((_, index) => index !== indexToRemove);
     setAsserts(newAsserts);
+    setArrayValueDrafts((drafts) =>
+      Object.fromEntries(
+        Object.entries(drafts).flatMap(([indexText, draft]) => {
+          const index = Number(indexText);
+          if (index === indexToRemove) {
+            return [];
+          }
+          return [[index > indexToRemove ? index - 1 : index, draft]];
+        }),
+      ),
+    );
     onAdd(newAsserts);
   };
 
@@ -202,9 +254,40 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                 <Select
                   value={assert.type}
                   onValueChange={(newValue) => {
-                    const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
-                    );
+                    const nextType = newValue as AssertionType;
+                    const newAsserts = asserts.map((a, i) => {
+                      if (i !== index) {
+                        return a;
+                      }
+
+                      if (
+                        OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(nextType) &&
+                        !OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(a.type)
+                      ) {
+                        const { value: _value, ...assertWithoutValue } = a;
+                        return { ...assertWithoutValue, type: nextType };
+                      }
+
+                      if (ARRAY_VALUE_ASSERTION_TYPES.has(nextType)) {
+                        const valueText = formatAssertionValue(a);
+                        setArrayValueDrafts((drafts) => ({ ...drafts, [index]: valueText }));
+                        return {
+                          ...a,
+                          type: nextType,
+                          value: parseAssertionValue(nextType, valueText),
+                        };
+                      }
+
+                      if (ARRAY_VALUE_ASSERTION_TYPES.has(a.type)) {
+                        setArrayValueDrafts((drafts) => {
+                          const { [index]: _removed, ...nextDrafts } = drafts;
+                          return nextDrafts;
+                        });
+                        return { ...a, type: nextType, value: formatAssertionValue(a) };
+                      }
+
+                      return { ...a, type: nextType };
+                    });
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
                   }}
@@ -230,44 +313,104 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   <p className="text-xs text-muted-foreground">{ASSERTION_HELP[assert.type]}</p>
                 )}
 
-                {/* Value textarea */}
-                <div className="space-y-2">
-                  <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-                    Value
-                  </Label>
-                  <Textarea
-                    id={`assert-value-${index}`}
-                    placeholder="Enter expected value or criteria..."
-                    value={
-                      typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : ''
-                    }
-                    onChange={(e) => {
-                      const newValue = e.target.value;
-                      const newAsserts = asserts.map((a, i) =>
-                        i === index ? { ...a, value: newValue } : a,
-                      );
-                      setAsserts(newAsserts);
-                      onAdd(newAsserts);
-                    }}
-                    className="min-h-20 resize-y"
-                  />
-                  {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
+                {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type) &&
+                assert.value === undefined ? (
+                  <div className="space-y-2 rounded-md border border-dashed border-border p-3">
                     <p className="text-xs text-muted-foreground">
-                      Separate values with commas, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
+                      This check validates JSON without requiring a schema. Add one only when you
+                      need specific fields or types.
                     </p>
-                  )}
-                  {(assert.type === 'regex' || assert.type === 'not-regex') && (
-                    <p className="text-xs text-muted-foreground">
-                      Enter a regular expression pattern, e.g.{' '}
-                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
-                    </p>
-                  )}
-                </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: '' } : a,
+                        );
+                        setAsserts(newAsserts);
+                        onAdd(newAsserts);
+                      }}
+                    >
+                      Add optional JSON schema
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+                        {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type)
+                          ? 'JSON schema (optional)'
+                          : 'Value'}
+                      </Label>
+                      {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const newAsserts = asserts.map((a, i) => {
+                              if (i !== index) {
+                                return a;
+                              }
+                              const { value: _value, ...assertWithoutValue } = a;
+                              return assertWithoutValue;
+                            });
+                            setAsserts(newAsserts);
+                            onAdd(newAsserts);
+                          }}
+                        >
+                          Remove schema
+                        </Button>
+                      )}
+                    </div>
+                    <Textarea
+                      id={`assert-value-${index}`}
+                      placeholder={
+                        OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type)
+                          ? 'type: object\nrequired: [answer]'
+                          : 'Enter expected value or criteria...'
+                      }
+                      value={
+                        ARRAY_VALUE_ASSERTION_TYPES.has(assert.type)
+                          ? (arrayValueDrafts[index] ?? formatAssertionValue(assert))
+                          : formatAssertionValue(assert)
+                      }
+                      onChange={(e) => {
+                        if (ARRAY_VALUE_ASSERTION_TYPES.has(assert.type)) {
+                          setArrayValueDrafts((drafts) => ({
+                            ...drafts,
+                            [index]: e.target.value,
+                          }));
+                        }
+                        const newValue = parseAssertionValue(assert.type, e.target.value);
+                        const newAsserts = asserts.map((a, i) =>
+                          i === index ? { ...a, value: newValue } : a,
+                        );
+                        setAsserts(newAsserts);
+                        onAdd(newAsserts);
+                      }}
+                      className="min-h-20 resize-y"
+                    />
+                    {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type) && (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a JSON Schema in YAML or JSON format.
+                      </p>
+                    )}
+                    {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
+                      <p className="text-xs text-muted-foreground">
+                        Separate values with commas, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
+                      </p>
+                    )}
+                    {(assert.type === 'regex' || assert.type === 'not-regex') && (
+                      <p className="text-xs text-muted-foreground">
+                        Enter a regular expression pattern, e.g.{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           ))}
