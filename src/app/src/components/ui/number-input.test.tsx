@@ -19,6 +19,24 @@ describe('NumberInput', () => {
   it('renders with helperText', () => {
     render(<NumberInput helperText="Helper text here" onChange={vi.fn()} />);
     expect(screen.getByText('Helper text here')).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton')).toHaveAccessibleDescription('Helper text here');
+  });
+
+  it('preserves supplied descriptions when it adds helper text', () => {
+    render(
+      <>
+        <p id="external-description">External guidance</p>
+        <NumberInput
+          aria-describedby="external-description"
+          helperText="Helper text here"
+          onChange={vi.fn()}
+        />
+      </>,
+    );
+
+    expect(screen.getByRole('spinbutton')).toHaveAccessibleDescription(
+      'External guidance Helper text here',
+    );
   });
 
   it('calls onChange with numeric value', async () => {
@@ -51,14 +69,16 @@ describe('NumberInput', () => {
 
   it('shows error message when error is a string', () => {
     render(<NumberInput error="This is an error" onChange={vi.fn()} />);
-    expect(screen.getByText('This is an error')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('This is an error');
     const input = screen.getByRole('spinbutton');
     expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription('This is an error');
   });
 
   it('shows helperText when error is boolean true', () => {
     render(<NumberInput error={true} helperText="Helper text" onChange={vi.fn()} />);
-    expect(screen.getByText('Helper text')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Helper text');
+    expect(screen.getByRole('spinbutton')).toHaveAccessibleDescription('Helper text');
   });
 
   it('respects disabled state', () => {
