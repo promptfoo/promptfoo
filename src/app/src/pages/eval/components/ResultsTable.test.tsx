@@ -1340,6 +1340,38 @@ describe('ResultsTable Row Navigation', () => {
     );
   });
 
+  it('does not reuse a cleared legacy rowId when a filter is removed', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/?rowId=51');
+    const { rerender } = renderWithProviders(
+      <ResultsTable {...defaultProps} filterMode="failures" />,
+    );
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+        }),
+      );
+    });
+    mockFetchEvalData.mockClear();
+
+    rerender(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(window.location.search).toBe('');
+    });
+
+    await waitFor(() => {
+      const lastCall = mockFetchEvalData.mock.calls[mockFetchEvalData.mock.calls.length - 1];
+      expect(lastCall?.[1]).toEqual(
+        expect.objectContaining({
+          pageIndex: 0,
+        }),
+      );
+    });
+  });
+
   it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 
