@@ -229,6 +229,27 @@ describe('ProviderConfigEditor', () => {
         'Replace the example value with your Azure deployment name',
       );
     });
+
+    it('should reject zero max tokens instead of treating it as an empty value', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'openai:gpt-5.5', config: { max_tokens: 0 } }}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="openai"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith('Max tokens must be greater than 0');
+    });
   });
 
   it('should render without crashing when provider is an empty object', () => {

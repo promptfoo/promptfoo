@@ -51,6 +51,24 @@ const createDefaultMCPServer = (index: number): MCPServerConfig => ({
   args: [],
 });
 
+const parseOptionalNumber = (value: string): number | undefined => {
+  if (value.trim() === '') {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const parseOptionalInteger = (value: string): number | undefined => {
+  if (value.trim() === '') {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
+
 const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -458,7 +476,7 @@ const FoundationModelConfiguration = ({
                 step={0.1}
                 value={selectedTarget.config?.temperature ?? ''}
                 onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
+                  updateCustomTarget('temperature', parseOptionalNumber(e.target.value))
                 }
               />
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
@@ -472,7 +490,7 @@ const FoundationModelConfiguration = ({
                 min={1}
                 value={selectedTarget.config?.max_tokens ?? ''}
                 onChange={(e) =>
-                  updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
+                  updateCustomTarget('max_tokens', parseOptionalInteger(e.target.value))
                 }
               />
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
@@ -487,9 +505,7 @@ const FoundationModelConfiguration = ({
                 max={1}
                 step={0.01}
                 value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                onChange={(e) => updateCustomTarget('top_p', parseOptionalNumber(e.target.value))}
               />
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
@@ -154,6 +154,27 @@ describe('FoundationModelConfiguration', () => {
     const temperatureInput = screen.getByLabelText('Temperature');
     await user.clear(temperatureInput);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
+  });
+
+  it('preserves zero values for sampling controls and max token validation', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+
+    fireEvent.change(screen.getByLabelText('Temperature'), { target: { value: '0' } });
+    fireEvent.change(screen.getByLabelText('Max Tokens'), { target: { value: '0' } });
+    fireEvent.change(screen.getByLabelText('Top P'), { target: { value: '0' } });
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', 0);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('max_tokens', 0);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('top_p', 0);
   });
 
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
