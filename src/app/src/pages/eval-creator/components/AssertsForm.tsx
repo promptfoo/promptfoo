@@ -28,6 +28,7 @@ import {
   STRUCTURED_VALUE_ASSERTION_TYPES,
   TEXT_SCORE_ASSERTION_TYPES,
   THRESHOLD_ASSERTION_TYPES,
+  TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES,
   WORD_COUNT_ASSERTION_TYPES,
 } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
@@ -159,6 +160,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'context-recall': 'Context recall',
   'context-relevance': 'Context relevance',
   'g-eval': 'G-Eval criteria scoring',
+  'trajectory:goal-success': 'Agent goal achieved',
 };
 
 const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
@@ -198,6 +200,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Scores whether retrieved context is useful for the query. This uses a grading provider and can add cost.',
   'g-eval':
     'Scores the response against your criteria in multiple grading steps. This can add cost.',
+  'trajectory:goal-success':
+    'Judges whether a traced agent run achieved your goal. This requires trace data and a grading model, which can add cost.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
   'perplexity-score':
     'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
@@ -962,6 +966,92 @@ const ModelJudgeScoreField = ({
   );
 };
 
+const TrajectoryGoalSuccessField = ({
+  assertion,
+  error,
+  index,
+  onChange,
+}: SpecializedValueFieldProps) => {
+  const hasAdvancedValue =
+    assertion.value !== undefined &&
+    typeof assertion.value === 'object' &&
+    !Array.isArray(assertion.value);
+  const helpId = `assert-trajectory-goal-help-${index}`;
+  const errorId = `assert-value-error-${index}`;
+  const goalError = error === 'Enter the goal that the agent should achieve.' ? error : undefined;
+  const thresholdError = goalError ? undefined : error;
+  const goalDescriptionIds = goalError ? `${errorId} ${helpId}` : helpId;
+  const thresholdDescriptionIds = thresholdError ? `${errorId} ${helpId}` : helpId;
+
+  return (
+    <div className="space-y-3">
+      {hasAdvancedValue ? (
+        <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            An object-shaped goal is configured. Edit it in YAML or replace it with a visual goal.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({ ...assertion, value: '' })}
+          >
+            Replace with text goal
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor={`assert-trajectory-goal-${index}`} className="text-sm font-medium">
+            Goal to achieve (required)
+          </Label>
+          <Textarea
+            id={`assert-trajectory-goal-${index}`}
+            value={formatAssertionValue(assertion)}
+            onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+            placeholder="Example: Find the shipping status and tell the user whether it has shipped."
+            aria-invalid={Boolean(goalError)}
+            aria-describedby={goalDescriptionIds}
+            className="min-h-20 resize-y"
+          />
+        </div>
+      )}
+      {goalError && (
+        <HelperText id={errorId} error>
+          {goalError}
+        </HelperText>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor={`assert-trajectory-threshold-${index}`} className="text-sm font-medium">
+          Minimum score threshold (optional)
+        </Label>
+        <Input
+          id={`assert-trajectory-threshold-${index}`}
+          type="number"
+          min="0"
+          max="1"
+          step="0.01"
+          value={formatAssertionThreshold(assertion)}
+          onChange={(event) =>
+            onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
+          }
+          aria-invalid={Boolean(thresholdError)}
+          aria-describedby={thresholdDescriptionIds}
+        />
+      </div>
+      {thresholdError && (
+        <HelperText id={errorId} error>
+          {thresholdError}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        Requires trace data. The grading model receives a summarized trajectory and final response.
+        Without a threshold, the grader&apos;s pass result decides. Set provider or rubric prompt
+        options in YAML.
+      </p>
+    </div>
+  );
+};
+
 const SpecializedValueField = ({
   assertion,
   error,
@@ -997,6 +1087,17 @@ const SpecializedValueField = ({
   if (MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type)) {
     return (
       <ModelJudgeScoreField assertion={assertion} error={error} index={index} onChange={onChange} />
+    );
+  }
+
+  if (TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)) {
+    return (
+      <TrajectoryGoalSuccessField
+        assertion={assertion}
+        error={error}
+        index={index}
+        onChange={onChange}
+      />
     );
   }
 
@@ -1153,7 +1254,8 @@ const AssertionValueFields = ({
     TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
     PI_SCORE_ASSERTION_TYPES.has(assertion.type) ||
     RAG_SCORE_ASSERTION_TYPES.has(assertion.type) ||
-    MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type)
+    MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -1274,6 +1376,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     PI_SCORE_ASSERTION_TYPES.has(nextType) ||
     RAG_SCORE_ASSERTION_TYPES.has(nextType) ||
     MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(nextType) ||
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -1301,6 +1404,14 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
   if (
     MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type) &&
     !MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(nextType)
+  ) {
+    const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
+    return { ...withoutStoredValue, type: nextType, value: '' };
+  }
+
+  if (
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
+    !TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(nextType)
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
     return { ...withoutStoredValue, type: nextType, value: '' };

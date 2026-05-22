@@ -585,6 +585,58 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('guides traced goal success checks with their required goal and threshold', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'trajectory:goal-success' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByText(/requires trace data and a grading model/i)).toBeVisible();
+    const goal = screen.getByRole('textbox', { name: 'Goal to achieve (required)' });
+    expect(goal).toHaveAccessibleDescription(
+      /Enter the goal that the agent should achieve.*Requires trace data.*summarized trajectory and final response/i,
+    );
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+    ).toHaveAttribute('aria-invalid', 'false');
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.type(goal, 'Determine whether order 123 shipped.');
+    const threshold = screen.getByRole('spinbutton', {
+      name: 'Minimum score threshold (optional)',
+    });
+    expect(threshold).toHaveAccessibleDescription(/grader's pass result decides.*YAML/i);
+    await user.type(threshold, '0.8');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      {
+        type: 'trajectory:goal-success',
+        value: 'Determine whether order 123 shipped.',
+        threshold: 0.8,
+      },
+    ]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('preserves imported object-shaped trajectory goals until replaced', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'trajectory:goal-success', value: { goal: 'Resolve the request' } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Goal to achieve (required)' })).toBeNull();
+    expect(screen.getByText(/object-shaped goal is configured/i)).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Replace with text goal' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'trajectory:goal-success', value: '' }]);
+  });
+
   it('allows SQL syntax validation without optional JSON configuration', async () => {
     const onValidityChange = vi.fn();
     initialValues = [{ type: 'is-sql' }];

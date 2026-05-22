@@ -406,6 +406,48 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('validates trajectory goal content and normalized score thresholds', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Complete the task'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'trajectory:goal-success' as const, threshold: 0.8 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [
+            {
+              assert: [
+                { type: 'trajectory:goal-success' as const, value: 'Finish it', threshold: 1.1 },
+              ],
+            },
+          ],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'trajectory:goal-success' as const,
+                  value: { goal: 'Finish it' },
+                  threshold: 0.8,
+                },
+              ],
+            },
+          ],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('accepts blank SQL validation settings but rejects non-object settings', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],

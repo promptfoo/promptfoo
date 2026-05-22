@@ -66,6 +66,11 @@ export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-g-eval',
 ]);
 
+export const TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES = new Set<AssertionType>([
+  'trajectory:goal-success',
+  'not-trajectory:goal-success',
+]);
+
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-sql',
   'contains-sql',
@@ -130,11 +135,6 @@ const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
   'not-similar:euclidean',
 ]);
 
-const REQUIRED_GOAL_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  'trajectory:goal-success',
-  'not-trajectory:goal-success',
-]);
-
 const REQUIRED_MATCHER_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'skill-used',
   'not-skill-used',
@@ -184,7 +184,8 @@ function getThresholdError(assertion: Assertion): string | undefined {
   if (
     (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
       RAG_SCORE_ASSERTION_TYPES.has(assertion.type) ||
-      MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type)) &&
+      MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+      TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)) &&
     assertion.threshold !== undefined &&
     (typeof assertion.threshold !== 'number' ||
       !Number.isFinite(assertion.threshold) ||
@@ -369,7 +370,7 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
   }
 
   if (
-    REQUIRED_GOAL_VALUE_ASSERTION_TYPES.has(assertion.type) &&
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
     !(isRecord(assertion.value) && hasNonBlankString(assertion.value.goal))
   ) {
