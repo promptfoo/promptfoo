@@ -43,6 +43,32 @@ describe('skill-used assertion', () => {
     expect(result.reason).toContain('Observed required skill(s): token-skill');
   });
 
+  it('ignores errored skill calls when checking skill-used assertions', async () => {
+    const result = await runAssertion({
+      assertion: {
+        type: 'skill-used',
+        value: 'missing-skill',
+      },
+      test: testCase,
+      providerResponse: {
+        output: 'Done',
+        metadata: {
+          skillCalls: [
+            {
+              name: 'missing-skill',
+              source: 'tool',
+              is_error: true,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Missing required skill(s): missing-skill');
+    expect(result.reason).toContain('Actual skills: (none)');
+  });
+
   it('passes when all expected skills in a list are present', async () => {
     const result = await runSkillAssertion({
       type: 'skill-used',
