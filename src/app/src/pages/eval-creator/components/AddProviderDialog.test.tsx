@@ -145,6 +145,9 @@ describe('AddProviderDialog layout', () => {
     expect(footer).toHaveClass('shrink-0');
     expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
     expect(screen.getByText(/a provider is a model, agent, or endpoint/i)).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription(
+      'A provider is a model, agent, or endpoint. Choose what each prompt and test case will run against.',
+    );
     expect(screen.getByTestId('provider-type-selector')).toHaveAttribute('data-mode', 'eval');
   });
 
@@ -214,7 +217,10 @@ describe('AddProviderDialog layout', () => {
     await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
-    expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
+    const discardDialog = screen.getByRole('dialog', { name: 'Discard provider changes?' });
+    expect(discardDialog).toHaveAccessibleDescription(
+      'Your provider selection and configuration changes will be lost.',
+    );
     expect(onClose).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Continue editing' }));

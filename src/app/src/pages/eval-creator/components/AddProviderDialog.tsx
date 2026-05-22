@@ -81,6 +81,8 @@ export default function AddProviderDialog({
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [discardDestination, setDiscardDestination] = useState<DiscardDestination>('close');
   const validationMessageId = useId();
+  const dialogDescriptionId = useId();
+  const discardDescriptionId = useId();
   const validateProviderRef = useRef<(() => boolean) | null>(null);
 
   useEffect(() => {
@@ -179,7 +181,11 @@ export default function AddProviderDialog({
         `}
       </style>
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && requestClose()}>
-        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
+        <DialogContent
+          className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden"
+          hideDescription={false}
+          aria-describedby={dialogDescriptionId}
+        >
           <DialogHeader>
             <DialogTitle>
               {initialProvider
@@ -193,7 +199,7 @@ export default function AddProviderDialog({
                 Step {step === 'select' ? '1' : '2'} of 2
               </p>
             )}
-            <DialogDescription>
+            <DialogDescription id={dialogDescriptionId}>
               {step === 'select'
                 ? 'A provider is a model, agent, or endpoint. Choose what each prompt and test case will run against.'
                 : initialProvider
@@ -266,10 +272,10 @@ export default function AddProviderDialog({
         open={discardDialogOpen}
         onOpenChange={(isOpen) => !isOpen && setDiscardDialogOpen(false)}
       >
-        <DialogContent>
+        <DialogContent hideDescription={false} aria-describedby={discardDescriptionId}>
           <DialogHeader>
             <DialogTitle>Discard provider changes?</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id={discardDescriptionId}>
               Your provider selection and configuration changes will be lost.
             </DialogDescription>
           </DialogHeader>
