@@ -824,6 +824,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         path: '../../../etc/passwd',
       });
       expect(result.output).toBe(expectedOutput);
+      expect(result.error).toBe(expectedOutput);
     });
 
     it('should handle multiple function tool calls', async () => {

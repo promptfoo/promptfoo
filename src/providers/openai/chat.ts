@@ -672,6 +672,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : message.tool_calls;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
         const results = [];
+        const mcpErrors: string[] = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
@@ -687,9 +688,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
 
                 if (isMcpErrorResult(mcpResult)) {
-                  results.push(
-                    `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`,
-                  );
+                  const mcpError = `MCP Tool Error (${functionName}): ${getMcpErrorMessage(mcpResult)}`;
+                  results.push(mcpError);
+                  mcpErrors.push(mcpError);
                 } else {
                   // Normalize MCP content to a readable string
                   const normalizeContent = (content: any): string => {
@@ -731,7 +732,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 continue; // Skip to next function call
               } catch (error) {
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                results.push(`MCP Tool Error (${functionName}): ${error}`);
+                const mcpError = `MCP Tool Error (${functionName}): ${error}`;
+                results.push(mcpError);
+                mcpErrors.push(mcpError);
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               }
@@ -758,9 +761,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             }
           }
         }
-        if (hasSuccessfulCallback && results.length > 0) {
+        if ((hasSuccessfulCallback || mcpErrors.length > 0) && results.length > 0) {
           return {
             output: results.join('\n'),
+            ...(mcpErrors.length > 0 ? { error: mcpErrors.join('; ') } : {}),
             tokenUsage: getTokenUsage(data, cached),
             cached,
             latencyMs,
