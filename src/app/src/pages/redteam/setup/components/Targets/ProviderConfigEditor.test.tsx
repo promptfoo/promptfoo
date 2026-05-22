@@ -204,6 +204,67 @@ describe('ProviderConfigEditor', () => {
       );
     });
 
+    it.each([
+      {
+        mode: 'PEM upload',
+        signatureAuth: { enabled: true, certificateType: 'pem', keyInputType: 'upload' },
+        expected: 'A PEM private key is required for digital signature authentication',
+      },
+      {
+        mode: 'PEM path',
+        signatureAuth: { enabled: true, certificateType: 'pem', keyInputType: 'path' },
+        expected: 'Private Key File Path is required for digital signature authentication',
+      },
+      {
+        mode: 'JKS',
+        signatureAuth: { enabled: true, certificateType: 'jks' },
+        expected: 'Keystore Path is required for digital signature authentication',
+      },
+      {
+        mode: 'PFX bundle',
+        signatureAuth: { enabled: true, certificateType: 'pfx' },
+        expected: 'PFX File Path is required for digital signature authentication',
+      },
+      {
+        mode: 'PFX separate files',
+        signatureAuth: { enabled: true, certificateType: 'pfx', pfxMode: 'separate' },
+        expected:
+          'Certificate File Path is required for digital signature authentication, Private Key File Path is required for digital signature authentication',
+      },
+    ])('blocks saving incomplete digital signature $mode setup', async ({
+      signatureAuth,
+      expected,
+    }) => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              signatureAuth,
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await act(async () => {
+        expect(validateFn!()).toBe(false);
+      });
+      expect(mockSetError).toHaveBeenCalledWith(expected);
+      expect(screen.getByTestId('http-auth-field-errors')).toHaveTextContent(expected);
+    });
+
     it('allows OAuth password grants without optional client credentials', () => {
       let validateFn: (() => boolean) | null = null;
 

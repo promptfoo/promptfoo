@@ -36,6 +36,12 @@ export interface AuthorizationFieldErrors {
   keyName?: string;
   value?: string;
   path?: string;
+  privateKey?: string;
+  privateKeyPath?: string;
+  keystorePath?: string;
+  pfxPath?: string;
+  certPath?: string;
+  keyPath?: string;
 }
 
 // Password field with visibility toggle
@@ -136,6 +142,10 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
         {fieldErrors[field]}
       </HelperText>
     ) : null;
+  const fieldErrorProps = (field: keyof AuthorizationFieldErrors) => ({
+    'aria-invalid': Boolean(fieldErrors[field]),
+    'aria-describedby': fieldErrors[field] ? fieldErrorId(field) : undefined,
+  });
 
   // Visibility state for password fields
   const [showClientSecret, setShowClientSecret] = useState(false);
@@ -329,8 +339,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   value={auth?.tokenUrl || ''}
                   onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
                   placeholder="https://example.com/oauth/token"
-                  aria-invalid={Boolean(fieldErrors.tokenUrl)}
-                  aria-describedby={fieldErrors.tokenUrl ? fieldErrorId('tokenUrl') : undefined}
+                  {...fieldErrorProps('tokenUrl')}
                 />
                 {renderFieldError('tokenUrl')}
               </div>
@@ -349,8 +358,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   required={auth?.grantType !== 'password'}
                   value={auth?.clientId || ''}
                   onChange={(e) => updateAuthField('clientId', e.target.value)}
-                  aria-invalid={Boolean(fieldErrors.clientId)}
-                  aria-describedby={fieldErrors.clientId ? fieldErrorId('clientId') : undefined}
+                  {...fieldErrorProps('clientId')}
                 />
                 {renderFieldError('clientId')}
                 {auth?.grantType === 'password' && (
@@ -388,8 +396,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                       required
                       value={auth?.username || ''}
                       onChange={(e) => updateAuthField('username', e.target.value)}
-                      aria-invalid={Boolean(fieldErrors.username)}
-                      aria-describedby={fieldErrors.username ? fieldErrorId('username') : undefined}
+                      {...fieldErrorProps('username')}
                     />
                     {renderFieldError('username')}
                   </div>
@@ -452,8 +459,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   required
                   value={auth?.username || ''}
                   onChange={(e) => updateAuthField('username', e.target.value)}
-                  aria-invalid={Boolean(fieldErrors.username)}
-                  aria-describedby={fieldErrors.username ? fieldErrorId('username') : undefined}
+                  {...fieldErrorProps('username')}
                 />
                 {renderFieldError('username')}
               </div>
@@ -539,8 +545,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   value={auth?.keyName || 'X-API-Key'}
                   onChange={(e) => updateAuthField('keyName', e.target.value)}
                   placeholder="X-API-Key"
-                  aria-invalid={Boolean(fieldErrors.keyName)}
-                  aria-describedby={fieldErrors.keyName ? fieldErrorId('keyName') : undefined}
+                  {...fieldErrorProps('keyName')}
                 />
                 <p className="text-sm text-muted-foreground">
                   {auth?.placement === 'header'
@@ -587,8 +592,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   value={auth?.path || ''}
                   onChange={(e) => updateAuthField('path', e.target.value)}
                   placeholder="./auth/get-token.ts"
-                  aria-invalid={Boolean(fieldErrors.path)}
-                  aria-describedby={fieldErrors.path ? fieldErrorId('path') : undefined}
+                  {...fieldErrorProps('path')}
                 />
                 <p className="text-sm text-muted-foreground">
                   Load a token from a JavaScript, TypeScript, or Python auth file. See{' '}
@@ -611,9 +615,11 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
       {/* Digital Signature Auth Form */}
       {getAuthType() === 'digital_signature' && (
         <div className="mt-6 space-y-6">
-          <p className="text-sm">
-            Configure signature-based authentication for secure API calls. Your private key is never
-            sent to Promptfoo and will always be stored locally on your system. See{' '}
+          <p className="rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+            Promptfoo loads referenced key files locally at run time. Values pasted or uploaded
+            here, including private keys and passwords, are included in this provider configuration
+            and any copied or downloaded YAML. Avoid entering secrets you do not intend to include.
+            See{' '}
             <a
               href="https://www.promptfoo.dev/docs/providers/http/#digital-signature-authentication"
               target="_blank"
@@ -713,6 +719,8 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   accept=".pem,.key"
                   style={{ display: 'none' }}
                   id="private-key-upload"
+                  required
+                  {...fieldErrorProps('privateKey')}
                   onClick={(e) => {
                     (e.target as HTMLInputElement).value = '';
                   }}
@@ -783,6 +791,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     </label>
                   </>
                 )}
+                {renderFieldError('privateKey')}
               </div>
             )}
 
@@ -790,11 +799,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             selectedTarget.config?.signatureAuth?.keyInputType === 'path' && (
               <div className="rounded-lg border border-border p-6">
                 <div className="space-y-2">
-                  <Label htmlFor="private-key-path">Private Key File Path</Label>
+                  <Label htmlFor="private-key-path">
+                    Private Key File Path
+                    <span aria-hidden="true" className="ml-1 text-destructive">
+                      *
+                    </span>
+                  </Label>
                   <Input
                     id="private-key-path"
+                    required
                     placeholder="/path/to/private_key.pem"
                     value={selectedTarget.config?.signatureAuth?.privateKeyPath || ''}
+                    {...fieldErrorProps('privateKeyPath')}
                     onChange={(e) => {
                       updateCustomTarget('signatureAuth', {
                         ...selectedTarget.config?.signatureAuth,
@@ -812,6 +828,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                   <p className="text-sm text-muted-foreground">
                     Specify the path on disk to your PEM format private key file
                   </p>
+                  {renderFieldError('privateKeyPath')}
                 </div>
               </div>
             )}
@@ -819,10 +836,19 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
             selectedTarget.config?.signatureAuth?.keyInputType === 'base64' && (
               <div className="space-y-4 rounded-lg border border-border p-6">
+                <Label htmlFor="private-key-content">
+                  Private Key
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
+                </Label>
                 <textarea
+                  id="private-key-content"
+                  required
                   className="h-32 w-full rounded-md border border-border bg-transparent p-3 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
                   value={selectedTarget.config?.signatureAuth?.privateKey || ''}
+                  {...fieldErrorProps('privateKey')}
                   onChange={(e) => {
                     updateCustomTarget('signatureAuth', {
                       ...selectedTarget.config?.signatureAuth,
@@ -837,6 +863,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     });
                   }}
                 />
+                {renderFieldError('privateKey')}
                 <div className="text-center">
                   <Button
                     variant="outline"
@@ -883,11 +910,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               </p>
 
               <div className="space-y-2">
-                <Label htmlFor="keystore-path">Keystore Path</Label>
+                <Label htmlFor="keystore-path">
+                  Keystore Path
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
+                </Label>
                 <Input
                   id="keystore-path"
+                  required
                   placeholder="/path/to/keystore.jks"
                   value={selectedTarget.config?.signatureAuth?.keystorePath || ''}
+                  {...fieldErrorProps('keystorePath')}
                   onChange={(e) => {
                     updateCustomTarget('signatureAuth', {
                       ...selectedTarget.config?.signatureAuth,
@@ -903,6 +937,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 <p className="text-sm text-muted-foreground">
                   Enter full path to your JKS keystore file
                 </p>
+                {renderFieldError('keystorePath')}
               </div>
 
               <PasswordField
@@ -986,11 +1021,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 selectedTarget.config?.signatureAuth?.pfxMode === 'pfx') && (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="pfx-path">PFX File Path</Label>
+                    <Label htmlFor="pfx-path">
+                      PFX File Path
+                      <span aria-hidden="true" className="ml-1 text-destructive">
+                        *
+                      </span>
+                    </Label>
                     <Input
                       id="pfx-path"
+                      required
                       placeholder="/path/to/certificate.pfx"
                       value={selectedTarget.config?.signatureAuth?.pfxPath || ''}
+                      {...fieldErrorProps('pfxPath')}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config?.signatureAuth,
@@ -1009,6 +1051,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     <p className="text-sm text-muted-foreground">
                       Enter full path to your PFX/P12 certificate file
                     </p>
+                    {renderFieldError('pfxPath')}
                   </div>
 
                   <PasswordField
@@ -1032,11 +1075,18 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               {selectedTarget.config?.signatureAuth?.pfxMode === 'separate' && (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="cert-path">Certificate File Path</Label>
+                    <Label htmlFor="cert-path">
+                      Certificate File Path
+                      <span aria-hidden="true" className="ml-1 text-destructive">
+                        *
+                      </span>
+                    </Label>
                     <Input
                       id="cert-path"
+                      required
                       placeholder="/path/to/certificate.crt"
                       value={selectedTarget.config?.signatureAuth?.certPath || ''}
+                      {...fieldErrorProps('certPath')}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config?.signatureAuth,
@@ -1055,14 +1105,22 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     <p className="text-sm text-muted-foreground">
                       Enter full path to your certificate file
                     </p>
+                    {renderFieldError('certPath')}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="key-path">Private Key File Path</Label>
+                    <Label htmlFor="key-path">
+                      Private Key File Path
+                      <span aria-hidden="true" className="ml-1 text-destructive">
+                        *
+                      </span>
+                    </Label>
                     <Input
                       id="key-path"
+                      required
                       placeholder="/path/to/private.key"
                       value={selectedTarget.config?.signatureAuth?.keyPath || ''}
+                      {...fieldErrorProps('keyPath')}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
                           ...selectedTarget.config?.signatureAuth,
@@ -1073,6 +1131,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                     <p className="text-sm text-muted-foreground">
                       Enter full path to your private key file
                     </p>
+                    {renderFieldError('keyPath')}
                   </div>
                 </>
               )}

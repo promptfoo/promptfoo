@@ -232,7 +232,76 @@ interface HttpAuthorizationValidationResult {
   fieldErrors: AuthorizationFieldErrors;
 }
 
+function validateHttpSignatureAuthorization(
+  provider: ProviderOptions,
+): HttpAuthorizationValidationResult {
+  const signatureAuth = provider.config.signatureAuth;
+  if (!signatureAuth?.enabled) {
+    return { errors: [], fieldErrors: {} };
+  }
+
+  const errors: string[] = [];
+  const fieldErrors: AuthorizationFieldErrors = {};
+  const requireValue = (field: keyof AuthorizationFieldErrors, value: unknown, message: string) => {
+    if (typeof value !== 'string' || value.trim() === '') {
+      errors.push(message);
+      fieldErrors[field] = message;
+    }
+  };
+
+  switch (signatureAuth.certificateType ?? 'pem') {
+    case 'pem':
+      if (signatureAuth.keyInputType === 'path') {
+        requireValue(
+          'privateKeyPath',
+          signatureAuth.privateKeyPath,
+          'Private Key File Path is required for digital signature authentication',
+        );
+      } else {
+        requireValue(
+          'privateKey',
+          signatureAuth.privateKey,
+          'A PEM private key is required for digital signature authentication',
+        );
+      }
+      break;
+    case 'jks':
+      requireValue(
+        'keystorePath',
+        signatureAuth.keystorePath,
+        'Keystore Path is required for digital signature authentication',
+      );
+      break;
+    case 'pfx':
+      if (signatureAuth.pfxMode === 'separate') {
+        requireValue(
+          'certPath',
+          signatureAuth.certPath,
+          'Certificate File Path is required for digital signature authentication',
+        );
+        requireValue(
+          'keyPath',
+          signatureAuth.keyPath,
+          'Private Key File Path is required for digital signature authentication',
+        );
+      } else {
+        requireValue(
+          'pfxPath',
+          signatureAuth.pfxPath,
+          'PFX File Path is required for digital signature authentication',
+        );
+      }
+      break;
+  }
+
+  return { errors, fieldErrors };
+}
+
 function validateHttpAuthorization(provider: ProviderOptions): HttpAuthorizationValidationResult {
+  if (provider.config.signatureAuth?.enabled) {
+    return validateHttpSignatureAuthorization(provider);
+  }
+
   const auth = provider.config.auth;
   if (!auth) {
     return { errors: [], fieldErrors: {} };
@@ -485,7 +554,9 @@ function ProviderConfigEditor({
   }, []);
 
   const updateCustomTarget = (field: string, value: unknown) => {
-    setAuthorizationFieldErrors((errors) => (field === 'auth' ? {} : errors));
+    setAuthorizationFieldErrors((errors) =>
+      field === 'auth' || field === 'signatureAuth' ? {} : errors,
+    );
 
     const foundationErrorField = FOUNDATION_ERROR_FIELD_BY_CONFIG_FIELD[field];
     if (foundationErrorField) {

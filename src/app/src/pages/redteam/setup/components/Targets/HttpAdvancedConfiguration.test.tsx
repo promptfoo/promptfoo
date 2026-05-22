@@ -262,6 +262,46 @@ describe('HttpAdvancedConfiguration', () => {
     expect(pemTrigger).toHaveTextContent('PEM');
   });
 
+  it('discloses and associates required digital signature key paths', async () => {
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: {
+            signatureAuth: {
+              enabled: true,
+              certificateType: 'pem',
+              keyInputType: 'path',
+              privateKeyPath: '',
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        authorizationFieldErrors={{
+          privateKeyPath: 'Private Key File Path is required for digital signature authentication',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Authorization' })).toHaveAttribute(
+        'data-state',
+        'active',
+      );
+    });
+    expect(
+      screen.getByText(/Values pasted or uploaded here, including private keys and passwords/i),
+    ).toBeVisible();
+    const privateKeyPath = document.getElementById('private-key-path');
+    expect(privateKeyPath).not.toBeNull();
+    expect(privateKeyPath).toHaveAccessibleName('Private Key File Path');
+    expect(privateKeyPath).toBeRequired();
+    expect(privateKeyPath).toHaveAttribute('aria-invalid', 'true');
+    expect(privateKeyPath).toHaveAccessibleDescription(
+      'Private Key File Path is required for digital signature authentication',
+    );
+  });
+
   describe('JKS Keystore Configuration', () => {
     it('should render fields for JKS keystore file upload, keystore path, password, and key alias when JKS certificateType is selected', async () => {
       const user = userEvent.setup();
@@ -286,8 +326,9 @@ describe('HttpAdvancedConfiguration', () => {
       const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
       await user.click(authorizationTab);
 
-      // Check for Keystore fields - uses actual label text from the component
-      expect(screen.getByLabelText('Keystore Path')).toBeInTheDocument();
+      const keystorePath = document.getElementById('keystore-path');
+      expect(keystorePath).toHaveAccessibleName('Keystore Path');
+      expect(keystorePath).toBeRequired();
       expect(screen.getByLabelText('Keystore Password')).toBeInTheDocument();
       expect(screen.getByLabelText('Key Alias')).toBeInTheDocument();
     });
@@ -316,8 +357,9 @@ describe('HttpAdvancedConfiguration', () => {
     const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
     await user.click(authorizationTab);
 
-    // Check for PFX File Path label and input - uses the actual label text from the component
-    expect(screen.getByLabelText('PFX File Path')).toBeInTheDocument();
+    const pfxPath = document.getElementById('pfx-path');
+    expect(pfxPath).toHaveAccessibleName('PFX File Path');
+    expect(pfxPath).toBeRequired();
     expect(screen.getByLabelText('PFX Password')).toBeVisible();
   });
 
