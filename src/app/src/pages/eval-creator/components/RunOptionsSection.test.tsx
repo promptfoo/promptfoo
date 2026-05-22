@@ -6,7 +6,7 @@ import { RunOptionsSection } from './RunOptionsSection';
 import type { SetupReadiness } from './setupReadiness';
 
 vi.mock('./RunTestSuiteButton', () => ({
-  default: () => <button type="button">Run Eval</button>,
+  default: () => <button type="button">Run Evaluation</button>,
 }));
 
 const readySetup: SetupReadiness = {

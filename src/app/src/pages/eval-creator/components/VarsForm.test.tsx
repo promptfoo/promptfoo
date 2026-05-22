@@ -103,6 +103,9 @@ describe('VarsForm', () => {
     const ageInput = screen.getByLabelText('age');
     expect(ageInput).toBeInTheDocument();
     expect(ageInput).toHaveValue('');
+    expect(
+      screen.getByText(/Leave a field blank only when you intentionally/i),
+    ).toBeInTheDocument();
   });
 
   it('stacks labels above inputs on narrow screens', () => {

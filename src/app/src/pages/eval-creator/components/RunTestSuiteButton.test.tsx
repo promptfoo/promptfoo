@@ -44,21 +44,21 @@ describe('RunTestSuiteButton', () => {
 
   it('should be disabled when there are no prompts or tests', () => {
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are prompts but no tests', () => {
     useStore.getState().updateConfig({ prompts: ['prompt 1'] });
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are tests but no prompts', () => {
     useStore.getState().updateConfig({ tests: [{ vars: { foo: 'bar' } }] });
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
   });
 
@@ -69,7 +69,7 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).not.toBeDisabled();
   });
 
@@ -82,7 +82,7 @@ describe('RunTestSuiteButton', () => {
 
     renderWithProvider(<RunTestSuiteButton />);
 
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute('aria-describedby', 'run-eval-help');
   });
@@ -97,7 +97,7 @@ describe('RunTestSuiteButton', () => {
 
     renderWithProvider(<RunTestSuiteButton />);
 
-    expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).not.toBeDisabled();
   });
 
   it('should be enabled for scalar provider, prompt, and test configs', () => {
@@ -109,7 +109,57 @@ describe('RunTestSuiteButton', () => {
 
     renderWithProvider(<RunTestSuiteButton />);
 
-    expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).not.toBeDisabled();
+  });
+
+  it('announces that an evaluation is starting while waiting for progress', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Evaluation' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('button', { name: 'Running evaluation' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Starting evaluation and preparing requests.',
+    );
+  });
+
+  it('announces measurable progress while an evaluation is running', async () => {
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: '123' } },
+      {
+        path: '/eval/job/123/',
+        response: { status: 'in-progress', progress: 1, total: 2, logs: [] },
+      },
+    ]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Evaluation' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await timers.advanceByAsync(1500);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '50% complete. Results open automatically when finished.',
+    );
   });
 
   it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
@@ -123,7 +173,7 @@ describe('RunTestSuiteButton', () => {
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
       screen
-        .getByRole('button', { name: 'Run Eval' })
+        .getByRole('button', { name: 'Run Evaluation' })
         .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
@@ -148,7 +198,7 @@ describe('RunTestSuiteButton', () => {
     renderWithProvider(<RunTestSuiteButton />);
     await act(async () => {
       screen
-        .getByRole('button', { name: 'Run Eval' })
+        .getByRole('button', { name: 'Run Evaluation' })
         .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
@@ -171,7 +221,7 @@ describe('RunTestSuiteButton', () => {
 
     renderWithProvider(<RunTestSuiteButton />);
 
-    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeDisabled();
   });
 
   it('should handle progress API failure after job creation', async () => {
@@ -193,7 +243,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
     expect(button).not.toBeDisabled();
 
     // Click the button with fake timers active to control the interval
@@ -227,7 +277,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
 
     // Use real timers for the click and wait for async operations
     timers.useRealTimers();
@@ -239,7 +289,7 @@ describe('RunTestSuiteButton', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(errorMessage);
     });
 
-    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeInTheDocument();
   });
 
   it('should stop polling when unmounted', async () => {
@@ -253,7 +303,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     const { unmount } = renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
 
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
@@ -285,7 +335,7 @@ describe('RunTestSuiteButton', () => {
     });
 
     const { unmount } = renderWithProvider(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
 
     await act(async () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));

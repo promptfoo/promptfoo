@@ -55,6 +55,10 @@ const RunTestSuiteButton = () => {
   const readiness = getSetupReadiness(config);
 
   const isDisabled = isRunning || !readiness.isReadyToRun;
+  const progressMessage =
+    progressPercent === 0
+      ? 'Starting evaluation and preparing requests.'
+      : `${progressPercent.toFixed(0)}% complete. Results open automatically when finished.`;
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -161,14 +165,19 @@ const RunTestSuiteButton = () => {
         className="dark:bg-blue-600 dark:hover:bg-blue-500"
       >
         {isRunning ? (
-          <span className="flex items-center gap-2" role="status" aria-live="polite">
+          <span className="flex items-center gap-2">
             <Spinner className="size-4" />
-            {progressPercent.toFixed(0)}% complete
+            Running evaluation
           </span>
         ) : (
-          'Run Eval'
+          'Run Evaluation'
         )}
       </Button>
+      {isRunning && (
+        <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          {progressMessage}
+        </p>
+      )}
       {!isRunning && isDisabled && (
         <p id="run-eval-help" className="text-xs text-muted-foreground">
           Resolve the required setup items above to run this evaluation.
