@@ -2,7 +2,7 @@ import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
   DerivedMetric,
@@ -90,6 +90,10 @@ describe('EvaluateTestSuiteCreator', () => {
     vi.clearAllMocks();
     // Reset store to its default state before each test
     useStore.getState().reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('disables Reset when a new evaluation has nothing to discard', () => {
@@ -586,6 +590,33 @@ describe('EvaluateTestSuiteCreator', () => {
         'error',
       );
     });
+  });
+
+  it('guides recovery when a YAML configuration file cannot be read', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      'FileReader',
+      class MockFileReader {
+        onerror: ((event: ProgressEvent<FileReader>) => unknown) | null = null;
+
+        readAsText() {
+          this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+        }
+      } as unknown as typeof FileReader,
+    );
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(['description: Test'], 'unreadable.yaml', {
+      type: 'application/yaml',
+    });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Unable to read this file. Please try again or choose another file.',
+      'error',
+    );
+    expect(fileInput.value).toBe('');
   });
 
   it('should handle non-object YAML with error toast', async () => {

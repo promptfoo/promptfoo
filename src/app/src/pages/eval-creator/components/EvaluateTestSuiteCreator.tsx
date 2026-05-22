@@ -257,7 +257,7 @@ const EvaluateTestSuiteCreator = () => {
         }
       };
       reader.onerror = () => {
-        showToast('Failed to read file', 'error');
+        showToast('Unable to read this file. Please try again or choose another file.', 'error');
       };
       reader.readAsText(file);
     }
