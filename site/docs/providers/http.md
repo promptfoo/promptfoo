@@ -1018,7 +1018,7 @@ The JKS file is processed using the `jks-js` library, which automatically:
 - Selects the appropriate key based on the alias (or uses the first available)
 
 :::info
-JKS support requires the `jks-js` package. Install it with:
+JKS support uses the optional `jks-js` runtime package. Install it with:
 
 ```bash
 npm install jks-js
@@ -1478,8 +1478,8 @@ providers:
 
 :::info Dependencies
 
-- **JKS support** requires the `jks-js` package: `npm install jks-js`
-- **PFX support** requires the `pem` package: `npm install pem`
+- **JKS support** uses the optional `jks-js` runtime package: `npm install jks-js`
+- **PFX support** uses the optional `pem` runtime package: `npm install pem`
 
 :::
 

@@ -5,7 +5,7 @@ import https from 'https';
 import path from 'path';
 
 import httpZ from 'http-z';
-import { Agent } from 'undici';
+import { Agent, type Dispatcher, interceptors } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -1296,6 +1296,12 @@ function normalizeHttpLineEndings(input: string): string {
   return normalized.replace(/\n/g, '\r\n');
 }
 
+function getRawRequestHttpVersion(input: string): string {
+  const firstLine = normalizeHttpLineEndings(input).split('\r\n', 1)[0].trim();
+  const versionMatch = firstLine.match(/\s+(HTTP\/\d(?:\.\d)?)$/i);
+  return versionMatch ? versionMatch[1].toUpperCase() : 'HTTP/1.1';
+}
+
 function parseRawRequest(input: string) {
   const adjusted = normalizeHttpLineEndings(input) + '\r\n\r\n';
   // If the injectVar is in a query param, we need to encode the URL in the first line
@@ -1316,6 +1322,7 @@ function parseRawRequest(input: string) {
     return {
       method: requestModel.method,
       url: requestModel.target,
+      httpVersion: getRawRequestHttpVersion(input),
       headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
@@ -1346,6 +1353,224 @@ export function extractBodyFromRawRequest(rawRequest: string): string | undefine
 
   const body = adjusted.slice(separatorIndex + 4).trim();
   return body.length > 0 ? body : undefined;
+}
+
+function getHeaderValue(
+  headers: Record<string, string> | undefined,
+  headerName: string,
+): string | undefined {
+  if (!headers) {
+    return undefined;
+  }
+  const normalizedHeaderName = headerName.toLowerCase();
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === normalizedHeaderName);
+  return entry?.[1];
+}
+
+function sanitizeUrlEncodedBody(body: string): string {
+  if (!body.includes('=')) {
+    return body;
+  }
+
+  try {
+    const params = new URLSearchParams(body);
+    const entries = Array.from(params.entries());
+    if (entries.length === 0) {
+      return body;
+    }
+
+    let changed = false;
+    for (const [key, value] of entries) {
+      if (isSecretField(key) || looksLikeSecret(value)) {
+        params.set(key, REDACTED);
+        changed = true;
+      }
+    }
+
+    return changed ? params.toString() : body;
+  } catch {
+    return body;
+  }
+}
+
+function getMultipartBoundary(contentType: string): string | undefined {
+  const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
+}
+
+function sanitizeMultipartFallbackBody(body: string): string {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    return body;
+  }
+
+  const sanitizedTrimmedBody = sanitizeUrlEncodedBody(trimmedBody);
+  return sanitizedTrimmedBody === trimmedBody
+    ? body
+    : body.replace(trimmedBody, sanitizedTrimmedBody);
+}
+
+function getMultipartPartFieldName(headerBlock: string): string | undefined {
+  const fieldNameMatch = headerBlock.match(
+    /content-disposition:[^\r\n]*\bname=(?:"([^"]*)"|([^;\r\n]+))/i,
+  );
+  const fieldName = fieldNameMatch?.[1] ?? fieldNameMatch?.[2]?.trim();
+  return fieldName || undefined;
+}
+
+function sanitizeMultipartPartBody(part: string): string {
+  const separator = part.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
+  const separatorIndex = part.indexOf(separator);
+  if (separatorIndex === -1) {
+    return sanitizeMultipartFallbackBody(part);
+  }
+
+  const headerBlock = part.slice(0, separatorIndex);
+  const bodyStartIndex = separatorIndex + separator.length;
+  const body = part.slice(bodyStartIndex);
+  const fieldName = getMultipartPartFieldName(headerBlock);
+  const trailingNewline = body.match(/(\r?\n)$/)?.[1] ?? '';
+  const bodyWithoutTerminator = trailingNewline ? body.slice(0, -trailingNewline.length) : body;
+  const shouldRedact =
+    Boolean(fieldName && isSecretField(fieldName)) || looksLikeSecret(bodyWithoutTerminator);
+  if (!shouldRedact) {
+    return part;
+  }
+
+  return `${part.slice(0, bodyStartIndex)}${REDACTED}${trailingNewline}`;
+}
+
+function sanitizeMultipartBody(body: string, contentType: string): string {
+  const boundary = getMultipartBoundary(contentType);
+  if (!boundary) {
+    return sanitizeMultipartFallbackBody(body);
+  }
+
+  return body
+    .split(`--${boundary}`)
+    .map((part) => sanitizeMultipartPartBody(part))
+    .join(`--${boundary}`);
+}
+
+function sanitizeRequestBodyForMetadata(body: unknown, headers?: Record<string, string>): unknown {
+  const sanitizedBody = sanitizeObject(body, { context: 'request body' });
+  if (typeof sanitizedBody !== 'string' || sanitizedBody.length === 0) {
+    return sanitizedBody;
+  }
+
+  const contentType = getHeaderValue(headers, 'content-type');
+  const normalizedContentType = contentType?.toLowerCase();
+  if (contentType && normalizedContentType?.includes('multipart/form-data')) {
+    return sanitizeMultipartBody(sanitizedBody, contentType);
+  }
+  if (normalizedContentType?.includes('application/x-www-form-urlencoded')) {
+    return sanitizeUrlEncodedBody(sanitizedBody);
+  }
+
+  return sanitizedBody;
+}
+
+function looksLikeRawHttpRequest(value: string): boolean {
+  const firstLine = value.split(/\r?\n/, 1)[0].trim();
+  return /^[A-Z]+\s+\S+\s+HTTP\/\d(?:\.\d)?$/i.test(firstLine);
+}
+
+function decodeEscapedStringLiteral(value: string): string | undefined {
+  if (!/[\\](?:r|n|t|"|\\)/.test(value)) {
+    return undefined;
+  }
+
+  try {
+    const decoded = JSON.parse(`"${value}"`);
+    return typeof decoded === 'string' ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeRawRequestStringForMetadata(value: string): string | undefined {
+  if (!looksLikeRawHttpRequest(value)) {
+    return undefined;
+  }
+
+  try {
+    const parsedRequest = parseRawRequest(value);
+    return formatRawRequestForDebugMetadata(
+      parsedRequest,
+      extractBodyFromRawRequest(value) ?? parsedRequest.body?.text,
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function sanitizeTransformedRequestForMetadata(
+  value: unknown,
+  headers?: Record<string, string>,
+): unknown {
+  const sanitizedValue = sanitizeRequestBodyForMetadata(value, headers);
+  if (typeof sanitizedValue !== 'string') {
+    return sanitizedValue;
+  }
+
+  const sanitizedRawRequest = sanitizeRawRequestStringForMetadata(sanitizedValue);
+  if (sanitizedRawRequest) {
+    return sanitizedRawRequest;
+  }
+
+  const decodedValue = decodeEscapedStringLiteral(sanitizedValue);
+  if (decodedValue) {
+    const sanitizedDecodedRawRequest = sanitizeRawRequestStringForMetadata(decodedValue);
+    if (sanitizedDecodedRawRequest) {
+      return sanitizedDecodedRawRequest;
+    }
+  }
+
+  return sanitizedValue
+    .split(/\r?\n/)
+    .map((line) => {
+      const requestLine = line.match(/^([A-Z]+)\s+(\S+)\s+(HTTP\/\d(?:\.\d)?)$/i);
+      if (requestLine) {
+        return `${requestLine[1]} ${sanitizeUrl(requestLine[2])} ${requestLine[3]}`;
+      }
+
+      const headerLine = line.match(/^([^:\s][^:]*):\s*(.*)$/);
+      if (headerLine) {
+        const [, name, value] = headerLine;
+        if (isSecretField(name) || looksLikeSecret(value)) {
+          return `${name}: ${REDACTED}`;
+        }
+      }
+
+      const sanitizedLine = sanitizeRequestBodyForMetadata(line, headers);
+      return typeof sanitizedLine === 'string'
+        ? sanitizedLine
+        : (safeJsonStringify(sanitizedLine) ?? String(sanitizedLine));
+    })
+    .join('\n');
+}
+
+function formatRawRequestForDebugMetadata(
+  parsedRequest: ReturnType<typeof parseRawRequest>,
+  bodyContent?: string,
+): string {
+  const requestLines = [
+    `${parsedRequest.method} ${sanitizeUrl(parsedRequest.url)} ${parsedRequest.httpVersion}`,
+  ];
+  const sanitizedHeaders = sanitizeObject(parsedRequest.headers, {
+    context: 'request headers',
+  }) as Record<string, string>;
+
+  for (const [key, value] of Object.entries(sanitizedHeaders)) {
+    requestLines.push(`${key}: ${value}`);
+  }
+
+  const sanitizedBody = sanitizeRequestBodyForMetadata(bodyContent, parsedRequest.headers);
+  if (sanitizedBody !== undefined) {
+    requestLines.push('', String(sanitizedBody));
+  }
+
+  return requestLines.join('\n');
 }
 
 export function determineRequestBody(
@@ -1453,7 +1678,9 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
 /**
  * Creates an HTTPS agent with TLS configuration for secure connections
  */
-async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
+async function createHttpsAgent(
+  tlsConfig: z.infer<typeof TlsCertificateSchema>,
+): Promise<Dispatcher> {
   const tlsOptions: https.AgentOptions = {};
   const basePath = cliState.basePath || '';
   const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
@@ -1631,10 +1858,12 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
 
   logger.debug(`[HTTP Provider] Creating HTTPS agent with TLS configuration`);
 
-  // Create an undici Agent with the TLS options
+  // Compose the decompress interceptor like the shared pooled agents do — on
+  // Node 26 undici no longer auto-decompresses, so without this a gzip/br
+  // response body comes back to callers as raw compressed bytes.
   return new Agent({
     connect: tlsOptions,
-  });
+  }).compose(interceptors.decompress({ skipErrorResponses: false }));
 }
 
 export class HttpProvider implements ApiProvider {
@@ -1652,8 +1881,8 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
   private authTokenCache = new Map<string, CachedAuthToken>();
   private tokenRefreshLocks = new Map<string, TokenRefreshLock>();
-  private httpsAgent?: Agent;
-  private httpsAgentPromise?: Promise<Agent>;
+  private httpsAgent?: Dispatcher;
+  private httpsAgentPromise?: Promise<Dispatcher>;
   /**
    * Tracks session IDs that were fetched from the session endpoint.
    * Used to distinguish sessions we created from client-generated UUIDs.
@@ -2233,7 +2462,7 @@ export class HttpProvider implements ApiProvider {
     return sessionId;
   }
 
-  private async getHttpsAgent(): Promise<Agent | undefined> {
+  private async getHttpsAgent(): Promise<Dispatcher | undefined> {
     if (!this.config.tls) {
       return undefined;
     }
@@ -2666,14 +2895,20 @@ export class HttpProvider implements ApiProvider {
       },
     };
     if (context?.debug) {
-      ret.metadata.transformedRequest = transformedPrompt;
+      ret.metadata.transformedRequest = sanitizeTransformedRequestForMetadata(
+        transformedPrompt,
+        renderedConfig.headers,
+      );
       if (multipartBody) {
         ret.metadata.multipart = {
           fields: sanitizeMultipartFields(multipartBody.fields),
           files: sanitizeMultipartFiles(multipartBody.files),
         };
       } else {
-        ret.metadata.finalRequestBody = renderedConfig.body;
+        ret.metadata.finalRequestBody = sanitizeRequestBodyForMetadata(
+          renderedConfig.body,
+          renderedConfig.headers,
+        );
       }
     }
 
@@ -2932,9 +3167,11 @@ export class HttpProvider implements ApiProvider {
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt
         transformedRequest: this.config.transformRequest
-          ? transformedPrompt
-          : parsedRequest.body?.text || renderedRequest.trim(),
-        finalRequestBody: parsedRequest.body?.text,
+          ? sanitizeTransformedRequestForMetadata(transformedPrompt, parsedRequest.headers)
+          : formatRawRequestForDebugMetadata(parsedRequest, bodyContent),
+        finalRequestBody: this.config.transformRequest
+          ? sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers)
+          : sanitizeRequestBodyForMetadata(bodyContent, parsedRequest.headers),
         http: {
           status,
           statusText,
