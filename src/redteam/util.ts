@@ -324,6 +324,11 @@ const REFUSAL_RISK_PATTERNS: Array<{ signal: string; pattern: RegExp }> = [
       /\b(?:you can|you could)\b[^.]{0,80}\b(?:manually|yourself)\b[^.]{0,80}\b(?:share|send|forward|export|upload|deliver)\b/,
   },
   {
+    signal: 'protected_content_disclosure',
+    pattern:
+      /\b(?:system prompt|developer (?:message|instructions?)|api[- ]?key|access[- ]?token|bearer token|password|secret|credentials?)\b(?:[^.!?\n]{0,120}\b(?:but|however|though)\b[^.!?\n]{0,80}\b(?:says?|contains?|starts?|equals?|is|are)\b|[^.!?\n]{0,80}[:=]\s*\S)/,
+  },
+  {
     signal: 'connector_or_config_disclosure',
     pattern:
       /\b(?:(?:use|using|uses|connected|active)\b[^.]{0,100}\b(?:slack|drive|gmail|outlook|crm|connector|integration|tool|workspace|account)\b|(?:slack|drive|gmail|outlook|crm|connector|integration|tool|workspace|account)\b[^.]{0,40}\b(?:is|are|was|were)?\s*(?:connected|active|configured|enabled))/,
