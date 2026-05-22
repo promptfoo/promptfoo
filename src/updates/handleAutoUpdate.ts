@@ -6,6 +6,20 @@ import { updateEventEmitter } from './updateEventEmitter';
 
 import type { UpdateObject } from './updateCheck';
 
+export function scheduleAutoUpdateOnExit(
+  info: UpdateObject,
+  disableUpdateNag: boolean,
+  projectRoot: string,
+  registerBeforeExit: (listener: () => void) => void = (listener) => {
+    process.once('beforeExit', listener);
+  },
+  spawnFn: typeof spawn = nodeSpawn,
+) {
+  registerBeforeExit(() => {
+    handleAutoUpdate(info, disableUpdateNag, false, projectRoot, spawnFn);
+  });
+}
+
 export function handleAutoUpdate(
   info: UpdateObject | null,
   disableUpdateNag: boolean,

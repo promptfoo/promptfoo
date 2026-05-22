@@ -2,9 +2,7 @@ import semver from 'semver';
 // Use require to load package.json - works reliably in both dev and published package
 import packageJson from '../../package.json';
 import logger from '../logger';
-import { fetchWithTimeout } from '../util/fetch';
-
-export const FETCH_TIMEOUT_MS = 10000;
+import { getLatestVersion } from '../updates';
 
 export interface UpdateInfo {
   current: string;
@@ -33,22 +31,6 @@ function getPackageJson(): { name: string; version: string } | null {
   } catch {
     return null;
   }
-}
-
-/**
- * Fetch latest version from custom API
- */
-async function getLatestVersion(): Promise<string> {
-  const response = await fetchWithTimeout(
-    `https://api.promptfoo.dev/api/latestVersion`,
-    {},
-    FETCH_TIMEOUT_MS,
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to fetch package information for promptfoo`);
-  }
-  const data = (await response.json()) as { latestVersion: string };
-  return data.latestVersion;
 }
 
 export async function checkForUpdates(

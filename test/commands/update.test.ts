@@ -22,6 +22,7 @@ import type { ChildProcess } from 'node:child_process';
 
 import { Command } from 'commander';
 import { updateCommand } from '../../src/commands/update';
+import telemetry from '../../src/telemetry';
 import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
 import { checkForUpdates } from '../../src/updates/updateCheck';
 
@@ -73,6 +74,7 @@ describe('update command', () => {
     await program.parseAsync(['node', 'test', 'update']);
 
     expect(mockCheckForUpdates).toHaveBeenCalledWith({ throwOnError: true });
+    expect(telemetry.record).toHaveBeenCalledWith('command_used', { name: 'update' });
   });
 
   it('should show latest message in check mode when no update is available', async () => {

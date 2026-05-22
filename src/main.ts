@@ -31,6 +31,7 @@ import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
   isMainModule,
+  isUpdateCommandRequested,
   setupEnvFilesFromArgv,
   shouldSkipDefaultConfigLoading,
   shutdownGracefully,
@@ -44,7 +45,7 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { ServerError } from './server/errors';
-import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
+import { scheduleAutoUpdateOnExit, setUpdateHandler } from './updates/handleAutoUpdate';
 import { checkForUpdates } from './updates/updateCheck';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
@@ -81,9 +82,9 @@ async function main() {
           logger.info(info.message);
           logger.info('Run "promptfoo update" to upgrade to the latest version.');
 
-          // Attempt auto-update in background if explicitly enabled
-          if (enableAutoUpdate) {
-            handleAutoUpdate(info, disableUpdateNag, !enableAutoUpdate, process.cwd());
+          // Never replace the installed package while the current invocation is using it.
+          if (enableAutoUpdate && !isUpdateCommandRequested(argv)) {
+            scheduleAutoUpdateOnExit(info, disableUpdateNag, process.cwd());
           }
         }
       })

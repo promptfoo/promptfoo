@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 
-vi.mock('../../src/util/fetch', () => ({
+vi.mock('../../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
@@ -20,7 +20,7 @@ vi.mock('../../package.json', () => ({
 
 import semver from 'semver';
 import { checkForUpdates } from '../../src/updates/updateCheck';
-import { fetchWithTimeout } from '../../src/util/fetch';
+import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 const mockFetchWithTimeout = fetchWithTimeout as MockedFunction<typeof fetchWithTimeout>;
 const mockSemverGt = semver.gt as MockedFunction<typeof semver.gt>;
@@ -59,7 +59,7 @@ describe('checkForUpdates', () => {
 
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       'https://api.promptfoo.dev/api/latestVersion',
-      {},
+      { headers: { 'x-promptfoo-silent': 'true' } },
       10000,
     );
   });

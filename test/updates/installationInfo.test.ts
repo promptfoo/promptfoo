@@ -31,6 +31,9 @@ describe('getInstallationInfo', () => {
     mockChildProcess.execSync.mockImplementation(() => {
       throw new Error('Command not found');
     });
+    mockChildProcess.execFileSync.mockImplementation(() => {
+      throw new Error('Unable to identify npm global root');
+    });
   });
 
   afterEach(() => {
@@ -413,6 +416,19 @@ describe('getInstallationInfo', () => {
     });
   });
 
+  it('should detect local npm installation when invoked from a nested project directory', () => {
+    process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
+    mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
+
+    const result = getInstallationInfo('/project/examples/chatbot', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.NPM,
+      isGlobal: false,
+      updateMessage: "Locally installed. Please update via your project's package.json.",
+    });
+  });
+
   it('should detect local yarn installation from yarn.lock', () => {
     process.argv = ['node', '/project/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/project/node_modules/promptfoo/dist/src/main.js');
@@ -485,6 +501,7 @@ describe('getInstallationInfo', () => {
   it('should fall back to global npm installation', () => {
     process.argv = ['node', '/usr/local/lib/node_modules/promptfoo/dist/src/main.js'];
     mockFs.realpathSync.mockReturnValue('/usr/local/lib/node_modules/promptfoo/dist/src/main.js');
+    mockChildProcess.execFileSync.mockReturnValue('/usr/local/lib/node_modules\n');
 
     const result = getInstallationInfo('/project', false);
 
@@ -493,6 +510,20 @@ describe('getInstallationInfo', () => {
       isGlobal: true,
       updateCommand: 'npm install -g promptfoo@latest',
       updateMessage: 'Installed with npm. Attempting to automatically update now...',
+    });
+  });
+
+  it('should not update an npm-looking installation without a confirmed global root', () => {
+    process.argv = ['node', '/custom/path/node_modules/promptfoo/dist/src/main.js'];
+    mockFs.realpathSync.mockReturnValue('/custom/path/node_modules/promptfoo/dist/src/main.js');
+
+    const result = getInstallationInfo('/project', false);
+
+    expect(result).toEqual({
+      packageManager: PackageManager.NPM,
+      isGlobal: false,
+      updateMessage:
+        'Unable to confirm a global npm installation. Please update promptfoo through the package manager that installed it.',
     });
   });
 

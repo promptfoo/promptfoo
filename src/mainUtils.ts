@@ -118,6 +118,34 @@ export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.sli
   return false;
 }
 
+export function isUpdateCommandRequested(argv: string[] = process.argv.slice(2)): boolean {
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+
+    if (arg === '--') {
+      return false;
+    }
+
+    if (arg === '--env-file' || arg === '--env-path') {
+      index += 1;
+      continue;
+    }
+
+    if (
+      arg === '-v' ||
+      arg === '--verbose' ||
+      arg.startsWith('--env-file=') ||
+      arg.startsWith('--env-path=')
+    ) {
+      continue;
+    }
+
+    return arg === 'update';
+  }
+
+  return false;
+}
+
 export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
   if (!processArgv1) {
     return false;

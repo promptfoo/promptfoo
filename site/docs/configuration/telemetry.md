@@ -54,7 +54,7 @@ Note: This only disables the notification. You can still manually update using `
 Automatic background updates are **disabled by default** and considered experimental. This is an opt-in feature. Use with caution in production environments.
 :::
 
-When enabled, promptfoo will attempt to automatically update itself in the background when a new version is detected. The update runs silently without interrupting your workflow, and the new version will be available on your next command.
+When enabled, promptfoo schedules an automatic update when a new version is detected. It starts the update only after the current CLI invocation finishes, so a running eval or server does not use files while they are being replaced. The new version will be available on your next command.
 
 ### Enabling Auto-Updates
 
@@ -79,9 +79,10 @@ export PROMPTFOO_ENABLE_AUTO_UPDATE=0
 ### How It Works
 
 - Auto-updates only work for globally installed instances (npm, yarn, pnpm, bun)
-- Updates run in the background without blocking your commands
+- Updates begin after the current promptfoo command completes
 - The new version takes effect on the next promptfoo command
 - No updates occur for local project installations, Docker, or npx usage
+- npm auto-updates require confirmation that the active CLI is from npm's global install root
 - Updates are skipped if `PROMPTFOO_DISABLE_UPDATE=1` is set
 
 ### Supported Installation Methods

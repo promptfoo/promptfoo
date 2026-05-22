@@ -46,6 +46,26 @@ export function pathStartsWith(haystack: string, prefix: string): boolean {
   return normalizedHaystack.startsWith(`${normalizedPrefix}/`);
 }
 
+/**
+ * Return the project root for a local dependency when the CLI is invoked from
+ * that project or one of its subdirectories.
+ */
+export function findLocalInstallationRoot(
+  realPath: string,
+  invocationRoot: string,
+): string | undefined {
+  const normalizedRealPath = realPath.replace(/\\/g, '/');
+  const nodeModulesMarker = '/node_modules/';
+  const markerIndex = normalizePathForComparison(normalizedRealPath).indexOf(nodeModulesMarker);
+
+  if (markerIndex <= 0) {
+    return undefined;
+  }
+
+  const installationRoot = normalizedRealPath.slice(0, markerIndex);
+  return pathStartsWith(invocationRoot, installationRoot) ? installationRoot : undefined;
+}
+
 function isPotentialHomebrewPath(realPath: string): boolean {
   return pathContains(realPath, '/Cellar/promptfoo/');
 }
@@ -181,16 +201,14 @@ export function detectPackageManagerFromPath(cliPath: string, projectRoot: strin
     }
 
     // Check for local install
-    if (
-      normalizedProjectRoot &&
-      pathStartsWith(realPath, `${normalizedProjectRoot}/node_modules`)
-    ) {
+    const localInstallationRoot = findLocalInstallationRoot(realPath, projectRoot);
+    if (localInstallationRoot) {
       // Detect which package manager based on lock files
-      if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
+      if (fs.existsSync(path.join(localInstallationRoot, 'yarn.lock'))) {
         return PackageManager.YARN;
-      } else if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
+      } else if (fs.existsSync(path.join(localInstallationRoot, 'pnpm-lock.yaml'))) {
         return PackageManager.PNPM;
-      } else if (fs.existsSync(path.join(projectRoot, 'bun.lockb'))) {
+      } else if (fs.existsSync(path.join(localInstallationRoot, 'bun.lockb'))) {
         return PackageManager.BUN;
       }
       return PackageManager.NPM;

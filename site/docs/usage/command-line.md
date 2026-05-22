@@ -276,7 +276,7 @@ The update command will:
 3. Execute the appropriate update command for your system
 4. Provide manual instructions if automatic update is not possible
 
-For installations that cannot be automatically updated (like `npx` or local project installations), the command will provide appropriate manual update instructions.
+For installations that cannot be safely identified for automatic updating (like `npx`, local project installations, or an unconfirmed npm path), the command will provide appropriate manual update instructions.
 
 ## `promptfoo cache`
 

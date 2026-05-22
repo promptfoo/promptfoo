@@ -1,8 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 
 import logger from '../logger';
 import {
   detectPackageManagerFromPath,
+  findLocalInstallationRoot,
   isGitRepository,
   PackageManager,
   pathContains,
@@ -20,6 +22,8 @@ export interface InstallationInfo {
 }
 
 const LOCAL_INSTALL_MESSAGE = "Locally installed. Please update via your project's package.json.";
+const UNCONFIRMED_NPM_INSTALL_MESSAGE =
+  'Unable to confirm a global npm installation. Please update promptfoo through the package manager that installed it.';
 
 function localInstallationInfo(packageManager: PackageManager): InstallationInfo {
   return {
@@ -100,20 +104,40 @@ function getBunInstallationInfo(realPath: string, isAutoUpdateDisabled: boolean)
 
 function getNpmInstallationInfo(
   realPath: string,
-  normalizedProjectRoot: string | undefined,
+  projectRoot: string,
   isAutoUpdateDisabled: boolean,
 ): InstallationInfo {
-  const isLocal =
-    normalizedProjectRoot && pathStartsWith(realPath, `${normalizedProjectRoot}/node_modules`);
+  if (findLocalInstallationRoot(realPath, projectRoot)) {
+    return localInstallationInfo(PackageManager.NPM);
+  }
 
-  return isLocal
-    ? localInstallationInfo(PackageManager.NPM)
-    : globalInstallationInfo(
+  try {
+    const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const globalRoot = execFileSync(npmExecutable, ['root', '--global'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 1000,
+    })
+      .trim()
+      .replace(/[\\/]+$/, '');
+
+    if (globalRoot && pathStartsWith(realPath, `${globalRoot}/promptfoo`)) {
+      return globalInstallationInfo(
         PackageManager.NPM,
         'npm',
         'npm install -g promptfoo@latest',
         isAutoUpdateDisabled,
       );
+    }
+  } catch {
+    // Fall through to the fail-closed result below.
+  }
+
+  return {
+    packageManager: PackageManager.NPM,
+    isGlobal: false,
+    updateMessage: UNCONFIRMED_NPM_INSTALL_MESSAGE,
+  };
 }
 
 export function getInstallationInfo(
@@ -193,7 +217,7 @@ export function getInstallationInfo(
       }
 
       case PackageManager.NPM: {
-        return getNpmInstallationInfo(realPath, normalizedProjectRoot, isAutoUpdateDisabled);
+        return getNpmInstallationInfo(realPath, projectRoot, isAutoUpdateDisabled);
       }
 
       default:

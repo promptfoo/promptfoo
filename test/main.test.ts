@@ -68,6 +68,7 @@ vi.mock('../src/codeScan', () => ({
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let isUpdateCommandRequested: typeof import('../src/mainUtils').isUpdateCommandRequested;
 let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
 let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
 let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
@@ -77,6 +78,7 @@ async function loadMainModule() {
   ({
     addCommonOptionsRecursively,
     isMainModule,
+    isUpdateCommandRequested,
     shouldSkipDefaultConfigLoading,
     setupEnvFilesFromArgv,
     shutdownGracefully,
@@ -151,6 +153,23 @@ describe('shouldSkipDefaultConfigLoading', () => {
   it('keeps default config discovery for other commands and post-separator arguments', () => {
     expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
     expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
+  });
+});
+
+describe('isUpdateCommandRequested', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+  });
+
+  it('recognizes the update command after supported global options', () => {
+    expect(isUpdateCommandRequested(['update'])).toBe(true);
+    expect(isUpdateCommandRequested(['--verbose', 'update'])).toBe(true);
+    expect(isUpdateCommandRequested(['--env-file', '.env.local', 'update'])).toBe(true);
+  });
+
+  it('does not confuse arguments or separator content with the update command', () => {
+    expect(isUpdateCommandRequested(['eval', 'update'])).toBe(false);
+    expect(isUpdateCommandRequested(['--', 'update'])).toBe(false);
   });
 });
 

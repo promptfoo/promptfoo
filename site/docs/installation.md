@@ -101,7 +101,7 @@ The update command automatically detects how you installed promptfoo and uses th
 - **pnpm global**: Runs `pnpm add -g promptfoo@latest`
 - **bun global**: Runs `bun add -g promptfoo@latest`
 
-For installations that cannot be automatically updated (like `npx` or local project installations), the command provides appropriate manual instructions.
+For installations that cannot be safely identified for automatic updating (like `npx`, local project installations, or an unconfirmed npm path), the command provides appropriate manual instructions.
 
 ### Update Options
 

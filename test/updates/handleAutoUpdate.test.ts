@@ -16,7 +16,11 @@ vi.mock('../../src/updates/updateEventEmitter');
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 
-import { handleAutoUpdate, setUpdateHandler } from '../../src/updates/handleAutoUpdate';
+import {
+  handleAutoUpdate,
+  scheduleAutoUpdateOnExit,
+  setUpdateHandler,
+} from '../../src/updates/handleAutoUpdate';
 import { getInstallationInfo, PackageManager } from '../../src/updates/installationInfo';
 import { updateEventEmitter } from '../../src/updates/updateEventEmitter';
 
@@ -232,6 +236,38 @@ describe('handleAutoUpdate', () => {
 
     const result = handleAutoUpdate(info, false, false, '/project', mockSpawn);
     expect(result).toBe(mockProcess);
+  });
+
+  it('should wait until process exit before starting an automatic update', () => {
+    const info: UpdateObject = {
+      message: 'Update available',
+      update: { current: '1.0.0', latest: '1.1.0', name: 'promptfoo' },
+    };
+    let beforeExit: (() => void) | undefined;
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm install -g promptfoo@latest',
+    });
+
+    scheduleAutoUpdateOnExit(
+      info,
+      false,
+      '/project',
+      (listener) => {
+        beforeExit = listener;
+      },
+      mockSpawn,
+    );
+
+    expect(mockSpawn).not.toHaveBeenCalled();
+    beforeExit?.();
+    expect(mockSpawn).toHaveBeenCalledWith('npm', ['install', '-g', 'promptfoo@1.1.0'], {
+      stdio: 'ignore',
+      shell: false,
+      detached: true,
+    });
   });
 });
 
