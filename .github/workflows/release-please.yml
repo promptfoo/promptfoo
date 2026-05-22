@@ -192,6 +192,11 @@ jobs:
     needs: [release-please, build]
     permissions:
       contents: read
+    env:
+      # Plain release-artifact files mirrored into promptfoo/code-scan-action.
+      # `dist/` (a directory) and `.release-source.json` (generated below, not
+      # copied from source) are handled separately in each step.
+      MIRROR_ARTIFACT_FILES: 'action.yml README.md CHANGELOG.md'
     steps:
       # Token is scoped to the foreign repo (code-scan-action) via owner/
       # repositories. Do NOT add `permission-*` inputs here until the App
@@ -243,9 +248,9 @@ jobs:
           rm -rf "$export_dir"
           mkdir -p "$export_dir"
 
-          cp code-scan-action/action.yml "$export_dir/action.yml"
-          cp code-scan-action/README.md "$export_dir/README.md"
-          cp code-scan-action/CHANGELOG.md "$export_dir/CHANGELOG.md"
+          for file in $MIRROR_ARTIFACT_FILES; do
+            cp "code-scan-action/$file" "$export_dir/$file"
+          done
           cp -R code-scan-action/dist "$export_dir/dist"
 
           cat > "$export_dir/.release-source.json" <<JSON
@@ -290,12 +295,12 @@ jobs:
           # and broke the mirror's validate-release-pr check.
           rm -rf dist
           cp -R "$export_dir/dist" dist
-          cp "$export_dir/action.yml" action.yml
-          cp "$export_dir/README.md" README.md
-          cp "$export_dir/CHANGELOG.md" CHANGELOG.md
+          for file in $MIRROR_ARTIFACT_FILES; do
+            cp "$export_dir/$file" "$file"
+          done
           cp "$export_dir/.release-source.json" .release-source.json
 
-          git add action.yml README.md CHANGELOG.md dist .release-source.json
+          git add $MIRROR_ARTIFACT_FILES dist .release-source.json
           if git diff --cached --quiet; then
             echo "No mirror changes to publish for code-scan-action v${CODE_SCAN_ACTION_VERSION}"
             exit 0
