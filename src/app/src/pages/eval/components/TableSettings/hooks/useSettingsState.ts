@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useResultsViewSettingsStore } from '../../store';
+import type { CostDisplayUnit } from '@app/utils/cost';
 
 interface SettingsState {
   maxTextLength: number;
   wordBreak: string;
   showInferenceDetails: boolean;
-  costDisplayUnit: string;
+  costDisplayUnit: CostDisplayUnit;
   showRunsPerCostUnit: boolean;
   renderMarkdown: boolean;
   prettifyJson: boolean;

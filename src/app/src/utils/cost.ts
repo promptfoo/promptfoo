@@ -14,6 +14,20 @@ const RUNS_FORMAT_OPTIONS: Intl.NumberFormatOptions = {
   maximumSignificantDigits: 3,
 };
 
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormatter(options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = JSON.stringify(options);
+  const cached = numberFormatCache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const formatter = new Intl.NumberFormat(undefined, options);
+  numberFormatCache.set(key, formatter);
+  return formatter;
+}
+
 export function getCostDisplayValue(costUsd: number, unit: CostDisplayUnit): number {
   return unit === 'cents' ? costUsd * 100 : costUsd;
 }
@@ -23,9 +37,7 @@ export function formatUsdCost(
   unit: CostDisplayUnit,
   options: Intl.NumberFormatOptions = DEFAULT_COST_FORMAT_OPTIONS,
 ): string {
-  const displayCost = Intl.NumberFormat(undefined, options).format(
-    getCostDisplayValue(costUsd, unit),
-  );
+  const displayCost = getNumberFormatter(options).format(getCostDisplayValue(costUsd, unit));
 
   return unit === 'cents' ? `${displayCost}¢` : `$${displayCost}`;
 }
@@ -43,5 +55,5 @@ export function calculateRunsPerCostUnit(
 
 export function formatRunsPerCostUnit(runs: number, unit: CostDisplayUnit): string {
   const denominator = unit === 'cents' ? '1¢' : '$1';
-  return `${Intl.NumberFormat(undefined, RUNS_FORMAT_OPTIONS).format(runs)} runs/${denominator}`;
+  return `${getNumberFormatter(RUNS_FORMAT_OPTIONS).format(runs)} runs/${denominator}`;
 }
