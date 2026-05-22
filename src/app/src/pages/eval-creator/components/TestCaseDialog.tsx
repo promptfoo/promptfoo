@@ -120,7 +120,9 @@ const TestCaseForm = ({
       onCancel();
       setAddAnotherStatus(null);
     } else {
-      setAddAnotherStatus('Test case added. Enter values for the next test case.');
+      setAddAnotherStatus(
+        'Test case added. Each test case runs across every prompt and provider. Enter values for the next test case.',
+      );
     }
     setDescription('');
     setVars(getTestCaseVars(varsList, undefined));
@@ -149,7 +151,12 @@ const TestCaseForm = ({
             className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4"
           >
             {addAnotherStatus && (
-              <p role="status" className="rounded-md bg-muted p-3 text-sm">
+              <p
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className="rounded-md bg-muted p-3 text-sm"
+              >
                 {addAnotherStatus}
               </p>
             )}

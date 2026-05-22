@@ -141,9 +141,12 @@ describe('TestCaseForm', () => {
     );
 
     expect(onCancel).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Test case added. Enter values for the next test case.',
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
+      'Test case added. Each test case runs across every prompt and provider. Enter values for the next test case.',
     );
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('keeps intentional blank inputs when creating another test case', async () => {
