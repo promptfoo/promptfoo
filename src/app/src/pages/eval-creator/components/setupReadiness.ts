@@ -5,7 +5,14 @@ import type { AssertionOrSet, ProviderOptions, UnifiedConfig } from '@promptfoo/
 export type SetupStepId = 1 | 2 | 3 | 4;
 
 export interface SetupIssue {
-  id: 'providers' | 'prompts' | 'tests' | 'variables' | 'assertions' | 'assertionVariables';
+  id:
+    | 'providers'
+    | 'prompts'
+    | 'tests'
+    | 'variables'
+    | 'assertions'
+    | 'assertionVariables'
+    | 'comparisonOutputs';
   message: string;
   stepId: SetupStepId;
 }
@@ -80,6 +87,37 @@ function getAssertions(testCase: unknown): AssertionOrSet[] {
   return isRecord(testCase) && Array.isArray(testCase.assert)
     ? (testCase.assert as AssertionOrSet[])
     : [];
+}
+
+function containsSelectBest(assertions: AssertionOrSet[]): boolean {
+  return assertions.some((assertion) =>
+    assertion.type === 'assert-set'
+      ? assertion.assert.some((nestedAssertion) => nestedAssertion.type === 'select-best')
+      : assertion.type === 'select-best',
+  );
+}
+
+function hasConfiguredSelectBest(
+  tests: UnifiedConfig['tests'] | undefined,
+  defaultAssertions: AssertionOrSet[],
+): boolean {
+  if (!Array.isArray(tests)) {
+    return countTests(tests) > 0 && containsSelectBest(defaultAssertions);
+  }
+
+  return tests.some((testCase) => {
+    if (!isRecord(testCase)) {
+      return false;
+    }
+
+    const disablesDefaultAsserts =
+      isRecord(testCase.options) && testCase.options.disableDefaultAsserts === true;
+    const assertions = [
+      ...(disablesDefaultAsserts ? [] : defaultAssertions),
+      ...getAssertions(testCase),
+    ];
+    return containsSelectBest(assertions);
+  });
 }
 
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
@@ -278,6 +316,15 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
   }
 
   const defaultAssertions = getAssertions(config.defaultTest);
+  if (providerCount * promptCount < 2 && hasConfiguredSelectBest(config.tests, defaultAssertions)) {
+    issues.push({
+      id: 'comparisonOutputs',
+      message:
+        'Choose best output needs at least two outputs per test case. Add another provider or prompt.',
+      stepId: 1,
+    });
+  }
+
   const assertionVariableIssues = Array.isArray(config.tests)
     ? config.tests.flatMap((testCase, index) => {
         if (!isRecord(testCase)) {

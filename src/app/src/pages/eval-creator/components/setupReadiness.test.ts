@@ -346,6 +346,30 @@ describe('setupReadiness', () => {
       ).toBe(false);
     });
 
+    it('requires multiple outputs for select-best comparisons', () => {
+      const singleOutputConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        tests: [{ assert: [{ type: 'select-best' as const, value: 'Choose the clearer reply' }] }],
+      };
+
+      const readiness = getSetupReadiness(singleOutputConfig);
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.issues).toContainEqual({
+        id: 'comparisonOutputs',
+        message:
+          'Choose best output needs at least two outputs per test case. Add another provider or prompt.',
+        stepId: 1,
+      });
+      expect(
+        getSetupReadiness({
+          ...singleOutputConfig,
+          providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('rejects authored moderation categories unless they use runtime array form', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],

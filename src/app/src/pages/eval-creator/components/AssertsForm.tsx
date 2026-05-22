@@ -119,6 +119,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   factuality: 'Factuality',
   'model-graded-closedqa': 'Closed QA grading',
   'not-similar': 'Not semantically similar',
+  'select-best': 'Choose best output',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
@@ -133,6 +134,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   similar: 'A model checks semantic similarity to your expected answer. This can add cost.',
   'not-similar':
     'Fails when a model finds semantic similarity to your expected answer. This can add cost.',
+  'select-best':
+    'Compares outputs for this test case. Add at least two prompts or providers; a model judges the winner and this can add cost.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
@@ -595,9 +598,11 @@ const AssertionValueFields = ({
         <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
           {assertion.type === 'moderation' || assertion.type === 'not-moderation'
             ? 'Categories (optional)'
-            : OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
-              ? 'JSON schema (optional)'
-              : 'Value'}
+            : assertion.type === 'select-best'
+              ? 'Selection criteria (required)'
+              : OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
+                ? 'JSON schema (optional)'
+                : 'Value'}
         </Label>
         {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type) && (
           <Button

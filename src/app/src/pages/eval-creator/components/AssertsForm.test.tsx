@@ -358,6 +358,25 @@ describe('AssertsForm', () => {
     expect(screen.getByText(/fails when a model finds semantic similarity/i)).toBeVisible();
   });
 
+  it('explains select-best criteria and its multi-output prerequisite', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'select-best' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByText('Model-graded: may add cost')).toBeVisible();
+    expect(screen.getByText(/Add at least two prompts or providers/i)).toBeVisible();
+    expect(
+      screen.getByRole('textbox', { name: 'Selection criteria (required)' }),
+    ).toHaveAccessibleDescription('Enter criteria for selecting the best output.');
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+  });
+
   it('progressively reveals optional XML element requirements', async () => {
     const user = userEvent.setup();
     initialValues = [{ type: 'is-xml' }];

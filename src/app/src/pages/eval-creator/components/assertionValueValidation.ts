@@ -267,6 +267,10 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
   }
 
   if (REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) && !hasNonBlankString(assertion.value)) {
+    if (assertion.type === 'select-best') {
+      return 'Enter criteria for selecting the best output.';
+    }
+
     return 'Enter an expected value before saving this check.';
   }
 
