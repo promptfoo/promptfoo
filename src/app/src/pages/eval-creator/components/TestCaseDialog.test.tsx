@@ -143,6 +143,47 @@ describe('TestCaseForm', () => {
     );
   });
 
+  it('keeps intentional blank inputs when creating another test case', async () => {
+    renderComponent();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add and create another' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Test Case' }));
+
+    expect(onAdd).toHaveBeenNthCalledWith(
+      2,
+      {
+        description: '',
+        vars: { var1: '', var2: '' },
+        assert: [],
+      },
+      true,
+    );
+  });
+
+  it('prevents saving while an assertion is missing a required value', () => {
+    renderComponent();
+
+    act(() => {
+      mockAssertsForm.mock.calls[0][0].onValidityChange?.(false);
+    });
+
+    const alert = screen.getByRole('alert');
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
+
+    expect(alert).toHaveTextContent('Complete the highlighted assertion values before saving.');
+    expect(addButton).toBeDisabled();
+    expect(addAnotherButton).toBeDisabled();
+    expect(addButton).toHaveAttribute('aria-describedby', 'test-case-assertion-error');
+
+    act(() => {
+      mockAssertsForm.mock.lastCall?.[0].onValidityChange?.(true);
+    });
+
+    expect(addButton).not.toBeDisabled();
+    expect(addAnotherButton).not.toBeDisabled();
+  });
+
   it("should call onAdd with the updated form state and shouldClose=true, then reset the form and call onCancel when the 'Update Test Case' button is clicked in edit mode", async () => {
     const initialValues: TestCase = {
       description: 'Initial description',

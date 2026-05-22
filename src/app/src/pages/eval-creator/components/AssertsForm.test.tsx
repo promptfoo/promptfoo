@@ -130,6 +130,48 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'contains-any', value: ['hello', 'world'] }]);
   });
 
+  it('requires grading criteria for an LLM rubric before the test case can be saved', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'llm-rubric', value: '' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    const valueInput = screen.getByRole('textbox', { name: 'Value' });
+    expect(valueInput).toHaveAttribute('aria-invalid', 'true');
+    expect(
+      screen.getByText('Enter grading criteria before using an LLM rubric.'),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.type(valueInput, 'Answer accurately and cite the source.');
+
+    expect(valueInput).toHaveAttribute('aria-invalid', 'false');
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('requires at least one value for comma-separated list checks', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'contains-any', value: [] }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(
+      screen.getByText('Enter at least one comma-separated value for this check.'),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+  });
+
   it('progressively reveals optional JSON schema validation', async () => {
     const user = userEvent.setup();
     initialValues = [{ type: 'is-json' }];

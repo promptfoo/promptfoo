@@ -40,6 +40,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
   const [assertsFormKey, setAssertsFormKey] = useState(0);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [addAnotherStatus, setAddAnotherStatus] = useState<string | null>(null);
+  const [assertsValid, setAssertsValid] = useState(true);
 
   React.useEffect(() => {
     if (initialValues) {
@@ -53,6 +54,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
     }
     setDiscardDialogOpen(false);
     setAddAnotherStatus(null);
+    setAssertsValid(true);
   }, [initialValues, varsList]);
 
   const initialDescription = initialValues?.description || '';
@@ -75,6 +77,10 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
   };
 
   const handleAdd = (close: boolean) => {
+    if (!assertsValid) {
+      return;
+    }
+
     onAdd(
       {
         description,
@@ -90,7 +96,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
       setAddAnotherStatus('Test case added. Enter values for the next test case.');
     }
     setDescription('');
-    setVars({});
+    setVars(getTestCaseVars(varsList, undefined));
     setAsserts([]);
     setAssertsFormKey((prevKey) => prevKey + 1);
   };
@@ -147,6 +153,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
                 setAsserts(asserts);
                 setAddAnotherStatus(null);
               }}
+              onValidityChange={setAssertsValid}
               initialValues={
                 ((initialValues?.assert || []).filter(
                   (item) => item.type !== 'assert-set',
@@ -155,16 +162,37 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
             />
           </div>
 
-          <DialogFooter data-testid="test-case-dialog-footer" className="shrink-0 gap-2 sm:gap-0">
+          <DialogFooter
+            data-testid="test-case-dialog-footer"
+            className="shrink-0 flex-wrap gap-2 sm:gap-0"
+          >
+            {!assertsValid && (
+              <p
+                id="test-case-assertion-error"
+                role="alert"
+                className="mr-auto text-left text-sm text-destructive"
+              >
+                Complete the highlighted assertion values before saving.
+              </p>
+            )}
             <Button variant="outline" onClick={requestCancel}>
               Cancel
             </Button>
             {!initialValues && (
-              <Button variant="secondary" onClick={() => handleAdd(false)}>
+              <Button
+                variant="secondary"
+                disabled={!assertsValid}
+                aria-describedby={assertsValid ? undefined : 'test-case-assertion-error'}
+                onClick={() => handleAdd(false)}
+              >
                 Add and create another
               </Button>
             )}
-            <Button onClick={() => handleAdd(true)}>
+            <Button
+              disabled={!assertsValid}
+              aria-describedby={assertsValid ? undefined : 'test-case-assertion-error'}
+              onClick={() => handleAdd(true)}
+            >
               {initialValues ? 'Update Test Case' : 'Add Test Case'}
             </Button>
           </DialogFooter>

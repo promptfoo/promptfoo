@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import { DeleteIcon } from '@app/components/ui/icons';
 import { Label } from '@app/components/ui/label';
 import {
@@ -20,6 +21,7 @@ import type { Assertion, AssertionType } from '@promptfoo/types';
 interface AssertsFormProps {
   onAdd: (asserts: Assertion[]) => void;
   initialValues: Assertion[];
+  onValidityChange?: (isValid: boolean) => void;
 }
 
 const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
@@ -154,6 +156,8 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
+const REQUIRED_TEXT_VALUE_ASSERTION_TYPES = new Set<AssertionType>(['llm-rubric', 'similar']);
+
 const formatAssertionValue = (assert: Assertion): string => {
   if (ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && Array.isArray(assert.value)) {
     return assert.value.map(String).join(', ');
@@ -181,7 +185,27 @@ const parseAssertionValue = (type: AssertionType, value: string): Assertion['val
   return value;
 };
 
-const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
+const getAssertionValueError = (assert: Assertion): string | undefined => {
+  if (
+    ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) &&
+    (!Array.isArray(assert.value) || assert.value.length === 0)
+  ) {
+    return 'Enter at least one comma-separated value for this check.';
+  }
+
+  if (
+    REQUIRED_TEXT_VALUE_ASSERTION_TYPES.has(assert.type) &&
+    (typeof assert.value !== 'string' || assert.value.trim() === '')
+  ) {
+    return assert.type === 'llm-rubric'
+      ? 'Enter grading criteria before using an LLM rubric.'
+      : 'Enter an expected answer for semantic similarity.';
+  }
+
+  return undefined;
+};
+
+const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
   const [arrayValueDrafts, setArrayValueDrafts] = useState<Record<number, string>>(() =>
     Object.fromEntries(
@@ -190,6 +214,12 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
       ),
     ),
   );
+  const assertionErrors = asserts.map(getAssertionValueError);
+  const isValid = assertionErrors.every((error) => error === undefined);
+
+  useEffect(() => {
+    onValidityChange?.(isValid);
+  }, [isValid, onValidityChange]);
 
   const handleAdd = () => {
     const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
@@ -366,6 +396,10 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     </div>
                     <Textarea
                       id={`assert-value-${index}`}
+                      aria-invalid={Boolean(assertionErrors[index])}
+                      aria-describedby={
+                        assertionErrors[index] ? `assert-value-error-${index}` : undefined
+                      }
                       placeholder={
                         OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type)
                           ? 'type: object\nrequired: [answer]'
@@ -392,6 +426,11 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                       }}
                       className="min-h-20 resize-y"
                     />
+                    {assertionErrors[index] && (
+                      <HelperText id={`assert-value-error-${index}`} error>
+                        {assertionErrors[index]}
+                      </HelperText>
+                    )}
                     {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assert.type) && (
                       <p className="text-xs text-muted-foreground">
                         Enter a JSON Schema in YAML or JSON format.
