@@ -1055,6 +1055,7 @@ URL context lets Gemini models fetch and analyze content from specific web URLs.
 providers:
   - id: vertex:gemini-2.5-flash
     config:
+      apiVersion: v1beta1
       tools:
         - urlContext: {}
 ```

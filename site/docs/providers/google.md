@@ -293,7 +293,7 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
 
 - `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
-- `google:embedding:gemini-embedding-2` - Latest Gemini embedding model with multimodal input (text, image, video, audio, and PDF)
+- `google:embedding:gemini-embedding-2` - Latest Gemini embedding model for text input through promptfoo
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
