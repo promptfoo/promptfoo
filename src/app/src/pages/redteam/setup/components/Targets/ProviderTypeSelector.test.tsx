@@ -100,6 +100,16 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByRole('button', { name: 'Clear provider search' })).toBeInTheDocument();
   });
 
+  it('uses provider terminology for the custom option in eval mode', () => {
+    renderWithTooltipProvider(
+      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={vi.fn()} mode="eval" />,
+    );
+
+    expect(screen.getByText('Custom Provider')).toBeInTheDocument();
+    expect(screen.getByText('Configure another model, endpoint, or script')).toBeInTheDocument();
+    expect(screen.queryByText('Custom Target')).not.toBeInTheDocument();
+  });
+
   it('stacks filters above search before the layout has room for a shared row', () => {
     const mockSetProvider = vi.fn();
 

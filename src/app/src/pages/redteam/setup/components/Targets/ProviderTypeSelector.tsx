@@ -411,12 +411,23 @@ const allProviderOptions = [
   return a.label.localeCompare(b.label);
 });
 
+const evalProviderOptions = allProviderOptions.map((option) =>
+  option.value === 'custom'
+    ? {
+        ...option,
+        label: 'Custom Provider',
+        description: 'Configure another model, endpoint, or script',
+      }
+    : option,
+);
+
 interface ProviderTypeSelectorProps {
   provider: ProviderOptions | undefined;
   setProvider: (provider: ProviderOptions, providerType: string) => void;
   availableProviderIds?: string[];
   disableModelSelection?: boolean;
   providerType?: string;
+  mode?: 'eval' | 'redteam';
 }
 
 export default function ProviderTypeSelector({
@@ -424,8 +435,10 @@ export default function ProviderTypeSelector({
   providerType,
   setProvider,
   availableProviderIds,
+  mode = 'redteam',
 }: ProviderTypeSelectorProps) {
   const { recordEvent } = useTelemetry();
+  const providerOptions = mode === 'eval' ? evalProviderOptions : allProviderOptions;
 
   const [selectedProviderType, setSelectedProviderType] = useState<string | undefined>(
     providerType,
@@ -465,7 +478,7 @@ export default function ProviderTypeSelector({
     const currentLabel = provider?.label;
 
     // Find the selected option to get its details
-    const selectedOption = allProviderOptions.find((option) => option.value === value);
+    const selectedOption = providerOptions.find((option) => option.value === value);
 
     // Track provider type selection
     recordEvent('feature_used', {
@@ -1021,7 +1034,7 @@ export default function ProviderTypeSelector({
   };
 
   // Filter available options if availableProviderIds is provided, by search term, and by tag
-  const filteredProviderOptions = allProviderOptions.filter((option) => {
+  const filteredProviderOptions = providerOptions.filter((option) => {
     // Filter by availableProviderIds if provided
     const isAvailable = !availableProviderIds || availableProviderIds.includes(option.value);
 
@@ -1039,7 +1052,7 @@ export default function ProviderTypeSelector({
 
   // Get the selected provider option for collapsed view
   const selectedOption = selectedProviderType
-    ? allProviderOptions.find((option) => option.value === selectedProviderType)
+    ? providerOptions.find((option) => option.value === selectedProviderType)
     : undefined;
 
   // Show collapsed view when a provider is selected and not in expanded mode
@@ -1094,11 +1107,11 @@ export default function ProviderTypeSelector({
   // Calculate counts for each tag
   const getTagCount = (tagKey: TagKey | undefined) => {
     if (tagKey === undefined) {
-      return allProviderOptions.filter(
+      return providerOptions.filter(
         (opt) => !availableProviderIds || availableProviderIds.includes(opt.value),
       ).length;
     }
-    return allProviderOptions.filter(
+    return providerOptions.filter(
       (opt) =>
         opt.tag === tagKey && (!availableProviderIds || availableProviderIds.includes(opt.value)),
     ).length;

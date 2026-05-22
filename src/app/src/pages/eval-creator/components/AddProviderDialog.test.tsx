@@ -9,10 +9,12 @@ let providerValidationError: string | null = null;
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
   default: ({
     setProvider,
+    mode,
   }: {
     setProvider: (provider: { id: string; config: Record<string, never> }, type: string) => void;
+    mode?: 'eval' | 'redteam';
   }) => (
-    <div>
+    <div data-testid="provider-type-selector" data-mode={mode}>
       provider type selector
       <button
         type="button"
@@ -143,6 +145,7 @@ describe('AddProviderDialog layout', () => {
     expect(footer).toHaveClass('shrink-0');
     expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
     expect(screen.getByText(/a provider is a model, agent, or endpoint/i)).toBeInTheDocument();
+    expect(screen.getByTestId('provider-type-selector')).toHaveAttribute('data-mode', 'eval');
   });
 
   it('resets the scroll position when moving into provider configuration', async () => {

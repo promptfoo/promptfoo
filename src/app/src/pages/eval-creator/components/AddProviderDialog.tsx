@@ -217,6 +217,7 @@ export default function AddProviderDialog({
                     ) => void
                   }
                   providerType={providerType}
+                  mode="eval"
                 />
               </div>
             ) : (
