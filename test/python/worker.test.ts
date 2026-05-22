@@ -1,9 +1,10 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { PythonWorker } from '../../src/python/worker';
+import { MAX_STDERR_BUFFER_LENGTH, PythonWorker } from '../../src/python/worker';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -32,7 +33,10 @@ type TestablePythonWorker = {
 };
 
 function createTestableWorker() {
-  return new PythonWorker('/tmp/provider.py', 'call_api') as unknown as TestablePythonWorker;
+  return new PythonWorker(
+    path.join(os.tmpdir(), 'provider.py'),
+    'call_api',
+  ) as unknown as TestablePythonWorker;
 }
 
 describe('PythonWorker stderr parsing', () => {
@@ -273,7 +277,7 @@ describe('PythonWorker stderr parsing', () => {
 
   it('bounds an unterminated stderr buffer', () => {
     const worker = createTestableWorker();
-    const longLine = 'x'.repeat(16_384);
+    const longLine = 'x'.repeat(MAX_STDERR_BUFFER_LENGTH);
 
     worker.handleStderr(longLine);
 
@@ -300,11 +304,9 @@ describeOrSkip('PythonWorker', () => {
 
   beforeAll(async () => {
     // Create test fixture
-    if (!fs.existsSync(fixturesDir)) {
-      fs.mkdirSync(fixturesDir, { recursive: true });
-    }
+    await fs.promises.mkdir(fixturesDir, { recursive: true });
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       testScriptPath,
       `
 def call_api(prompt, options, context):
@@ -312,7 +314,7 @@ def call_api(prompt, options, context):
 `,
     );
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       multiApiPath,
       `
 def call_api(prompt, options, context):
@@ -326,7 +328,7 @@ def call_classification_api(prompt, options, context):
 `,
     );
 
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       errorPath,
       `
 def call_api(prompt, options, context):
@@ -338,7 +340,7 @@ def call_api(prompt, options, context):
 
     // Uses Python's default logging format (LEVEL:name:message) so the test
     // exercises what real providers emit when they don't customize logging.
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       loggingPath,
       `
 import logging
@@ -351,6 +353,12 @@ def call_api(prompt, options, context):
     return {"output": f"Logged: {prompt}"}
 `,
     );
+
+    await Promise.all([
+      fs.promises.access(nonexistentPath),
+      fs.promises.access(wrongNamePath),
+      fs.promises.access(embeddingsOnlyPath),
+    ]);
 
     sharedWorker = new PythonWorker(testScriptPath, 'call_api');
     multiApiWorker = new PythonWorker(multiApiPath, 'call_api');
