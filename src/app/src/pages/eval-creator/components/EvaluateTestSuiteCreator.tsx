@@ -739,6 +739,7 @@ const EvaluateTestSuiteCreator = () => {
             <DialogDescription>
               This clears providers, prompts, test cases, and run options. This action cannot be
               undone.
+              {yamlHasUnsavedChanges && ' Your unsaved YAML edits will also be discarded.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -788,6 +789,7 @@ const EvaluateTestSuiteCreator = () => {
               <code className="rounded bg-muted px-1 py-0.5">{pendingYamlImport?.fileName}</code>{' '}
               replaces providers, prompts, test cases, run options, and any API key values entered
               in this setup. This action cannot be undone.
+              {yamlHasUnsavedChanges && ' Your unsaved YAML edits will also be discarded.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

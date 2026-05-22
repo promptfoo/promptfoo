@@ -357,6 +357,18 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('Evaluation setup')).toBeInTheDocument();
   });
 
+  it('discloses that resetting also discards unsaved YAML edits', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    expect(screen.getByRole('dialog', { name: 'Reset evaluation setup?' })).toHaveTextContent(
+      'Your unsaved YAML edits will also be discarded.',
+    );
+  });
+
   it('should show a ready state and jump to run options once required setup is complete', async () => {
     useStore.getState().updateConfig({
       providers: [{ id: 'openai:gpt-4.1' }],
@@ -463,6 +475,24 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(useStore.getState().config.prompts).toEqual(['Keep this prompt']);
     expect(useStore.getState().config.description).toBe('');
     expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
+  });
+
+  it('discloses unsaved YAML loss before importing replacement YAML', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await user.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
+
+    const mockFile = new File(['description: Replacement'], 'replacement.yaml', {
+      type: 'application/yaml',
+    });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' }),
+    ).toHaveTextContent('Your unsaved YAML edits will also be discarded.');
   });
 
   it('should handle invalid YAML with error toast', async () => {
