@@ -69,9 +69,9 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: '' }]);
     expect(screen.getByRole('textbox', { name: 'Value' })).toHaveAttribute('aria-invalid', 'true');
-    expect(
-      screen.getByText('Enter an expected value before saving this check.'),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Enter an expected value before saving this check.',
+    );
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
 
     await user.click(addButton);
