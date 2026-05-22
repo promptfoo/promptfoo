@@ -11,7 +11,7 @@ import { cache } from 'promptfoo';
 
 > **isCacheEnabled**(): `boolean`
 
-Defined in: [cache.ts:813](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L813)
+Defined in: [cache.ts:932](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L932)
 
 Return whether the shared promptfoo cache is enabled.
 

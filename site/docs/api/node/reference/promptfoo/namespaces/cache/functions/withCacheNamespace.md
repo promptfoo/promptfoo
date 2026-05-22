@@ -11,7 +11,7 @@ import { cache } from 'promptfoo';
 
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
-Defined in: [cache.ts:270](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L270)
+Defined in: [cache.ts:272](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L272)
 
 Run an async operation inside an isolated cache namespace.
 

@@ -233,6 +233,10 @@ jobs:
         run: |
           npm run format:check:prettier
 
+      - name: Check generated Node API reference
+        run: |
+          npm run docs:api:check
+
       - name: Check Dependency Versions
         run: |
           npx check-dependency-version-consistency
