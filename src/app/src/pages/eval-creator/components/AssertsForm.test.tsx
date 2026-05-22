@@ -350,6 +350,22 @@ describe('AssertsForm', () => {
     ).toHaveAccessibleDescription(/default to 0.75.*ROUGE-N rewards coverage/i);
   });
 
+  it('configures semantic similarity thresholds with model-cost disclosure', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'similar', value: 'A clear response' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByText('Model-graded: may add cost')).toBeVisible();
+    const threshold = screen.getByRole('spinbutton', { name: 'Score threshold (optional)' });
+    expect(threshold).toHaveAccessibleDescription(/default to 0.75.*embeddings and may add cost/i);
+
+    await user.type(threshold, '0.8');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'similar', value: 'A clear response', threshold: 0.8 },
+    ]);
+  });
+
   it('stores word count limits in the runtime range shape without model-grading cost', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();

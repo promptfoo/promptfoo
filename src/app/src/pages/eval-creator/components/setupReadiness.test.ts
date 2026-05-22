@@ -255,6 +255,12 @@ describe('setupReadiness', () => {
       expect(
         getSetupReadiness({
           ...baseConfig,
+          tests: [{ assert: [{ type: 'similar' as const, value: 'answer', threshold: 1.1 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
           tests: [{ assert: [{ type: 'bleu' as const, value: 'answer', threshold: 0.6 }] }],
         }).isReadyToRun,
       ).toBe(true);

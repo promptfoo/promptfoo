@@ -667,7 +667,13 @@ const WebhookField = ({ assertion, error, index, onChange }: SpecializedValueFie
 
 const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
   const isRouge = assertion.type === 'rouge-n' || assertion.type === 'not-rouge-n';
-  const defaultThreshold = isRouge ? '0.75' : '0.5';
+  const isSimilarity = assertion.type === 'similar' || assertion.type === 'not-similar';
+  const defaultThreshold = isRouge || isSimilarity ? '0.75' : '0.5';
+  const metricDescription = isSimilarity
+    ? 'Semantic similarity uses embeddings and may add cost.'
+    : isRouge
+      ? 'ROUGE-N rewards coverage of the reference answer.'
+      : 'BLEU rewards precision against the reference answer.';
   const helpId = `assert-text-score-help-${index}`;
   const errorId = `assert-value-error-${index}`;
   const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
@@ -712,11 +718,8 @@ const TextScoreField = ({ assertion, error, index, onChange }: SpecializedValueF
         </HelperText>
       )}
       <p id={helpId} className="text-xs text-muted-foreground">
-        Scores range from 0 to 1 and default to {defaultThreshold}.{' '}
-        {isRouge
-          ? 'ROUGE-N rewards coverage of the reference answer.'
-          : 'BLEU rewards precision against the reference answer.'}{' '}
-        Configure multiple references in YAML.
+        Scores range from 0 to 1 and default to {defaultThreshold}. {metricDescription} Configure
+        multiple references in YAML.
       </p>
     </div>
   );

@@ -42,6 +42,8 @@ export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-bleu',
   'rouge-n',
   'not-rouge-n',
+  'similar',
+  'not-similar',
 ]);
 
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
