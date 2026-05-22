@@ -60,6 +60,7 @@ import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
+import { RoleConfusionPlugin } from './roleConfusion';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
 import { TeenSafetyAgeRestrictedGoodsAndServicesPlugin } from './teenSafety/ageRestrictedGoodsAndServices';
@@ -509,6 +510,24 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
   createPluginFactory(RbacPlugin, 'rbac'),
+  createPluginFactory(RoleConfusionPlugin, 'role-confusion', (config) => {
+    if (config.examples !== undefined) {
+      invariant(
+        Array.isArray(config.examples),
+        'Role confusion plugin config.examples must be an array of strings',
+      );
+      invariant(
+        config.examples.length > 0,
+        'Role confusion plugin config.examples must not be empty if provided',
+      );
+      config.examples.forEach((example, index) => {
+        invariant(
+          typeof example === 'string' && example.trim().length > 0,
+          `Role confusion plugin config.examples[${index}] must be a non-empty string`,
+        );
+      });
+    }
+  }),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),
   createPluginFactory(
@@ -661,7 +680,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
-  (id) => !['indirect-prompt-injection', 'rag-poisoning', 'role-confusion'].includes(id),
+  (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
 ).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
@@ -672,27 +691,6 @@ remotePlugins.push(
         config.indirectInjectionVar,
         'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set. If using this plugin in a plugin collection, configure this plugin separately.',
       ),
-  ),
-  createRemotePlugin<{ examples?: string[] }>(
-    'role-confusion',
-    (config: { examples?: string[] }) => {
-      if ('examples' in config) {
-        invariant(
-          Array.isArray(config.examples),
-          'Role confusion plugin config.examples must be an array of strings',
-        );
-        invariant(
-          config.examples.length > 0,
-          'Role confusion plugin config.examples must not be empty if provided',
-        );
-        config.examples.forEach((example, index) => {
-          invariant(
-            typeof example === 'string' && example.trim().length > 0,
-            `Role confusion plugin config.examples[${index}] must be a non-empty string`,
-          );
-        });
-      }
-    },
   ),
 );
 

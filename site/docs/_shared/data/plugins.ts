@@ -2026,10 +2026,10 @@ export const PLUGINS = [
     isRemote: true,
   },
   {
-    category: 'Trust and Safety',
+    category: 'Security and Access Control',
     description:
-      'Tests whether AI maintains professional boundaries when users request persona or character changes',
-    label: 'brand',
+      'Tests whether AI assumes ungranted roles, authority, credentials, or capabilities',
+    label: 'technical',
     link: '/docs/red-team/plugins/role-confusion/',
     name: 'Role Confusion',
     pluginId: 'role-confusion',
@@ -2038,8 +2038,7 @@ export const PLUGINS = [
       agent: true,
       chat: true,
     },
-    vulnerabilityType: 'misinformation and misuse',
-    isRemote: true,
+    vulnerabilityType: 'security',
   },
   {
     category: 'Security and Access Control',

@@ -190,7 +190,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
   'role-confusion':
-    'Tests whether AI maintains proper role boundaries when users request persona or character changes',
+    'Tests whether AI assumes ungranted roles, authority, credentials, or capabilities',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
@@ -650,7 +650,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
-  'role-confusion': Severity.Low,
+  'role-confusion': Severity.Medium,
   'shell-injection': Severity.High,
   'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
@@ -677,6 +677,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
+    'role-confusion',
     'reasoning-dos',
     'shell-injection',
     'special-token-injection',
@@ -764,7 +765,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'policy',
     'politics',
     'religion',
-    'role-confusion',
     'unverifiable-claims',
   ],
 
@@ -1255,7 +1255,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'role-confusion':
-    'Tests whether AI maintains proper role boundaries when users request persona or character changes',
+    'Tests whether AI assumes ungranted roles, authority, credentials, or capabilities',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',

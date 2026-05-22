@@ -141,21 +141,15 @@ describe('constants', () => {
     ]);
   });
 
-  it('remote-only UI guards should include coding-agent plugins, collections, and role confusion', () => {
+  it('remote-only UI guards should exclude locally generated role confusion', () => {
     expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
-      expect.arrayContaining([
-        ...CODING_AGENT_COLLECTIONS,
-        ...CODING_AGENT_PLUGINS,
-        'role-confusion',
-      ]),
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
+    expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain('role-confusion');
     expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
-      expect.arrayContaining([
-        ...CODING_AGENT_COLLECTIONS,
-        ...CODING_AGENT_PLUGINS,
-        'role-confusion',
-      ]),
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
+    expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain('role-confusion');
   });
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {

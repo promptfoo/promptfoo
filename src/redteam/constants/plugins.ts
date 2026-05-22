@@ -579,7 +579,6 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'rag-source-attribution',
   'reasoning-dos',
   'religion',
-  'role-confusion',
   'special-token-injection',
   'ssrf',
   'system-prompt-override',
