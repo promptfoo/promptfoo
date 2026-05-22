@@ -159,6 +159,41 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 250');
   });
 
+  it('keeps a matched aggregate parent when its token total exceeds descendants', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 299, source: 'trace' } },
+      renderedValue: { max: 299, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'parent',
+              name: 'agent.run',
+              startTime: 0,
+              endTime: 100,
+              attributes: { 'gen_ai.usage.total_tokens': 300 },
+            },
+            {
+              spanId: 'child',
+              parentSpanId: 'parent',
+              name: 'llm.completion',
+              startTime: 10,
+              endTime: 90,
+              attributes: { 'gen_ai.usage.total_tokens': 100 },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 300');
+  });
+
   it('falls back to providerResponse.tokenUsage when no trace is present', () => {
     const params: AssertionParams = {
       ...baseParams,
@@ -212,6 +247,22 @@ describe('handleTokensUsed', () => {
     expect(result.pass).toBe(true);
     expect(result.reason).toContain('Tokens used: 0');
     expect(result.reason).toContain('source=response');
+  });
+
+  it('falls back to provider token components when response total is zero', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 49, source: 'response' } },
+      renderedValue: { max: 49, source: 'response' },
+      providerResponse: {
+        output: 'o',
+        tokenUsage: { total: 0, prompt: 30, completion: 20 },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 50');
   });
 
   it('falls back to providerResponse.tokenUsage when trace data has no spans', () => {

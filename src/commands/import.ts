@@ -8,13 +8,14 @@ import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
-import EvalResult from '../models/evalResult';
+import EvalResult, { stripTraceLinkageFromMetadata } from '../models/evalResult';
 import telemetry from '../telemetry';
 import { getTraceStore } from '../tracing/store';
 import { sha256 } from '../util/createHash';
 import type { Command } from 'commander';
 
 import type {
+  EvaluateResult,
   EvaluateSummaryV2,
   EvaluateSummaryV3,
   ExportedBlobAsset,
@@ -302,9 +303,10 @@ async function importTraces(
   traces: TraceData[],
   evalId: string,
   generateNewTraceIds: boolean,
-): Promise<void> {
+): Promise<Map<string, string>> {
   const traceStore = getTraceStore();
   const usedTraceIds = new Set<string>();
+  const importedTraceIds = new Map<string, string>();
   for (const trace of traces) {
     // Trace IDs are globally unique in the local trace store. Duplicate eval
     // imports and conflicting imports need fresh IDs so spans never attach to
@@ -324,7 +326,36 @@ async function importTraces(
     if (trace.spans.length > 0) {
       await traceStore.addSpans(traceId, trace.spans);
     }
+    importedTraceIds.set(trace.traceId, traceId);
   }
+  return importedTraceIds;
+}
+
+function remapImportedResultTraceLinkage(
+  results: EvaluateResult[],
+  importedTraceIds: Map<string, string>,
+  evalId: string,
+): EvaluateResult[] {
+  return results.map((result) => {
+    const importedTraceId = result.traceId && importedTraceIds.get(result.traceId);
+    if (importedTraceId) {
+      return {
+        ...result,
+        traceId: importedTraceId,
+        evaluationId: evalId,
+      };
+    }
+
+    if (!result.traceId && !result.evaluationId) {
+      return result;
+    }
+
+    const { traceId: _traceId, evaluationId: _evaluationId, ...unlinkedResult } = result;
+    return {
+      ...unlinkedResult,
+      metadata: stripTraceLinkageFromMetadata(result.metadata),
+    };
+  });
 }
 
 interface ImportedEvalContext {
@@ -350,8 +381,13 @@ async function createImportedV3Eval(
     runtimeOptions: evalData.runtimeOptions,
     ...extractDurations(evalData),
   });
-  await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
-  await importTraces(traces, evalRecord.id, context.newId);
+  const importedTraceIds = await importTraces(traces, evalRecord.id, context.newId);
+  const importedResults = remapImportedResultTraceLinkage(
+    evalData.results.results,
+    importedTraceIds,
+    evalRecord.id,
+  );
+  await EvalResult.createManyFromEvaluateResult(importedResults, evalRecord.id);
   await recordImportedBlobReferences(blobAssets, evalRecord.id);
   return evalRecord.id;
 }

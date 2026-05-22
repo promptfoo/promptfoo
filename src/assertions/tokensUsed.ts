@@ -57,25 +57,54 @@ function tokensFromTrace(spans: TraceSpan[], pattern: string): number {
     .filter((span) => matchesPattern(span.name, pattern))
     .map((span) => ({ span, total: sumTokenAttributes(span.attributes) }))
     .filter(({ total }) => total > 0);
-  const matchedTokenSpanIds = new Set(matchedTokenSpans.map(({ span }) => span.spanId));
-  const ancestorTokenSpanIds = new Set<string>();
+  const matchedTokenSpansById = new Map(
+    matchedTokenSpans.map((tokenSpan) => [tokenSpan.span.spanId, tokenSpan]),
+  );
+  const descendantTokenSpanIdsById = new Map<string, string[]>();
+  const rootTokenSpanIds: string[] = [];
 
   for (const { span } of matchedTokenSpans) {
     let parentSpanId = span.parentSpanId;
     const visited = new Set<string>();
+    let matchedParentSpanId: string | undefined;
     while (parentSpanId && !visited.has(parentSpanId)) {
       visited.add(parentSpanId);
-      if (matchedTokenSpanIds.has(parentSpanId)) {
-        ancestorTokenSpanIds.add(parentSpanId);
+      if (matchedTokenSpansById.has(parentSpanId)) {
+        matchedParentSpanId = parentSpanId;
+        break;
       }
       parentSpanId = spansById.get(parentSpanId)?.parentSpanId;
     }
+
+    if (!matchedParentSpanId) {
+      rootTokenSpanIds.push(span.spanId);
+      continue;
+    }
+
+    const descendants = descendantTokenSpanIdsById.get(matchedParentSpanId) ?? [];
+    descendants.push(span.spanId);
+    descendantTokenSpanIdsById.set(matchedParentSpanId, descendants);
   }
 
-  return matchedTokenSpans.reduce(
-    (sum, { span, total }) => (ancestorTokenSpanIds.has(span.spanId) ? sum : sum + total),
-    0,
-  );
+  const coveredTokens = (spanId: string, visited: Set<string>): number => {
+    if (visited.has(spanId)) {
+      return 0;
+    }
+
+    const tokenSpan = matchedTokenSpansById.get(spanId);
+    if (!tokenSpan) {
+      return 0;
+    }
+
+    const nextVisited = new Set(visited).add(spanId);
+    const descendantTotal = (descendantTokenSpanIdsById.get(spanId) ?? []).reduce(
+      (sum, descendantSpanId) => sum + coveredTokens(descendantSpanId, nextVisited),
+      0,
+    );
+    return Math.max(tokenSpan.total, descendantTotal);
+  };
+
+  return rootTokenSpanIds.reduce((sum, spanId) => sum + coveredTokens(spanId, new Set()), 0);
 }
 
 function tokensFromProviderResponse(params: AssertionParams): number {
@@ -86,20 +115,22 @@ function tokensFromProviderResponse(params: AssertionParams): number {
     );
   }
 
+  const prompt = nonNegativeTokenValue(usage.prompt);
+  const completion = nonNegativeTokenValue(usage.completion);
+  const componentTotal =
+    prompt === undefined && completion === undefined
+      ? undefined
+      : (prompt ?? 0) + (completion ?? 0);
   const total = nonNegativeTokenValue(usage.total);
-  if (total !== undefined) {
+  if (total !== undefined && (total > 0 || !componentTotal)) {
     return total;
   }
 
-  const prompt = nonNegativeTokenValue(usage.prompt);
-  const completion = nonNegativeTokenValue(usage.completion);
-  if (prompt === undefined && completion === undefined) {
-    throw new Error(
-      'No token usage data available for tokens-used assertion from provider response',
-    );
+  if (componentTotal !== undefined) {
+    return componentTotal;
   }
 
-  return (prompt ?? 0) + (completion ?? 0);
+  throw new Error('No token usage data available for tokens-used assertion from provider response');
 }
 
 function resolveTokenUsage(

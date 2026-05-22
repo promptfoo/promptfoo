@@ -83,6 +83,7 @@ describe('TraceStore', () => {
         traceId: 'test-trace-id',
         evaluationId: 'test-eval-id',
         testCaseId: 'test-case-id',
+        createdAt: expect.any(Number),
         metadata: { test: 'data' },
       });
       expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
