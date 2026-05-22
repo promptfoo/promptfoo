@@ -74,6 +74,17 @@ describe('database WAL mode', () => {
     }
   });
 
+  it('opens database paths with URL-reserved characters', async () => {
+    const configDir = path.join(tempDir, 'nested#config');
+    fs.mkdirSync(configDir);
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: configDir });
+
+    const database = await import('../src/database');
+    await database.getDb();
+
+    expect(fs.existsSync(database.getDbPath())).toBe(true);
+  });
+
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: 'true' });
 

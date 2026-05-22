@@ -110,6 +110,37 @@ describe('database', () => {
       ).resolves.toEqual([{ id: 'a' }, { id: 'b' }]);
     });
 
+    it('should serialize plain statements with top-level transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE transaction_plain_statement_test (id TEXT PRIMARY KEY)');
+
+      let markTransactionStarted: () => void;
+      const transactionStarted = new Promise<void>((resolve) => {
+        markTransactionStarted = resolve;
+      });
+      let releaseTransaction!: () => void;
+      const transactionRelease = new Promise<void>((resolve) => {
+        releaseTransaction = resolve;
+      });
+
+      const transactionPromise = db.transaction(async (tx) => {
+        await tx.run("INSERT INTO transaction_plain_statement_test (id) VALUES ('transaction')");
+        markTransactionStarted();
+        await transactionRelease;
+      });
+
+      await transactionStarted;
+      const statementPromise = db.run(
+        "INSERT INTO transaction_plain_statement_test (id) VALUES ('statement')",
+      );
+      releaseTransaction();
+
+      await Promise.all([transactionPromise, statementPromise]);
+      await expect(
+        db.all<{ id: string }>('SELECT id FROM transaction_plain_statement_test ORDER BY id'),
+      ).resolves.toEqual([{ id: 'statement' }, { id: 'transaction' }]);
+    });
+
     it('should reuse the active transaction for nested root transactions', async () => {
       const db = await getDb();
       await db.run('CREATE TABLE nested_transaction_test (id TEXT PRIMARY KEY)');

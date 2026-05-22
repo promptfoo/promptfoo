@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { pathToFileURL } from 'node:url';
 import * as path from 'path';
 
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
@@ -71,17 +72,37 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   }
 }
 
-function serializeTransactions(db: Drizzle): Drizzle {
+function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
   const transaction = db.transaction.bind(db);
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
   const activeTransaction = new AsyncLocalStorage<TransactionContext>();
-  let transactionQueue = Promise.resolve();
+  let operationQueue = Promise.resolve();
 
-  // better-sqlite3 executed all writes synchronously on one connection. libsql opens a
-  // fresh connection for each top-level transaction, so overlapping transactions on the
-  // shared client can otherwise fail immediately with SQLITE_BUSY.
+  const runSerialized = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = operationQueue.then(operation);
+    operationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
+  const serializeClientMethod = <TArgs extends unknown[], TResult>(
+    method: (...args: TArgs) => Promise<TResult>,
+  ) => {
+    return (...args: TArgs) => runSerialized(() => method(...args));
+  };
+
+  // better-sqlite3 executed statements synchronously on one connection. libsql opens a
+  // new logical connection for top-level statements and interactive transactions, so an
+  // ordinary write started while a transaction owns the write lock fails with SQLITE_BUSY.
+  client.execute = serializeClientMethod(client.execute.bind(client)) as typeof client.execute;
+  client.batch = serializeClientMethod(client.batch.bind(client));
+  client.migrate = serializeClientMethod(client.migrate.bind(client));
+  client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client));
+
   db.transaction = ((callback, config) => {
     const currentTransaction = activeTransaction.getStore();
     if (currentTransaction) {
@@ -90,14 +111,9 @@ function serializeTransactions(db: Drizzle): Drizzle {
       return callback(currentTransaction);
     }
 
-    const result = transactionQueue.then(() =>
+    return runSerialized(() =>
       transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
     );
-    transactionQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
   }) as typeof db.transaction;
 
   return db;
@@ -118,14 +134,14 @@ export async function getDb() {
       const isTesting = getEnvBool('IS_TESTING');
       // libsql opens fresh connections for top-level transactions, so tests need a
       // shared in-memory database rather than connection-local `:memory:`.
-      const dbUrl = isTesting ? 'file::memory:?cache=shared' : `file:${getDbPath()}`;
+      const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
       const client = createClient({ url: dbUrl });
       sqliteInstance = client;
 
       await configureDatabase(client, isTesting);
 
       const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-      dbInstance = serializeTransactions(drizzle(client, { logger: drizzleLogger }));
+      dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }));
       return dbInstance;
     })().catch((error) => {
       sqliteInstance?.close();
