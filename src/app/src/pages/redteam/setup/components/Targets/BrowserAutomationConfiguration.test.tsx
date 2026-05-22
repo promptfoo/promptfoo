@@ -92,11 +92,13 @@ describe('BrowserAutomationConfiguration', () => {
     ]);
   });
 
-  it('exposes the runtime-supported screenshot action fields', () => {
+  it('exposes the runtime-supported screenshot action fields', async () => {
+    const user = userEvent.setup();
+    const updateCustomTarget = vi.fn();
     renderWithProviders(
       <BrowserAutomationConfiguration
         selectedTarget={providerWithSteps([{ action: 'screenshot', args: { path: '' } }])}
-        updateCustomTarget={vi.fn()}
+        updateCustomTarget={updateCustomTarget}
         fieldErrors={{
           stepErrors: { 0: { path: 'Step 1: enter a screenshot file path.' } },
         }}
@@ -107,6 +109,16 @@ describe('BrowserAutomationConfiguration', () => {
       'Step 1: enter a screenshot file path.',
     );
     expect(screen.getByLabelText(/Screenshot File Path/)).toBeRequired();
+    expect(screen.getByLabelText('Capture Full Page')).toHaveAccessibleDescription(
+      /include scrollable content below the visible viewport/i,
+    );
+
+    await user.click(screen.getByLabelText('Capture Full Page'));
+    await user.click(screen.getByRole('option', { name: 'Yes (Entire Page)' }));
+
+    expect(updateCustomTarget).toHaveBeenCalledWith('steps', [
+      { action: 'screenshot', args: { path: '', fullPage: true } },
+    ]);
   });
 
   it('discloses and saves advanced extraction scripts within extract steps', () => {

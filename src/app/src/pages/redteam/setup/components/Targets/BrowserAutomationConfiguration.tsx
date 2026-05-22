@@ -409,30 +409,61 @@ const BrowserAutomationConfiguration = ({
                 )}
 
                 {step.action === 'screenshot' && (
-                  <div className="space-y-2">
-                    <Label htmlFor={`step-${index}-path`}>
-                      Screenshot File Path
-                      <RequiredIndicator />
-                    </Label>
-                    <Input
-                      id={`step-${index}-path`}
-                      required
-                      value={step.args?.path || ''}
-                      onChange={(e) => {
-                        const newSteps = [...(selectedTarget.config.steps || [])];
-                        newSteps[index] = {
-                          ...step,
-                          args: { ...step.args, path: e.target.value },
-                        };
-                        updateCustomTarget('steps', newSteps);
-                      }}
-                      placeholder="screenshots/result.png"
-                      {...getStepErrorProps(index, 'path')}
-                    />
-                    <BrowserFieldError
-                      id={getStepErrorId(index, 'path')}
-                      error={getStepError(index, 'path')}
-                    />
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor={`step-${index}-path`}>
+                        Screenshot File Path
+                        <RequiredIndicator />
+                      </Label>
+                      <Input
+                        id={`step-${index}-path`}
+                        required
+                        value={step.args?.path || ''}
+                        onChange={(e) => {
+                          const newSteps = [...(selectedTarget.config.steps || [])];
+                          newSteps[index] = {
+                            ...step,
+                            args: { ...step.args, path: e.target.value },
+                          };
+                          updateCustomTarget('steps', newSteps);
+                        }}
+                        placeholder="screenshots/result.png"
+                        {...getStepErrorProps(index, 'path')}
+                      />
+                      <BrowserFieldError
+                        id={getStepErrorId(index, 'path')}
+                        error={getStepError(index, 'path')}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor={`step-${index}-full-page`}>Capture Full Page</Label>
+                      <Select
+                        value={String(step.args?.fullPage ?? false)}
+                        onValueChange={(value) => {
+                          const newSteps = [...(selectedTarget.config.steps || [])];
+                          newSteps[index] = {
+                            ...step,
+                            args: { ...step.args, fullPage: value === 'true' },
+                          };
+                          updateCustomTarget('steps', newSteps);
+                        }}
+                      >
+                        <SelectTrigger
+                          id={`step-${index}-full-page`}
+                          aria-describedby={`step-${index}-full-page-help`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="false">No (Visible Viewport)</SelectItem>
+                          <SelectItem value="true">Yes (Entire Page)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <HelperText id={`step-${index}-full-page-help`} className="text-sm">
+                        Choose Yes to include scrollable content below the visible viewport.
+                      </HelperText>
+                    </div>
                   </div>
                 )}
 
