@@ -51,13 +51,23 @@ describe('HttpAdvancedConfiguration', () => {
     mockUpdateCustomTarget = vi.fn();
   });
 
-  it('adapts advanced tabs across narrow and wide layouts', () => {
+  const revealAdvancedConfiguration = async (user: ReturnType<typeof userEvent.setup>) => {
+    if (!screen.queryByRole('tablist')) {
+      await user.click(screen.getByRole('button', { name: /Advanced HTTP settings/i }));
+    }
+  };
+
+  it('discloses advanced tabs on request for a new HTTP provider', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <HttpAdvancedConfiguration
         selectedTarget={{ id: 'http-provider', config: {} }}
         updateCustomTarget={mockUpdateCustomTarget}
       />,
     );
+
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    await revealAdvancedConfiguration(user);
 
     expect(screen.getByRole('tablist')).toHaveClass(
       'grid-cols-2',
@@ -76,6 +86,7 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    await revealAdvancedConfiguration(user);
     await user.click(screen.getByRole('tab', { name: 'Request Transform' }));
     expect(screen.getByLabelText('Request Transform Function')).toBeInTheDocument();
 
@@ -129,6 +140,7 @@ describe('HttpAdvancedConfiguration', () => {
         />,
       );
 
+      await revealAdvancedConfiguration(user);
       // Click on Token Estimation tab
       const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
       await user.click(tokenEstimationTab);
@@ -154,6 +166,7 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    await revealAdvancedConfiguration(user);
     // Click on Token Estimation tab
     const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
     await user.click(tokenEstimationTab);
@@ -555,6 +568,7 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    await revealAdvancedConfiguration(user);
     const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
     await user.click(authorizationTab);
 
