@@ -71,6 +71,9 @@ const BrowserAutomationConfiguration = ({
   fieldErrors = {},
 }: BrowserAutomationConfigurationProps) => {
   const fieldErrorIdPrefix = useId();
+  const headlessModeHelpId = `${fieldErrorIdPrefix}-headless-mode-help`;
+  const timeoutHelpId = `${fieldErrorIdPrefix}-timeout-help`;
+  const responseTransformHelpId = `${fieldErrorIdPrefix}-response-transform-help`;
   const stepsErrorId = `${fieldErrorIdPrefix}-steps`;
   const getStepError = (index: number, field: keyof BrowserStepFieldErrors) =>
     fieldErrors.stepErrors?.[index]?.[field];
@@ -100,7 +103,7 @@ const BrowserAutomationConfiguration = ({
             value={String(selectedTarget.config.headless ?? true)}
             onValueChange={(value) => updateCustomTarget('headless', value === 'true')}
           >
-            <SelectTrigger id="headless-mode">
+            <SelectTrigger id="headless-mode" aria-describedby={headlessModeHelpId}>
               <SelectValue placeholder="Select mode" />
             </SelectTrigger>
             <SelectContent>
@@ -108,6 +111,10 @@ const BrowserAutomationConfiguration = ({
               <SelectItem value="false">No (Visible Browser)</SelectItem>
             </SelectContent>
           </Select>
+          <p id={headlessModeHelpId} className="text-sm text-muted-foreground">
+            Use a hidden browser for evaluation runs. Choose a visible browser when debugging steps
+            locally.
+          </p>
         </div>
 
         <div className="mt-4 space-y-2">
@@ -117,8 +124,9 @@ const BrowserAutomationConfiguration = ({
             type="number"
             value={selectedTarget.config.timeoutMs || 30000}
             onChange={(e) => updateCustomTarget('timeoutMs', Number(e.target.value))}
+            aria-describedby={timeoutHelpId}
           />
-          <p className="text-sm text-muted-foreground">
+          <p id={timeoutHelpId} className="text-sm text-muted-foreground">
             Maximum time to wait for browser operations (in milliseconds)
           </p>
         </div>
@@ -130,8 +138,9 @@ const BrowserAutomationConfiguration = ({
             value={selectedTarget.config.transformResponse || ''}
             onChange={(e) => updateCustomTarget('transformResponse', e.target.value)}
             placeholder="e.g., extracted.searchResults"
+            aria-describedby={responseTransformHelpId}
           />
-          <p className="text-sm text-muted-foreground">
+          <p id={responseTransformHelpId} className="text-sm text-muted-foreground">
             JavaScript expression to parse the extracted data
           </p>
         </div>

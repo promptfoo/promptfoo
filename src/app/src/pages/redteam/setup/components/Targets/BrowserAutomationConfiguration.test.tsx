@@ -12,6 +12,25 @@ const providerWithSteps = (steps: ProviderOptions['config']['steps']): ProviderO
 });
 
 describe('BrowserAutomationConfiguration', () => {
+  it('describes browser execution and output settings at their controls', () => {
+    renderWithProviders(
+      <BrowserAutomationConfiguration
+        selectedTarget={providerWithSteps([])}
+        updateCustomTarget={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Headless Mode')).toHaveAccessibleDescription(
+      /Use a hidden browser for evaluation runs/i,
+    );
+    expect(screen.getByLabelText('Timeout (ms)')).toHaveAccessibleDescription(
+      /Maximum time to wait for browser operations/i,
+    );
+    expect(screen.getByLabelText('Response Transform')).toHaveAccessibleDescription(
+      /JavaScript expression to parse the extracted data/i,
+    );
+  });
+
   it('associates navigation validation with the URL that needs correction', () => {
     renderWithProviders(
       <BrowserAutomationConfiguration
