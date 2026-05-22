@@ -646,17 +646,12 @@ function createRunEvalState({
 }
 
 /**
- * Reserved runtime-var names injected into every eval step's `vars`.
+ * Builds the reserved runtime vars injected into every eval step's `vars` and
+ * exposed to prompt/provider rendering.
  *
- * The `__eval*` namespace (and `__repeatIndex`) is reserved by promptfoo: any
- * user/test/dataset var with one of these names is overwritten by the runtime
- * value below. `RESERVED_RUNTIME_VAR_NAMES` is used to warn when an incoming
- * `test.vars` key collides with one of these reserved names.
- */
-const RESERVED_RUNTIME_VAR_NAMES = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
-
-/**
- * Builds the reserved runtime vars exposed to prompt/provider rendering.
+ * The names returned here (`__evalId`, `__evalStepId`, `__repeatIndex`) are
+ * reserved by promptfoo: a user/test/dataset var with one of these names is
+ * overwritten by the runtime value, and `runEvalInternal` warns when it is.
  *
  * Note: `__evalStepId` encodes the per-(repeat, combination) test index
  * (`test-<idx>-prompt-<idx>-repeat-<idx>`). It is a positional step identifier,
@@ -1355,26 +1350,27 @@ async function runEvalInternal({
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
-  // Warn before overwriting: the `__eval*` namespace is reserved by promptfoo,
-  // so an incoming `test.vars` key with one of these names is silently shadowed
-  // by the runtime value injected below.
-  for (const reservedName of RESERVED_RUNTIME_VAR_NAMES) {
-    if (test.vars && Object.hasOwn(test.vars, reservedName)) {
-      logger.warn(
-        `Test var "${reservedName}" collides with a reserved promptfoo runtime var and will be overridden. ` +
-          `Rename this var to avoid the conflict; the "__eval*" namespace is reserved.`,
-      );
-    }
-  }
-  Object.assign(
-    state.vars,
-    getEvalRuntimeVars({
-      evalId,
-      promptIndex,
-      repeatIndex,
-      testIndex,
-    }),
+  const runtimeVars = getEvalRuntimeVars({
+    evalId,
+    promptIndex,
+    repeatIndex,
+    testIndex,
+  });
+  // Warn before overwriting: these runtime var names are reserved by promptfoo.
+  // Only the keys actually injected for this step are checked (`__evalId` is
+  // omitted when no evalId is set); collisions are reported in a single warning
+  // to avoid log spam across a large eval.
+  const incomingVars = test.vars ?? {};
+  const collidingReservedVars = Object.keys(runtimeVars).filter((name) =>
+    Object.hasOwn(incomingVars, name),
   );
+  if (collidingReservedVars.length > 0) {
+    logger.warn(
+      `Test var(s) ${collidingReservedVars.map((name) => `"${name}"`).join(', ')} collide with ` +
+        `reserved promptfoo runtime vars and will be overridden. Rename them to avoid the conflict.`,
+    );
+  }
+  Object.assign(state.vars, runtimeVars);
 
   let setup = state.setup;
   let latencyMs = 0;

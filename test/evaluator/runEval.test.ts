@@ -119,6 +119,28 @@ describe('runEval', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reserved'));
   });
 
+  it('does not warn for __evalId when no evalId is set', async () => {
+    const logger = (await import('../../src/logger')).default;
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    await runEval({
+      ...defaultOptions,
+      // No evalId: getEvalRuntimeVars omits __evalId, so a user __evalId var is
+      // not overridden and must not produce a (false) collision warning.
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        vars: {
+          __evalId: 'user-eval-id',
+        },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('__evalId'));
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {
