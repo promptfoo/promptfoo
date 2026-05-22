@@ -14,7 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { useStore } from '@app/stores/evalConfig';
+import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
 import { Check, Upload } from 'lucide-react';
@@ -77,6 +77,10 @@ const EvaluateTestSuiteCreator = () => {
   const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [yamlHasUnsavedChanges, setYamlHasUnsavedChanges] = useState(false);
   const [discardYamlDialogOpen, setDiscardYamlDialogOpen] = useState(false);
+  const [pendingYamlImport, setPendingYamlImport] = useState<{
+    config: Partial<UnifiedConfig>;
+    fileName: string;
+  } | null>(null);
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -86,7 +90,9 @@ const EvaluateTestSuiteCreator = () => {
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
 
   useEffect(() => {
-    useStore.persist.rehydrate();
+    if (!useStore.persist.hasHydrated()) {
+      useStore.persist.rehydrate();
+    }
   }, []);
 
   // Fetch config status to determine if ConfigureEnvButton should be shown
@@ -195,6 +201,14 @@ const EvaluateTestSuiteCreator = () => {
     setEditorTab('ui');
   };
 
+  const applyImportedYaml = (importedConfig: Partial<UnifiedConfig>) => {
+    setConfig(importedConfig);
+    setYamlHasUnsavedChanges(false);
+    setPendingYamlImport(null);
+    setResetKey((key) => key + 1);
+    showToast('Configuration replaced from YAML', 'success');
+  };
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -210,9 +224,15 @@ const EvaluateTestSuiteCreator = () => {
           try {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object') {
-              setConfig(parsedConfig as Partial<UnifiedConfig>);
-              setResetKey((k) => k + 1);
-              showToast('Configuration replaced from YAML', 'success');
+              const importedConfig = parsedConfig as Partial<UnifiedConfig>;
+              const hasExistingSetup =
+                yamlHasUnsavedChanges || JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG);
+
+              if (hasExistingSetup) {
+                setPendingYamlImport({ config: importedConfig, fileName: file.name });
+              } else {
+                applyImportedYaml(importedConfig);
+              }
             } else {
               showToast('Invalid YAML configuration', 'error');
             }
@@ -747,6 +767,38 @@ const EvaluateTestSuiteCreator = () => {
             </Button>
             <Button variant="destructive" onClick={handleDiscardYamlAndSwitch}>
               Discard and switch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={pendingYamlImport !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingYamlImport(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Replace current setup with YAML?</DialogTitle>
+            <DialogDescription>
+              Importing{' '}
+              <code className="rounded bg-muted px-1 py-0.5">{pendingYamlImport?.fileName}</code>{' '}
+              replaces providers, prompts, test cases, run options, and any API key values entered
+              in this setup. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingYamlImport(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => pendingYamlImport && applyImportedYaml(pendingYamlImport.config)}
+            >
+              Replace setup
             </Button>
           </DialogFooter>
         </DialogContent>

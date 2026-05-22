@@ -1,6 +1,6 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
@@ -390,19 +390,34 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByRole('button', { name: 'Continue to Test Cases' })).toBeInTheDocument();
   });
 
-  it('should successfully upload and parse a valid YAML file', async () => {
+  it('should require confirmation before uploaded YAML replaces an existing setup', async () => {
     const user = userEvent.setup();
     useStore.getState().updateConfig({
       prompts: ['This should be replaced'],
-      env: { OPENAI_API_KEY: 'remove-with-old-config' },
     });
     render(<EvaluateTestSuiteCreator />);
+    act(() => {
+      useStore.getState().updateConfig({
+        env: { OPENAI_API_KEY: 'remove-with-old-config' },
+      });
+    });
 
     const mockYamlContent = 'description: Test Config\nproviders:\n  - id: test-provider';
     const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' });
+    expect(dialog).toHaveTextContent('test.yaml');
+    expect(dialog).toHaveTextContent('API key values');
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
+    expect(useStore.getState().config.prompts).toEqual(['This should be replaced']);
+    expect(useStore.getState().config.env).toEqual({
+      OPENAI_API_KEY: 'remove-with-old-config',
+    });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Replace setup' }));
 
     await waitFor(() => {
       expect(showToastMock).toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
@@ -411,6 +426,43 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(useStore.getState().config.description).toBe('Test Config');
     expect(useStore.getState().config.prompts).toBeUndefined();
     expect(useStore.getState().config.env).toBeUndefined();
+  });
+
+  it('should keep entered API keys when returning before the browser session reloads', async () => {
+    const { unmount } = render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalled();
+    });
+
+    act(() => {
+      useStore.getState().updateConfig({ env: { OPENAI_API_KEY: 'current-session-key' } });
+    });
+    unmount();
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(useStore.getState().config.env).toEqual({ OPENAI_API_KEY: 'current-session-key' });
+  });
+
+  it('should preserve the current setup when YAML replacement is cancelled', async () => {
+    const user = userEvent.setup();
+    useStore.getState().updateConfig({ prompts: ['Keep this prompt'] });
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(['description: Replacement'], 'replacement.yaml', {
+      type: 'application/yaml',
+    });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Replace current setup with YAML?' })).toBeNull();
+    expect(useStore.getState().config.prompts).toEqual(['Keep this prompt']);
+    expect(useStore.getState().config.description).toBe('');
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
   });
 
   it('should handle invalid YAML with error toast', async () => {
