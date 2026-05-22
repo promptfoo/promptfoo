@@ -229,6 +229,13 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
         </Select>
       </div>
 
+      {getAuthType() && getAuthType() !== 'digital_signature' && (
+        <p className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Authentication values entered here are included in this provider configuration and any
+          copied or downloaded YAML. Avoid entering secrets you do not intend to include.
+        </p>
+      )}
+
       {/* OAuth 2.0 Form */}
       {getAuthType() === 'oauth' &&
         (() => {

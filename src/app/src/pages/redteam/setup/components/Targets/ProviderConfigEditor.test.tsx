@@ -162,6 +162,67 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(true);
     });
 
+    it('blocks saving an HTTP provider with incomplete configured authentication', () => {
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              auth: { type: 'api_key', placement: 'header', keyName: '', value: '' },
+            },
+          }}
+          setProvider={vi.fn()}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Key Name is required for API key authentication, API Key Value is required for API key authentication',
+      );
+    });
+
+    it('allows OAuth password grants without optional client credentials', () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+              auth: {
+                type: 'oauth',
+                grantType: 'password',
+                tokenUrl: 'https://auth.example.com/token',
+                username: 'operator',
+                password: 'secret',
+              },
+            },
+          }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      expect(validateFn!()).toBe(true);
+    });
+
     it('explains missing HTTP placeholders as test inputs in eval mode', async () => {
       const user = userEvent.setup();
 

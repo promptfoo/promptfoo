@@ -211,7 +211,51 @@ function validateHttpProvider(
   if (bodyError && bodyError !== requestError) {
     errors.push(bodyError);
   }
+  errors.push(...validateHttpAuthorization(provider));
   return { errors, urlError, requestError };
+}
+
+function validateHttpAuthorization(provider: ProviderOptions): string[] {
+  const auth = provider.config.auth;
+  if (!auth) {
+    return [];
+  }
+
+  const errors: string[] = [];
+  const requireValue = (value: unknown, message: string) => {
+    if (typeof value !== 'string' || value.trim() === '') {
+      errors.push(message);
+    }
+  };
+
+  switch (auth.type) {
+    case 'oauth':
+      requireValue(auth.tokenUrl, 'Token URL is required for OAuth authentication');
+      if (auth.grantType === 'password') {
+        requireValue(auth.username, 'Username is required for OAuth password grant');
+        requireValue(auth.password, 'Password is required for OAuth password grant');
+      } else {
+        requireValue(auth.clientId, 'Client ID is required for OAuth client credentials');
+        requireValue(auth.clientSecret, 'Client Secret is required for OAuth client credentials');
+      }
+      break;
+    case 'basic':
+      requireValue(auth.username, 'Username is required for Basic authentication');
+      requireValue(auth.password, 'Password is required for Basic authentication');
+      break;
+    case 'bearer':
+      requireValue(auth.token, 'Token is required for Bearer authentication');
+      break;
+    case 'api_key':
+      requireValue(auth.keyName, 'Key Name is required for API key authentication');
+      requireValue(auth.value, 'API Key Value is required for API key authentication');
+      break;
+    case 'file':
+      requireValue(auth.path, 'Auth File Path is required for file authentication');
+      break;
+  }
+
+  return errors;
 }
 
 function validateAgentProvider(provider: ProviderOptions): string[] {

@@ -638,6 +638,11 @@ describe('HttpAdvancedConfiguration', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Authorization' }));
 
+    expect(
+      screen.getByText(
+        /included in this provider configuration and any copied or downloaded YAML/i,
+      ),
+    ).toBeVisible();
     for (const name of ['Token URL', 'Client ID', 'Client Secret']) {
       const input = screen.getByLabelText(new RegExp(name));
       expect(input).toHaveAccessibleName(name);
