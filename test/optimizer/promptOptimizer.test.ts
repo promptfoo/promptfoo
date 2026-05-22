@@ -390,6 +390,10 @@ describe('prompt optimizer', () => {
 
     vi.mocked(evaluate)
       .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
       .mockResolvedValueOnce(candidateEval)
       .mockResolvedValueOnce(candidateEval)
       .mockResolvedValueOnce(candidateEval);
@@ -397,13 +401,15 @@ describe('prompt optimizer', () => {
     const testSuite: TestSuite = {
       providers: [createMockProvider({ id: 'target-provider' })],
       prompts: [{ raw: 'Seed', label: 'Seed' }],
-      tests: [{}],
+      tests: [{}, {}],
     };
 
-    await optimizePromptTestSuite({ outputPath: 'results.jsonl' }, testSuite);
+    await optimizePromptTestSuite({ outputPath: 'results.jsonl' }, testSuite, {
+      validationSplit: 0.5,
+    });
 
     const evalCalls = vi.mocked(evaluate).mock.calls;
-    expect(evalCalls.length).toBeGreaterThan(0);
+    expect(evalCalls).toHaveLength(8);
     for (const call of evalCalls) {
       expect(call[1]).toBeInstanceOf(Eval);
       expect(call[1].config.outputPath).toBeUndefined();
