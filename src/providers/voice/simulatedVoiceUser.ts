@@ -33,6 +33,7 @@ const DEFAULT_SAMPLE_RATE = 24000;
 const DEFAULT_AUDIO_FORMAT = 'pcm16';
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_TIMEOUT_MS = 120000;
+const DEFAULT_INSTRUCTIONS_TEMPLATE = '{{instructions}}';
 
 /**
  * Provider options for SimulatedVoiceUser.
@@ -171,7 +172,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Render the instructions with context variables
-    const rawInstructions = this.voiceConfig.instructions || prompt;
+    const rawInstructions = this.voiceConfig.instructions || DEFAULT_INSTRUCTIONS_TEMPLATE;
     const instructions = getNunjucksEngine().renderString(rawInstructions, context?.vars || {});
 
     logger.debug('[SimulatedVoiceUser] Starting voice conversation:', {

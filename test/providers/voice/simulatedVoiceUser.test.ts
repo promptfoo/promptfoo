@@ -180,6 +180,33 @@ describe('SimulatedVoiceUser', () => {
     );
   });
 
+  it('uses the instructions test variable for caller goals by default', async () => {
+    providerMocks.start.mockResolvedValue({
+      duration: 1,
+      stopReason: 'goal_achieved',
+      success: true,
+      transcript: '',
+      turnCount: 0,
+      turns: [],
+    });
+
+    await new SimulatedVoiceUser({}).callApi('Target prompt', {
+      prompt: { raw: 'Target prompt', display: 'Target prompt', label: 'target' },
+      vars: { instructions: 'Caller should ask about their balance.' },
+    });
+
+    expect(providerMocks.MockOrchestrator.instances[0].config).toEqual(
+      expect.objectContaining({
+        simulatedUserConfig: expect.objectContaining({
+          instructions: expect.stringContaining('Caller should ask about their balance.'),
+        }),
+        targetConfig: expect.objectContaining({
+          instructions: 'Target prompt',
+        }),
+      }),
+    );
+  });
+
   it('returns local orchestrator errors', async () => {
     providerMocks.start.mockRejectedValue(new Error('local failed'));
 

@@ -67,11 +67,11 @@ npx promptfoo@latest eval
 
 ### Turn Detection (VAD)
 
-| Option               | Description                                 | Default      |
-| -------------------- | ------------------------------------------- | ------------ |
-| `turnDetectionMode`  | Mode (`server_vad`, `client_vad`, `manual`) | `server_vad` |
-| `silenceThresholdMs` | Silence duration to detect turn end         | `500`        |
-| `vadThreshold`       | Voice activity detection sensitivity        | `0.5`        |
+| Option               | Description                              | Default      |
+| -------------------- | ---------------------------------------- | ------------ |
+| `turnDetectionMode`  | Mode (`server_vad`, `silence`, `hybrid`) | `server_vad` |
+| `silenceThresholdMs` | Silence duration to detect turn end      | `500`        |
+| `vadThreshold`       | Voice activity detection sensitivity     | `0.5`        |
 
 ## Writing Test Goals
 
