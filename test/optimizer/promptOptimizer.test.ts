@@ -634,7 +634,7 @@ describe('prompt optimizer', () => {
     };
 
     await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
-      'No eval test cases match the selected prompt/provider — check your prompts/providers filters.',
+      'No eval test cases ran for the selected prompt/provider — check filters and other test scoping options.',
     );
     // The optimizer must fail fast instead of running candidate rounds against
     // empty evidence.
@@ -810,10 +810,9 @@ function evalResult(promptIdx: number, success: boolean, reason: string): Evalua
 function evalWith(prompts: CompletedPrompt[], results: EvaluateResult[]): Eval {
   const evalRecord = new Eval({}, { persisted: false, prompts });
   evalRecord.prompts = prompts;
-  // A real evaluator run that produced these prompts always schedules at least
-  // one result row. Backfill a placeholder per prompt when a test does not care
-  // about result contents, so the optimizer's zero-runnable-tests guard only
-  // fires for genuinely empty evals (see `emptyEval`).
+  // These optimizer tests often omit result rows when they only care about
+  // prompt scores. Backfill placeholders so the zero-runnable-tests guard only
+  // fires for cases that intentionally use `emptyEval`.
   const backfilledResults =
     results.length === 0
       ? prompts.map((_prompt, promptIdx) => evalResult(promptIdx, true, 'placeholder result'))
@@ -824,8 +823,7 @@ function evalWith(prompts: CompletedPrompt[], results: EvaluateResult[]): Eval {
 
 /**
  * Builds an Eval whose results are genuinely empty, mirroring an evaluator run
- * where prompt/provider filters scoped every configured test away from the
- * selected pair.
+ * where active test scoping left no runnable result rows.
  */
 function emptyEval(prompts: CompletedPrompt[]): Eval {
   const evalRecord = new Eval({}, { persisted: false, prompts });

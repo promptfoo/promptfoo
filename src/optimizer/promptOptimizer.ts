@@ -636,7 +636,7 @@ export async function optimizePromptTestSuite(
   );
   if (baselineEval.results.length === 0) {
     throw new Error(
-      'No eval test cases match the selected prompt/provider — check your prompts/providers filters.',
+      'No eval test cases ran for the selected prompt/provider — check filters and other test scoping options.',
     );
   }
   const baselineValidationEval = validationTestSuite
