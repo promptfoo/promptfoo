@@ -54,7 +54,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
-| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
+| [skill-used](#skill-used)                                       | Check expected or forbidden skills in normalized provider metadata |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
