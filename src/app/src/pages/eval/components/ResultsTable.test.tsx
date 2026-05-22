@@ -4684,6 +4684,49 @@ describe('ResultsTable default column sizing', () => {
     expect(outputWidth).toBe(480);
   });
 
+  it('resamples metadata widths when search changes the result set', () => {
+    let table = mockTable;
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const initialHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const initialWidth = Number.parseFloat(initialHeader?.style.width || '0');
+
+    table = {
+      ...mockTable,
+      body: [
+        {
+          ...mockTable.body[0],
+          vars: ['ok', 'compact'],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} debouncedSearchText="compact" zoom={1.01} />);
+
+    const filteredHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const filteredWidth = Number.parseFloat(filteredHeader?.style.width || '0');
+
+    expect(initialHeader).not.toBeNull();
+    expect(filteredHeader).not.toBeNull();
+    expect(filteredWidth).toBeLessThan(initialWidth);
+  });
+
   it('renders matching header and body colgroups for the computed widths', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
@@ -4912,5 +4955,25 @@ describe('useStableColumnSampleBody', () => {
 
     rerender({ evalId: 'eval-b', body: evalBPage2 });
     expect(result.current).toBe(evalBPage1);
+  });
+
+  it('waits for fresh rows when filters change the result-set key', () => {
+    const unfilteredRows = makeRows(2);
+    const filteredPage1 = makeRows(1);
+    const filteredPage2 = makeRows(1);
+    const { result, rerender } = renderHook(
+      ({ resultSetKey, body }) => useStableColumnSampleBody(resultSetKey, body),
+      { initialProps: { resultSetKey: 'eval-a:all', body: unfilteredRows } },
+    );
+    expect(result.current).toBe(unfilteredRows);
+
+    rerender({ resultSetKey: 'eval-a:filtered', body: unfilteredRows });
+    expect(result.current).toBe(unfilteredRows);
+
+    rerender({ resultSetKey: 'eval-a:filtered', body: filteredPage1 });
+    expect(result.current).toBe(filteredPage1);
+
+    rerender({ resultSetKey: 'eval-a:filtered', body: filteredPage2 });
+    expect(result.current).toBe(filteredPage1);
   });
 });

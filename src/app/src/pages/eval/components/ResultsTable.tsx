@@ -216,42 +216,42 @@ function getMetadataColumnSizeValues<Row>(
  * The eval results store paginates server-side, so `tableBody` only ever holds
  * the current page. Estimating column widths directly from it makes unresized
  * columns visibly jump page-to-page. This captures the first non-empty page
- * seen for an eval and reuses it until the eval changes.
+ * seen for a result set and reuses it until the result set changes.
  */
 export function useStableColumnSampleBody(
-  evalId: string | null,
+  resultSetKey: string | null,
   tableBody: ExtendedEvaluateTableRow[],
 ): ExtendedEvaluateTableRow[] {
-  const previousEvalIdRef = useRef(evalId);
+  const previousResultSetKeyRef = useRef(resultSetKey);
   const previousTableBodyRef = useRef(tableBody);
   const [sample, setSample] = React.useState<{
-    evalId: string | null;
+    resultSetKey: string | null;
     body: ExtendedEvaluateTableRow[];
-  } | null>(() => (tableBody.length > 0 ? { evalId, body: tableBody } : null));
+  } | null>(() => (tableBody.length > 0 ? { resultSetKey, body: tableBody } : null));
 
   useEffect(() => {
-    const evalChanged = previousEvalIdRef.current !== evalId;
+    const resultSetChanged = previousResultSetKeyRef.current !== resultSetKey;
     const tableBodyChanged = previousTableBodyRef.current !== tableBody;
 
-    previousEvalIdRef.current = evalId;
+    previousResultSetKeyRef.current = resultSetKey;
     previousTableBodyRef.current = tableBody;
 
     setSample((currentSample) => {
-      if (evalChanged) {
-        // The store updates evalId before the next eval page arrives. Wait for
-        // fresh rows instead of adopting the previous eval's page as this eval's sample.
-        return tableBodyChanged && tableBody.length > 0 ? { evalId, body: tableBody } : null;
+      if (resultSetChanged) {
+        // The result-set inputs update before the next page arrives. Wait for
+        // fresh rows instead of adopting the previous result set as this sample.
+        return tableBodyChanged && tableBody.length > 0 ? { resultSetKey, body: tableBody } : null;
       }
 
-      if (currentSample?.evalId === evalId || tableBody.length === 0) {
+      if (currentSample?.resultSetKey === resultSetKey || tableBody.length === 0) {
         return currentSample;
       }
 
-      return { evalId, body: tableBody };
+      return { resultSetKey, body: tableBody };
     });
-  }, [evalId, tableBody]);
+  }, [resultSetKey, tableBody]);
 
-  return sample?.evalId === evalId ? sample.body : tableBody;
+  return sample?.resultSetKey === resultSetKey ? sample.body : tableBody;
 }
 
 function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
@@ -1806,9 +1806,65 @@ function ResultsTable({
 
   const injectVarName = config?.redteam?.injectVar || 'prompt';
 
+  // Create a stable representation of the applied filters for result-set changes.
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) => {
+        // For metadata filters with exists operator, only field is required
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        // For other metadata operators, both field and value are required
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For metric filters with is_defined operator, only field is required
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        // For metric filters with comparison operators, both field and value are required
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For non-metadata/non-metric filters, value is required
+        return Boolean(filter.value);
+      })
+      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
+    // Create a stable string representation of applied filters
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex, // Include sortIndex for complete representation
+      })),
+    );
+  }, [filters.values]);
+
   // Estimate metadata column widths from a page sample that is stable across
   // pagination, so unresized columns do not jump as the user pages.
-  const columnSizeSampleBody = useStableColumnSampleBody(evalId, tableBody);
+  const columnSizeSampleKey = React.useMemo(
+    () =>
+      JSON.stringify({
+        evalId,
+        pageSize: pagination.pageSize,
+        filterMode,
+        searchText: debouncedSearchText,
+        filters: appliedFiltersString,
+        comparisonEvalIds,
+      }),
+    [
+      evalId,
+      pagination.pageSize,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+      comparisonEvalIds,
+    ],
+  );
+  const columnSizeSampleBody = useStableColumnSampleBody(columnSizeSampleKey, tableBody);
 
   const variableColumnSizes = React.useMemo(
     () =>
@@ -1878,43 +1934,6 @@ function ResultsTable({
       setEvalDetailsHash('');
     }
   }, [navigate]);
-
-  // Create a stable reference for applied filters to avoid unnecessary re-renders
-  const appliedFiltersString = React.useMemo(() => {
-    const appliedFilters = Object.values(filters.values)
-      .filter((filter) => {
-        // For metadata filters with exists operator, only field is required
-        if (filter.type === 'metadata' && filter.operator === 'exists') {
-          return Boolean(filter.field);
-        }
-        // For other metadata operators, both field and value are required
-        if (filter.type === 'metadata') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For metric filters with is_defined operator, only field is required
-        if (filter.type === 'metric' && filter.operator === 'is_defined') {
-          return Boolean(filter.field);
-        }
-        // For metric filters with comparison operators, both field and value are required
-        if (filter.type === 'metric') {
-          return Boolean(filter.value && filter.field);
-        }
-        // For non-metadata/non-metric filters, value is required
-        return Boolean(filter.value);
-      })
-      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
-    // Create a stable string representation of applied filters
-    return JSON.stringify(
-      appliedFilters.map((f) => ({
-        type: f.type,
-        operator: f.operator,
-        value: f.value,
-        field: f.field,
-        logicOperator: f.logicOperator,
-        sortIndex: f.sortIndex, // Include sortIndex for complete representation
-      })),
-    );
-  }, [filters.values]);
 
   const hasMountedResultSetResetRef = useRef(false);
 
