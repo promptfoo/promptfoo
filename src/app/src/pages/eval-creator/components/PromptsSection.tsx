@@ -89,7 +89,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
         event.target.value = '';
       };
       reader.onerror = () => {
-        showToast('Failed to read file', 'error');
+        showToast('Unable to read this file. Please try again or choose another file.', 'error');
         event.target.value = '';
       };
       reader.readAsText(file);

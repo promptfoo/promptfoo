@@ -98,6 +98,16 @@ describe('PromptsSection', () => {
     return readAsTextMock;
   };
 
+  const createFileReaderErrorMock = () => {
+    global.FileReader = class MockFileReader {
+      onerror: ((event: ProgressEvent<FileReader>) => unknown) | null = null;
+
+      readAsText() {
+        this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+      }
+    } as unknown as typeof FileReader;
+  };
+
   it('should display a message indicating no prompts are present when the prompts list is empty', () => {
     setupStore([]);
 
@@ -413,6 +423,33 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).not.toHaveBeenCalled();
     expect(showToastMock).toHaveBeenCalledWith(
       'The file appears to be empty. Please select a file with content.',
+      'error',
+    );
+    expect(fileInput.value).toBe('');
+  });
+
+  it('guides recovery when an uploaded prompt file cannot be read', async () => {
+    const user = userEvent.setup();
+    createFileReaderErrorMock();
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error('File input element not found');
+    }
+
+    await user.upload(fileInput, new File(['prompt'], 'prompt.txt', { type: 'text/plain' }));
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Unable to read this file. Please try again or choose another file.',
       'error',
     );
     expect(fileInput.value).toBe('');
