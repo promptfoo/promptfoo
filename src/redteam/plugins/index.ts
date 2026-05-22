@@ -401,18 +401,11 @@ function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): vo
       );
     }
 
-    collectUnsupportedRemoteRedteamAssertionTypes(
-      key,
-      testCase.assert,
-      unsupportedAssertionTypes,
-    );
+    collectUnsupportedRemoteRedteamAssertionTypes(key, testCase.assert, unsupportedAssertionTypes);
   }
 
   if (unsupportedAssertionTypes.size > 0) {
-    throw new UnsupportedRemoteRedteamAssertionsError(
-      key,
-      Array.from(unsupportedAssertionTypes),
-    );
+    throw new UnsupportedRemoteRedteamAssertionsError(key, Array.from(unsupportedAssertionTypes));
   }
 }
 

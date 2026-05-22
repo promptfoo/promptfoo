@@ -50,6 +50,7 @@ import {
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
+import { RemoteRedteamAssertionContractError } from './types';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -65,7 +66,6 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from './types';
-import { RemoteRedteamAssertionContractError } from './types';
 
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 
