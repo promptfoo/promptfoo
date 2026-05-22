@@ -233,6 +233,15 @@ describe('EvaluateTestSuiteCreator', () => {
   it('should summarize incomplete setup progress and recommend the next required step', () => {
     render(<EvaluateTestSuiteCreator />);
 
+    expect(screen.getByText('How evaluations work')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Promptfoo sends each prompt with each test case to every provider, then uses your assertions to decide whether the response passes.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('1. Providers')).toBeInTheDocument();
+    expect(screen.getByText('2. Prompts')).toBeInTheDocument();
+    expect(screen.getByText('3. Test cases')).toBeInTheDocument();
     expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
     expect(screen.getByText('Add at least one provider to evaluate.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Continue to Providers' })).toBeNull();

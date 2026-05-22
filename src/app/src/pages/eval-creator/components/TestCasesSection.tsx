@@ -98,6 +98,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const testCaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
@@ -282,24 +283,25 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlineTests && (
             <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
-                    <Button variant="ghost" size="icon" asChild>
-                      <span>
-                        <UploadIcon className="size-4" />
-                      </span>
-                    </Button>
-                    <input
-                      type="file"
-                      accept=".csv,.yaml,.yml"
-                      onChange={handleAddTestCaseFromFile}
-                      className="hidden"
-                    />
-                  </label>
-                </TooltipTrigger>
-                <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
-              </Tooltip>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => testCaseFileInputRef.current?.click()}
+                >
+                  <UploadIcon className="mr-2 size-4" />
+                  Import CSV or YAML
+                </Button>
+                <input
+                  ref={testCaseFileInputRef}
+                  type="file"
+                  accept=".csv,.yaml,.yml"
+                  onChange={handleAddTestCaseFromFile}
+                  className="hidden"
+                  aria-label="Upload test cases from CSV or YAML"
+                />
+              </div>
 
               <Button
                 onClick={() => setTestCaseDialogOpen(true)}

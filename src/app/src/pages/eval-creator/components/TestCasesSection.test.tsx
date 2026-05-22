@@ -233,6 +233,27 @@ describe('TestCasesSection', () => {
       expect(fileInput).toHaveAttribute('accept', '.csv,.yaml,.yml');
     });
 
+    it('opens test case file selection from a keyboard-operable import button', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <TooltipProvider delayDuration={0}>
+          <TestCasesSection varsList={[]} />
+        </TooltipProvider>,
+      );
+
+      const fileInput = screen.getByLabelText(
+        'Upload test cases from CSV or YAML',
+      ) as HTMLInputElement;
+      const openPicker = vi.spyOn(fileInput, 'click');
+      const importButton = screen.getByRole('button', { name: 'Import CSV or YAML' });
+
+      importButton.focus();
+      await user.keyboard('{Enter}');
+
+      expect(openPicker).toHaveBeenCalledOnce();
+    });
+
     it('handles empty file upload', async () => {
       const user = userEvent.setup();
       createFileReaderMock('');

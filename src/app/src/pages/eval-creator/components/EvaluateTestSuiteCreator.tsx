@@ -269,6 +269,31 @@ const EvaluateTestSuiteCreator = () => {
         {/* Main Content */}
         <TabsContent value="ui">
           <div className="container max-w-7xl mx-auto px-4 py-4 lg:py-8">
+            <Card className="mb-4 border-primary/15 bg-primary/5 shadow-sm lg:mb-6">
+              <CardContent className="space-y-4 p-4 lg:p-5">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-primary">How evaluations work</p>
+                  <h2 className="text-lg font-semibold">Compare responses against clear checks</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Promptfoo sends each prompt with each test case to every provider, then uses
+                    your assertions to decide whether the response passes.
+                  </p>
+                </div>
+                <ol className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    ['1. Providers', 'Models or systems that respond'],
+                    ['2. Prompts', 'Instructions you want to compare'],
+                    ['3. Test cases', 'Inputs and expected behavior'],
+                  ].map(([title, explanation]) => (
+                    <li key={title} className="rounded-md border border-border bg-background p-3">
+                      <p className="text-sm font-medium">{title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{explanation}</p>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+
             <Card className="mb-4 shadow-sm lg:mb-6">
               <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between lg:p-5">
                 <div className="space-y-1">

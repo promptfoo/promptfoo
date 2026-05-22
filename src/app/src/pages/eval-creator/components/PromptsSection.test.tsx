@@ -303,6 +303,26 @@ describe('PromptsSection', () => {
     });
   });
 
+  it('opens prompt file selection from a keyboard-operable import button', async () => {
+    const user = userEvent.setup();
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const fileInput = screen.getByLabelText('Select a prompt file') as HTMLInputElement;
+    const openPicker = vi.spyOn(fileInput, 'click');
+    const importButton = screen.getByRole('button', { name: 'Import prompt' });
+
+    importButton.focus();
+    await user.keyboard('{Enter}');
+
+    expect(openPicker).toHaveBeenCalledOnce();
+  });
+
   it('should handle a file with a very long line of text', async () => {
     const user = userEvent.setup();
     const longLineText = 'This is a very long line of text without any line breaks. '.repeat(1000);

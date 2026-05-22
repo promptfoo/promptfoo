@@ -48,6 +48,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const prompts = canEditInlinePrompts ? ((rawPrompts || []) as string[]) : [];
   const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
+  const promptFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editingPromptIndex !== null && editingPromptIndex > 0 && newPromptInputRef.current) {
@@ -161,25 +162,25 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlinePrompts && (
             <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <label className="cursor-pointer" aria-label="Upload prompt from file">
-                    <Button variant="ghost" size="icon" asChild>
-                      <span>
-                        <UploadIcon className="size-4" />
-                      </span>
-                    </Button>
-                    <input
-                      type="file"
-                      accept=".txt,.md"
-                      onChange={handleAddPromptFromFile}
-                      className="hidden"
-                      aria-label="Upload prompt from file"
-                    />
-                  </label>
-                </TooltipTrigger>
-                <TooltipContent>Upload prompt from file</TooltipContent>
-              </Tooltip>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => promptFileInputRef.current?.click()}
+                >
+                  <UploadIcon className="mr-2 size-4" />
+                  Import prompt
+                </Button>
+                <input
+                  ref={promptFileInputRef}
+                  type="file"
+                  accept=".txt,.md"
+                  onChange={handleAddPromptFromFile}
+                  className="hidden"
+                  aria-label="Select a prompt file"
+                />
+              </div>
 
               <Button
                 onClick={() => setPromptDialogOpen(true)}
