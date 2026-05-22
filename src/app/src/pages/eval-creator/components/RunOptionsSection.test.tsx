@@ -93,6 +93,29 @@ describe('RunOptionsSection', () => {
     expect(screen.getByText('Fix invalid optional run settings before starting.')).toBeVisible();
   });
 
+  it('keeps optional settings expanded while a hidden correction would block running', async () => {
+    const user = userEvent.setup();
+    render(<RunOptionsSection readiness={readySetup} onChange={vi.fn()} />);
+
+    const optionalSettingsButton = screen.getByRole('button', { name: /Optional run settings/i });
+    await user.click(optionalSettingsButton);
+
+    const delayInput = screen.getByLabelText('Delay between calls (ms)');
+    await user.type(delayInput, '1.5');
+    await user.click(optionalSettingsButton);
+
+    expect(screen.getByLabelText('Delay between calls (ms)')).toBeVisible();
+    expect(delayInput).toHaveAccessibleDescription(
+      'Enter a whole number of milliseconds, 0 or greater.',
+    );
+
+    await user.clear(delayInput);
+    await user.type(delayInput, '100');
+    await user.click(optionalSettingsButton);
+
+    expect(screen.queryByLabelText('Delay between calls (ms)')).toBeNull();
+  });
+
   it('requires a whole positive maximum concurrency value', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

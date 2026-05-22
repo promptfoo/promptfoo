@@ -67,6 +67,14 @@ export function RunOptionsSection({
   const canSetMaxConcurrency = delayDraft === '' || Number(delayDraft) === 0;
   const settingsError = delayError || maxConcurrencyError;
 
+  const handleOptionalSettingsOpenChange = (open: boolean) => {
+    if (!open && settingsError) {
+      return;
+    }
+
+    setShowOptionalSettings(open);
+  };
+
   useEffect(() => {
     setDelayDraft(delay?.toString() || '');
   }, [delay]);
@@ -105,7 +113,7 @@ export function RunOptionsSection({
 
   return (
     <div className="space-y-4">
-      <Collapsible open={showOptionalSettings} onOpenChange={setShowOptionalSettings}>
+      <Collapsible open={showOptionalSettings} onOpenChange={handleOptionalSettingsOpenChange}>
         <Card className="bg-muted/30 border-dashed">
           <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 p-4 text-left">
             <div>
