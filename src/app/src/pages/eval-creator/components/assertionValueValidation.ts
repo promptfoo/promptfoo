@@ -59,6 +59,13 @@ export const RAG_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-context-relevance',
 ]);
 
+export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'llm-rubric',
+  'not-llm-rubric',
+  'g-eval',
+  'not-g-eval',
+]);
+
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-sql',
   'contains-sql',
@@ -176,7 +183,8 @@ function getThresholdError(assertion: Assertion): string | undefined {
 
   if (
     (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
-      RAG_SCORE_ASSERTION_TYPES.has(assertion.type)) &&
+      RAG_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+      MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type)) &&
     assertion.threshold !== undefined &&
     (typeof assertion.threshold !== 'number' ||
       !Number.isFinite(assertion.threshold) ||

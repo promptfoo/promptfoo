@@ -143,6 +143,7 @@ describe('AssertsForm', () => {
   });
 
   it('allows the default LLM rubric while disclosing optional criteria and cost', async () => {
+    const user = userEvent.setup();
     const onValidityChange = vi.fn();
     initialValues = [{ type: 'llm-rubric' }];
     renderComponent(
@@ -153,10 +154,65 @@ describe('AssertsForm', () => {
       />,
     );
 
-    const valueInput = screen.getByRole('textbox', { name: 'Value' });
+    const valueInput = screen.getByRole('textbox', { name: 'Rubric criteria (optional)' });
     expect(valueInput).toHaveAttribute('aria-invalid', 'false');
     expect(screen.getByText(/leave blank for the default rubric/i)).toBeInTheDocument();
+    const threshold = screen.getByRole('spinbutton', {
+      name: 'Minimum score threshold (optional)',
+    });
+    expect(threshold).toHaveAccessibleDescription(/numeric score alone does not fail/i);
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+
+    await user.type(threshold, '0.8');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'llm-rubric', threshold: 0.8 }]);
+  });
+
+  it('configures G-Eval criteria with its documented default threshold', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'g-eval', value: 'Be concise and accurate.' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByRole('textbox', { name: 'Evaluation criterion (required)' })).toHaveValue(
+      'Be concise and accurate.',
+    );
+    const threshold = screen.getByRole('spinbutton', {
+      name: 'Minimum score threshold (optional)',
+    });
+    expect(threshold).toHaveAccessibleDescription(/default threshold is 0.7/i);
+
+    await user.type(threshold, '0.9');
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'g-eval', value: 'Be concise and accurate.', threshold: 0.9 },
+    ]);
+  });
+
+  it('places missing G-Eval criterion feedback beside its required input', () => {
+    initialValues = [{ type: 'g-eval', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const criteria = screen.getByRole('textbox', { name: 'Evaluation criterion (required)' });
+    expect(criteria).toHaveAttribute('placeholder', expect.stringContaining('Example:'));
+    expect(criteria.parentElement?.nextElementSibling).toHaveTextContent(
+      'Enter at least one grading criterion for G-Eval.',
+    );
+  });
+
+  it('preserves imported multi-criterion G-Eval configurations until explicitly replaced', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'g-eval', value: ['Be accurate.', 'Be concise.'] }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Evaluation criterion (required)' })).toBeNull();
+    expect(
+      screen.getByText(/Multiple G-Eval criteria are configured.*Edit them in YAML/i),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Replace with text criteria' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'g-eval', value: '' }]);
+    expect(screen.getByRole('textbox', { name: 'Evaluation criterion (required)' })).toBeVisible();
   });
 
   it('requires expected text for model-graded checks that cannot run without it', async () => {

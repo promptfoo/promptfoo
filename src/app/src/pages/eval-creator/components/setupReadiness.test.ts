@@ -306,6 +306,26 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('rejects normalized rubric score thresholds outside the score range', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'llm-rubric' as const, threshold: 1.1 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'g-eval' as const, value: 'Be clear', threshold: 0.8 }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('requires the threshold property used by runtime cost checks', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

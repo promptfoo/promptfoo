@@ -21,6 +21,7 @@ import {
   ARRAY_VALUE_ASSERTION_TYPES,
   COMMA_SEPARATED_VALUE_ASSERTION_TYPES,
   getAssertionValueError,
+  MODEL_JUDGE_SCORE_ASSERTION_TYPES,
   PI_SCORE_ASSERTION_TYPES,
   RAG_SCORE_ASSERTION_TYPES,
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
@@ -157,6 +158,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'context-faithfulness': 'Context faithfulness',
   'context-recall': 'Context recall',
   'context-relevance': 'Context relevance',
+  'g-eval': 'G-Eval criteria scoring',
 };
 
 const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
@@ -190,6 +192,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Scores whether retrieved context supports an expected answer. This uses a grading provider and can add cost.',
   'context-relevance':
     'Scores whether retrieved context is useful for the query. This uses a grading provider and can add cost.',
+  'g-eval':
+    'Scores the response against your criteria in multiple grading steps. This can add cost.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
   'perplexity-score':
     'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
@@ -859,6 +863,101 @@ const RagScoreField = ({ assertion, error, index, onChange }: SpecializedValueFi
   );
 };
 
+const ModelJudgeScoreField = ({
+  assertion,
+  error,
+  index,
+  onChange,
+}: SpecializedValueFieldProps) => {
+  const isGEval = assertion.type === 'g-eval' || assertion.type === 'not-g-eval';
+  const hasAdvancedValue =
+    (isGEval && Array.isArray(assertion.value)) ||
+    (!isGEval &&
+      assertion.value !== undefined &&
+      typeof assertion.value === 'object' &&
+      !Array.isArray(assertion.value));
+  const helpId = `assert-model-judge-help-${index}`;
+  const errorId = `assert-value-error-${index}`;
+  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+  const criteriaError =
+    isGEval && error === 'Enter at least one grading criterion for G-Eval.' ? error : undefined;
+  const thresholdError = criteriaError ? undefined : error;
+
+  return (
+    <div className="space-y-3">
+      {hasAdvancedValue ? (
+        <div className="space-y-2 rounded-md border border-dashed border-border p-3">
+          <p className="text-xs text-muted-foreground">
+            {isGEval
+              ? 'Multiple G-Eval criteria are configured. Edit them in YAML or replace them with one visual criterion.'
+              : 'A structured rubric is configured. Edit it in YAML or replace it with text criteria.'}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange({ ...assertion, value: '' })}
+          >
+            Replace with text criteria
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor={`assert-model-judge-criteria-${index}`} className="text-sm font-medium">
+            {isGEval ? 'Evaluation criterion (required)' : 'Rubric criteria (optional)'}
+          </Label>
+          <Textarea
+            id={`assert-model-judge-criteria-${index}`}
+            value={formatAssertionValue(assertion)}
+            onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+            placeholder={
+              isGEval
+                ? 'Example: The response is accurate, concise, and well structured.'
+                : 'Example: The response is helpful and accurate.'
+            }
+            aria-invalid={Boolean(error)}
+            aria-describedby={descriptionIds}
+            className="min-h-20 resize-y"
+          />
+        </div>
+      )}
+      {criteriaError && (
+        <HelperText id={errorId} error>
+          {criteriaError}
+        </HelperText>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor={`assert-model-judge-threshold-${index}`} className="text-sm font-medium">
+          Minimum score threshold (optional)
+        </Label>
+        <Input
+          id={`assert-model-judge-threshold-${index}`}
+          type="number"
+          min="0"
+          max="1"
+          step="0.01"
+          value={formatAssertionThreshold(assertion)}
+          onChange={(event) =>
+            onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
+          }
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionIds}
+        />
+      </div>
+      {thresholdError && (
+        <HelperText id={errorId} error>
+          {thresholdError}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        {isGEval
+          ? 'Scores range from 0 to 1 and the default threshold is 0.7. Configure multiple criteria or custom grading prompts in YAML.'
+          : "Scores range from 0 to 1. Without a threshold, the grader's pass result decides; a numeric score alone does not fail the check."}
+      </p>
+    </div>
+  );
+};
+
 const SpecializedValueField = ({
   assertion,
   error,
@@ -889,6 +988,12 @@ const SpecializedValueField = ({
 
   if (RAG_SCORE_ASSERTION_TYPES.has(assertion.type)) {
     return <RagScoreField assertion={assertion} error={error} index={index} onChange={onChange} />;
+  }
+
+  if (MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type)) {
+    return (
+      <ModelJudgeScoreField assertion={assertion} error={error} index={index} onChange={onChange} />
+    );
   }
 
   return <NoValueField type={assertion.type} />;
@@ -1009,7 +1114,8 @@ const AssertionValueFields = ({
     DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type) ||
     TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
     PI_SCORE_ASSERTION_TYPES.has(assertion.type) ||
-    RAG_SCORE_ASSERTION_TYPES.has(assertion.type)
+    RAG_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+    MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -1139,6 +1245,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(nextType) ||
     PI_SCORE_ASSERTION_TYPES.has(nextType) ||
     RAG_SCORE_ASSERTION_TYPES.has(nextType) ||
+    MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -1159,6 +1266,14 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
   }
 
   if (RAG_SCORE_ASSERTION_TYPES.has(assertion.type) && !RAG_SCORE_ASSERTION_TYPES.has(nextType)) {
+    const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
+    return { ...withoutStoredValue, type: nextType, value: '' };
+  }
+
+  if (
+    MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type) &&
+    !MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(nextType)
+  ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
     return { ...withoutStoredValue, type: nextType, value: '' };
   }
