@@ -1,4 +1,10 @@
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { renderWithProviders } from '@app/utils/testutils';
+import {
+  deserializePolicyIdFromMetric,
+  formatPolicyIdentifierAsMetric,
+  isPolicyMetric,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -172,6 +178,54 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-name-test-metric')).toHaveTextContent('test-metric');
   });
 
+  it('shows a filter hint tooltip for metric pills', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<CustomMetrics lookup={{ metric1: 10 }} />);
+
+    await user.hover(screen.getByTestId('metric-name-metric1'));
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Click to filter by this metric');
+  });
+
+  it('exposes the filter hint from a keyboard-focusable metric control', async () => {
+    renderWithProviders(<CustomMetrics lookup={{ metric1: 10 }} />);
+
+    const metricButton = screen.getByRole('button', { name: 'Filter by metric metric1' });
+    metricButton.focus();
+
+    expect(metricButton).toHaveFocus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Click to filter by this metric');
+  });
+
+  it('keeps policy details alongside the filter hint tooltip', async () => {
+    const user = userEvent.setup();
+    const policyMetric = 'policy:policy-1';
+
+    vi.mocked(isPolicyMetric).mockReturnValueOnce(true);
+    vi.mocked(deserializePolicyIdFromMetric).mockReturnValueOnce('policy-1');
+    vi.mocked(formatPolicyIdentifierAsMetric).mockReturnValueOnce('Reusable policy');
+    vi.mocked(useCustomPoliciesMap).mockReturnValueOnce({
+      'policy-1': {
+        id: 'policy-1',
+        name: 'Reusable policy',
+        text: 'Must not expose sensitive data.',
+      },
+    });
+
+    renderWithProviders(<CustomMetrics lookup={{ [policyMetric]: 10 }} />);
+
+    await user.hover(screen.getByTestId(`metric-name-${policyMetric}`));
+
+    const tooltip = await screen.findByRole('tooltip');
+    expect(tooltip).toHaveTextContent('Reusable policy');
+    expect(tooltip).toHaveTextContent('Must not expose sensitive data.');
+    expect(tooltip).toHaveTextContent('Click to filter by this policy');
+    expect(
+      screen.getByRole('button', { name: 'Filter by policy Reusable policy' }),
+    ).toBeInTheDocument();
+  });
+
   it('handles sorting of metrics with special characters and unusual names', () => {
     const lookup = {
       '1. Metric': 1,
@@ -195,6 +249,31 @@ describe('CustomMetrics', () => {
       'Metric A',
       'Metric B',
       'metric-c',
+    ]);
+  });
+
+  it('sorts the full metric list before truncating visible metrics', async () => {
+    const user = userEvent.setup();
+    const lookup = {
+      zebra: 3,
+      alpha: 1,
+      beta: 2,
+    };
+
+    renderWithProviders(<CustomMetrics lookup={lookup} truncationCount={2} />);
+
+    expect(screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent)).toEqual([
+      'alpha',
+      'beta',
+    ]);
+    expect(screen.queryByTestId('metric-name-zebra')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('toggle-show-more'));
+
+    expect(screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent)).toEqual([
+      'alpha',
+      'beta',
+      'zebra',
     ]);
   });
 
