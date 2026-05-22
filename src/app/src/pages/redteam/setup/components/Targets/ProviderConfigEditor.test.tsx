@@ -2,13 +2,31 @@ import React from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderConfigEditor from './ProviderConfigEditor';
 
 import type { ProviderOptions } from '../../types';
 
 vi.mock('./HttpEndpointConfiguration', () => ({
-  default: () => <div data-testid="http-config" />,
+  default: ({
+    bodyError,
+    updateCustomTarget,
+  }: {
+    bodyError?: React.ReactNode;
+    updateCustomTarget?: (field: string, value: unknown) => void;
+  }) => (
+    <div data-testid="http-config">
+      <button
+        type="button"
+        data-testid="set-http-body-without-prompt"
+        onClick={() => updateCustomTarget?.('body', { message: 'hello' })}
+      >
+        Set body without prompt
+      </button>
+      {bodyError && <div data-testid="http-body-error">{bodyError}</div>}
+    </div>
+  ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
   default: () => <div data-testid="ws-config" />,
@@ -122,6 +140,31 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('explains missing HTTP placeholders as test inputs in eval mode', async () => {
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{
+            id: 'http',
+            config: {
+              url: 'https://api.example.com/chat',
+              body: { message: '{{prompt}}' },
+            },
+          }}
+          setProvider={vi.fn()}
+          providerType="http"
+          mode="eval"
+        />,
+      );
+
+      await user.click(screen.getByTestId('set-http-body-without-prompt'));
+
+      const message = await screen.findByTestId('http-body-error');
+      expect(message).toHaveTextContent(/replaces with each test input at run time/i);
+      expect(message).not.toHaveTextContent(/attack payload/i);
     });
 
     it('should return false from validate() when provider ID contains only whitespace characters for foundation model providers', () => {

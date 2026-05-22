@@ -94,9 +94,9 @@ function getBodyPromptError(value: unknown, provider: ProviderOptions): React.Re
 
   return (
     <>
-      Request body must contain <code>{'{{prompt}}'}</code> - this is where promptfoo will inject
-      the attack payload. Replace the user input value with <code>{'{{prompt}}'}</code>. Promptfoo
-      uses Nunjucks templating to replace <code>{'{{prompt}}'}</code> with the actual test content.{' '}
+      Request body must contain <code>{'{{prompt}}'}</code>, which Promptfoo replaces with each test
+      input at run time. Replace the value that should receive the prompt with{' '}
+      <code>{'{{prompt}}'}</code>. Promptfoo uses Nunjucks templating for this replacement.{' '}
       <a
         href="https://www.promptfoo.dev/docs/configuration/guide/#using-nunjucks-templates"
         target="_blank"
