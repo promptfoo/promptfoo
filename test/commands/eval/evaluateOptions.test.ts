@@ -668,6 +668,34 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should not synthesize a default test from explicitly empty scenarios', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-empty-scenarios.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        scenarios: [],
+        defaultTest: {
+          assert: [{ type: 'contains', value: 'Hello' }],
+        },
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:1',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+    });
+
     it('should preserve empty filterRange slices for the implicit default test', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-empty.yaml', {
         providers: ['echo'],

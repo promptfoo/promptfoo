@@ -524,6 +524,7 @@ export async function doEval(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const canSynthesizeImplicitDefaultTest = testSuite.scenarios === undefined;
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
@@ -541,7 +542,7 @@ export async function doEval(
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const shouldApplyRangeToImplicitDefaultTest =
-      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+      filterRange !== undefined && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
