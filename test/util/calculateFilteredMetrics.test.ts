@@ -476,6 +476,160 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScoreWeights?.accuracy).toBe(4);
       expect(metrics[0].namedScoresCount.accuracy).toBe(1);
     });
+
+    it('should combine weighted and unweighted rows for the same metric', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      // Row A: stored weight -> aggregated via the SQL fast path.
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'weighted-row',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.75,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.75,
+          reason: 'weighted metric',
+          namedScoreWeights: { accuracy: 4 },
+        },
+        namedScores: { accuracy: 0.75 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      // Row B: no stored weights -> aggregated via the JS fallback path.
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 1,
+        testCase: { vars: {} },
+        promptId: 'unweighted-row',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.8,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.8,
+          reason: 'legacy metric without stored weights',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'first assertion',
+              assertion: { type: 'contains', value: 'a', metric: 'accuracy' },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'second assertion',
+              assertion: { type: 'contains', value: 'b', metric: 'accuracy' },
+            },
+          ],
+        },
+        namedScores: { accuracy: 0.8 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      // SQL path contributes 0.75 * 4 = 3; JS fallback contributes 0.8.
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(3.8, 10);
+      // SQL path counts 1 row; JS fallback counts 2 component assertions.
+      expect(metrics[0].namedScoresCount.accuracy).toBe(3);
+      // SQL path sums weight 4; JS fallback sums the 2-assertion fallback weight.
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(6);
+    });
+
+    it('should route only the unweighted metric of a partially weighted row through the fallback', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      // A single row where `accuracy` has a stored weight but `relevance` does not.
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'partial-weights-row',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.75,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.75,
+          reason: 'partially weighted metrics',
+          namedScoreWeights: { accuracy: 4 },
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'first relevance assertion',
+              assertion: { type: 'contains', value: 'a', metric: 'relevance' },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'second relevance assertion',
+              assertion: { type: 'contains', value: 'b', metric: 'relevance' },
+            },
+          ],
+        },
+        namedScores: { accuracy: 0.75, relevance: 0.5 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      // `accuracy` is handled once by the SQL fast path and not re-counted by the fallback.
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(3, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(1);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(4);
+      // `relevance` lacks a stored weight, so it falls back to the 2-assertion count.
+      expect(metrics[0].namedScores.relevance).toBeCloseTo(0.5, 10);
+      expect(metrics[0].namedScoresCount.relevance).toBe(2);
+      expect(metrics[0].namedScoreWeights?.relevance).toBe(2);
+    });
   });
 
   describe('assertion counts aggregation', () => {

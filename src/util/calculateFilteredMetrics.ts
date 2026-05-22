@@ -287,12 +287,15 @@ function parseJsonObject<T extends object>(value: unknown): T | undefined {
   }
 }
 
+function isValidNamedScoreWeight(weight: unknown): weight is number {
+  return typeof weight === 'number' && Number.isFinite(weight);
+}
+
 function hasValidNamedScoreWeight(
   gradingResult: GradingResult | undefined,
   metricName: string,
 ): boolean {
-  const weight = gradingResult?.namedScoreWeights?.[metricName];
-  return typeof weight === 'number' && Number.isFinite(weight);
+  return isValidNamedScoreWeight(gradingResult?.namedScoreWeights?.[metricName]);
 }
 
 function withOnlyValidNamedScoreWeights(
@@ -303,8 +306,8 @@ function withOnlyValidNamedScoreWeights(
   }
 
   const validWeights = Object.fromEntries(
-    Object.entries(gradingResult.namedScoreWeights).filter(
-      ([, weight]) => typeof weight === 'number' && Number.isFinite(weight),
+    Object.entries(gradingResult.namedScoreWeights).filter(([, weight]) =>
+      isValidNamedScoreWeight(weight),
     ),
   );
 
