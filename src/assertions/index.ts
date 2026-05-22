@@ -1041,6 +1041,17 @@ export async function runAssertions({
       });
 
       const finalAssert = asserts[chainResult.finalIndex];
+      for (const intermediateResult of chainResult.result.componentResults ?? []) {
+        if (intermediateResult.metadata?.fallbackIntermediate !== true) {
+          continue;
+        }
+
+        finalAssert.assertResult.addNamedScores({
+          result: intermediateResult,
+          metric: renderMetricName(intermediateResult.assertion?.metric, vars || test.vars || {}),
+          weight: intermediateResult.assertion?.weight,
+        });
+      }
       finalAssert.assertResult.addResult({
         index: finalAssert.index,
         result: chainResult.result,

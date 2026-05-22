@@ -394,6 +394,63 @@ describe('Assertion Fallback Mechanism', () => {
       const passes = (result.componentResults ?? []).map((r) => r.pass);
       expect(passes.every((p) => p === false)).toBe(true);
     });
+
+    it('keeps named metrics for assertions that execute before a fallback passes', async () => {
+      const assertions: Assertion[] = [
+        {
+          type: 'equals',
+          value: 'wrong',
+          metric: 'primary',
+          weight: 3,
+          fallback: 'next',
+        },
+        {
+          type: 'contains',
+          value: 'test',
+          metric: 'fallback',
+          weight: 2,
+        },
+      ];
+
+      const result = await runAssertions({
+        test: createTestCase(assertions),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.score).toBe(1);
+      expect(result.namedScores).toEqual({
+        primary: 0,
+        fallback: 1,
+      });
+      expect(result.namedScoreWeights).toEqual({
+        primary: 3,
+        fallback: 2,
+      });
+    });
+
+    it('does not add named metrics for a fallback assertion that is bypassed', async () => {
+      const assertions: Assertion[] = [
+        {
+          type: 'contains',
+          value: 'test',
+          metric: 'primary',
+          fallback: 'next',
+        },
+        {
+          type: 'equals',
+          value: 'not executed',
+          metric: 'fallback',
+        },
+      ];
+
+      const result = await runAssertions({
+        test: createTestCase(assertions),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.namedScores).toEqual({ primary: 1 });
+      expect(result.namedScoreWeights).toEqual({ primary: 1 });
+    });
   });
 
   describe('Thrown errors in chain primaries', () => {
