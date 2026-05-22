@@ -52,9 +52,30 @@ function sumTokenAttributes(attributes: Record<string, unknown> | undefined): nu
 }
 
 function tokensFromTrace(spans: TraceSpan[], pattern: string): number {
-  return spans
+  const spansById = new Map(spans.map((span) => [span.spanId, span]));
+  const matchedTokenSpans = spans
     .filter((span) => matchesPattern(span.name, pattern))
-    .reduce((sum, span) => sum + sumTokenAttributes(span.attributes), 0);
+    .map((span) => ({ span, total: sumTokenAttributes(span.attributes) }))
+    .filter(({ total }) => total > 0);
+  const matchedTokenSpanIds = new Set(matchedTokenSpans.map(({ span }) => span.spanId));
+  const ancestorTokenSpanIds = new Set<string>();
+
+  for (const { span } of matchedTokenSpans) {
+    let parentSpanId = span.parentSpanId;
+    const visited = new Set<string>();
+    while (parentSpanId && !visited.has(parentSpanId)) {
+      visited.add(parentSpanId);
+      if (matchedTokenSpanIds.has(parentSpanId)) {
+        ancestorTokenSpanIds.add(parentSpanId);
+      }
+      parentSpanId = spansById.get(parentSpanId)?.parentSpanId;
+    }
+  }
+
+  return matchedTokenSpans.reduce(
+    (sum, { span, total }) => (ancestorTokenSpanIds.has(span.spanId) ? sum : sum + total),
+    0,
+  );
 }
 
 function tokensFromProviderResponse(params: AssertionParams): number {

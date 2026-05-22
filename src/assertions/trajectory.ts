@@ -648,6 +648,7 @@ export const handleTrajectoryGoalSuccess = async (
     score: 0,
     reason: `trajectory:goal-success judge timed out after ${timeoutMs}ms`,
     assertion: params.assertion,
+    metadata: { graderError: true as const },
   }));
 
   if (!params.inverse) {

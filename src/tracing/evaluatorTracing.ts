@@ -84,7 +84,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     if (otlpReceiverStarted) {
       const { updateOTLPReceiverOptions } = await import('./otlpReceiver');
       updateOTLPReceiverOptions({ acceptFormats, redactAttributes });
-      logger.debug('[EvaluatorTracing] OTLP receiver already started, refreshed options');
+      logger.debug('[EvaluatorTracing] OTLP receiver already started, merged live options');
       return;
     }
 
