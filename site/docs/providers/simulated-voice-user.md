@@ -5,8 +5,9 @@ description: 'Test voice agent prompts with realistic multi-turn voice conversat
 
 # Simulated Voice User
 
-:::info Cloud Feature
-This provider requires [Promptfoo Cloud](/docs/enterprise). Run `promptfoo auth login` to authenticate before using.
+:::note
+For local evals, set credentials for a realtime voice provider such as `OPENAI_API_KEY` or
+`GOOGLE_API_KEY`. Promptfoo Cloud can also run the provider after `promptfoo auth login`.
 :::
 
 The Simulated Voice User Provider tests voice agent prompts through realistic multi-turn voice conversations. A simulated caller speaks to a voice agent created from your prompt, enabling end-to-end testing of conversational voice AI behavior.
