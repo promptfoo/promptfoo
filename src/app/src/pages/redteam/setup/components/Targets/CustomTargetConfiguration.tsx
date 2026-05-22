@@ -532,7 +532,10 @@ const CustomTargetConfiguration = ({
         {/* Target ID Section */}
         <div className="space-y-2">
           <Label htmlFor="target-id">
-            {config.targetIdLabel} <span className="text-destructive">*</span>
+            {config.targetIdLabel}
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
           </Label>
           <Input
             id="target-id"

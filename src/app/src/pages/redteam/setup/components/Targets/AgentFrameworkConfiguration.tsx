@@ -170,7 +170,10 @@ export default function AgentFrameworkConfiguration({
       <div className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="provider-id">
-            Python agent file path <span className="text-destructive">*</span>
+            Python agent file path
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
           </Label>
           <Input
             id="provider-id"

@@ -59,7 +59,7 @@ describe('CustomTargetConfiguration', () => {
       />,
     );
 
-    const providerId = screen.getByLabelText(/Provider ID/i);
+    const providerId = screen.getByRole('textbox', { name: 'Provider ID' });
     expect(providerId).toBeRequired();
     expect(providerId).toHaveAttribute('aria-invalid', 'true');
     expect(providerId).toHaveAccessibleDescription(

@@ -274,7 +274,10 @@ const FoundationModelConfiguration = ({
           {isBedrock && (
             <div className="mb-4 space-y-2">
               <Label htmlFor="bedrock-api-mode">
-                Bedrock API <span className="text-destructive">*</span>
+                Bedrock API
+                <span aria-hidden="true" className="ml-1 text-destructive">
+                  *
+                </span>
               </Label>
               <select
                 id="bedrock-api-mode"
@@ -294,7 +297,10 @@ const FoundationModelConfiguration = ({
           )}
 
           <Label htmlFor="model-id">
-            Model ID <span className="text-destructive">*</span>
+            Model ID
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
           </Label>
           <Input
             id="model-id"

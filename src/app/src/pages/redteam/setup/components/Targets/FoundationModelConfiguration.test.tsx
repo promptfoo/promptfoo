@@ -93,7 +93,7 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    const modelIdInput = screen.getByRole('textbox', { name: 'Model ID' });
     expect(modelIdInput).toHaveValue('test-model-id');
     expect(modelIdInput).toBeRequired();
   });
@@ -443,9 +443,9 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('invoke');
-    expect(screen.getByLabelText(/Bedrock API/i)).toBeRequired();
-    expect(screen.getByRole('textbox', { name: /Model ID/i })).toHaveValue(
+    expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toHaveValue('invoke');
+    expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toBeRequired();
+    expect(screen.getByRole('textbox', { name: 'Model ID' })).toHaveValue(
       'anthropic.claude-3-5-sonnet-20241022-v2:0',
     );
     expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();

@@ -729,7 +729,10 @@ ${exampleRequest}`;
           <>
             <div className="space-y-2">
               <Label htmlFor="url">
-                URL <span className="text-destructive">*</span>
+                URL
+                <span aria-hidden="true" className="ml-1 text-destructive">
+                  *
+                </span>
               </Label>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Select

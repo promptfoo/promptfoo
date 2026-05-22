@@ -186,7 +186,7 @@ describe('AgentFrameworkConfiguration', () => {
       />,
     );
 
-    const input = screen.getByRole('textbox', { name: /Python agent file path/i });
+    const input = screen.getByRole('textbox', { name: 'Python agent file path' });
     expect(input).toBeRequired();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(input).toHaveAccessibleDescription(
