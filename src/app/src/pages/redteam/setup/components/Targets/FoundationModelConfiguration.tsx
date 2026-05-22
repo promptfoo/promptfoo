@@ -505,7 +505,9 @@ const FoundationModelConfiguration = ({
                 onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
               />
               <p className="text-sm text-muted-foreground">
-                Optional - defaults to {providerInfo.envVar} environment variable
+                Optional. Prefer the {providerInfo.envVar} environment variable. A key entered here
+                is included in this provider configuration and any copied or downloaded YAML, and is
+                not restored after a page reload.
               </p>
             </div>
 

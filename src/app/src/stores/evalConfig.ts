@@ -28,9 +28,28 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
-const omitPersistedEnvironmentValues = (config: Partial<UnifiedConfig>) => ({
+const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>) => ({
   ...config,
   env: {},
+  providers: Array.isArray(config.providers)
+    ? config.providers.map((provider) => {
+        if (!provider || typeof provider !== 'object' || !('config' in provider)) {
+          return provider;
+        }
+
+        const providerConfig = provider.config;
+        if (
+          !providerConfig ||
+          typeof providerConfig !== 'object' ||
+          !('apiKey' in providerConfig)
+        ) {
+          return provider;
+        }
+
+        const { apiKey: _apiKey, ...configWithoutApiKey } = providerConfig;
+        return { ...provider, config: configWithoutApiKey };
+      })
+    : config.providers,
 });
 
 export const useStore = create<EvalConfigState>()(
@@ -70,7 +89,7 @@ export const useStore = create<EvalConfigState>()(
       name: 'promptfoo',
       skipHydration: true,
       partialize: (state) => ({
-        config: omitPersistedEnvironmentValues(state.config),
+        config: omitPersistedSensitiveValues(state.config),
       }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
@@ -78,7 +97,7 @@ export const useStore = create<EvalConfigState>()(
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config: omitPersistedEnvironmentValues({
+          config: omitPersistedSensitiveValues({
             ...DEFAULT_CONFIG,
             ...persistedConfig,
           }),

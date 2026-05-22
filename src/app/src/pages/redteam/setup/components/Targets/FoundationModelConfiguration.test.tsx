@@ -47,6 +47,8 @@ describe('FoundationModelConfiguration', () => {
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
+    expect(screen.getByText(/Prefer the OPENAI_API_KEY environment variable/i)).toBeInTheDocument();
+    expect(screen.getByText(/not restored after a page reload/i)).toBeInTheDocument();
 
     await user.click(temperatureInput);
     await user.keyboard('{Control>}a{/Control}');

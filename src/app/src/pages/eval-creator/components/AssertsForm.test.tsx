@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AssertsForm from './AssertsForm';
-import type { Assertion, AssertionType } from '@promptfoo/types';
+import type { Assertion } from '@promptfoo/types';
 
 // Mock APIs needed for Radix Select
 HTMLElement.prototype.hasPointerCapture = vi.fn();
@@ -94,16 +94,29 @@ describe('AssertsForm', () => {
     await userEvent.click(select);
 
     // Wait for options to appear (Radix Select uses portals)
-    const options = await waitFor(() => screen.getAllByRole('option'));
-    const newType: AssertionType = 'contains';
-    const newTypeOption = options.find((option) => option.textContent === newType);
-
-    if (newTypeOption) {
-      await userEvent.click(newTypeOption);
-    }
+    const newTypeOption = await waitFor(() =>
+      screen.getByRole('option', { name: /Contains text \(contains\)/ }),
+    );
+    await userEvent.click(newTypeOption);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
+  });
+
+  it('explains deterministic and model-graded assertions and groups choices', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'llm-rubric', value: 'Be helpful' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.getByText(/Assertions are pass or fail checks/i)).toBeInTheDocument();
+    expect(screen.getByText('Model-graded: may add cost')).toBeInTheDocument();
+    expect(screen.getByText(/A model judges the response/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+
+    expect(await screen.findByText('Recommended starting checks')).toBeInTheDocument();
+    expect(screen.getByText('Model-graded quality')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Equals exactly \(equals\)/ })).toBeInTheDocument();
   });
 
   it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {

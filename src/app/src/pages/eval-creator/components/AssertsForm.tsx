@@ -8,7 +8,9 @@ import { Label } from '@app/components/ui/label';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
@@ -20,78 +22,105 @@ interface AssertsFormProps {
   initialValues: Assertion[];
 }
 
-// Most common assertion types first, then alphabetically by category
-const assertTypes: AssertionType[] = [
-  // Most common LLM-based assertions
-  'similar',
-  'llm-rubric',
-  'factuality',
-  'model-graded-closedqa',
-
-  // Common string matching
-  'contains',
-  'icontains',
-  'equals',
-  'starts-with',
-  'regex',
-
-  // Multiple value matching
-  'contains-all',
-  'contains-any',
-
-  // Format validation
-  'is-json',
-  'contains-json',
-  'is-xml',
-  'contains-xml',
-  'is-sql',
-  'contains-sql',
-
-  // Other LLM-based
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'g-eval',
-  'moderation',
-  'pi',
-  'select-best',
-
-  // Function call validation
-  'is-valid-function-call',
-  'is-valid-openai-function-call',
-  'is-valid-openai-tools-call',
-  'skill-used',
-  'trajectory:goal-success',
-  'trajectory:tool-args-match',
-  'trajectory:tool-used',
-  'trajectory:tool-sequence',
-  'trajectory:step-count',
-
-  // Metrics
-  'bleu',
-  'cost',
-  'finish-reason',
-  'latency',
-  'perplexity',
-  'perplexity-score',
-  'rouge-n',
-  'webhook',
-
-  // Negations
-  'not-contains',
-  'not-contains-all',
-  'not-contains-any',
-  'not-contains-json',
-  'not-equals',
-  'not-icontains',
-  'not-is-json',
-  'not-regex',
-  'not-rouge-n',
-  'not-similar',
-  'not-starts-with',
-  'not-webhook',
+const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
+  {
+    label: 'Recommended starting checks',
+    types: ['contains', 'equals', 'is-json', 'llm-rubric'],
+  },
+  {
+    label: 'Text matching',
+    types: ['icontains', 'starts-with', 'regex', 'contains-all', 'contains-any'],
+  },
+  {
+    label: 'Structured output',
+    types: ['contains-json', 'is-xml', 'contains-xml', 'is-sql', 'contains-sql'],
+  },
+  {
+    label: 'Model-graded quality',
+    types: [
+      'similar',
+      'factuality',
+      'model-graded-closedqa',
+      'answer-relevance',
+      'context-faithfulness',
+      'context-recall',
+      'context-relevance',
+      'g-eval',
+      'moderation',
+      'pi',
+      'select-best',
+    ],
+  },
+  {
+    label: 'Tools and agent behavior',
+    types: [
+      'is-valid-function-call',
+      'is-valid-openai-function-call',
+      'is-valid-openai-tools-call',
+      'skill-used',
+      'trajectory:goal-success',
+      'trajectory:tool-args-match',
+      'trajectory:tool-used',
+      'trajectory:tool-sequence',
+      'trajectory:step-count',
+    ],
+  },
+  {
+    label: 'Metrics and integrations',
+    types: [
+      'bleu',
+      'cost',
+      'finish-reason',
+      'latency',
+      'perplexity',
+      'perplexity-score',
+      'rouge-n',
+      'webhook',
+    ],
+  },
+  {
+    label: 'Negative checks',
+    types: [
+      'not-contains',
+      'not-contains-all',
+      'not-contains-any',
+      'not-contains-json',
+      'not-equals',
+      'not-icontains',
+      'not-is-json',
+      'not-regex',
+      'not-rouge-n',
+      'not-similar',
+      'not-starts-with',
+      'not-webhook',
+    ],
+  },
 ];
+
+const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
+  contains: 'Contains text',
+  equals: 'Equals exactly',
+  'is-json': 'Valid JSON',
+  'llm-rubric': 'LLM rubric',
+  similar: 'Semantically similar',
+  factuality: 'Factuality',
+  'model-graded-closedqa': 'Closed QA grading',
+  latency: 'Latency threshold',
+  cost: 'Cost threshold',
+};
+
+const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
+  contains: 'Passes when the response includes the text you enter below.',
+  equals: 'Passes only when the response exactly matches the value below.',
+  'is-json': 'Passes when the response is valid JSON. No value is needed.',
+  'llm-rubric': 'A model judges the response using your criteria. This can add cost.',
+  similar: 'A model checks semantic similarity to your expected answer. This can add cost.',
+};
+
+const getAssertionLabel = (type: AssertionType): string => {
+  const label = ASSERTION_LABELS[type];
+  return label ? `${label} (${type})` : type;
+};
 
 // Assertion types that accept comma-separated values
 const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
@@ -136,6 +165,10 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold">Assertions</h3>
+      <p className="text-sm text-muted-foreground">
+        Assertions are pass or fail checks. Start with a deterministic check such as Contains text
+        or Equals exactly; model-graded checks handle judgment calls but may add cost.
+      </p>
 
       {asserts.length > 0 && (
         <div className="space-y-3">
@@ -150,7 +183,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     </Label>
                     {LLM_ASSERTION_TYPES.has(assert.type) && (
                       <Badge variant="secondary" className="text-xs">
-                        LLM
+                        Model-graded: may add cost
                       </Badge>
                     )}
                   </div>
@@ -180,14 +213,22 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent className="max-h-[300px]">
-                    {assertTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                        {LLM_ASSERTION_TYPES.has(type) && ' (LLM)'}
-                      </SelectItem>
+                    {ASSERTION_TYPE_GROUPS.map((group) => (
+                      <SelectGroup key={group.label}>
+                        <SelectLabel>{group.label}</SelectLabel>
+                        {group.types.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {getAssertionLabel(type)}
+                            {LLM_ASSERTION_TYPES.has(type) && ' - model-graded'}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>
+                {ASSERTION_HELP[assert.type] && (
+                  <p className="text-xs text-muted-foreground">{ASSERTION_HELP[assert.type]}</p>
+                )}
 
                 {/* Value textarea */}
                 <div className="space-y-2">

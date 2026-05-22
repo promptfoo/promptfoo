@@ -71,6 +71,24 @@ describe('evalConfig store', () => {
       expect(persistedState.state.config.env).toEqual({});
     });
 
+    it('does not persist inline provider API keys used for the current evaluation', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'openai:gpt-4o',
+            config: { apiKey: 'inline-session-key', temperature: 0.2 },
+          },
+        ],
+      });
+
+      expect((useStore.getState().config.providers?.[0] as any).config.apiKey).toBe(
+        'inline-session-key',
+      );
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.providers[0].config).toEqual({ temperature: 0.2 });
+    });
+
     it('removes environment values from previously persisted browser state on rehydrate', async () => {
       localStorage.setItem(
         'promptfoo',
@@ -79,6 +97,12 @@ describe('evalConfig store', () => {
             config: {
               description: 'Previously saved config',
               env: { OPENAI_API_KEY: 'old-persisted-key' },
+              providers: [
+                {
+                  id: 'openai:gpt-4o',
+                  config: { apiKey: 'old-inline-key', temperature: 0.4 },
+                },
+              ],
             },
           },
           version: 0,
@@ -89,6 +113,9 @@ describe('evalConfig store', () => {
 
       expect(useStore.getState().config.description).toBe('Previously saved config');
       expect(useStore.getState().config.env).toEqual({});
+      expect((useStore.getState().config.providers?.[0] as any).config).toEqual({
+        temperature: 0.4,
+      });
     });
   });
 
