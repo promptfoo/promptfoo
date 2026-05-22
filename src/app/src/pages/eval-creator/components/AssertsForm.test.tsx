@@ -341,6 +341,29 @@ describe('AssertsForm', () => {
     ).toBeVisible();
   });
 
+  it('offers deterministic HTML checks without irrelevant expected-value input', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'equals', value: 'stale expected text' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(
+      await screen.findByRole('option', { name: /Valid HTML document \(is-html\)/ }),
+    );
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'is-html' }]);
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    expect(screen.getByText(/full response is HTML/i)).toBeVisible();
+  });
+
+  it('explains imported inverse refusal checks without asking for a value', () => {
+    initialValues = [{ type: 'not-is-refusal' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    expect(screen.getByText(/response is a refusal/i)).toBeVisible();
+  });
+
   it('does not invite unused values for imported inverse context checks', () => {
     initialValues = [{ type: 'not-context-relevance' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);

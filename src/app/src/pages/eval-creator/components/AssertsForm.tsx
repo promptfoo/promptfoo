@@ -45,7 +45,15 @@ const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
   },
   {
     label: 'Structured output',
-    types: ['contains-json', 'is-xml', 'contains-xml', 'is-sql', 'contains-sql'],
+    types: [
+      'contains-json',
+      'is-html',
+      'contains-html',
+      'is-xml',
+      'contains-xml',
+      'is-sql',
+      'contains-sql',
+    ],
   },
   {
     label: 'Model-graded quality',
@@ -69,6 +77,7 @@ const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
       'is-valid-function-call',
       'is-valid-openai-function-call',
       'is-valid-openai-tools-call',
+      'is-refusal',
       'skill-used',
       'trajectory:goal-success',
       'trajectory:tool-args-match',
@@ -98,9 +107,12 @@ const ASSERTION_TYPE_GROUPS: { label: string; types: AssertionType[] }[] = [
       'not-contains-all',
       'not-contains-any',
       'not-contains-json',
+      'not-contains-html',
       'not-equals',
       'not-icontains',
+      'not-is-html',
       'not-is-json',
+      'not-is-refusal',
       'not-regex',
       'not-rouge-n',
       'not-similar',
@@ -114,6 +126,12 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   contains: 'Contains text',
   equals: 'Equals exactly',
   'is-json': 'Valid JSON',
+  'is-html': 'Valid HTML document',
+  'contains-html': 'Contains HTML',
+  'is-refusal': 'Detect refusal',
+  'not-is-html': 'Not valid HTML',
+  'not-contains-html': 'Does not contain HTML',
+  'not-is-refusal': 'Does not refuse',
   'llm-rubric': 'LLM rubric',
   similar: 'Semantically similar',
   factuality: 'Factuality',
@@ -164,6 +182,12 @@ const OPTIONAL_XML_ELEMENT_ASSERTION_TYPES = new Set<AssertionType>([
 ]);
 
 const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-html',
+  'contains-html',
+  'is-refusal',
+  'not-is-html',
+  'not-contains-html',
+  'not-is-refusal',
   'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
@@ -440,14 +464,20 @@ const StructuredValueField = ({ assertion, error, index, onChange }: StructuredV
 
 const NoValueField = ({ type }: { type: AssertionType }) => {
   const explanation =
-    type === 'answer-relevance' || type === 'not-answer-relevance'
-      ? 'This check uses the prompt or query variable and the generated response. No value is needed.'
-      : type === 'context-faithfulness' ||
-          type === 'not-context-faithfulness' ||
-          type === 'context-relevance' ||
-          type === 'not-context-relevance'
-        ? 'This check uses your query and context variables. No value is needed.'
-        : 'This check validates function or tool calls returned by the provider. No value is needed.';
+    type === 'is-html' || type === 'not-is-html'
+      ? 'This check validates whether the full response is HTML. No value is needed.'
+      : type === 'contains-html' || type === 'not-contains-html'
+        ? 'This check detects HTML content within the response. No value is needed.'
+        : type === 'is-refusal' || type === 'not-is-refusal'
+          ? 'This check detects whether the response is a refusal. No value is needed.'
+          : type === 'answer-relevance' || type === 'not-answer-relevance'
+            ? 'This check uses the prompt or query variable and the generated response. No value is needed.'
+            : type === 'context-faithfulness' ||
+                type === 'not-context-faithfulness' ||
+                type === 'context-relevance' ||
+                type === 'not-context-relevance'
+              ? 'This check uses your query and context variables. No value is needed.'
+              : 'This check validates function or tool calls returned by the provider. No value is needed.';
 
   return (
     <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
