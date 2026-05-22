@@ -92,6 +92,32 @@ export function isSecretField(fieldName: string): boolean {
 }
 
 /**
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted or exported.
+ * Removes non-serializable fields like AbortSignal, functions, and symbols.
+ */
+export function sanitizeRuntimeOptions(
+  options?: Partial<import('../types').EvaluateOptions>,
+): Partial<import('../types').EvaluateOptions> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  // Create a copy to avoid mutating the original options object.
+  const sanitized = { ...options };
+
+  delete sanitized.abortSignal;
+
+  const sanitizedEntries = sanitized as Record<string, unknown>;
+  for (const [key, value] of Object.entries(sanitizedEntries)) {
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      delete sanitizedEntries[key];
+    }
+  }
+
+  return sanitized;
+}
+
+/**
  * Check if a value looks like a secret based on common patterns.
  * Detects API keys, tokens, and other credential patterns.
  */

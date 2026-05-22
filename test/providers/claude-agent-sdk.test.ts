@@ -117,7 +117,7 @@ const createMockUsage = (input = 0, output = 0): NonNullableUsage => ({
 });
 
 // Helper to create a mock BetaMessage with required fields
-// The BetaMessage type requires: id, container, content, context_management, model, role, stop_details, stop_reason, stop_sequence, type, usage
+// The BetaMessage type requires: id, container, content, context_management, diagnostics, model, role, stop_details, stop_reason, stop_sequence, type, usage
 // We use 'as any' for content since test mocks don't need the full BetaContentBlock discriminated union
 const createMockBetaMessage = (
   content: Array<{ type: string; id?: string; name?: string; input?: unknown; text?: string }>,
@@ -126,6 +126,7 @@ const createMockBetaMessage = (
   container: null,
   content: content as any,
   context_management: null,
+  diagnostics: null,
   model: 'claude-sonnet-4-20250514' as const,
   role: 'assistant' as const,
   stop_details: null,
