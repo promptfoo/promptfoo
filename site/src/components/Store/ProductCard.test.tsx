@@ -12,8 +12,8 @@ const mockProduct: FourthwallProduct = {
   slug: 'test-product',
   name: 'Test Product',
   description: '<p>A test product description</p>',
-  status: 'AVAILABLE',
-  access: 'PUBLIC',
+  state: { type: 'AVAILABLE' },
+  access: { type: 'PUBLIC' },
   images: [
     { id: 'img-1', url: 'https://example.com/image1.jpg', width: 800, height: 800 },
     { id: 'img-2', url: 'https://example.com/image2.jpg', width: 800, height: 800 },
@@ -53,7 +53,7 @@ describe('ProductCard', () => {
       variants: [
         {
           ...mockProduct.variants[0],
-          stock: { type: 'LIMITED', quantity: 0 },
+          stock: { type: 'LIMITED', inStock: false },
         },
       ],
     };

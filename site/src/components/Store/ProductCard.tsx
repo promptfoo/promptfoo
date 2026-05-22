@@ -142,7 +142,6 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
                 color: '#fff',
                 fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: '0.1em',
                 fontSize: '0.65rem',
               }}
             >

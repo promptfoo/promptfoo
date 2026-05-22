@@ -506,8 +506,10 @@ export function ProductModal() {
               <CircularProgress size={24} sx={{ color: 'var(--ifm-button-color, #fff)' }} />
             ) : selectedVariant && !soldOut && isInStock(selectedVariant.stock) ? (
               'Add to Cart'
-            ) : (
+            ) : soldOut ? (
               'Sold Out'
+            ) : (
+              'Out of Stock'
             )}
           </Button>
         </Box>

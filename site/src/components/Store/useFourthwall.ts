@@ -425,19 +425,22 @@ export function stripHtml(html: string): string {
 }
 
 // Check if variant is in stock
-export function isInStock(stock: { type: string; quantity?: number }): boolean {
+export function isInStock(stock: { type: string; inStock?: boolean; quantity?: number }): boolean {
   if (stock.type === 'UNLIMITED') {
     return true;
   }
-  if (stock.type === 'LIMITED' && typeof stock.quantity === 'number') {
-    return stock.quantity > 0;
+  if (stock.type === 'LIMITED') {
+    if (typeof stock.inStock === 'boolean') {
+      return stock.inStock;
+    }
+    return typeof stock.quantity === 'number' && stock.quantity > 0;
   }
   return false;
 }
 
 // Check if a product is completely sold out (all variants out of stock)
 export function isProductSoldOut(product: FourthwallProduct): boolean {
-  if (product.status === 'UNAVAILABLE') {
+  if (product.state.type !== 'AVAILABLE') {
     return true;
   }
   return product.variants.every((variant) => !isInStock(variant.stock));

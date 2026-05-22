@@ -99,12 +99,16 @@ describe('isInStock', () => {
     expect(isInStock({ type: 'UNLIMITED' })).toBe(true);
   });
 
-  it('returns true for limited stock with quantity > 0', () => {
-    expect(isInStock({ type: 'LIMITED', quantity: 5 })).toBe(true);
-    expect(isInStock({ type: 'LIMITED', quantity: 1 })).toBe(true);
+  it('returns true for limited stock marked in stock', () => {
+    expect(isInStock({ type: 'LIMITED', inStock: true })).toBe(true);
   });
 
-  it('returns false for limited stock with quantity 0', () => {
+  it('returns false for limited stock marked out of stock', () => {
+    expect(isInStock({ type: 'LIMITED', inStock: false })).toBe(false);
+  });
+
+  it('falls back to limited stock quantity', () => {
+    expect(isInStock({ type: 'LIMITED', quantity: 5 })).toBe(true);
     expect(isInStock({ type: 'LIMITED', quantity: 0 })).toBe(false);
   });
 
@@ -118,30 +122,31 @@ describe('isInStock', () => {
 });
 
 describe('isProductSoldOut', () => {
+  const makeVariant = (overrides: Partial<FourthwallProduct['variants'][number]> = {}) => ({
+    id: 'var-1',
+    name: 'Default',
+    sku: 'SKU-1',
+    unitPrice: { value: 10, currency: 'USD' },
+    stock: { type: 'UNLIMITED' as const },
+    images: [],
+    attributes: {},
+    ...overrides,
+  });
+
   const makeProduct = (overrides: Partial<FourthwallProduct> = {}): FourthwallProduct => ({
     id: 'prod-1',
     slug: 'test-product',
     name: 'Test Product',
     description: '',
-    status: 'AVAILABLE',
-    access: 'PUBLIC',
+    state: { type: 'AVAILABLE' },
+    access: { type: 'PUBLIC' },
     images: [],
-    variants: [
-      {
-        id: 'var-1',
-        name: 'Default',
-        sku: 'SKU-1',
-        unitPrice: { value: 10, currency: 'USD' },
-        stock: { type: 'UNLIMITED' },
-        images: [],
-        attributes: {},
-      },
-    ],
+    variants: [makeVariant()],
     ...overrides,
   });
 
   it('returns true when the product is unavailable', () => {
-    expect(isProductSoldOut(makeProduct({ status: 'UNAVAILABLE' }))).toBe(true);
+    expect(isProductSoldOut(makeProduct({ state: { type: 'UNAVAILABLE' } }))).toBe(true);
   });
 
   it('returns true when all variants are out of stock', () => {
@@ -149,24 +154,13 @@ describe('isProductSoldOut', () => {
       isProductSoldOut(
         makeProduct({
           variants: [
-            {
-              id: 'var-1',
-              name: 'Small',
-              sku: 'SKU-1',
-              unitPrice: { value: 10, currency: 'USD' },
-              stock: { type: 'LIMITED', quantity: 0 },
-              images: [],
-              attributes: {},
-            },
-            {
+            makeVariant({ name: 'Small', stock: { type: 'LIMITED', inStock: false } }),
+            makeVariant({
               id: 'var-2',
               name: 'Large',
               sku: 'SKU-2',
-              unitPrice: { value: 10, currency: 'USD' },
-              stock: { type: 'LIMITED' },
-              images: [],
-              attributes: {},
-            },
+              stock: { type: 'LIMITED', inStock: false },
+            }),
           ],
         }),
       ),
@@ -178,24 +172,13 @@ describe('isProductSoldOut', () => {
       isProductSoldOut(
         makeProduct({
           variants: [
-            {
-              id: 'var-1',
-              name: 'Small',
-              sku: 'SKU-1',
-              unitPrice: { value: 10, currency: 'USD' },
-              stock: { type: 'LIMITED', quantity: 0 },
-              images: [],
-              attributes: {},
-            },
-            {
+            makeVariant({ name: 'Small', stock: { type: 'LIMITED', inStock: false } }),
+            makeVariant({
               id: 'var-2',
               name: 'Large',
               sku: 'SKU-2',
-              unitPrice: { value: 10, currency: 'USD' },
-              stock: { type: 'LIMITED', quantity: 4 },
-              images: [],
-              attributes: {},
-            },
+              stock: { type: 'LIMITED', inStock: true },
+            }),
           ],
         }),
       ),
