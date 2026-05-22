@@ -74,6 +74,11 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
+  const providerPendingDeletion =
+    providerToDelete === null ? undefined : providers[providerToDelete];
+  const providerLabelToDelete = providerPendingDeletion
+    ? getProviderLabel(providerPendingDeletion)
+    : null;
 
   const handleAddProvider = (provider: ProviderOptions) => {
     onChange([...providers, provider]);
@@ -197,9 +202,12 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete provider?</DialogTitle>
+            <DialogTitle>Delete {providerLabelToDelete ?? 'provider'}?</DialogTitle>
             <DialogDescription>
-              This removes the provider from this evaluation. This action cannot be undone.
+              This removes {providerLabelToDelete ?? 'this provider'} from this evaluation. This
+              action cannot be undone.
+              {providers.length === 1 &&
+                ' This is your only provider; add another provider before you can run the evaluation.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

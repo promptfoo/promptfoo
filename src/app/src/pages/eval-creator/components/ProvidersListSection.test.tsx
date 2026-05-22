@@ -32,8 +32,19 @@ describe('ProvidersListSection', () => {
 
     await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
 
-    expect(screen.getByRole('dialog', { name: 'Delete provider?' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Delete Primary model?' })).toBeInTheDocument();
+    expect(screen.getByText(/removes Primary model from this evaluation/i)).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('warns when deleting the only provider will prevent running', async () => {
+    const user = userEvent.setup();
+    render(<ProvidersListSection providers={[providers[0]]} onChange={onChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
+
+    expect(screen.getByText(/this is your only provider/i)).toBeInTheDocument();
+    expect(screen.getByText(/add another provider before you can run/i)).toBeInTheDocument();
   });
 
   it('removes the provider after deletion is confirmed', async () => {
