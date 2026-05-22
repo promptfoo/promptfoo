@@ -6,6 +6,10 @@ import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
+  extractFileReferences,
+  formatFileNotFoundError,
+  formatFileReadError,
+  formatMissingFileReferencesError,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -16,6 +20,8 @@ import {
   pathExists,
   readFilters,
   readOutput,
+  resolveFileProtocolPath,
+  validateFileReferences,
 } from '../../src/util/file';
 import {
   isAudioFile,
@@ -1565,6 +1571,144 @@ describe('file utilities', () => {
       expect(() => readOutput('output.xml')).toThrow(
         'Unsupported output file format: xml currently only supports json',
       );
+    });
+  });
+
+  describe('file reference validation helpers', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const value = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return /[*?[\]{}]/.test(value);
+      });
+    });
+
+    it('extracts nested file references with config paths', () => {
+      const result = extractFileReferences({
+        providers: ['file://providers.yaml'],
+        tests: [{ vars: { payload: 'file://data/input.json' } }],
+        assertion: 'file://assertions.py:check',
+      });
+
+      expect(result).toEqual([
+        {
+          original: 'file://providers.yaml',
+          filePath: 'providers.yaml',
+          functionName: undefined,
+          configPath: 'providers[0]',
+        },
+        {
+          original: 'file://data/input.json',
+          filePath: 'data/input.json',
+          functionName: undefined,
+          configPath: 'tests[0].vars.payload',
+        },
+        {
+          original: 'file://assertions.py:check',
+          filePath: 'assertions.py',
+          functionName: 'check',
+          configPath: 'assertion',
+        },
+      ]);
+    });
+
+    it('validates missing and existing file references', () => {
+      vi.mocked(fs.existsSync).mockImplementation((filePath) =>
+        String(filePath).endsWith('exists.yaml'),
+      );
+
+      const result = validateFileReferences(
+        {
+          valid: 'file://exists.yaml',
+          missing: 'file://missing.yaml',
+        },
+        '/base',
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.validFiles).toHaveLength(1);
+      expect(result.missingFiles).toEqual([
+        {
+          reference: {
+            original: 'file://missing.yaml',
+            filePath: 'missing.yaml',
+            functionName: undefined,
+            configPath: 'missing',
+          },
+          resolvedPath: path.resolve('/base', 'missing.yaml'),
+        },
+      ]);
+    });
+
+    it('skips glob and templated file references during upfront validation', () => {
+      const result = validateFileReferences(
+        {
+          glob: 'file://fixtures/*.yaml',
+          templated: 'file://{{ env.DATASET_PATH }}',
+        },
+        '/base',
+      );
+
+      expect(result.valid).toBe(true);
+      expect(fs.existsSync).not.toHaveBeenCalled();
+    });
+
+    it('resolves file protocol paths relative to a base path', () => {
+      expect(resolveFileProtocolPath('file://fixtures/provider.yaml', '/base')).toBe(
+        path.join('/base', 'fixtures/provider.yaml'),
+      );
+      expect(resolveFileProtocolPath('file:///absolute/provider.yaml', '/base')).toBe(
+        '/absolute/provider.yaml',
+      );
+    });
+
+    it('formats missing file and read errors with actionable context', () => {
+      const notFound = formatFileNotFoundError({
+        filePath: '/base/missing.yaml',
+        basePath: '/base',
+        docsUrl: 'https://promptfoo.dev/docs/providers/file/',
+      });
+      expect(notFound).toContain('File not found');
+      const normalizedNotFound = notFound.replaceAll('\\', '/').replaceAll('\b', '/b');
+      expect(normalizedNotFound).toContain(
+        path.resolve('/base/missing.yaml').replaceAll('\\', '/'),
+      );
+      expect(normalizedNotFound).toContain(
+        `The path is relative to: ${path.resolve('/base').replaceAll('\\', '/')}`,
+      );
+      expect(notFound).toContain('https://promptfoo.dev/docs/providers/file/');
+
+      const readError = formatFileReadError({
+        filePath: '/base/config.yaml',
+        error: new Error('Permission denied'),
+      });
+      expect(readError).toContain('Failed to read file');
+      expect(readError).toContain('Permission denied');
+    });
+
+    it('formats missing file-reference validation errors', () => {
+      const result = formatMissingFileReferencesError(
+        {
+          valid: false,
+          missingFiles: [
+            {
+              reference: {
+                original: 'file://missing.py',
+                filePath: 'missing.py',
+                configPath: 'providers[0]',
+              },
+              resolvedPath: '/base/missing.py',
+            },
+          ],
+          validFiles: [],
+        },
+        '/base',
+      );
+
+      expect(result).toContain('File reference errors found in config');
+      expect(result).toContain('file://missing.py');
+      expect(result).toContain('providers[0]');
+      expect(result).toContain('/base/missing.py');
     });
   });
 

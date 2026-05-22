@@ -1,3 +1,4 @@
+import fsSync from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -7,6 +8,7 @@ import logger from '../logger';
 import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
+import { formatFileNotFoundError } from '../util/file';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
@@ -202,6 +204,28 @@ export class PythonProvider implements ApiProvider {
     return `python:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
+  private getBasePath(): string {
+    return this.options?.config.basePath || '';
+  }
+
+  private getAbsoluteScriptPath(): string {
+    return path.resolve(path.join(this.getBasePath(), this.scriptPath));
+  }
+
+  private validateScriptExists(absPath: string): void {
+    if (fsSync.existsSync(absPath)) {
+      return;
+    }
+
+    const errorMessage = formatFileNotFoundError({
+      filePath: absPath,
+      basePath: this.getBasePath(),
+      docsUrl: 'https://promptfoo.dev/docs/providers/python/',
+    });
+    logger.error(errorMessage);
+    throw new Error(`Python provider script not found: ${absPath}\n\n${errorMessage}`);
+  }
+
   /**
    * Process any file:// references in the configuration and initialize worker pool
    * This should be called after initialization
@@ -221,16 +245,12 @@ export class PythonProvider implements ApiProvider {
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
       try {
-        this.config = await processConfigFileReferences(
-          this.config,
-          this.options?.config.basePath || '',
-        );
+        this.config = await processConfigFileReferences(this.config, this.getBasePath());
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
-        const absPath = path.resolve(
-          path.join(this.options?.config.basePath || '', this.scriptPath),
-        );
+        const absPath = this.getAbsoluteScriptPath();
+        this.validateScriptExists(absPath);
 
         this.pool = new PythonWorkerPool(
           absPath,
@@ -324,7 +344,7 @@ export class PythonProvider implements ApiProvider {
       await this.initialize();
     }
 
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const absPath = this.getAbsoluteScriptPath();
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 

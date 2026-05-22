@@ -54,6 +54,9 @@ describe('loadApiProvider', () => {
       path.slice('promptfoo://provider/'.length),
     );
 
+    // Default mock for fs.existsSync to return true (file exists)
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+
     // Reset maybeLoadConfigFromExternalFile mock to default implementation
     vi.mocked(fileUtil.maybeLoadConfigFromExternalFile).mockImplementation((input: any) => input);
   });
@@ -822,10 +825,8 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle invalid file path for yaml/json config', async () => {
-    vi.mocked(fs.readFileSync).mockImplementation(() => {
-      throw new Error('File not found');
-    });
-    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('File not found');
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    await expect(loadApiProvider('file://invalid.yaml')).rejects.toThrow('Provider file not found');
   });
 
   it('should handle invalid yaml content', async () => {
@@ -1023,6 +1024,9 @@ describe('loadApiProviders', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     cliState.config = undefined;
+
+    // Default mock for fs.existsSync to return true (file exists)
+    vi.mocked(fs.existsSync).mockReturnValue(true);
 
     // Reset maybeLoadConfigFromExternalFile mock to default implementation
     vi.mocked(fileUtil.maybeLoadConfigFromExternalFile).mockImplementation((input: any) => input);

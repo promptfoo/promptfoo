@@ -631,6 +631,42 @@ describe('combineConfigs', () => {
     expect(prompts[3]).toBe('prompt4');
   });
 
+  it('validates file references relative to each resolved config path', async () => {
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [String(pathOrGlob)]);
+    vi.mocked(fs.readFileSync).mockImplementation(
+      (
+        filePath: fs.PathOrFileDescriptor,
+        _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
+      ) => {
+        const normalizedPath = typeof filePath === 'string' ? filePath.replaceAll('\\', '/') : '';
+
+        if (normalizedPath.endsWith('dir1/config1.json')) {
+          return JSON.stringify({
+            description: 'test1',
+            prompts: ['prompt1'],
+          });
+        }
+        if (normalizedPath.endsWith('dir2/config2.json')) {
+          return JSON.stringify({
+            description: 'test2',
+            prompts: ['file://prompt2.txt'],
+          });
+        }
+        return Buffer.from('');
+      },
+    );
+    vi.mocked(fs.existsSync).mockImplementation(
+      (filePath) => String(filePath) === path.resolve('/mock/cwd/dir2/prompt2.txt'),
+    );
+
+    const result = await combineConfigs(['dir1/config1.json', 'dir2/config2.json']);
+
+    expect(result.prompts).toEqual([
+      'prompt1',
+      `file://${path.resolve('/mock/cwd/dir2/prompt2.txt')}`,
+    ]);
+  });
+
   it('merges metadata correctly', async () => {
     const config1 = {
       defaultTest: {
@@ -1118,6 +1154,7 @@ describe('combineConfigs', () => {
       defaultTest: 'file://external/defaultTest.yaml',
     };
 
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));

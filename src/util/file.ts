@@ -2,7 +2,9 @@ import * as fs from 'fs';
 import { access } from 'fs/promises';
 import * as path from 'path';
 
+import chalk from 'chalk';
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
+import dedent from 'dedent';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
@@ -294,6 +296,171 @@ export function maybeLoadConfigFromExternalFile(
     return result;
   }
   return maybeLoadFromExternalFile(config, context);
+}
+
+export interface FileReference {
+  original: string;
+  filePath: string;
+  functionName?: string;
+  configPath: string;
+}
+
+export function extractFileReferences(config: unknown, currentPath: string = ''): FileReference[] {
+  const references: FileReference[] = [];
+
+  if (typeof config === 'string' && config.startsWith('file://')) {
+    try {
+      const { filePath, functionName } = parseFileUrl(config);
+      references.push({
+        original: config,
+        filePath,
+        functionName,
+        configPath: currentPath || 'root',
+      });
+    } catch {
+      references.push({
+        original: config,
+        filePath: config.slice('file://'.length),
+        configPath: currentPath || 'root',
+      });
+    }
+    return references;
+  }
+
+  if (Array.isArray(config)) {
+    config.forEach((item, index) => {
+      references.push(
+        ...extractFileReferences(item, currentPath ? `${currentPath}[${index}]` : `[${index}]`),
+      );
+    });
+    return references;
+  }
+
+  if (config && typeof config === 'object') {
+    for (const [key, value] of Object.entries(config)) {
+      references.push(...extractFileReferences(value, currentPath ? `${currentPath}.${key}` : key));
+    }
+  }
+
+  return references;
+}
+
+export interface FileValidationResult {
+  valid: boolean;
+  missingFiles: Array<{
+    reference: FileReference;
+    resolvedPath: string;
+  }>;
+  validFiles: Array<{
+    reference: FileReference;
+    resolvedPath: string;
+  }>;
+}
+
+export function validateFileReferences(
+  config: unknown,
+  basePath: string = '',
+): FileValidationResult {
+  const result: FileValidationResult = {
+    valid: true,
+    missingFiles: [],
+    validFiles: [],
+  };
+
+  for (const reference of extractFileReferences(config)) {
+    if (
+      hasMagic(reference.filePath) ||
+      (reference.filePath.includes('{{') && reference.filePath.includes('}}'))
+    ) {
+      continue;
+    }
+
+    const resolvedPath = path.isAbsolute(reference.filePath)
+      ? reference.filePath
+      : path.resolve(basePath || process.cwd(), reference.filePath);
+
+    if (fs.existsSync(resolvedPath)) {
+      result.validFiles.push({ reference, resolvedPath });
+    } else {
+      result.valid = false;
+      result.missingFiles.push({ reference, resolvedPath });
+    }
+  }
+
+  return result;
+}
+
+export function resolveFileProtocolPath(fileUrl: string, basePath?: string): string {
+  const relativePath = fileUrl.slice('file://'.length);
+  return path.isAbsolute(relativePath)
+    ? relativePath
+    : path.join(basePath || process.cwd(), relativePath);
+}
+
+export interface FileNotFoundErrorOptions {
+  filePath: string;
+  basePath?: string;
+  docsUrl?: string;
+}
+
+export function formatFileNotFoundError(options: FileNotFoundErrorOptions): string {
+  const { filePath, basePath, docsUrl } = options;
+  const absolutePath = path.resolve(filePath);
+
+  let message = dedent`
+    File not found: ${chalk.bold(absolutePath)}
+
+    ${chalk.white('Please verify that:')}
+      - The file path is correct
+      - The file exists at the specified location
+      ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
+  `;
+
+  if (docsUrl) {
+    message += `\n\n    ${chalk.white('For more information, visit:')} ${chalk.cyan(docsUrl)}`;
+  }
+
+  return message;
+}
+
+export interface FileReadErrorOptions {
+  filePath: string;
+  error: unknown;
+}
+
+export function formatFileReadError(options: FileReadErrorOptions): string {
+  const { filePath, error } = options;
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  return dedent`
+    Failed to read file: ${chalk.bold(path.resolve(filePath))}
+
+    ${chalk.white('Error:')} ${errorMessage}
+  `;
+}
+
+export function formatMissingFileReferencesError(
+  validationResult: FileValidationResult,
+  basePath: string,
+): string {
+  return dedent`
+    ${chalk.red.bold('File reference errors found in config:')}
+
+    ${validationResult.missingFiles
+      .map(
+        ({ reference, resolvedPath }) => dedent`
+      - ${chalk.bold(reference.original)}
+        ${chalk.white('Location in config:')} ${reference.configPath}
+        ${chalk.white('Resolved path:')} ${resolvedPath}
+    `,
+      )
+      .join('\n\n')}
+
+    ${chalk.white('Please verify that:')}
+      - The file paths are correct
+      - The files exist at the specified locations
+      - Paths are relative to: ${chalk.cyan(path.resolve(basePath))}
+  `;
 }
 
 /**

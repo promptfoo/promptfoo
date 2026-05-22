@@ -100,6 +100,7 @@ describe('PythonProvider', () => {
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
   const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockExistsSync = vi.mocked(fs.existsSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockGetEnvInt = vi.mocked(getEnvInt);
   const mockGetConfiguredPythonPath = vi.mocked(getConfiguredPythonPath);
@@ -139,6 +140,7 @@ describe('PythonProvider', () => {
     } as never);
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
+    mockExistsSync.mockReturnValue(true);
     mockResolve.mockReturnValue('/absolute/path/to/script.py');
 
     // Reset cliState.maxConcurrency before each test
@@ -181,6 +183,24 @@ describe('PythonProvider', () => {
         config: { basePath: '/base' },
       });
       expect(provider.id()).toBe('testId');
+    });
+  });
+
+  describe('initialization file validation', () => {
+    it('should throw an actionable error when the Python provider script is missing', async () => {
+      mockExistsSync.mockReturnValue(false);
+      const provider = new PythonProvider('missing.py', {
+        config: { basePath: '/project' },
+      });
+
+      await expect(provider.callApi('test prompt')).rejects.toThrow(
+        'Python provider script not found: /absolute/path/to/script.py',
+      );
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('File not found'));
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('https://promptfoo.dev/docs/providers/python/'),
+      );
+      expect(mockPythonWorkerPool).not.toHaveBeenCalled();
     });
   });
 

@@ -36,7 +36,11 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  formatMissingFileReferencesError,
+  maybeLoadFromExternalFile,
+  validateFileReferences,
+} from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -426,6 +430,17 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
+      const configBasePath = path.dirname(globPath);
+      const validationResult = validateFileReferences(config, configBasePath);
+      if (!validationResult.valid) {
+        const errorMessage = formatMissingFileReferencesError(validationResult, configBasePath);
+        logger.error(errorMessage);
+        throw new Error(
+          `Missing file references: ${validationResult.missingFiles
+            .map(({ resolvedPath }) => resolvedPath)
+            .join(', ')}`,
+        );
+      }
       configs.push(config);
     }
   }
