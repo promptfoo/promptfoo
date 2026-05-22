@@ -89,9 +89,6 @@ const EvaluateTestSuiteCreator = () => {
     fileName: string;
   } | null>(null);
   const [resetKey, setResetKey] = useState(0);
-  const resetDialogDescriptionId = React.useId();
-  const discardYamlDialogDescriptionId = React.useId();
-  const importYamlDialogDescriptionId = React.useId();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { config, setConfig, updateConfig, reset } = useStore();
@@ -787,10 +784,10 @@ const EvaluateTestSuiteCreator = () => {
 
       {/* Reset Confirmation Dialog */}
       <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <DialogContent hideDescription={false} aria-describedby={resetDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Reset evaluation setup?</DialogTitle>
-            <DialogDescription id={resetDialogDescriptionId}>
+            <DialogDescription>
               This clears providers, prompts, test cases, and run options. This action cannot be
               undone.
               {yamlHasUnsavedChanges && ' Your unsaved YAML edits will also be discarded.'}
@@ -808,10 +805,10 @@ const EvaluateTestSuiteCreator = () => {
       </Dialog>
 
       <Dialog open={discardYamlDialogOpen} onOpenChange={setDiscardYamlDialogOpen}>
-        <DialogContent hideDescription={false} aria-describedby={discardYamlDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
-            <DialogDescription id={discardYamlDialogDescriptionId}>
+            <DialogDescription>
               Your YAML edits have not been saved. Stay in the YAML editor to save them, or discard
               them before returning to the UI editor.
             </DialogDescription>
@@ -835,10 +832,10 @@ const EvaluateTestSuiteCreator = () => {
           }
         }}
       >
-        <DialogContent hideDescription={false} aria-describedby={importYamlDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Replace current setup with YAML?</DialogTitle>
-            <DialogDescription id={importYamlDialogDescriptionId}>
+            <DialogDescription>
               Importing{' '}
               <code className="rounded bg-muted px-1 py-0.5">{pendingYamlImport?.fileName}</code>{' '}
               replaces providers, prompts, test cases, run options, and any API key values entered

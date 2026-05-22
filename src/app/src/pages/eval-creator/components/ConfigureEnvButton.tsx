@@ -1,4 +1,4 @@
-import { type HTMLInputTypeAttribute, useId, useState } from 'react';
+import { type HTMLInputTypeAttribute, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -100,8 +100,6 @@ const ConfigureEnvButton = () => {
     defaultEnv as Record<string, string>,
   );
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
-  const dialogDescriptionId = useId();
-  const discardDialogDescriptionId = useId();
   const hasUnsavedChanges = JSON.stringify(env) !== JSON.stringify(cleanEnv);
   const hasConfiguredSettings = Object.values(defaultEnv).some(
     (value) => typeof value === 'string' && value.trim() !== '',
@@ -158,11 +156,10 @@ const ConfigureEnvButton = () => {
         <DialogContent
           className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden"
           hideDescription={false}
-          aria-describedby={dialogDescriptionId}
         >
           <DialogHeader>
             <DialogTitle>Provider Settings</DialogTitle>
-            <DialogDescription id={dialogDescriptionId}>
+            <DialogDescription>
               Add temporary credentials only for providers you use in this evaluation.
             </DialogDescription>
           </DialogHeader>
@@ -288,10 +285,10 @@ const ConfigureEnvButton = () => {
         open={discardDialogOpen}
         onOpenChange={(open) => !open && setDiscardDialogOpen(false)}
       >
-        <DialogContent hideDescription={false} aria-describedby={discardDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Discard provider setting changes?</DialogTitle>
-            <DialogDescription id={discardDialogDescriptionId}>
+            <DialogDescription>
               Any unsaved API keys or endpoint settings you entered will be lost.
             </DialogDescription>
           </DialogHeader>

@@ -59,7 +59,6 @@ const YamlEditorComponent = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = React.useState(false);
   const textareaId = React.useId();
-  const discardDialogDescriptionId = React.useId();
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
@@ -299,10 +298,10 @@ const YamlEditorComponent = ({
       </div>
 
       <Dialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
-        <DialogContent hideDescription={false} aria-describedby={discardDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Discard unsaved YAML changes?</DialogTitle>
-            <DialogDescription id={discardDialogDescriptionId}>
+            <DialogDescription>
               Your edits since the last save will be lost. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>

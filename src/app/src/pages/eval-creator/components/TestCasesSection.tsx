@@ -305,8 +305,6 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     ? `test case ${testCaseNumberToDelete}`
     : 'this test case';
   const [pendingImport, setPendingImport] = React.useState<PendingTestCaseImport | null>(null);
-  const importDialogDescriptionId = React.useId();
-  const deleteDialogDescriptionId = React.useId();
   const testCaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
@@ -694,13 +692,13 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
         open={pendingImport !== null}
         onOpenChange={(open) => !open && setPendingImport(null)}
       >
-        <DialogContent hideDescription={false} aria-describedby={importDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>
               Import {pendingImport?.testCases.length ?? 0} test case
               {pendingImport?.testCases.length === 1 ? '' : 's'}?
             </DialogTitle>
-            <DialogDescription id={importDialogDescriptionId}>
+            <DialogDescription>
               {pendingImport?.fileName} will be added to your existing {testCases.length} test case
               {testCases.length === 1 ? '' : 's'}. Each test case runs across every prompt and
               provider, so larger imports increase requests and potential cost.
@@ -732,12 +730,12 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
-        <DialogContent hideDescription={false} aria-describedby={deleteDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>
               Delete test case{testCaseNumberToDelete ? ` ${testCaseNumberToDelete}` : ''}?
             </DialogTitle>
-            <DialogDescription id={deleteDialogDescriptionId}>
+            <DialogDescription>
               This removes {testCaseLabelToDelete} from this evaluation. This action cannot be
               undone. Future runs will no longer evaluate it across prompts and providers.
               {testCases.length === 1 &&

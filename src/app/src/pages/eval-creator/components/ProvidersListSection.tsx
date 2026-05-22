@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -76,7 +76,6 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
-  const deleteDialogDescriptionId = useId();
   const providerPendingDeletion =
     providerToDelete === null ? undefined : providers[providerToDelete];
   const providerLabelToDelete = providerPendingDeletion
@@ -215,10 +214,10 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         open={providerToDelete !== null}
         onOpenChange={(open) => !open && cancelDeleteProvider()}
       >
-        <DialogContent hideDescription={false} aria-describedby={deleteDialogDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Delete {providerLabelToDelete ?? 'provider'}?</DialogTitle>
-            <DialogDescription id={deleteDialogDescriptionId}>
+            <DialogDescription>
               This removes {providerLabelToDelete ?? 'this provider'} from this evaluation. Future
               runs will no longer send prompts or test cases to it. This action cannot be undone.
               {providers.length === 1 &&

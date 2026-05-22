@@ -53,8 +53,6 @@ const TestCaseForm = ({
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [addAnotherStatus, setAddAnotherStatus] = useState<string | null>(null);
   const [assertsValid, setAssertsValid] = useState(true);
-  const dialogDescriptionId = React.useId();
-  const discardDescriptionId = React.useId();
   const effectiveInheritedAssertions =
     initialValues?.options?.disableDefaultAsserts === true ? [] : inheritedAssertions;
   const effectiveAssertions = [...effectiveInheritedAssertions, ...asserts];
@@ -136,11 +134,10 @@ const TestCaseForm = ({
         <DialogContent
           className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden"
           hideDescription={false}
-          aria-describedby={dialogDescriptionId}
         >
           <DialogHeader>
             <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
-            <DialogDescription id={dialogDescriptionId}>
+            <DialogDescription>
               Set inputs for one evaluation example, then add optional pass or fail checks. Each
               test case runs against every configured prompt and provider.
             </DialogDescription>
@@ -250,12 +247,10 @@ const TestCaseForm = ({
         open={discardDialogOpen}
         onOpenChange={(isOpen) => !isOpen && setDiscardDialogOpen(false)}
       >
-        <DialogContent hideDescription={false} aria-describedby={discardDescriptionId}>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
             <DialogTitle>Discard test case changes?</DialogTitle>
-            <DialogDescription id={discardDescriptionId}>
-              Your unsaved inputs and assertions will be lost.
-            </DialogDescription>
+            <DialogDescription>Your unsaved inputs and assertions will be lost.</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
