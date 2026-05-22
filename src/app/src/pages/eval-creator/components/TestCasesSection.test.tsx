@@ -54,7 +54,10 @@ describe('TestCasesSection', () => {
       </TooltipProvider>,
     );
     expect(screen.getByText('Test Cases')).toBeInTheDocument();
-    expect(screen.getByText('Add Example')).toBeInTheDocument();
+    expect(screen.getByText('Add Starter Example')).toBeInTheDocument();
+    expect(
+      screen.getByText(/starter example uses a deterministic text check/i),
+    ).toBeInTheDocument();
   });
 
   it('renders existing test cases', () => {
@@ -144,6 +147,45 @@ describe('TestCasesSection', () => {
     );
 
     expect(screen.queryByText('Missing variables: input.')).toBeNull();
+  });
+
+  it('adds a deterministic starter example without silently enabling model grading', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={['animal', 'location']} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Starter Example' }));
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith({
+      tests: [
+        {
+          description: 'Fun animal adventure story',
+          vars: {
+            animal: 'penguin',
+            location: 'tropical island',
+          },
+          assert: [
+            {
+              type: 'contains-any',
+              value: ['penguin', 'adventure', 'tropical', 'island'],
+            },
+          ],
+        },
+      ],
+    });
+    expect(mockUpdateConfig).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({
+            assert: expect.arrayContaining([expect.objectContaining({ type: 'llm-rubric' })]),
+          }),
+        ]),
+      }),
+    );
   });
 
   it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {

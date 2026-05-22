@@ -325,23 +325,24 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                           type: 'contains-any',
                           value: ['penguin', 'adventure', 'tropical', 'island'],
                         },
-                        {
-                          type: 'llm-rubric',
-                          value:
-                            'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
-                        },
                       ],
                     };
                     setTestCases([...testCases, exampleTestCase]);
                   }}
                 >
-                  Add Example
+                  Add Starter Example
                 </Button>
               )}
             </>
           )}
         </div>
       </div>
+      {canEditInlineTests && testCases.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          The starter example uses a deterministic text check. Add model-graded assertions later for
+          subjective quality checks; those may add cost.
+        </p>
+      )}
 
       {/* Test Cases Table */}
       <div className="overflow-x-auto rounded-lg border border-border">
