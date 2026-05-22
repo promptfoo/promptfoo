@@ -286,6 +286,26 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('rejects normalized RAG metric thresholds outside the score range', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Answer the query'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'answer-relevance' as const, threshold: 1.1 }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'answer-relevance' as const, threshold: 0.8 }] }],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('requires the threshold property used by runtime cost checks', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

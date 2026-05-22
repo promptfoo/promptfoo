@@ -22,6 +22,7 @@ import {
   COMMA_SEPARATED_VALUE_ASSERTION_TYPES,
   getAssertionValueError,
   PI_SCORE_ASSERTION_TYPES,
+  RAG_SCORE_ASSERTION_TYPES,
   REQUIRED_THRESHOLD_ASSERTION_TYPES,
   STRUCTURED_VALUE_ASSERTION_TYPES,
   TEXT_SCORE_ASSERTION_TYPES,
@@ -152,6 +153,10 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
   pi: 'Pi Labs scoring',
+  'answer-relevance': 'Answer relevance',
+  'context-faithfulness': 'Context faithfulness',
+  'context-recall': 'Context recall',
+  'context-relevance': 'Context relevance',
 };
 
 const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
@@ -177,6 +182,14 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
   pi: 'Uses the external Pi Labs scorer. This requires WITHPI_API_KEY and may add service cost.',
+  'answer-relevance':
+    'Scores how well the response answers the prompt or query. This uses grading and embedding providers and can add cost.',
+  'context-faithfulness':
+    'Scores whether the response is supported by retrieved context. This uses a grading provider and can add cost.',
+  'context-recall':
+    'Scores whether retrieved context supports an expected answer. This uses a grading provider and can add cost.',
+  'context-relevance':
+    'Scores whether retrieved context is useful for the query. This uses a grading provider and can add cost.',
   perplexity: 'Reports perplexity when supported; add a threshold only to make it pass or fail.',
   'perplexity-score':
     'Reports normalized perplexity when supported; add a threshold only to make it pass or fail.',
@@ -203,6 +216,11 @@ const OPTIONAL_XML_ELEMENT_ASSERTION_TYPES = new Set<AssertionType>([
 
 const GUIDED_FINISH_REASON_TYPES = new Set<AssertionType>(['finish-reason', 'not-finish-reason']);
 const DISCLOSED_WEBHOOK_ASSERTION_TYPES = new Set<AssertionType>(['webhook', 'not-webhook']);
+
+const RAG_SCORE_REFERENCE_ASSERTION_TYPES = new Set<AssertionType>([
+  'context-recall',
+  'not-context-recall',
+]);
 
 const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-html',
@@ -780,6 +798,67 @@ const PiScoreField = ({ assertion, error, index, onChange }: SpecializedValueFie
   );
 };
 
+const RagScoreField = ({ assertion, error, index, onChange }: SpecializedValueFieldProps) => {
+  const needsGroundTruth = RAG_SCORE_REFERENCE_ASSERTION_TYPES.has(assertion.type);
+  const usesContext = assertion.type.includes('context-');
+  const helpId = `assert-rag-score-help-${index}`;
+  const errorId = `assert-value-error-${index}`;
+  const descriptionIds = error ? `${errorId} ${helpId}` : helpId;
+
+  return (
+    <div className="space-y-3">
+      {needsGroundTruth && (
+        <div className="space-y-2">
+          <Label htmlFor={`assert-rag-ground-truth-${index}`} className="text-sm font-medium">
+            Ground truth answer (required)
+          </Label>
+          <Textarea
+            id={`assert-rag-ground-truth-${index}`}
+            value={formatAssertionValue(assertion)}
+            onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+            placeholder="Enter the answer that retrieved context should support..."
+            aria-invalid={Boolean(error)}
+            aria-describedby={descriptionIds}
+            className="min-h-20 resize-y"
+          />
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor={`assert-rag-threshold-${index}`} className="text-sm font-medium">
+          Minimum score threshold (optional)
+        </Label>
+        <Input
+          id={`assert-rag-threshold-${index}`}
+          type="number"
+          min="0"
+          max="1"
+          step="0.01"
+          value={formatAssertionThreshold(assertion)}
+          onChange={(event) =>
+            onChange({ ...assertion, threshold: parseAssertionThreshold(event.target.value) })
+          }
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionIds}
+        />
+      </div>
+      {error && (
+        <HelperText id={errorId} error>
+          {error}
+        </HelperText>
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        Scores range from 0 to 1. Without a threshold, the runtime default is 0 and this check is
+        permissive.{' '}
+        {needsGroundTruth
+          ? 'Provide retrieved context as a context variable, extract it in advanced YAML settings, or use prompt content as the fallback.'
+          : usesContext
+            ? 'Provide query and context variables, or extract context in advanced YAML settings.'
+            : 'This compares the response with the prompt or a query variable.'}
+      </p>
+    </div>
+  );
+};
+
 const SpecializedValueField = ({
   assertion,
   error,
@@ -806,6 +885,10 @@ const SpecializedValueField = ({
 
   if (PI_SCORE_ASSERTION_TYPES.has(assertion.type)) {
     return <PiScoreField assertion={assertion} error={error} index={index} onChange={onChange} />;
+  }
+
+  if (RAG_SCORE_ASSERTION_TYPES.has(assertion.type)) {
+    return <RagScoreField assertion={assertion} error={error} index={index} onChange={onChange} />;
   }
 
   return <NoValueField type={assertion.type} />;
@@ -925,7 +1008,8 @@ const AssertionValueFields = ({
     GUIDED_FINISH_REASON_TYPES.has(assertion.type) ||
     DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(assertion.type) ||
     TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
-    PI_SCORE_ASSERTION_TYPES.has(assertion.type)
+    PI_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+    RAG_SCORE_ASSERTION_TYPES.has(assertion.type)
   ) {
     return (
       <SpecializedValueField
@@ -1054,6 +1138,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     GUIDED_FINISH_REASON_TYPES.has(nextType) ||
     DISCLOSED_WEBHOOK_ASSERTION_TYPES.has(nextType) ||
     PI_SCORE_ASSERTION_TYPES.has(nextType) ||
+    RAG_SCORE_ASSERTION_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -1069,6 +1154,11 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
   }
 
   if (PI_SCORE_ASSERTION_TYPES.has(assertion.type) && !PI_SCORE_ASSERTION_TYPES.has(nextType)) {
+    const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
+    return { ...withoutStoredValue, type: nextType, value: '' };
+  }
+
+  if (RAG_SCORE_ASSERTION_TYPES.has(assertion.type) && !RAG_SCORE_ASSERTION_TYPES.has(nextType)) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;
     return { ...withoutStoredValue, type: nextType, value: '' };
   }

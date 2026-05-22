@@ -48,6 +48,17 @@ export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
 
 export const PI_SCORE_ASSERTION_TYPES = new Set<AssertionType>(['pi', 'not-pi']);
 
+export const RAG_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'answer-relevance',
+  'not-answer-relevance',
+  'context-faithfulness',
+  'not-context-faithfulness',
+  'context-recall',
+  'not-context-recall',
+  'context-relevance',
+  'not-context-relevance',
+]);
+
 export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-sql',
   'contains-sql',
@@ -164,7 +175,8 @@ function getThresholdError(assertion: Assertion): string | undefined {
   }
 
   if (
-    TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) &&
+    (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+      RAG_SCORE_ASSERTION_TYPES.has(assertion.type)) &&
     assertion.threshold !== undefined &&
     (typeof assertion.threshold !== 'number' ||
       !Number.isFinite(assertion.threshold) ||

@@ -402,6 +402,46 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('exposes permissive defaults and thresholds for answer relevance scoring', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'answer-relevance' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
+    const threshold = screen.getByRole('spinbutton', {
+      name: 'Minimum score threshold (optional)',
+    });
+    expect(threshold).toHaveAccessibleDescription(
+      /Scores range from 0 to 1.*runtime default is 0.*prompt or a query variable/i,
+    );
+
+    await user.type(threshold, '0.75');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'answer-relevance', threshold: 0.75 }]);
+  });
+
+  it('guides context recall setup with ground truth and a normalized threshold', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'context-recall', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const groundTruth = screen.getByRole('textbox', { name: 'Ground truth answer (required)' });
+    expect(groundTruth).toHaveAccessibleDescription(/Provide retrieved context.*prompt content/i);
+    await user.type(groundTruth, 'Paris is the capital of France.');
+    await user.type(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+      '0.9',
+    );
+
+    expect(onAdd).toHaveBeenLastCalledWith([
+      {
+        type: 'context-recall',
+        value: 'Paris is the capital of France.',
+        threshold: 0.9,
+      },
+    ]);
+  });
+
   it('stores word count limits in the runtime range shape without model-grading cost', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();
@@ -540,7 +580,9 @@ describe('AssertsForm', () => {
 
     expect(screen.queryByRole('textbox', { name: 'Value' })).toBeNull();
     expect(screen.getByText('Model-graded: may add cost')).toBeVisible();
-    expect(screen.getByText(/uses your query and context variables/i)).toBeVisible();
+    expect(
+      screen.getByRole('spinbutton', { name: 'Minimum score threshold (optional)' }),
+    ).toHaveAccessibleDescription(/Provide query and context variables/i);
   });
 
   it('discloses model grading for a negative semantic similarity check', () => {
