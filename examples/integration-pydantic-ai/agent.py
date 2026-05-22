@@ -8,9 +8,9 @@ in a consistent format using Pydantic models.
 from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
-# Use the explicit `openai-chat:` prefix so the example stays pinned to the Chat
-# Completions API. In PydanticAI v2.0 the bare `openai:` prefix will resolve to
-# the Responses API instead.
+# Use the explicit `openai-chat:` prefix to pin this example to the OpenAI Chat
+# Completions API. The bare `openai:` prefix is Chat Completions today but
+# resolves to the Responses API in PydanticAI v2.0+.
 DEFAULT_MODEL = "openai-chat:gpt-4.1-mini"
 
 
