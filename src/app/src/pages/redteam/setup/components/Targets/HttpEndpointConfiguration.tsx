@@ -1,6 +1,6 @@
 import './syntax-highlighting.css';
 
-import { useCallback, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
@@ -76,6 +76,47 @@ interface GeneratedConfig {
   };
 }
 
+function applyTextAreaErrorAttributes(
+  textarea: HTMLTextAreaElement | null,
+  error: React.ReactNode | null,
+  errorId: string,
+): void {
+  if (!textarea) {
+    return;
+  }
+
+  textarea.setAttribute('aria-invalid', String(Boolean(error)));
+  if (error) {
+    textarea.setAttribute('aria-describedby', errorId);
+  } else {
+    textarea.removeAttribute('aria-describedby');
+  }
+}
+
+function useEditorErrorAttributes(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  error: React.ReactNode | null,
+  errorId: string,
+): void {
+  useEffect(() => {
+    applyTextAreaErrorAttributes(
+      containerRef.current?.querySelector('textarea') ?? null,
+      error,
+      errorId,
+    );
+  }, [containerRef, error, errorId]);
+}
+
+function useTextAreaErrorAttributes(
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>,
+  error: React.ReactNode | null,
+  errorId: string,
+): void {
+  useEffect(() => {
+    applyTextAreaErrorAttributes(textareaRef.current, error, errorId);
+  }, [textareaRef, error, errorId]);
+}
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -99,6 +140,9 @@ const HttpEndpointConfiguration = ({
   onSessionTested,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
   const urlErrorId = useId();
+  const bodyErrorId = useId();
+  const requestBodyEditorContainerRef = useRef<HTMLDivElement>(null);
+  const rawRequestRef = useRef<HTMLTextAreaElement>(null);
   const [requestBody, setRequestBody] = useState(
     typeof selectedTarget.config.body === 'string'
       ? selectedTarget.config.body
@@ -153,6 +197,9 @@ Content-Type: application/json
 
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
+
+  useEditorErrorAttributes(requestBodyEditorContainerRef, bodyError, bodyErrorId);
+  useTextAreaErrorAttributes(rawRequestRef, bodyError, bodyErrorId);
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -578,7 +625,12 @@ ${exampleRequest}`;
               />
               <Label htmlFor="use-https">Use HTTPS</Label>
             </div>
+            <Label htmlFor="raw-http-request" className="mb-2 block">
+              Raw HTTP request
+            </Label>
             <textarea
+              ref={rawRequestRef}
+              id="raw-http-request"
               value={selectedTarget.config.request || ''}
               onChange={(e) => handleRawRequestChange(e.target.value)}
               placeholder={placeholderText}
@@ -589,7 +641,11 @@ ${exampleRequest}`;
                 maxHeight: '40rem',
               }}
             />
-            {bodyError && <HelperText error>{bodyError}</HelperText>}
+            {bodyError && (
+              <HelperText id={bodyErrorId} error>
+                {bodyError}
+              </HelperText>
+            )}
           </>
         ) : (
           <>
@@ -667,7 +723,9 @@ ${exampleRequest}`;
 
             <div className="mb-2 mt-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <p className="font-medium">Request Body</p>
+                <Label htmlFor="http-request-body" className="font-medium">
+                  Request Body
+                </Label>
                 <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
                   <button
                     type="button"
@@ -724,6 +782,7 @@ ${exampleRequest}`;
               )}
             </div>
             <div
+              ref={requestBodyEditorContainerRef}
               className={cn(
                 'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
                 bodyError ? 'border-destructive' : 'border-border',
@@ -731,6 +790,7 @@ ${exampleRequest}`;
               style={{ contain: 'inline-size' }}
             >
               <Editor
+                textareaId="http-request-body"
                 value={
                   typeof requestBody === 'object'
                     ? JSON.stringify(requestBody, null, 2)
@@ -750,7 +810,11 @@ ${exampleRequest}`;
                 textareaClassName="!whitespace-pre"
               />
             </div>
-            {bodyError && <HelperText error>{bodyError}</HelperText>}
+            {bodyError && (
+              <HelperText id={bodyErrorId} error>
+                {bodyError}
+              </HelperText>
+            )}
           </>
         )}
 

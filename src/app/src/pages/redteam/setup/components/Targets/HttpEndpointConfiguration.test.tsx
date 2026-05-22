@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange }: any) => (
+  default: ({ textareaId, value, onValueChange }: any) => (
     <textarea
+      id={textareaId}
       data-testid="code-editor"
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
@@ -180,10 +181,13 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
 
     const firstNameField = nameFields[0];
     const firstValueField = valueFields[0];
+    const bodyField = screen.getByLabelText('Request Body');
 
     // Fields should remain visible after error state change
     expect(firstNameField).toBeVisible();
     expect(firstValueField).toBeVisible();
+    expect(bodyField).toHaveAttribute('aria-invalid', 'true');
+    expect(bodyField).toHaveAccessibleDescription(newBodyError);
   });
 
   it('should maintain header Name and Value field layout constraints when urlError state changes', () => {
@@ -227,6 +231,32 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(firstValueField).toBeVisible();
     expect(urlInput).toHaveAttribute('aria-invalid', 'true');
     expect(urlInput).toHaveAccessibleDescription(newUrlError);
+  });
+
+  it('connects raw request validation feedback to the raw request field', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        selectedTarget={{
+          ...defaultProps.selectedTarget,
+          config: {
+            ...defaultProps.selectedTarget.config,
+            request: 'POST /chat HTTP/1.1',
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        bodyError="Raw request must contain {{prompt}} template variable"
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const rawRequestField = screen.getByLabelText('Raw HTTP request');
+    expect(rawRequestField).toHaveAttribute('aria-invalid', 'true');
+    expect(rawRequestField).toHaveAccessibleDescription(
+      'Raw request must contain {{prompt}} template variable',
+    );
   });
 
   it('should render header Name and Value fields with correct minimum widths and flex grow, ensuring both fields remain visible and usable for typical header values', () => {
