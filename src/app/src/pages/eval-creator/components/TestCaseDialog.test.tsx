@@ -38,7 +38,7 @@ describe('TestCaseForm', () => {
     return render(<TestCaseForm {...defaultProps} {...props} />);
   };
 
-  it('should render with the title "Add Test Case" and show both "Add Test Case" and "Add Another" buttons when initialValues is undefined and open is true', () => {
+  it('explains how test cases run and offers add-and-continue in create mode', () => {
     renderComponent();
 
     const dialogTitle = screen.getByRole('heading', { name: 'Add Test Case' });
@@ -47,8 +47,12 @@ describe('TestCaseForm', () => {
     const addTestCaseButton = screen.getByRole('button', { name: 'Add Test Case' });
     expect(addTestCaseButton).toBeInTheDocument();
 
-    const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
     expect(addAnotherButton).toBeInTheDocument();
+    expect(screen.getByText(/set inputs for one evaluation example/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/runs against every configured prompt and provider/i),
+    ).toBeInTheDocument();
   });
 
   it('should render with the title "Edit Test Case" and show only the "Update Test Case" button when initialValues is provided and open is true', () => {
@@ -61,7 +65,7 @@ describe('TestCaseForm', () => {
 
     expect(screen.getByText('Edit Test Case')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Update Test Case' })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Add Another' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add and create another' })).toBeNull();
   });
 
   it('keeps dialog actions visible while the test case form scrolls independently', () => {
@@ -106,7 +110,7 @@ describe('TestCaseForm', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("should call onAdd with the current form state and shouldClose=false, then reset the form but not call onCancel when the 'Add Another' button is clicked in add mode", async () => {
+  it('acknowledges a saved test case while keeping the add flow open for another', async () => {
     renderComponent();
 
     const testVars = { var1: 'value1', var2: 'value2' };
@@ -120,7 +124,7 @@ describe('TestCaseForm', () => {
       assertsFormProps.onAdd(testAsserts);
     });
 
-    const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
     await userEvent.click(addAnotherButton);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
@@ -134,6 +138,9 @@ describe('TestCaseForm', () => {
     );
 
     expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Test case added. Enter values for the next test case.',
+    );
   });
 
   it("should call onAdd with the updated form state and shouldClose=true, then reset the form and call onCancel when the 'Update Test Case' button is clicked in edit mode", async () => {
@@ -178,6 +185,25 @@ describe('TestCaseForm', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onAdd).not.toHaveBeenCalled();
+  });
+
+  it('confirms before cancelling a test case with unsaved changes', async () => {
+    const user = userEvent.setup();
+    renderComponent();
+
+    await user.type(screen.getByLabelText('Description'), 'Draft case');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByText('Discard test case changes?')).toBeInTheDocument();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.queryByText('Discard test case changes?')).toBeNull();
+    expect(screen.getByLabelText('Description')).toHaveValue('Draft case');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('should update form fields when initialValues change', () => {
