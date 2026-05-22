@@ -7,7 +7,11 @@ import { runAssertion } from '../../src/assertions/index';
 import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
+import {
+  isPackagePath,
+  loadFromPackage,
+  resolvePackageReference,
+} from '../../src/providers/packageParser';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
@@ -99,9 +103,11 @@ vi.mock('../../src/matchers/rag', async () => {
 vi.mock('../../src/providers/packageParser', () => {
   const mockIsPackagePath = vi.fn();
   const mockLoadFromPackage = vi.fn();
+  const mockResolvePackageReference = vi.fn();
   return {
     isPackagePath: mockIsPackagePath,
     loadFromPackage: mockLoadFromPackage,
+    resolvePackageReference: mockResolvePackageReference,
     __esModule: true, // This is important for proper mocking
   };
 });
@@ -284,6 +290,7 @@ describe('JavaScript file references', () => {
     vi.mocked(path.resolve).mockReset();
     vi.mocked(isPackagePath).mockReset();
     vi.mocked(loadFromPackage).mockReset();
+    vi.mocked(resolvePackageReference).mockReset();
   });
 
   afterEach(() => {
@@ -776,6 +783,28 @@ describe('JavaScript file references', () => {
     });
     expect(typeof result.assertion?.value).toBe('string');
     expect(result.reason).not.toMatch(/\nundefined$/);
+  });
+
+  it('should report invalid circular javascript assertion results', async () => {
+    const invalidResult: Record<string, unknown> = {};
+    invalidResult.self = invalidResult;
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'javascript',
+        value: () => invalidResult,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain(
+      'Custom function must return a boolean, number, or GradingResult object',
+    );
+    expect(result.reason).not.toContain('Converting circular structure');
   });
 
   it('should serialize function-valued assertions returned inside a custom GradingResult', async () => {
@@ -1641,6 +1670,23 @@ return s >= 0.5 && s <= 0.75;`,
   });
 
   describe('JavaScript timeout behavior', () => {
+    it('should allow inline javascript assertions that complete within timeout', async () => {
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: {
+          type: 'javascript',
+          value: 'output === "Expected output"',
+        },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+        timeoutMs: 5000,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).not.toContain('timed out');
+    });
+
     it('should pass function assertions with closures when timeout is set', async () => {
       const cutoff = 0.5;
       const assertion: Assertion = {
@@ -1713,6 +1759,43 @@ return isCallable && typeof callResult === 'string' && callResult.length > 0 && 
       expect(result.score).toBe(1);
     });
 
+    it('should load file-based typescript assertions under timeout', async () => {
+      const realFs = await vi.importActual<typeof import('fs')>('fs');
+      const tempDir = realFs.mkdtempSync(
+        nodePath.join(os.tmpdir(), 'promptfoo-js-assert-timeout-'),
+      );
+      const scriptPath = nodePath.join(tempDir, 'assert.ts');
+      realFs.writeFileSync(
+        scriptPath,
+        `export default function fastAssertion(output: string) {
+  return output === 'Expected output';
+}`,
+        'utf8',
+      );
+
+      vi.mocked(path.resolve).mockReturnValue(scriptPath);
+      vi.mocked(path.extname).mockReturnValue('.ts');
+      vi.mocked(isPackagePath).mockReturnValue(false);
+
+      try {
+        const result: GradingResult = await runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion: {
+            type: 'javascript',
+            value: `file://${scriptPath}`,
+          },
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'Expected output' },
+          timeoutMs: 5000,
+        });
+
+        expect(result.pass).toBe(true);
+      } finally {
+        realFs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
+
     it('should timeout inline javascript assertions that exceed timeout', async () => {
       const output = 'Expected output';
       const assertion: Assertion = {
@@ -1722,17 +1805,24 @@ while (Date.now() - start < 300) {}
 return true;`,
       };
 
-      const result: GradingResult = await runAssertion({
-        prompt: 'Some prompt',
-        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-        assertion,
-        test: {} as AtomicTestCase,
-        providerResponse: { output },
-        timeoutMs: 50,
-      });
+      vi.useFakeTimers();
+      try {
+        const resultPromise = runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output },
+          timeoutMs: 50,
+        });
+        await vi.runAllTimersAsync();
+        const result: GradingResult = await resultPromise;
 
-      expect(result.pass).toBe(false);
-      expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+        expect(result.pass).toBe(false);
+        expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should timeout file-based javascript assertions that exceed timeout', async () => {
@@ -1757,22 +1847,79 @@ return true;`,
 
       try {
         const output = 'Expected output';
-        const assertion: Assertion = {
-          type: 'javascript',
-          value: `file://${scriptPath}`,
-        };
+        vi.useFakeTimers();
+        try {
+          const resultPromise = runAssertion({
+            prompt: 'Some prompt',
+            provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+            assertion: {
+              type: 'javascript',
+              value: `file://${scriptPath}`,
+            },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+            timeoutMs: 50,
+          });
+          await vi.runAllTimersAsync();
+          const result: GradingResult = await resultPromise;
 
-        const result: GradingResult = await runAssertion({
-          prompt: 'Some prompt',
-          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
-          assertion,
-          test: {} as AtomicTestCase,
-          providerResponse: { output },
-          timeoutMs: 50,
-        });
+          expect(result.pass).toBe(false);
+          expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+        } finally {
+          vi.useRealTimers();
+        }
+      } finally {
+        realFs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    });
 
-        expect(result.pass).toBe(false);
-        expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+    it('should timeout package javascript assertions in the worker', async () => {
+      const realFs = await vi.importActual<typeof import('fs')>('fs');
+      const tempDir = realFs.mkdtempSync(
+        nodePath.join(os.tmpdir(), 'promptfoo-js-assert-timeout-'),
+      );
+      const scriptPath = nodePath.join(tempDir, 'assert.js');
+      realFs.writeFileSync(
+        scriptPath,
+        `exports.busyLoopAssertion = function busyLoopAssertion() {
+  const start = Date.now();
+  while (Date.now() - start < 300) {}
+  return true;
+};`,
+        'utf8',
+      );
+
+      vi.mocked(isPackagePath).mockReturnValue(true);
+      vi.mocked(path.extname).mockReturnValue('.js');
+      vi.mocked(resolvePackageReference).mockReturnValue({
+        entityName: 'busyLoopAssertion',
+        filePath: scriptPath,
+        packageName: '@promptfoo/fake',
+      });
+
+      try {
+        vi.useFakeTimers();
+        try {
+          const resultPromise = runAssertion({
+            prompt: 'Some prompt',
+            provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+            assertion: {
+              type: 'javascript',
+              value: 'package:@promptfoo/fake:busyLoopAssertion',
+            },
+            test: {} as AtomicTestCase,
+            providerResponse: { output: 'Expected output' },
+            timeoutMs: 50,
+          });
+          await vi.runAllTimersAsync();
+          const result: GradingResult = await resultPromise;
+
+          expect(result.pass).toBe(false);
+          expect(result.reason).toContain('Javascript assertion timed out after 50ms');
+          expect(loadFromPackage).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
       } finally {
         realFs.rmSync(tempDir, { recursive: true, force: true });
       }

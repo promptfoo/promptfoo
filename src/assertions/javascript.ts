@@ -108,15 +108,26 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
+function serializeInvalidResult(result: unknown): string {
+  const serialized = safeJsonStringify(result);
+  if (serialized !== undefined) {
+    return serialized;
+  }
+
+  try {
+    return String(result);
+  } catch {
+    return '<unserializable>';
+  }
+}
+
 const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
   if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
     return result;
   } else {
     throw new Error(
-      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
-        result,
-      )}`,
+      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${serializeInvalidResult(result)}`,
     );
   }
 };
@@ -258,11 +269,7 @@ function loadCjsModule(modulePath) {
 
 async function importModuleWithFallback(modulePath) {
   try {
-    if (modulePath.endsWith('.ts') || modulePath.endsWith('.cts') || modulePath.endsWith('.mts')) {
-      try {
-        require('tsx/cjs');
-      } catch {}
-    }
+    await ensureTypescriptLoader(modulePath);
     const importedModule = await import(pathToFileURL(modulePath).toString());
     return importedModule?.default?.default || importedModule?.default || importedModule;
   } catch (err) {
@@ -272,6 +279,23 @@ async function importModuleWithFallback(modulePath) {
     }
     throw err;
   }
+}
+
+let tsxLoaderPromise;
+
+async function ensureTypescriptLoader(modulePath) {
+  if (!/\\.[cm]?ts$/.test(modulePath)) {
+    return;
+  }
+
+  if (!tsxLoaderPromise) {
+    tsxLoaderPromise = import('tsx').catch((err) => {
+      tsxLoaderPromise = undefined;
+      throw err;
+    });
+  }
+
+  await tsxLoaderPromise;
 }
 
 function resolveExportedFunction(requiredModule, filePath, functionName) {

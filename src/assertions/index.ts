@@ -19,7 +19,11 @@ import {
   matchesContextRelevance,
 } from '../matchers/rag';
 import { matchesSimilarity } from '../matchers/similarity';
-import { isPackagePath, loadFromPackage } from '../providers/packageParser';
+import {
+  isPackagePath,
+  loadFromPackage,
+  resolvePackageReference,
+} from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
 import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
@@ -533,14 +537,19 @@ export async function runAssertion({
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
-      const requiredModule = await loadFromPackage(renderedValue, basePath);
-      if (typeof requiredModule !== 'function') {
-        throw new Error(
-          `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
-        );
-      }
+      if (shouldUseIsolatedJavascriptRuntime) {
+        const { entityName, filePath } = resolvePackageReference(renderedValue, basePath);
+        renderedValue = `file://${filePath}:${entityName}`;
+      } else {
+        const requiredModule = await loadFromPackage(renderedValue, basePath);
+        if (typeof requiredModule !== 'function') {
+          throw new Error(
+            `Assertion malformed: ${renderedValue} must be a function. Received: ${typeof requiredModule}`,
+          );
+        }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
