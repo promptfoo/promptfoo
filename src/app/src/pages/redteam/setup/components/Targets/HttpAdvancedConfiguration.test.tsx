@@ -615,4 +615,113 @@ describe('HttpAdvancedConfiguration', () => {
       path: './auth/next.ts',
     });
   });
+
+  it('exposes OAuth client credential requirements with clean accessible names', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: {
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              tokenUrl: '',
+              clientId: '',
+              clientSecret: '',
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    for (const name of ['Token URL', 'Client ID', 'Client Secret']) {
+      const input = screen.getByLabelText(new RegExp(name));
+      expect(input).toHaveAccessibleName(name);
+      expect(input).toBeRequired();
+    }
+  });
+
+  it('makes OAuth client credentials optional only in password grant mode', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: {
+            auth: {
+              type: 'oauth',
+              grantType: 'password',
+              tokenUrl: '',
+              username: '',
+              password: '',
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    expect(screen.getByLabelText(/Token URL/)).toBeRequired();
+    expect(screen.getByLabelText('Client ID')).not.toBeRequired();
+    for (const name of ['Username', 'Password']) {
+      const input = screen.getByLabelText(new RegExp(name));
+      expect(input).toHaveAccessibleName(name);
+      expect(input).toBeRequired();
+    }
+  });
+
+  it.each([
+    {
+      label: 'Basic',
+      auth: { type: 'basic', username: '', password: '' },
+      fields: [
+        { id: 'basic-username', name: 'Username' },
+        { id: 'basic-password', name: 'Password' },
+      ],
+    },
+    {
+      label: 'Bearer',
+      auth: { type: 'bearer', token: '' },
+      fields: [{ id: 'bearer-token', name: 'Token' }],
+    },
+    {
+      label: 'API key',
+      auth: { type: 'api_key', keyName: '', value: '', placement: 'header' },
+      fields: [
+        { id: 'key-name', name: 'Key Name' },
+        { id: 'api-key-value', name: 'API Key Value' },
+      ],
+    },
+    {
+      label: 'File',
+      auth: { type: 'file', path: '' },
+      fields: [{ id: 'file-auth-path', name: 'Auth File Path' }],
+    },
+  ])('marks $label authorization fields as required', async ({ auth, fields }) => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={{
+          id: 'http-provider',
+          config: { auth } as ProviderOptions['config'],
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Authorization' }));
+
+    for (const { id, name } of fields) {
+      const input = document.getElementById(id);
+      expect(input).not.toBeNull();
+      expect(input).toHaveAccessibleName(name);
+      expect(input).toBeRequired();
+    }
+  });
 });

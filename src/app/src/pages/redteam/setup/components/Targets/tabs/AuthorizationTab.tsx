@@ -49,7 +49,11 @@ const PasswordField: React.FC<{
   <div className="space-y-2">
     <Label htmlFor={id}>
       {label}
-      {required && <span className="text-destructive"> *</span>}
+      {required && (
+        <span aria-hidden="true" className="ml-1 text-destructive">
+          *
+        </span>
+      )}
     </Label>
     <div className="relative">
       <Input
@@ -60,6 +64,7 @@ const PasswordField: React.FC<{
         placeholder={placeholder}
         className="pr-10"
         autoComplete="off"
+        required={required}
       />
       <Tooltip>
         <TooltipTrigger asChild>
@@ -263,10 +268,14 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
               <div className="space-y-2">
                 <Label htmlFor="token-url">
-                  Token URL <span className="text-destructive">*</span>
+                  Token URL
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="token-url"
+                  required
                   value={auth?.tokenUrl || ''}
                   onChange={(e) => updateAuthField('tokenUrl', e.target.value)}
                   placeholder="https://example.com/oauth/token"
@@ -276,10 +285,15 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
               <div className="space-y-2">
                 <Label htmlFor="client-id">
                   Client ID
-                  {auth?.grantType !== 'password' && <span className="text-destructive"> *</span>}
+                  {auth?.grantType !== 'password' && (
+                    <span aria-hidden="true" className="ml-1 text-destructive">
+                      *
+                    </span>
+                  )}
                 </Label>
                 <Input
                   id="client-id"
+                  required={auth?.grantType !== 'password'}
                   value={auth?.clientId || ''}
                   onChange={(e) => updateAuthField('clientId', e.target.value)}
                 />
@@ -306,10 +320,14 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="oauth-username">
-                      Username <span className="text-destructive">*</span>
+                      Username
+                      <span aria-hidden="true" className="ml-1 text-destructive">
+                        *
+                      </span>
                     </Label>
                     <Input
                       id="oauth-username"
+                      required
                       value={auth?.username || ''}
                       onChange={(e) => updateAuthField('username', e.target.value)}
                     />
@@ -361,10 +379,14 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
               <div className="space-y-2">
                 <Label htmlFor="basic-username">
-                  Username <span className="text-destructive">*</span>
+                  Username
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="basic-username"
+                  required
                   value={auth?.username || ''}
                   onChange={(e) => updateAuthField('username', e.target.value)}
                 />
@@ -436,10 +458,14 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
               <div className="space-y-2">
                 <Label htmlFor="key-name">
-                  Key Name <span className="text-destructive">*</span>
+                  Key Name
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="key-name"
+                  required
                   value={auth?.keyName || 'X-API-Key'}
                   onChange={(e) => updateAuthField('keyName', e.target.value)}
                   placeholder="X-API-Key"
@@ -475,10 +501,14 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
 
               <div className="space-y-2">
                 <Label htmlFor="file-auth-path">
-                  Auth File Path <span className="text-destructive">*</span>
+                  Auth File Path
+                  <span aria-hidden="true" className="ml-1 text-destructive">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="file-auth-path"
+                  required
                   value={auth?.path || ''}
                   onChange={(e) => updateAuthField('path', e.target.value)}
                   placeholder="./auth/get-token.ts"

@@ -40,7 +40,11 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
       {label && (
         <Label htmlFor={id}>
           {label}
-          {required && <span className="text-destructive ml-1">*</span>}
+          {required && (
+            <span aria-hidden="true" className="ml-1 text-destructive">
+              *
+            </span>
+          )}
         </Label>
       )}
       <div className="relative">
