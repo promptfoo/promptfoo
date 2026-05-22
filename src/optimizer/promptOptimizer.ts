@@ -595,9 +595,9 @@ function cloneOptimizationTestSuite(testSuite: TestSuite): TestSuite {
  * Detects whether `defaultTest` carries enough configuration to be a runnable test
  * on its own. `promptfoo eval` synthesizes a single implicit `[{}]` test case when no
  * `tests` or `scenarios` are configured and merges `defaultTest` into it (see
- * `getInitialTests` in `src/evaluator.ts`), so a `defaultTest` with assertions and/or
- * vars produces one runnable row. An empty `defaultTest` (`{}`) carries nothing to
- * evaluate and is not counted.
+ * `getInitialTests` in `src/evaluator.ts`), so a `defaultTest` with assertions,
+ * variables, or a scoring function produces one runnable row. An empty
+ * `defaultTest` (`{}`) carries nothing to evaluate and is not counted.
  */
 function hasRunnableDefaultTest(defaultTest: TestSuite['defaultTest']): boolean {
   if (!defaultTest || typeof defaultTest !== 'object') {
@@ -605,7 +605,8 @@ function hasRunnableDefaultTest(defaultTest: TestSuite['defaultTest']): boolean 
   }
   const hasAssertions = Array.isArray(defaultTest.assert) && defaultTest.assert.length > 0;
   const hasVars = Boolean(defaultTest.vars) && Object.keys(defaultTest.vars ?? {}).length > 0;
-  return hasAssertions || hasVars;
+  const hasScoringFunction = Boolean(defaultTest.assertScoringFunction);
+  return hasAssertions || hasVars || hasScoringFunction;
 }
 
 function countConfiguredOptimizationTests(testSuite: TestSuite): number {

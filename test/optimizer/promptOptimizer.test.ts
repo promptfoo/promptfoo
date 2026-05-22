@@ -687,6 +687,53 @@ describe('prompt optimizer', () => {
     expect(evaluate).toHaveBeenCalled();
   });
 
+  it('accepts a defaultTest-only config with an assertion scoring function', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      defaultTest: {
+        assertScoringFunction: () => ({ pass: true, score: 1, reason: 'scored' }),
+      },
+    };
+
+    const result = await optimizePromptTestSuite({}, testSuite);
+
+    expect(result.improved).toBe(true);
+    expect(evaluate).toHaveBeenCalled();
+  });
+
   it('uses validation score to reject search-only overfitting when split is enabled', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
