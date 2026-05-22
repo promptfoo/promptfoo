@@ -22,6 +22,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { TestCaseSchema } from '@promptfoo/types';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 
@@ -42,30 +43,17 @@ interface PendingTestCaseImport {
   testCases: TestCase[];
 }
 
-// Validation function for TestCase structure
+const TEST_CASE_FIELDS = new Set(Object.keys(TestCaseSchema.shape));
+
 function isValidTestCase(obj: unknown): obj is TestCase {
-  if (!obj || typeof obj !== 'object') {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
     return false;
   }
 
-  const testCase = obj as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  const hasRecognizedField = keys.length === 0 || keys.some((field) => TEST_CASE_FIELDS.has(field));
 
-  // Check required structure - vars should be an object if present
-  if (testCase.vars && typeof testCase.vars !== 'object') {
-    return false;
-  }
-
-  // Check assert array if present
-  if (testCase.assert && !Array.isArray(testCase.assert)) {
-    return false;
-  }
-
-  // Check options if present
-  if (testCase.options && typeof testCase.options !== 'object') {
-    return false;
-  }
-
-  return true;
+  return hasRecognizedField && TestCaseSchema.safeParse(obj).success;
 }
 
 function isTestGeneratorConfig(obj: unknown): obj is TestGeneratorConfig {

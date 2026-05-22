@@ -688,10 +688,9 @@ describe('TestCasesSection', () => {
       });
     });
 
-    it('handles YAML file with no valid test cases', async () => {
+    it('rejects YAML files containing only unknown test-case fields', async () => {
       const user = userEvent.setup();
       const mockYamlData = [
-        // These are actually valid objects that pass the isValidTestCase check
         {
           'not a valid test case': true,
         },
@@ -715,16 +714,14 @@ describe('TestCasesSection', () => {
       const file = new File(['invalid'], 'test.yaml', { type: 'text/yaml' });
 
       await user.upload(fileInput, file);
-      await confirmPendingImport(user, 1);
 
       await waitFor(() => {
-        // The first object is actually valid (it's an object), so we expect a warning about skipped items
         expect(mockShowToast).toHaveBeenCalledWith(
-          'Warning: 2 invalid test cases were skipped.',
-          'warning',
+          'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
+          'error',
         );
-        expect(mockShowToast).toHaveBeenCalledWith('Successfully imported 1 test case', 'success');
       });
+      expect(mockUpdateConfig).not.toHaveBeenCalled();
     });
 
     it('lets users cancel a parsed import before it changes the evaluation', async () => {
