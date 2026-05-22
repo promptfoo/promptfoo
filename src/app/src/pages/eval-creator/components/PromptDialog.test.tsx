@@ -71,7 +71,12 @@ describe('PromptDialog', () => {
     expect(mockProps.onAdd).toHaveBeenCalledWith('New prompt text');
     expect(textField).toHaveValue('');
     expect(textField).toHaveFocus();
-    expect(screen.getByRole('status')).toHaveTextContent('Prompt added. Enter the next prompt.');
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
+      'Prompt added. Each prompt runs across every test case and provider. Enter the next prompt.',
+    );
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 

@@ -65,7 +65,9 @@ const PromptDialog = ({
       onCancel();
     } else {
       setCleanPrompt('');
-      setAddAnotherStatus('Prompt added. Enter the next prompt.');
+      setAddAnotherStatus(
+        'Prompt added. Each prompt runs across every test case and provider. Enter the next prompt.',
+      );
       textareaRef.current?.focus();
     }
   };
@@ -96,7 +98,12 @@ const PromptDialog = ({
 
           <div className="space-y-2 py-4">
             {addAnotherStatus && (
-              <p role="status" className="rounded-md bg-muted p-3 text-sm">
+              <p
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+                className="rounded-md bg-muted p-3 text-sm"
+              >
                 {addAnotherStatus}
               </p>
             )}
