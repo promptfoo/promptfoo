@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { describe, expect, it } from 'vitest';
 import {
   type CodexCommandSkillItemAdapter,
@@ -24,11 +26,16 @@ describe('codexSkillMetadata', () => {
     });
 
     it('adds the working dir .agents root and ignores an orphan git root without a working dir', () => {
+      const workingDir = path.resolve('/repo/project');
       const withWorkingDir = getCodexSkillRootPrefixes({
-        workingDir: '/repo/project',
+        workingDir,
         gitRepositoryRoot: '/repo',
       });
-      expect(withWorkingDir).toContain('/repo/project/.agents');
+      // The working dir is resolved to an absolute path, so derive the expected
+      // prefix the same way rather than hard-coding a POSIX-only string.
+      expect(withWorkingDir).toContain(
+        path.posix.join(workingDir.replace(/\\/g, '/'), '.agents'),
+      );
       expect(withWorkingDir).toContain('/repo/.agents');
 
       const orphanGitRoot = getCodexSkillRootPrefixes({ gitRepositoryRoot: '/repo' });
