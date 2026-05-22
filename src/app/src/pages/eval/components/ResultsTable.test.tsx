@@ -350,13 +350,18 @@ describe('ResultsTable Metrics Display', () => {
   });
 
   it('keeps the sticky header divider visible for metadata and prompt columns', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      stickyHeader: true,
+      setStickyHeader: vi.fn(),
+    }));
+
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
       inComparisonMode: false,
       setTable: vi.fn(),
-      stickyHeader: true,
-      setStickyHeader: vi.fn(),
       table: {
         ...mockTable,
         head: {
