@@ -145,6 +145,36 @@ function getImportErrorMessage(fileName: string, error: unknown): string {
   return 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.';
 }
 
+const DEFAULT_STARTER_VALUES: Record<string, string> = {
+  animal: 'penguin',
+  location: 'tropical island',
+};
+
+function getStarterExample(varsList: string[]): TestCase {
+  const starterVars = varsList.length > 0 ? varsList : ['animal', 'location'];
+  const vars = Object.fromEntries(
+    starterVars.map((variable) => [
+      variable,
+      DEFAULT_STARTER_VALUES[variable] ?? `example ${variable.replace(/_/g, ' ')}`,
+    ]),
+  );
+  const isStoryStarter =
+    starterVars.length === 2 && starterVars.includes('animal') && starterVars.includes('location');
+
+  return {
+    description: isStoryStarter ? 'Fun animal adventure story' : 'Starter example',
+    vars,
+    assert: [
+      {
+        type: 'contains-any',
+        value: isStoryStarter
+          ? ['penguin', 'adventure', 'tropical', 'island']
+          : Object.values(vars),
+      },
+    ],
+  };
+}
+
 const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
@@ -356,20 +386,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    const exampleTestCase: TestCase = {
-                      description: 'Fun animal adventure story',
-                      vars: {
-                        animal: 'penguin',
-                        location: 'tropical island',
-                      },
-                      assert: [
-                        {
-                          type: 'contains-any',
-                          value: ['penguin', 'adventure', 'tropical', 'island'],
-                        },
-                      ],
-                    };
-                    setTestCases([...testCases, exampleTestCase]);
+                    setTestCases([...testCases, getStarterExample(varsList)]);
                   }}
                 >
                   Add Starter Example
@@ -381,8 +398,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
       </div>
       {canEditInlineTests && testCases.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          The starter example uses a deterministic text check. Add model-graded assertions later for
-          subjective quality checks; those may add cost.
+          The starter example uses your prompt variables when available and a deterministic text
+          check. Add model-graded assertions later for subjective quality checks; those may add
+          cost.
         </p>
       )}
 

@@ -56,7 +56,7 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Test Cases')).toBeInTheDocument();
     expect(screen.getByText('Add Starter Example')).toBeInTheDocument();
     expect(
-      screen.getByText(/starter example uses a deterministic text check/i),
+      screen.getByText(/starter example uses your prompt variables when available/i),
     ).toBeInTheDocument();
   });
 
@@ -186,6 +186,36 @@ describe('TestCasesSection', () => {
         ]),
       }),
     );
+  });
+
+  it('fills custom prompt variables when adding a starter example', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={['question', 'target_audience']} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add Starter Example' }));
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith({
+      tests: [
+        {
+          description: 'Starter example',
+          vars: {
+            question: 'example question',
+            target_audience: 'example target audience',
+          },
+          assert: [
+            {
+              type: 'contains-any',
+              value: ['example question', 'example target audience'],
+            },
+          ],
+        },
+      ],
+    });
   });
 
   it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {
