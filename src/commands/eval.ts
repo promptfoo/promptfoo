@@ -559,12 +559,11 @@ export async function doEval(
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
-      if (
-        filterRange !== undefined &&
-        !hasScenarios &&
-        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
-        testSuite.tests.length === 0
-      ) {
+      const shouldSuppressImplicitDefaultTest =
+        testSuite.tests.length === 0 &&
+        ((explicitTestCountBeforeFiltering ?? 0) > 0 ||
+          (filterRange !== undefined && shouldApplyRangeToImplicitDefaultTest));
+      if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
       }
     }

@@ -616,6 +616,31 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should suppress the implicit default test when filters remove explicit tests', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-pattern-filter-empty.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [{ description: 'kept only by matching filters', vars: { input: 'one' } }],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterPattern: 'no match',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+    });
+
     it('should apply filterRange to the implicit default test', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
         providers: ['echo'],
