@@ -320,6 +320,18 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByRole('button', { name: 'Test Cases: 1 ready' })).toBeInTheDocument();
   });
 
+  it('marks optional run settings configured when the evaluation has a name', () => {
+    useStore.getState().updateConfig({
+      description: 'Nightly support prompt comparison',
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(
+      screen.getAllByRole('button', { name: 'Run Options: Configured' }).length,
+    ).toBeGreaterThan(0);
+  });
+
   it('should let users jump between required steps from the progress summary', async () => {
     render(<EvaluateTestSuiteCreator />);
 

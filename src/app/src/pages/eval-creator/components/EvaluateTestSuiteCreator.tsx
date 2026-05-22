@@ -141,6 +141,11 @@ const EvaluateTestSuiteCreator = () => {
   const testCasesComplete = testCount > 0 && !readiness.issues.some((issue) => issue.stepId === 3);
   const hasResettableSetup =
     yamlHasUnsavedChanges || JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG);
+  const runOptionsConfigured = Boolean(
+    config.description?.trim() ||
+      config.evaluateOptions?.delay ||
+      config.evaluateOptions?.maxConcurrency,
+  );
 
   const setupSteps: SetupStep[] = [
     {
@@ -171,7 +176,7 @@ const EvaluateTestSuiteCreator = () => {
       id: 4,
       label: 'Run Options',
       title: 'Run Options',
-      isComplete: Boolean(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency),
+      isComplete: runOptionsConfigured,
       required: false,
     },
   ];
@@ -704,9 +709,7 @@ const EvaluateTestSuiteCreator = () => {
                     stepNumber={4}
                     title="Run Options"
                     description="Configure how your evaluation will run (optional but recommended for rate limiting)."
-                    isComplete={
-                      !!(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency)
-                    }
+                    isComplete={runOptionsConfigured}
                   >
                     <RunOptionsSection
                       description={config.description}
