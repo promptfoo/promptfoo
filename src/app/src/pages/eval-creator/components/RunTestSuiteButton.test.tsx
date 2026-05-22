@@ -105,6 +105,22 @@ describe('RunTestSuiteButton', () => {
     expect(button).toHaveAttribute('aria-describedby', 'run-eval-help');
   });
 
+  it('blocks an imported test case whose assertion is missing a runnable value', () => {
+    useStore.getState().updateConfig({
+      prompts: ['Write a summary'],
+      providers: ['openai:gpt-4'],
+      tests: [{ assert: [{ type: 'contains', value: '' }] }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    const button = screen.getByRole('button', { name: 'Run Evaluation' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription(
+      'Resolve the required setup items above to run this evaluation.',
+    );
+  });
+
   it('should accept prompt variables supplied by default test values', () => {
     useStore.getState().updateConfig({
       prompts: ['Write about {{topic}} for {{audience}}'],

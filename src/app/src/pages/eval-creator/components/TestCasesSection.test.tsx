@@ -131,6 +131,30 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Missing variables: input.')).toHaveClass('sr-only');
   });
 
+  it('exposes imported assertion values that must be completed before running', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Imported test',
+            assert: [{ type: 'contains', value: '' }],
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    expect(
+      screen.getByText('Assertion issue: Enter an expected value before saving this check.'),
+    ).toHaveClass('sr-only');
+  });
+
   it('does not report variables supplied by default test values as missing', () => {
     (useStore as any).mockReturnValue({
       config: {

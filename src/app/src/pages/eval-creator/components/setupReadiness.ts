@@ -1,9 +1,10 @@
+import { getFirstAssertionValueError } from './assertionValueValidation';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
 
 export interface SetupIssue {
-  id: 'providers' | 'prompts' | 'tests' | 'variables';
+  id: 'providers' | 'prompts' | 'tests' | 'variables' | 'assertions';
   message: string;
   stepId: SetupStepId;
 }
@@ -16,6 +17,8 @@ export interface SetupReadiness {
   testCount: number;
   requiredVariables: string[];
   testCasesMissingVariables: number[];
+  testCasesWithInvalidAssertions: number[];
+  defaultTestHasInvalidAssertions: boolean;
   plannedBaseRequestCount?: number;
 }
 
@@ -61,6 +64,14 @@ function hasRunnableProviderId(
   provider: ProviderOptions,
 ): provider is ProviderOptions & { id: string } {
   return typeof provider.id === 'string' && provider.id.trim() !== '';
+}
+
+function hasInvalidAssertionValue(testCase: unknown): boolean {
+  if (!isRecord(testCase) || !Array.isArray(testCase.assert)) {
+    return false;
+  }
+
+  return Boolean(getFirstAssertionValueError(testCase.assert));
 }
 
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
@@ -258,6 +269,28 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     });
   }
 
+  const testCasesWithInvalidAssertions = Array.isArray(config.tests)
+    ? config.tests.flatMap((testCase, index) => (hasInvalidAssertionValue(testCase) ? [index] : []))
+    : [];
+  const defaultTestHasInvalidAssertions = hasInvalidAssertionValue(config.defaultTest);
+
+  if (defaultTestHasInvalidAssertions || testCasesWithInvalidAssertions.length > 0) {
+    const invalidTestsMessage =
+      testCasesWithInvalidAssertions.length === 1
+        ? `test case ${testCasesWithInvalidAssertions[0] + 1}`
+        : `${testCasesWithInvalidAssertions.length} test cases`;
+    const locationMessage = defaultTestHasInvalidAssertions
+      ? testCasesWithInvalidAssertions.length > 0
+        ? `your default test and ${invalidTestsMessage}`
+        : 'your default test in YAML'
+      : invalidTestsMessage;
+    issues.push({
+      id: 'assertions',
+      message: `Add required assertion values in ${locationMessage}.`,
+      stepId: 3,
+    });
+  }
+
   return {
     isReadyToRun: issues.length === 0,
     issues,
@@ -266,6 +299,8 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     testCount,
     requiredVariables,
     testCasesMissingVariables,
+    testCasesWithInvalidAssertions,
+    defaultTestHasInvalidAssertions,
     plannedBaseRequestCount: Array.isArray(config.tests)
       ? providerCount * promptCount * testCount
       : undefined,

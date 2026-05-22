@@ -23,6 +23,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
 import { TestCaseSchema } from '@promptfoo/types';
+import { getFirstAssertionValueError } from './assertionValueValidation';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 
@@ -432,6 +433,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                     (v) => !testCaseVars.includes(v) && !defaultTestVars.includes(v),
                   );
                   const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
+                  const assertionError = getFirstAssertionValueError(testCase.assert);
+                  const hasAssertionError = Boolean(assertionError);
+                  const hasTestCaseIssue = hasMissingVars || hasAssertionError;
 
                   return (
                     <tr
@@ -443,7 +447,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                       className={cn(
                         'border-b border-border cursor-pointer',
                         'hover:bg-muted/50 transition-colors',
-                        hasMissingVars && 'bg-amber-50/50 dark:bg-amber-950/20',
+                        hasTestCaseIssue && 'bg-amber-50/50 dark:bg-amber-950/20',
                       )}
                     >
                       <td className="px-4 py-3 text-sm">
@@ -457,13 +461,15 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                           aria-label={`Open test case ${index + 1} for editing`}
                           className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {hasMissingVars && (
+                          {hasTestCaseIssue && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
                               </TooltipTrigger>
                               <TooltipContent>
-                                Missing variables: {missingVars.join(', ')}
+                                {hasMissingVars && <>Missing variables: {missingVars.join(', ')}</>}
+                                {hasMissingVars && hasAssertionError && <br />}
+                                {hasAssertionError && assertionError}
                               </TooltipContent>
                             </Tooltip>
                           )}
@@ -471,6 +477,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                             <span className="sr-only">
                               Missing variables: {missingVars.join(', ')}.
                             </span>
+                          )}
+                          {hasAssertionError && (
+                            <span className="sr-only">Assertion issue: {assertionError}</span>
                           )}
                           {testCase.description || (
                             <span className="text-muted-foreground italic">

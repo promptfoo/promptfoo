@@ -24,6 +24,8 @@ const readySetup: SetupReadiness = {
   testCount: 3,
   requiredVariables: [],
   testCasesMissingVariables: [],
+  testCasesWithInvalidAssertions: [],
+  defaultTestHasInvalidAssertions: false,
   plannedBaseRequestCount: 6,
 };
 

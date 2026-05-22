@@ -150,7 +150,45 @@ describe('setupReadiness', () => {
 
       expect(readiness.isReadyToRun).toBe(true);
       expect(readiness.testCasesMissingVariables).toEqual([]);
+      expect(readiness.testCasesWithInvalidAssertions).toEqual([]);
+      expect(readiness.defaultTestHasInvalidAssertions).toBe(false);
       expect(readiness.plannedBaseRequestCount).toBe(1);
+    });
+
+    it('blocks imported inline tests with incomplete assertion values', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        tests: [
+          { assert: [{ type: 'equals', value: '' }] },
+          { assert: [{ type: 'contains', value: '' }] },
+        ],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.testCasesWithInvalidAssertions).toEqual([1]);
+      expect(readiness.issues).toContainEqual({
+        id: 'assertions',
+        message: 'Add required assertion values in test case 2.',
+        stepId: 3,
+      });
+    });
+
+    it('blocks an incomplete assertion inherited from the default test', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        defaultTest: { assert: [{ type: 'contains-any', value: [] }] },
+        tests: [{}],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.defaultTestHasInvalidAssertions).toBe(true);
+      expect(readiness.issues).toContainEqual({
+        id: 'assertions',
+        message: 'Add required assertion values in your default test in YAML.',
+        stepId: 3,
+      });
     });
 
     it('does not claim an exact base request count for external test files', () => {

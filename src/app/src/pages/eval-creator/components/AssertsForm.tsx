@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { ARRAY_VALUE_ASSERTION_TYPES, getAssertionValueError } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -124,14 +125,6 @@ const getAssertionLabel = (type: AssertionType): string => {
   return label ? `${label} (${type})` : type;
 };
 
-// Assertion types that accept comma-separated values
-const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  'contains-any',
-  'contains-all',
-  'not-contains-any',
-  'not-contains-all',
-]);
-
 const OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES = new Set<AssertionType>([
   'is-json',
   'contains-json',
@@ -154,21 +147,6 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'pi',
   'select-best',
   'trajectory:goal-success',
-]);
-
-const REQUIRED_TEXT_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
-  'contains',
-  'icontains',
-  'starts-with',
-  'regex',
-  'webhook',
-  'not-contains',
-  'not-icontains',
-  'not-starts-with',
-  'not-regex',
-  'not-webhook',
-  'llm-rubric',
-  'similar',
 ]);
 
 const formatAssertionValue = (assert: Assertion): string => {
@@ -196,31 +174,6 @@ const parseAssertionValue = (type: AssertionType, value: string): Assertion['val
   }
 
   return value;
-};
-
-const getAssertionValueError = (assert: Assertion): string | undefined => {
-  if (
-    ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) &&
-    (!Array.isArray(assert.value) || assert.value.length === 0)
-  ) {
-    return 'Enter at least one comma-separated value for this check.';
-  }
-
-  if (
-    REQUIRED_TEXT_VALUE_ASSERTION_TYPES.has(assert.type) &&
-    (typeof assert.value !== 'string' || assert.value.trim() === '')
-  ) {
-    if (assert.type === 'llm-rubric') {
-      return 'Enter grading criteria before using an LLM rubric.';
-    }
-    if (assert.type === 'similar') {
-      return 'Enter an expected answer for semantic similarity.';
-    }
-
-    return 'Enter an expected value before saving this check.';
-  }
-
-  return undefined;
 };
 
 const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProps) => {
