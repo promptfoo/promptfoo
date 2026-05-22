@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import ProviderTypeSelector from './ProviderTypeSelector';
@@ -108,6 +108,34 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('Custom Provider')).toBeInTheDocument();
     expect(screen.getByText('Configure another model, endpoint, or script')).toBeInTheDocument();
     expect(screen.queryByText('Custom Target')).not.toBeInTheDocument();
+  });
+
+  it('announces the selected option and keeps documentation keyboard actions separate', () => {
+    const setProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector
+        provider={{ id: 'http', config: {} }}
+        setProvider={setProvider}
+        providerType="http"
+      />,
+    );
+
+    expect(screen.getByText('HTTP/HTTPS Endpoint').closest('[role="button"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('Python').closest('[role="button"]')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+
+    const documentationLink = screen.getByRole('link', { name: 'View Python documentation' });
+    expect(documentationLink.closest('[role="button"]')).toBeNull();
+
+    fireEvent.keyDown(documentationLink, { key: 'Enter' });
+
+    expect(setProvider).not.toHaveBeenCalled();
   });
 
   it('stacks filters above search before the layout has room for a shared row', () => {
