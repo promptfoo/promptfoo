@@ -10,7 +10,6 @@
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
   border-radius: 8px;
   font-size: 0.8125rem;
   font-weight: 500;
@@ -28,12 +27,16 @@
   cursor: pointer;
 }
 
+/*
+ * The clickable button fills the chip and owns the padding so the entire
+ * chip surface (including its inset) is clickable, with no dead zone.
+ */
 .metric-content {
   display: flex;
   align-items: center;
   gap: 0.25rem;
   flex: 1;
-  padding: 0;
+  padding: 0.25rem 0.5rem;
   border: 0;
   color: inherit;
   background: transparent;
@@ -114,8 +117,11 @@
   }
 
   .metric-chip {
-    padding: 0.2rem 0.4rem;
     font-size: 0.75rem;
+  }
+
+  .metric-content {
+    padding: 0.2rem 0.4rem;
   }
 
   .filter-icon {
