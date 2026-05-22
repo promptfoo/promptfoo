@@ -232,6 +232,57 @@ describe('AssertsForm', () => {
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
+  it('guides finish reason checks through normalized values and preserves a custom path', async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'finish-reason' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    const reasonSelect = screen.getByRole('combobox', {
+      name: 'Expected finish reason (required)',
+    });
+    expect(reasonSelect).toHaveAccessibleDescription('Select or enter the expected finish reason.');
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+
+    await user.click(reasonSelect);
+    await user.click(await screen.findByRole('option', { name: 'Natural completion (stop)' }));
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'finish-reason', value: 'stop' }]);
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+
+    await user.click(screen.getByRole('button', { name: 'Use provider-specific reason' }));
+    const customInput = screen.getByRole('textbox', {
+      name: 'Provider-specific finish reason (required)',
+    });
+    await user.type(customInput, 'pause_turn');
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'finish-reason', value: 'pause_turn' }]);
+    expect(customInput).toHaveAccessibleDescription(/provider returns another reason/i);
+  });
+
+  it('clears unrelated expected text before revealing finish reason choices', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'equals', value: 'stale expected text' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await user.click(screen.getByRole('combobox', { name: 'Type' }));
+    await user.click(
+      await screen.findByRole('option', { name: /Finish reason \(finish-reason\)/ }),
+    );
+
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'finish-reason' }]);
+    expect(
+      screen.getByRole('combobox', { name: 'Expected finish reason (required)' }),
+    ).toBeVisible();
+    expect(screen.queryByDisplayValue('stale expected text')).toBeNull();
+  });
+
   it('stores word count limits in the runtime range shape without model-grading cost', async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();

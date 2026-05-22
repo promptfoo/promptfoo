@@ -142,6 +142,7 @@ const ASSERTION_LABELS: Partial<Record<AssertionType, string>> = {
   'not-similar': 'Not semantically similar',
   'select-best': 'Choose best output',
   'max-score': 'Choose highest score',
+  'finish-reason': 'Finish reason',
   latency: 'Latency threshold',
   cost: 'Cost threshold',
   'word-count': 'Word count limits',
@@ -160,6 +161,8 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
     'Compares outputs for this test case. Add at least two prompts or providers; a model judges the winner and this can add cost.',
   'max-score':
     'Selects the highest-scoring output from your other checks. Add at least two prompts or providers and one other assertion; this check does not add model-grading cost itself.',
+  'finish-reason':
+    'Checks why generation stopped using normalized provider finish reasons, such as natural completion or tool calls.',
   latency: 'Fails when a response takes longer than your maximum duration.',
   cost: 'Fails when one provider response costs more than your maximum amount.',
   'word-count': 'Checks response length without model grading or additional cost.',
@@ -186,6 +189,8 @@ const OPTIONAL_XML_ELEMENT_ASSERTION_TYPES = new Set<AssertionType>([
   'not-is-xml',
   'not-contains-xml',
 ]);
+
+const GUIDED_FINISH_REASON_TYPES = new Set<AssertionType>(['finish-reason', 'not-finish-reason']);
 
 const NO_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'is-html',
@@ -504,6 +509,136 @@ const MaxScoreField = ({ assertion }: { assertion: Assertion }) => (
   </div>
 );
 
+const STANDARD_FINISH_REASONS = [
+  { value: 'stop', label: 'Natural completion (stop)' },
+  { value: 'length', label: 'Token limit reached (length)' },
+  { value: 'content_filter', label: 'Content filtering (content_filter)' },
+  { value: 'tool_calls', label: 'Tool called (tool_calls)' },
+] as const;
+
+const STANDARD_FINISH_REASON_VALUES = new Set<string>(
+  STANDARD_FINISH_REASONS.map((reason) => reason.value),
+);
+
+interface FinishReasonFieldProps {
+  assertion: Assertion;
+  error?: string;
+  index: number;
+  onChange: (assertion: Assertion) => void;
+}
+
+const FinishReasonField = ({ assertion, error, index, onChange }: FinishReasonFieldProps) => {
+  const value = typeof assertion.value === 'string' ? assertion.value : '';
+  const hasCustomValue = value !== '' && !STANDARD_FINISH_REASON_VALUES.has(value);
+  const [isEnteringCustomValue, setIsEnteringCustomValue] = useState(hasCustomValue);
+  const showCustomValue = hasCustomValue || isEnteringCustomValue;
+  const descriptionId = error
+    ? `assert-value-error-${index}`
+    : `assert-finish-reason-help-${index}`;
+
+  if (showCustomValue) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor={`assert-finish-reason-custom-${index}`} className="text-sm font-medium">
+            Provider-specific finish reason (required)
+          </Label>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setIsEnteringCustomValue(false);
+              onChange({ ...assertion, value: undefined });
+            }}
+          >
+            Choose a standard reason
+          </Button>
+        </div>
+        <Input
+          id={`assert-finish-reason-custom-${index}`}
+          value={value}
+          onChange={(event) => onChange({ ...assertion, value: event.target.value })}
+          placeholder="pause_turn or {{expected_reason}}"
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionId}
+        />
+        {error ? (
+          <HelperText id={`assert-value-error-${index}`} error>
+            {error}
+          </HelperText>
+        ) : (
+          <p id={descriptionId} className="text-xs text-muted-foreground">
+            Use this only when your provider returns another reason or when the value comes from a
+            variable.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={`assert-finish-reason-${index}`} className="text-sm font-medium">
+        Expected finish reason (required)
+      </Label>
+      <Select
+        value={STANDARD_FINISH_REASON_VALUES.has(value) ? value : undefined}
+        onValueChange={(nextValue) => onChange({ ...assertion, value: nextValue })}
+      >
+        <SelectTrigger
+          id={`assert-finish-reason-${index}`}
+          aria-invalid={Boolean(error)}
+          aria-describedby={descriptionId}
+        >
+          <SelectValue placeholder="Select why generation should stop" />
+        </SelectTrigger>
+        <SelectContent>
+          {STANDARD_FINISH_REASONS.map((reason) => (
+            <SelectItem key={reason.value} value={reason.value}>
+              {reason.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          setIsEnteringCustomValue(true);
+          onChange({ ...assertion, value: '' });
+        }}
+      >
+        Use provider-specific reason
+      </Button>
+      {error ? (
+        <HelperText id={`assert-value-error-${index}`} error>
+          {error}
+        </HelperText>
+      ) : (
+        <p id={descriptionId} className="text-xs text-muted-foreground">
+          Promptfoo normalizes common provider stop reasons into these standard values.
+        </p>
+      )}
+    </div>
+  );
+};
+
+const SpecializedValueField = ({ assertion, error, index, onChange }: FinishReasonFieldProps) => {
+  if (assertion.type === 'max-score') {
+    return <MaxScoreField assertion={assertion} />;
+  }
+
+  if (GUIDED_FINISH_REASON_TYPES.has(assertion.type)) {
+    return (
+      <FinishReasonField assertion={assertion} error={error} index={index} onChange={onChange} />
+    );
+  }
+
+  return <NoValueField type={assertion.type} />;
+};
+
 interface OptionalXmlFieldProps {
   assertion: Assertion;
   index: number;
@@ -613,12 +748,18 @@ const AssertionValueFields = ({
     );
   }
 
-  if (assertion.type === 'max-score') {
-    return <MaxScoreField assertion={assertion} />;
-  }
-
-  if (NO_VALUE_ASSERTION_TYPES.has(assertion.type)) {
-    return <NoValueField type={assertion.type} />;
+  if (
+    NO_VALUE_ASSERTION_TYPES.has(assertion.type) ||
+    GUIDED_FINISH_REASON_TYPES.has(assertion.type)
+  ) {
+    return (
+      <SpecializedValueField
+        assertion={assertion}
+        error={error}
+        index={index}
+        onChange={onChange}
+      />
+    );
   }
 
   if (OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(assertion.type)) {
@@ -735,6 +876,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
   if (
     OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(nextType) ||
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(nextType) ||
+    GUIDED_FINISH_REASON_TYPES.has(nextType) ||
     NO_VALUE_ASSERTION_TYPES.has(nextType) ||
     THRESHOLD_ASSERTION_TYPES.has(nextType) ||
     WORD_COUNT_ASSERTION_TYPES.has(nextType) ||
@@ -749,6 +891,7 @@ function getSimpleTypeChange(assertion: Assertion, nextType: AssertionType): Ass
     WORD_COUNT_ASSERTION_TYPES.has(assertion.type) ||
     STRUCTURED_VALUE_ASSERTION_TYPES.has(assertion.type) ||
     OPTIONAL_XML_ELEMENT_ASSERTION_TYPES.has(assertion.type) ||
+    GUIDED_FINISH_REASON_TYPES.has(assertion.type) ||
     NO_VALUE_ASSERTION_TYPES.has(assertion.type)
   ) {
     const { threshold: _threshold, value: _value, ...withoutStoredValue } = assertion;

@@ -270,6 +270,9 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
     if (assertion.type === 'select-best') {
       return 'Enter criteria for selecting the best output.';
     }
+    if (assertion.type === 'finish-reason' || assertion.type === 'not-finish-reason') {
+      return 'Select or enter the expected finish reason.';
+    }
 
     return 'Enter an expected value before saving this check.';
   }
