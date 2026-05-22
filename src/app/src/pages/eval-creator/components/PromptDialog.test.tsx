@@ -88,6 +88,20 @@ describe('PromptDialog', () => {
     expect(addAnotherButton).toBeDisabled();
   });
 
+  it('should reject whitespace-only prompt text with an accessible explanation', async () => {
+    const user = userEvent.setup();
+    render(<PromptDialog {...mockProps} prompt="" />);
+
+    const textField = screen.getByRole('textbox');
+    await user.type(textField, '   ');
+
+    expect(textField).toHaveAttribute('aria-invalid', 'true');
+    expect(textField).toHaveAccessibleDescription('Prompt must include text, not only spaces.');
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add Another' })).toBeDisabled();
+    expect(mockProps.onAdd).not.toHaveBeenCalled();
+  });
+
   it('should update the text field value when the prompt prop changes', () => {
     const { rerender } = render(<PromptDialog {...mockProps} />);
     const newPrompt = 'This is a new test prompt.';

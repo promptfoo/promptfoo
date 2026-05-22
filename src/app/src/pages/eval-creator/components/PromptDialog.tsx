@@ -10,6 +10,7 @@ import {
 } from '@app/components/ui/dialog';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
+import { cn } from '@app/lib/utils';
 
 interface PromptDialogProps {
   open: boolean;
@@ -30,6 +31,9 @@ const PromptDialog = ({
 }: PromptDialogProps) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const promptHasText = editingPrompt.trim().length > 0;
+  const hasBlankPromptError = editingPrompt.length > 0 && !promptHasText;
+  const promptErrorId = 'prompt-input-error';
 
   React.useEffect(() => {
     setEditingPrompt(prompt);
@@ -60,11 +64,22 @@ const PromptDialog = ({
             value={editingPrompt}
             onChange={(e) => setEditingPrompt(e.target.value)}
             placeholder="The quick brown {{animal1}} jumps over the lazy {{animal2}}."
-            className="min-h-[200px] font-mono text-sm"
+            className={cn(
+              'min-h-[200px] font-mono text-sm',
+              hasBlankPromptError && 'border-destructive',
+            )}
+            aria-invalid={hasBlankPromptError}
+            aria-describedby={hasBlankPromptError ? promptErrorId : undefined}
           />
-          <p className="text-sm text-muted-foreground">
-            Tip: use the {'{{varname}}'} syntax to add variables to your prompt.
-          </p>
+          {hasBlankPromptError ? (
+            <p id={promptErrorId} className="text-sm text-destructive">
+              Prompt must include text, not only spaces.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Tip: use the {'{{varname}}'} syntax to add variables to your prompt.
+            </p>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -72,11 +87,11 @@ const PromptDialog = ({
             Cancel
           </Button>
           {!isEditing && (
-            <Button variant="secondary" onClick={() => handleAdd(false)} disabled={!editingPrompt}>
+            <Button variant="secondary" onClick={() => handleAdd(false)} disabled={!promptHasText}>
               Add Another
             </Button>
           )}
-          <Button onClick={() => handleAdd(true)} disabled={!editingPrompt}>
+          <Button onClick={() => handleAdd(true)} disabled={!promptHasText}>
             {isEditing ? 'Save' : 'Add'}
           </Button>
         </DialogFooter>
