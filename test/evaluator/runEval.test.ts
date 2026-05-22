@@ -581,9 +581,10 @@ describe('runEval', () => {
 
     const results = await runEval({
       ...defaultOptions,
+      evalId: 'eval-runtime-vars',
       provider: errorProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      prompt: { raw: '{{__evalStepId}} {{topic}}', label: 'test-label' },
+      test: { vars: { topic: 'weather' } },
       conversations: {},
       registers: {},
     });
@@ -591,6 +592,7 @@ describe('runEval', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('API Error');
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.vars).toEqual({ topic: 'weather' });
   });
 
   it('should handle null output differently for red team tests', async () => {
