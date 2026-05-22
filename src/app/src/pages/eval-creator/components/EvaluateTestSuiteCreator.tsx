@@ -536,6 +536,11 @@ const EvaluateTestSuiteCreator = () => {
                           <strong>Pro tip:</strong> Testing multiple providers helps you find the
                           best option for your use case. Compare different models, API versions, or
                           custom implementations to optimize for quality, cost, and latency.
+                          <p className="mt-2">
+                            Every additional provider receives each prompt and test case
+                            combination, increasing base requests and potentially increasing usage
+                            costs.
+                          </p>
                         </InfoBox>
                       )
                     }

@@ -65,7 +65,12 @@ vi.mock('./YamlEditor', () => ({
   )),
 }));
 vi.mock('./StepSection', () => ({
-  StepSection: vi.fn(({ children }) => <div data-testid="mock-step-section">{children}</div>),
+  StepSection: vi.fn(({ children, guidance }) => (
+    <div data-testid="mock-step-section">
+      {guidance}
+      {children}
+    </div>
+  )),
 }));
 vi.mock('./InfoBox', () => ({
   InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
@@ -261,7 +266,7 @@ describe('EvaluateTestSuiteCreator', () => {
     );
   });
 
-  it('should advance the progress summary as required setup is completed', () => {
+  it('should advance the progress summary as required setup is completed', async () => {
     useStore.getState().updateConfig({
       providers: [{ id: 'openai:gpt-4.1' }],
     });
@@ -271,6 +276,13 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
     expect(screen.getByText('Add at least one prompt or input.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Providers: 1 ready' }));
+
+    expect(
+      screen.getByText(/Every additional provider receives each prompt and test case combination/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/potentially increasing usage costs/)).toBeInTheDocument();
   });
 
   it('should count shorthand string providers from YAML as configured providers', () => {
