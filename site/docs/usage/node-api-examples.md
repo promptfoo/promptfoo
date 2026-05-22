@@ -79,7 +79,7 @@ await evaluate({
   prompts: ['Summarize: {{body}}'],
   providers: [
     async (prompt, context) => ({
-      output: `Handled "${prompt}" for ${context.vars.body}`,
+      output: `Handled "${prompt}" for ${context?.vars.body}`,
     }),
   ],
   tests: [{ vars: { body: 'hello world' } }],

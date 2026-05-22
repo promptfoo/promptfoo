@@ -11,7 +11,7 @@ import { cache } from 'promptfoo';
 
 > **clearCache**(): `Promise`\<`boolean`\>
 
-Defined in: [cache.ts:784](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L784)
+Defined in: [cache.ts:788](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L788)
 
 Clear the shared promptfoo cache.
 

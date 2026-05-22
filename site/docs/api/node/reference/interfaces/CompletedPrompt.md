@@ -9,7 +9,7 @@ description: 'Prompt metadata attached to completed eval results.'
 import type { CompletedPrompt } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:489](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L489)
+Defined in: [types/index.ts:484](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L484)
 
 Prompt metadata attached to completed eval results.
 
@@ -105,7 +105,7 @@ Human-readable label shown in reports and prompt selectors.
 
 > `optional` **metrics?**: [`PromptMetrics`](PromptMetrics.md)
 
-Defined in: [types/index.ts:493](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L493)
+Defined in: [types/index.ts:488](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L488)
 
 Aggregate metrics accumulated for this prompt.
 
@@ -115,7 +115,7 @@ Aggregate metrics accumulated for this prompt.
 
 > **provider**: `string`
 
-Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L491)
+Defined in: [types/index.ts:486](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L486)
 
 Provider id associated with the completed prompt column.
 

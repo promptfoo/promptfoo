@@ -9,7 +9,7 @@ description: 'Arbitrary metadata attached to a test case.'
 import type { TestCaseMetadata } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:1444](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1444)
+Defined in: [types/index.ts:1439](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1439)
 
 Arbitrary metadata attached to a test case.
 
@@ -35,7 +35,7 @@ const metadata: TestCaseMetadata = {
 
 > `optional` **pluginConfig?**: [`PluginConfig`](PluginConfig.md)
 
-Defined in: [types/index.ts:1446](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1446)
+Defined in: [types/index.ts:1441](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1441)
 
 Advanced red-team plugin config carried on generated test cases.
 
@@ -45,6 +45,6 @@ Advanced red-team plugin config carried on generated test cases.
 
 > `optional` **strategyConfig?**: [`StrategyConfig`](StrategyConfig.md)
 
-Defined in: [types/index.ts:1448](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1448)
+Defined in: [types/index.ts:1443](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1443)
 
 Advanced red-team strategy config carried on generated test cases.

@@ -37,7 +37,7 @@ const test: AssertionTestContext = {
 
 > `optional` **assert?**: [`AssertionOrSet`](../type-aliases/AssertionOrSet.md)[]
 
-Defined in: [types/index.ts:1480](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1480)
+Defined in: [types/index.ts:1475](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1475)
 
 Assertions to run against the provider output.
 
@@ -51,7 +51,7 @@ Assertions to run against the provider output.
 
 > `optional` **assertScoringFunction?**: `string` \| [`ScoringFunction`](../type-aliases/ScoringFunction.md)
 
-Defined in: [types/index.ts:1482](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1482)
+Defined in: [types/index.ts:1477](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1477)
 
 Optional custom scoring function for aggregating assertion results.
 
@@ -65,7 +65,7 @@ Optional custom scoring function for aggregating assertion results.
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:1468](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1468)
+Defined in: [types/index.ts:1463](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1463)
 
 Optional human-readable description of what the test covers.
 
@@ -79,7 +79,7 @@ Optional human-readable description of what the test covers.
 
 > `optional` **metadata?**: [`TestCaseMetadata`](TestCaseMetadata.md)
 
-Defined in: [types/index.ts:1488](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1488)
+Defined in: [types/index.ts:1483](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1483)
 
 Arbitrary metadata attached to the test case.
 
@@ -93,7 +93,7 @@ Arbitrary metadata attached to the test case.
 
 > `optional` **options?**: [`TestCaseOptions`](TestCaseOptions.md)
 
-Defined in: [types/index.ts:1484](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1484)
+Defined in: [types/index.ts:1479](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1479)
 
 Additional configuration settings for the prompt and grader.
 
@@ -107,7 +107,7 @@ Additional configuration settings for the prompt and grader.
 
 > `optional` **prompts?**: `string`[]
 
-Defined in: [types/index.ts:1476](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1476)
+Defined in: [types/index.ts:1471](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1471)
 
 Prompt labels or ids this test should run against; omitted means all prompts.
 
@@ -121,7 +121,7 @@ Prompt labels or ids this test should run against; omitted means all prompts.
 
 > `optional` **provider?**: `string` \| [`ProviderOptions`](ProviderOptions.md) \| [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/index.ts:1472](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1472)
+Defined in: [types/index.ts:1467](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1467)
 
 Provider override for this specific test case.
 
@@ -135,7 +135,7 @@ Provider override for this specific test case.
 
 > `optional` **providerOutput?**: `string` \| `Record`\<`string`, `unknown`\>
 
-Defined in: [types/index.ts:1478](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1478)
+Defined in: [types/index.ts:1473](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1473)
 
 Precomputed provider output; when set, promptfoo skips the provider call and grades this output directly.
 
@@ -149,7 +149,7 @@ Precomputed provider output; when set, promptfoo skips the provider call and gra
 
 > `optional` **providers?**: `string`[]
 
-Defined in: [types/index.ts:1474](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1474)
+Defined in: [types/index.ts:1469](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1469)
 
 Provider labels or ids this test should run against; supports wildcards such as `openai:*`.
 
@@ -163,7 +163,7 @@ Provider labels or ids this test should run against; supports wildcards such as 
 
 > `optional` **threshold?**: `number`
 
-Defined in: [types/index.ts:1486](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1486)
+Defined in: [types/index.ts:1481](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1481)
 
 Required aggregate score for the test case; without one, the case is graded pass/fail.
 
@@ -177,7 +177,7 @@ Required aggregate score for the test case; without one, the case is graded pass
 
 > `optional` **vars?**: `Vars`
 
-Defined in: [types/index.ts:1547](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1547)
+Defined in: [types/index.ts:1542](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1542)
 
 Flattened variables used for this exact eval row.
 

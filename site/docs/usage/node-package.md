@@ -116,7 +116,7 @@ const evalRecord = await evaluate({
   providers: [
     openai,
     async (prompt, context) => {
-      console.log('vars', context.vars);
+      console.log('vars', context?.vars);
       return { output: `Custom response for: ${prompt}` };
     },
   ],
