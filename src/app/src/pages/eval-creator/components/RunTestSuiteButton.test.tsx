@@ -324,10 +324,31 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(mockShowToast).toHaveBeenCalledWith(
-      'An error occurred: HTTP error! status: 500',
+      'An error occurred: Could not retrieve evaluation progress (HTTP 500). Try again or review server logs.',
       'error',
     );
-    expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not retrieve evaluation progress (HTTP 500). Try again or review server logs.',
+    );
+  });
+
+  it('explains how to recover when evaluation creation is rejected', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', ok: false, status: 400 }]);
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    timers.useRealTimers();
+    await userEvent.click(screen.getByRole('button', { name: 'Run Evaluation' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Could not start the evaluation (HTTP 400). Check the setup and try again.',
+      );
+    });
   });
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {

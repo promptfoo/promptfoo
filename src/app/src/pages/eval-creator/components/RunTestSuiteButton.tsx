@@ -106,7 +106,9 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(
+          `Could not start the evaluation (HTTP ${response.status}). Check the setup and try again.`,
+        );
       }
 
       const job: CreateJobResponse = await response.json();
@@ -125,7 +127,9 @@ const RunTestSuiteButton = ({ disabledReason }: RunTestSuiteButtonProps) => {
 
           if (!progressResponse.ok) {
             clearPollInterval();
-            throw new Error(`HTTP error! status: ${progressResponse.status}`);
+            throw new Error(
+              `Could not retrieve evaluation progress (HTTP ${progressResponse.status}). Try again or review server logs.`,
+            );
           }
 
           const progressData: GetJobResponse = await progressResponse.json();
