@@ -234,7 +234,7 @@ describe('EvaluateTestSuiteCreator', () => {
     render(<EvaluateTestSuiteCreator />);
 
     expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
-    expect(screen.getByText('Next up: Choose Providers.')).toBeInTheDocument();
+    expect(screen.getByText('Add at least one provider to evaluate.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Continue to Providers' })).toBeNull();
     expect(screen.getByRole('button', { name: /Choose Providers Required/i })).toHaveAttribute(
       'aria-current',
@@ -250,7 +250,7 @@ describe('EvaluateTestSuiteCreator', () => {
     render(<EvaluateTestSuiteCreator />);
 
     expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
-    expect(screen.getByText('Next up: Write Prompts.')).toBeInTheDocument();
+    expect(screen.getByText('Add at least one prompt or input.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
   });
 
@@ -337,6 +337,22 @@ describe('EvaluateTestSuiteCreator', () => {
 
     expect(screen.getByTestId('mock-run-options-section')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Review run options' })).toBeNull();
+  });
+
+  it('should direct users back to incomplete test case variables instead of showing ready', () => {
+    useStore.getState().updateConfig({
+      providers: [{ id: 'openai:gpt-4.1' }],
+      prompts: ['Hello {{name}}'],
+      tests: [{ vars: {} }],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.queryByText('Ready to run')).toBeNull();
+    expect(
+      screen.getByText('Test case 1 is missing values required by your prompts.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue to Test Cases' })).toBeInTheDocument();
   });
 
   it('should successfully upload and parse a valid YAML file', async () => {

@@ -37,6 +37,9 @@ const shouldRemoveMcpConfig = (
   previousTargetId.startsWith('bedrock:converse:') &&
   !nextTargetId.startsWith('bedrock:converse:');
 
+const usesExamplePath = (providerId: string | undefined): boolean =>
+  Boolean(providerId?.includes('/path/to/'));
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -223,6 +226,9 @@ function ProviderConfigEditor({
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Model ID is required');
       }
+      if (providerType === 'azure' && provider.id?.includes('your-deployment-name')) {
+        errors.push('Replace the example value with your Azure deployment name');
+      }
       // Validate that temperature is within reasonable bounds if provided
       if (
         provider.config?.temperature !== undefined &&
@@ -247,6 +253,8 @@ function ProviderConfigEditor({
         errors.push('Python file path is required');
       } else if (!provider.id.startsWith('file://')) {
         errors.push('Provider ID must start with file:// for Python agent files');
+      } else if (usesExamplePath(provider.id)) {
+        errors.push('Replace the example path with your agent file path');
       }
     } else if (
       ['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')
@@ -254,6 +262,8 @@ function ProviderConfigEditor({
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      } else if (usesExamplePath(provider.id)) {
+        errors.push('Replace the example path with your provider file path');
       }
     }
 

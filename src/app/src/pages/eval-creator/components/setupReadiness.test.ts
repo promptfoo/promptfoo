@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   countTests,
+  extractVariablesFromPrompts,
+  getSetupReadiness,
   normalizePrompts,
   normalizePromptsForJob,
   normalizeProviders,
@@ -117,6 +119,61 @@ describe('setupReadiness', () => {
     it('ignores blank or missing test configs', () => {
       expect(countTests('   ')).toBe(0);
       expect(countTests(undefined)).toBe(0);
+    });
+  });
+
+  describe('getSetupReadiness', () => {
+    it('blocks running when an inline test case omits a prompt variable', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write about {{topic}} for {{audience}}'],
+        tests: [{ vars: { topic: 'ocean life' } }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(false);
+      expect(readiness.requiredVariables).toEqual(['topic', 'audience']);
+      expect(readiness.testCasesMissingVariables).toEqual([0]);
+      expect(readiness.issues).toContainEqual({
+        id: 'variables',
+        message: 'Test case 1 is missing values required by your prompts.',
+        stepId: 3,
+      });
+    });
+
+    it('uses default test variables when reviewing inline test cases', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write about {{topic}} for {{audience}}'],
+        defaultTest: { vars: { audience: 'engineering leaders' } },
+        tests: [{ vars: { topic: 'reliability' } }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.testCasesMissingVariables).toEqual([]);
+      expect(readiness.plannedBaseRequestCount).toBe(1);
+    });
+
+    it('does not claim an exact base request count for external test files', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a summary'],
+        tests: 'file://tests.csv',
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.plannedBaseRequestCount).toBeUndefined();
+    });
+  });
+
+  describe('extractVariablesFromPrompts', () => {
+    it('deduplicates valid template variables across prompts', () => {
+      expect(
+        extractVariablesFromPrompts([
+          'Hello {{ name }}',
+          '{{name}} from {{location}}',
+          '{{ no spaces }}',
+        ]),
+      ).toEqual(['name', 'location']);
     });
   });
 });

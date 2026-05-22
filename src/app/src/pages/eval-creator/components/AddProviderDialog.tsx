@@ -2,7 +2,7 @@
 import '@app/lib/prism';
 import '@app/pages/redteam/setup/components/Targets/syntax-highlighting.css';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import ProviderConfigEditor from '@app/pages/redteam/setup/components/Targets/ProviderConfigEditor';
 import ProviderTypeSelector from '@app/pages/redteam/setup/components/Targets/ProviderTypeSelector';
 import type { ProviderOptions as RedteamProviderOptions } from '@app/pages/redteam/setup/types';
@@ -38,6 +37,8 @@ export default function AddProviderDialog({
     initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
+  const validationMessageId = useId();
+  const validateProviderRef = useRef<(() => boolean) | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -60,6 +61,7 @@ export default function AddProviderDialog({
     // Only move to configure step if user has made an explicit selection
     // (not when ProviderTypeSelector auto-sets a default or we're using placeholder)
     if (newProvider.id && newProvider.id !== '' && newProvider.id !== '__selecting__') {
+      setError(null);
       setProvider(newProvider);
       setProviderType(type);
       setStep('configure');
@@ -67,29 +69,26 @@ export default function AddProviderDialog({
   };
 
   const handleSave = () => {
-    if (provider) {
-      // Auto-generate label from ID if not provided
-      const providerToSave = provider.label
-        ? provider
-        : { ...provider, label: typeof provider.id === 'string' ? provider.id : 'Custom Provider' };
-      onSave(providerToSave);
-      onClose();
+    if (!provider || !validateProviderRef.current?.()) {
+      return;
     }
+
+    // Auto-generate label from ID if not provided
+    const providerToSave = provider.label
+      ? provider
+      : { ...provider, label: typeof provider.id === 'string' ? provider.id : 'Custom Provider' };
+    onSave(providerToSave);
+    onClose();
   };
 
   const handleBack = () => {
+    setError(null);
+    validateProviderRef.current = null;
     if (step === 'configure') {
       setStep('select');
     } else {
       onClose();
     }
-  };
-
-  const getDisabledTooltip = () => {
-    if (error) {
-      return error;
-    }
-    return undefined;
   };
 
   return (
@@ -144,6 +143,9 @@ export default function AddProviderDialog({
                   setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
                   validateAll={false}
+                  onValidationRequest={(validator) => {
+                    validateProviderRef.current = validator;
+                  }}
                   providerType={providerType}
                   mode="eval"
                 />
@@ -152,24 +154,25 @@ export default function AddProviderDialog({
           </div>
 
           <DialogFooter data-testid="add-provider-dialog-footer" className="shrink-0">
+            {error && (
+              <p
+                id={validationMessageId}
+                role="alert"
+                className="mr-auto text-left text-sm text-destructive"
+              >
+                {error}
+              </p>
+            )}
             <Button variant="outline" onClick={handleBack}>
               {step === 'configure' ? 'Back' : 'Cancel'}
             </Button>
             {step === 'configure' && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Button onClick={handleSave} disabled={!!error}>
-                      {initialProvider ? 'Save Changes' : 'Add Provider'}
-                    </Button>
-                  </div>
-                </TooltipTrigger>
-                {getDisabledTooltip() && (
-                  <TooltipContent>
-                    <p>{getDisabledTooltip()}</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
+              <Button
+                onClick={handleSave}
+                aria-describedby={error ? validationMessageId : undefined}
+              >
+                {initialProvider ? 'Save Changes' : 'Add Provider'}
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

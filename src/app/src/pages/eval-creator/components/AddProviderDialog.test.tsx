@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
 
+let providerValidationError: string | null = null;
+
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
   default: ({
     setProvider,
@@ -23,10 +25,23 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
 }));
 
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () => ({
-  default: () => <div>provider config editor</div>,
+  default: ({
+    onValidationRequest,
+    setError,
+  }: {
+    onValidationRequest?: (validator: () => boolean) => void;
+    setError?: (error: string | null) => void;
+  }) => {
+    onValidationRequest?.(() => {
+      setError?.(providerValidationError);
+      return providerValidationError === null;
+    });
+    return <div>provider config editor</div>;
+  },
 }));
 
 afterEach(() => {
+  providerValidationError = null;
   vi.resetAllMocks();
 });
 
@@ -136,5 +151,29 @@ describe('AddProviderDialog layout', () => {
     expect(nextScrollBody).toBeDefined();
     expect(nextScrollBody).not.toBe(scrollBody);
     expect(nextScrollBody).toHaveProperty('scrollTop', 0);
+  });
+
+  it('requires valid provider configuration before saving and keeps recovery available', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    providerValidationError = 'Valid URL is required';
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Valid URL is required');
+    expect(screen.getByRole('button', { name: 'Add Provider' })).not.toBeDisabled();
+
+    providerValidationError = null;
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });

@@ -73,6 +73,33 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it('should be disabled when a test case omits a required prompt variable', () => {
+    useStore.getState().updateConfig({
+      prompts: ['Write about {{topic}} for {{audience}}'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { topic: 'testing' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-describedby', 'run-eval-help');
+  });
+
+  it('should accept prompt variables supplied by default test values', () => {
+    useStore.getState().updateConfig({
+      prompts: ['Write about {{topic}} for {{audience}}'],
+      providers: ['openai:gpt-4'],
+      defaultTest: { vars: { audience: 'developers' } },
+      tests: [{ vars: { topic: 'testing' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
+  });
+
   it('should be enabled for scalar provider, prompt, and test configs', () => {
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',

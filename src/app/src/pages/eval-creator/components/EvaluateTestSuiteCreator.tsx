@@ -25,12 +25,18 @@ import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
-import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
+import {
+  extractVariablesFromPrompts,
+  getSetupReadiness,
+  normalizePrompts,
+  normalizeProviders,
+} from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { UnifiedConfig } from '@promptfoo/types';
 
-type SetupStepId = 1 | 2 | 3 | 4;
+import type { SetupStepId } from './setupReadiness';
+
 type EditorTab = 'ui' | 'yaml';
 
 interface SetupStep {
@@ -40,20 +46,6 @@ interface SetupStep {
   isComplete: boolean;
   count?: number;
   required: boolean;
-}
-
-function extractVarsFromPrompts(prompts: string[]): string[] {
-  const varRegex = /{{\s*(\w+)\s*}}/g;
-  const varsSet = new Set<string>();
-
-  prompts.forEach((prompt) => {
-    let match;
-    while ((match = varRegex.exec(prompt)) !== null) {
-      varsSet.add(match[1]);
-    }
-  });
-
-  return Array.from(varsSet);
 }
 
 function ErrorFallback({
@@ -129,14 +121,13 @@ const EvaluateTestSuiteCreator = () => {
   const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
 
   const varsList = React.useMemo(
-    () => extractVarsFromPrompts(normalizedPrompts),
+    () => extractVariablesFromPrompts(normalizedPrompts),
     [normalizedPrompts],
   );
 
-  const testCount = React.useMemo(() => countTests(config.tests), [config.tests]);
-
-  const isReadyToRun =
-    normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
+  const readiness = React.useMemo(() => getSetupReadiness(config), [config]);
+  const { isReadyToRun, testCount } = readiness;
+  const testCasesComplete = testCount > 0 && !readiness.issues.some((issue) => issue.stepId === 3);
 
   const setupSteps: SetupStep[] = [
     {
@@ -158,8 +149,8 @@ const EvaluateTestSuiteCreator = () => {
     {
       id: 3,
       label: 'Test Cases',
-      title: 'Add Test Cases',
-      isComplete: testCount > 0,
+      title: testCount > 0 ? 'Review Test Cases' : 'Add Test Cases',
+      isComplete: testCasesComplete,
       count: testCount,
       required: true,
     },
@@ -176,6 +167,7 @@ const EvaluateTestSuiteCreator = () => {
   const completedRequiredStepCount = requiredSteps.filter((step) => step.isComplete).length;
   const nextRecommendedStep =
     requiredSteps.find((step) => !step.isComplete) ?? setupSteps[setupSteps.length - 1];
+  const nextSetupIssue = readiness.issues.find((issue) => issue.stepId === nextRecommendedStep.id);
   const shouldShowSummaryAction = activeStep !== nextRecommendedStep.id;
 
   const handleReset = () => {
@@ -289,7 +281,7 @@ const EvaluateTestSuiteCreator = () => {
                   <p className="text-sm text-muted-foreground">
                     {isReadyToRun
                       ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
-                      : `Next up: ${nextRecommendedStep.title}.`}
+                      : nextSetupIssue?.message || `Next up: ${nextRecommendedStep.title}.`}
                   </p>
                 </div>
 
@@ -559,7 +551,7 @@ const EvaluateTestSuiteCreator = () => {
                     stepNumber={3}
                     title="Add Test Cases"
                     description="Define test scenarios with input data and expected outcomes. Each case tests your prompts with different inputs."
-                    isComplete={testCount > 0}
+                    isComplete={testCasesComplete}
                     isRequired
                     count={testCount}
                     guidance={
@@ -652,7 +644,7 @@ const EvaluateTestSuiteCreator = () => {
                       description={config.description}
                       delay={config.evaluateOptions?.delay}
                       maxConcurrency={config.evaluateOptions?.maxConcurrency}
-                      isReadyToRun={isReadyToRun}
+                      readiness={readiness}
                       onChange={(options) => {
                         const { description: newDesc, ...evalOptions } = options;
                         updateConfig({

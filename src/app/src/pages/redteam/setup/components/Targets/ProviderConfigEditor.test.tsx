@@ -153,14 +153,14 @@ describe('ProviderConfigEditor', () => {
       expect(mockOnValidate).toHaveBeenCalledWith(true);
     });
 
-    it("should return true from validate() for a valid agent framework provider (e.g., providerType is 'langchain', provider.id is 'file://path/to/agent.py')", () => {
+    it('should return true from validate() for a valid agent framework provider with a concrete file path', () => {
       const mockSetProvider = vi.fn();
       const mockSetError = vi.fn();
       const mockOnValidate = vi.fn();
       let validateFn: (() => boolean) | null = null;
 
       const validAgentProvider: ProviderOptions = {
-        id: 'file://path/to/agent.py',
+        id: 'file:///workspace/agents/customer_support.py',
         config: {},
       };
 
@@ -182,6 +182,52 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('should reject example paths that have not been replaced for script providers', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'file:///path/to/custom_provider.py', config: {} }}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="python"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Replace the example path with your provider file path',
+      );
+    });
+
+    it('should reject the example Azure deployment name', () => {
+      const mockSetProvider = vi.fn();
+      const mockSetError = vi.fn();
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: 'azure:chat:your-deployment-name', config: {} }}
+          setProvider={mockSetProvider}
+          setError={mockSetError}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="azure"
+        />,
+      );
+
+      expect(validateFn!()).toBe(false);
+      expect(mockSetError).toHaveBeenCalledWith(
+        'Replace the example value with your Azure deployment name',
+      );
     });
   });
 

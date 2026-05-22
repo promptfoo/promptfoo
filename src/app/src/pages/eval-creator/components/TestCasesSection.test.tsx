@@ -128,6 +128,24 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Missing variables: input.')).toHaveClass('sr-only');
   });
 
+  it('does not report variables supplied by default test values as missing', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        defaultTest: { vars: { input: 'shared input' } },
+        tests: [{ description: 'Test 1', vars: {} }],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={['input']} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.queryByText('Missing variables: input.')).toBeNull();
+  });
+
   it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {
     const user = userEvent.setup();
     const onOpenYamlEditor = vi.fn();

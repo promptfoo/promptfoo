@@ -83,6 +83,13 @@ const getManagedTestsLabel = (tests: unknown): string => {
 const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
+  const defaultTest =
+    config.defaultTest &&
+    typeof config.defaultTest === 'object' &&
+    !Array.isArray(config.defaultTest)
+      ? (config.defaultTest as TestCase)
+      : undefined;
+  const defaultTestVars = Object.keys(defaultTest?.vars || {});
   const canEditInlineTests =
     rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isInlineTestCase));
   const testCases = canEditInlineTests ? ((rawTests || []) as TestCase[]) : [];
@@ -358,7 +365,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
               ) : (
                 testCases.map((testCase, index) => {
                   const testCaseVars = Object.keys(testCase.vars || {});
-                  const missingVars = varsList.filter((v) => !testCaseVars.includes(v));
+                  const missingVars = varsList.filter(
+                    (v) => !testCaseVars.includes(v) && !defaultTestVars.includes(v),
+                  );
                   const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
 
                   return (

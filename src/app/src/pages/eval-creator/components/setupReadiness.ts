@@ -1,5 +1,24 @@
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
+export type SetupStepId = 1 | 2 | 3 | 4;
+
+export interface SetupIssue {
+  id: 'providers' | 'prompts' | 'tests' | 'variables';
+  message: string;
+  stepId: SetupStepId;
+}
+
+export interface SetupReadiness {
+  isReadyToRun: boolean;
+  issues: SetupIssue[];
+  providerCount: number;
+  promptCount: number;
+  testCount: number;
+  requiredVariables: string[];
+  testCasesMissingVariables: number[];
+  plannedBaseRequestCount?: number;
+}
+
 const PROVIDER_OPTION_KEYS = new Set([
   'id',
   'label',
@@ -44,7 +63,22 @@ function hasRunnableProviderId(
   return typeof provider.id === 'string' && provider.id.trim() !== '';
 }
 
-export function normalizeProviders(providers: UnifiedConfig['providers']): ProviderOptions[] {
+export function extractVariablesFromPrompts(prompts: string[]): string[] {
+  const variables = new Set<string>();
+  const variablePattern = /{{\s*(\w+)\s*}}/g;
+
+  for (const prompt of prompts) {
+    for (const match of prompt.matchAll(variablePattern)) {
+      variables.add(match[1]);
+    }
+  }
+
+  return Array.from(variables);
+}
+
+export function normalizeProviders(
+  providers: UnifiedConfig['providers'] | undefined,
+): ProviderOptions[] {
   const providerList = Array.isArray(providers) ? providers : providers ? [providers] : [];
 
   return providerList.flatMap((provider) => {
@@ -161,4 +195,79 @@ export function countTests(tests: UnifiedConfig['tests'] | undefined): number {
   }
 
   return tests ? 1 : 0;
+}
+
+export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadiness {
+  const providerCount = normalizeProviders(config.providers).length;
+  const prompts = normalizePrompts(config.prompts);
+  const promptCount = prompts.length;
+  const testCount = countTests(config.tests);
+  const requiredVariables = extractVariablesFromPrompts(prompts);
+  const issues: SetupIssue[] = [];
+
+  if (providerCount === 0) {
+    issues.push({
+      id: 'providers',
+      message: 'Add at least one provider to evaluate.',
+      stepId: 1,
+    });
+  }
+  if (promptCount === 0) {
+    issues.push({
+      id: 'prompts',
+      message: 'Add at least one prompt or input.',
+      stepId: 2,
+    });
+  }
+  if (testCount === 0) {
+    issues.push({
+      id: 'tests',
+      message: 'Add at least one test case.',
+      stepId: 3,
+    });
+  }
+
+  const defaultVars =
+    isRecord(config.defaultTest) && isRecord(config.defaultTest.vars)
+      ? config.defaultTest.vars
+      : {};
+  const testCasesMissingVariables =
+    requiredVariables.length > 0 && Array.isArray(config.tests)
+      ? config.tests.flatMap((testCase, index) => {
+          if (!isRecord(testCase)) {
+            return [];
+          }
+
+          const testVars = isRecord(testCase.vars) ? testCase.vars : {};
+          const hasMissingVariables = requiredVariables.some(
+            (variable) => !(variable in testVars) && !(variable in defaultVars),
+          );
+          return hasMissingVariables ? [index] : [];
+        })
+      : [];
+
+  if (testCasesMissingVariables.length > 0) {
+    const caseLabel =
+      testCasesMissingVariables.length === 1
+        ? `Test case ${testCasesMissingVariables[0] + 1} is`
+        : `${testCasesMissingVariables.length} test cases are`;
+    issues.push({
+      id: 'variables',
+      message: `${caseLabel} missing values required by your prompts.`,
+      stepId: 3,
+    });
+  }
+
+  return {
+    isReadyToRun: issues.length === 0,
+    issues,
+    providerCount,
+    promptCount,
+    testCount,
+    requiredVariables,
+    testCasesMissingVariables,
+    plannedBaseRequestCount: Array.isArray(config.tests)
+      ? providerCount * promptCount * testCount
+      : undefined,
+  };
 }
