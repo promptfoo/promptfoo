@@ -601,14 +601,27 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
   return explicitTests + scenarioTests;
 }
 
-function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvaluateOptions {
-  return {
+function createEvaluationOptions(
+  config: Partial<UnifiedConfig>,
+  testSuite: TestSuite,
+): InternalEvaluateOptions {
+  const options: InternalEvaluateOptions = {
     ...config.evaluateOptions,
     cache: false,
     eventSource: 'library',
     showProgressBar: false,
     silent: true,
+    // Match `evaluateWithSource` / `createRunEvalOptions`: optimizing a redteam
+    // config must use redteam scoring semantics (e.g. an empty response counts
+    // as a safe success) so refusals are not mis-scored as failures.
+    isRedteam: Boolean(config.redteam) || testSuite.redteam != null,
   };
+  // Match the `eval` command: a configured delay only rate-limits API calls
+  // when concurrency is forced to 1, otherwise delayed evals still run in parallel.
+  if (options.delay) {
+    options.maxConcurrency = 1;
+  }
+  return options;
 }
 
 export async function optimizePromptTestSuite(
@@ -632,13 +645,13 @@ export async function optimizePromptTestSuite(
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
     new Eval(config, { persisted: false }),
-    createEvaluationOptions(config),
+    createEvaluationOptions(config, testSuite),
   );
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
         new Eval(config, { persisted: false }),
-        createEvaluationOptions(config),
+        createEvaluationOptions(config, testSuite),
       )
     : undefined;
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
@@ -701,7 +714,7 @@ export async function optimizePromptTestSuite(
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
       new Eval(config, { persisted: false }),
-      createEvaluationOptions(config),
+      createEvaluationOptions(config, testSuite),
     );
     const candidateValidationEval = validationTestSuite
       ? await evaluate(
@@ -714,7 +727,7 @@ export async function optimizePromptTestSuite(
             ),
           ),
           new Eval(config, { persisted: false }),
-          createEvaluationOptions(config),
+          createEvaluationOptions(config, testSuite),
         )
       : undefined;
     const { searchPrompt: roundBestPrompt, validationPrompt: roundBestValidationPrompt } =
