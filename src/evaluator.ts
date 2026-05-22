@@ -766,41 +766,32 @@ function tryParseJson(value: string): unknown {
 async function callProviderForRunEval({
   abortSignal,
   evalId,
-  evaluateOptions,
   filters,
   promptForRender,
-  promptIdx,
   provider,
   rateLimitRegistry,
   renderedPrompt,
   repeatIndex,
   test,
-  testIdx,
-  testSuite,
+  traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
   | 'abortSignal'
   | 'evalId'
-  | 'evaluateOptions'
   | 'nunjucksFilters'
-  | 'promptIdx'
   | 'provider'
   | 'rateLimitRegistry'
   | 'repeatIndex'
   | 'test'
-  | 'testIdx'
-  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   promptForRender: Prompt;
   renderedPrompt: string;
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
   const startTime = Date.now();
-  const traceContext = test.providerOutput
-    ? null
-    : await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx, testSuite);
   const response = test.providerOutput
     ? {
         output: test.providerOutput,
@@ -1003,10 +994,6 @@ function createEvaluateResult({
   evalId?: string;
   vars: Vars;
 }): EvaluateResult {
-  const traceId = getTraceId(traceContext);
-  // Only set evaluationId when a trace context exists. Pairing it with traceId keeps
-  // the field's presence as a "this row was traced" signal for downstream consumers.
-  const evaluationId = traceContext ? (traceContext.evaluationId ?? evalId) : undefined;
   const ret: EvaluateResult = {
     ...setup,
     prompt: { ...rendered.setup.prompt, raw: rendered.renderedPrompt },
@@ -1027,8 +1014,7 @@ function createEvaluateResult({
     testCase: test,
     promptId: prompt.id || '',
     tokenUsage: createEmptyTokenUsage(),
-    ...(traceId ? { traceId } : {}),
-    ...(evaluationId ? { evaluationId } : {}),
+    ...getTraceLinkage(traceContext, evalId),
   };
 
   if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
@@ -1295,6 +1281,20 @@ function getTraceId(
   return parts[1];
 }
 
+function getTraceLinkage(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
+  evalId?: string,
+) {
+  const traceId = getTraceId(traceContext);
+  // Only set evaluationId when a trace context exists. Pairing it with traceId keeps
+  // the field's presence as a "this row was traced" signal for downstream consumers.
+  const evaluationId = traceContext ? (traceContext.evaluationId ?? evalId) : undefined;
+  return {
+    ...(traceId ? { traceId } : {}),
+    ...(evaluationId ? { evaluationId } : {}),
+  };
+}
+
 /**
  * Runs a single test case.
  * @param options - The options for running the test case.
@@ -1368,6 +1368,7 @@ async function runEvalInternal({
 
   let setup = state.setup;
   let latencyMs = 0;
+  let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
 
   try {
     const rendered = await renderRunEvalPrompt({
@@ -1381,26 +1382,32 @@ async function runEvalInternal({
     });
     setup = rendered.setup;
 
+    traceContext = test.providerOutput
+      ? null
+      : await generateTraceContextIfNeeded(
+          test,
+          evaluateOptions,
+          testIndex,
+          promptIndex,
+          testSuite,
+        );
     const providerCall = await callProviderForRunEval({
       abortSignal,
       evalId,
-      evaluateOptions,
       filters,
       promptForRender: {
         ...state.promptForRender,
         config: rendered.setup.prompt.config,
       },
-      promptIdx: promptIndex,
       provider,
       rateLimitRegistry,
       renderedPrompt: rendered.renderedPrompt,
       repeatIndex,
       test,
-      testIdx: testIndex,
-      testSuite,
+      traceContext,
       vars: state.vars,
     });
-    const { response, traceContext } = providerCall;
+    const { response } = providerCall;
     latencyMs = providerCall.latencyMs;
 
     updateConversationHistory({
@@ -1498,6 +1505,7 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...getTraceLinkage(traceContext, evalId),
       },
     ];
   }

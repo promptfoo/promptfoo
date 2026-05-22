@@ -357,6 +357,25 @@ export function persistTraceMetadata(
   };
 }
 
+export function stripTraceLinkageFromMetadata<T extends Record<string, unknown> | null | undefined>(
+  metadata: T,
+): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(TRACE_LINKAGE_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [TRACE_LINKAGE_KEY]: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+
+  return strippedMetadata as T;
+}
+
 function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
   traceId?: string;
   evaluationId?: string;
@@ -375,15 +394,11 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
     return { traceId, evaluationId, metadata: metadataRecord };
   }
 
-  const { [TRACE_LINKAGE_KEY]: _traceLinkage, ...remainingPromptfooMetadata } =
-    promptfooMetadata ?? {};
-  const surfacedMetadata = { ...metadataRecord };
-  delete surfacedMetadata[PROMPTFOO_METADATA_KEY];
-  if (Object.keys(remainingPromptfooMetadata).length > 0) {
-    surfacedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
-  }
-
-  return { traceId, evaluationId, metadata: surfacedMetadata };
+  return {
+    traceId,
+    evaluationId,
+    metadata: stripTraceLinkageFromMetadata(metadataRecord),
+  };
 }
 
 export default class EvalResult {

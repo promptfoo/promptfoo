@@ -367,6 +367,35 @@ describe('evaluator', () => {
     });
   });
 
+  describe('copy', () => {
+    it('drops trace linkage from copied results without copied trace records', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await EvalResult.createFromEvaluateResult(
+        eval_.id,
+        createEvaluateResult({
+          traceId: 'copy-source-trace',
+          evaluationId: eval_.id,
+          metadata: {
+            source: 'copy-path',
+            __promptfoo: { retained: 'internal-metadata' },
+          },
+        }),
+      );
+
+      const copy = await eval_.copy();
+      const [copiedResult] = await EvalResult.findManyByEvalId(copy.id);
+
+      expect(copiedResult.toEvaluateResult()).toMatchObject({
+        metadata: {
+          source: 'copy-path',
+          __promptfoo: { retained: 'internal-metadata' },
+        },
+      });
+      expect(copiedResult.toEvaluateResult().traceId).toBeUndefined();
+      expect(copiedResult.toEvaluateResult().evaluationId).toBeUndefined();
+    });
+  });
+
   describe('findById', () => {
     it('should handle empty vars array', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });

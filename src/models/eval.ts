@@ -49,7 +49,7 @@ import {
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult, { persistTraceMetadata } from './evalResult';
+import EvalResult, { persistTraceMetadata, stripTraceLinkageFromMetadata } from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -1512,6 +1512,7 @@ export default class Eval {
           id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
+          metadata: stripTraceLinkageFromMetadata(result.metadata),
           updatedAt: now,
         }));
 
