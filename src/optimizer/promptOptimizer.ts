@@ -491,25 +491,6 @@ function buildCandidateDefaultTest(
   };
 }
 
-function buildCandidateScenarios(
-  scenarios: TestSuite['scenarios'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['scenarios'] {
-  return scenarios?.map((scenario) => ({
-    ...scenario,
-    config: scenario.config.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-    tests: scenario.tests.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-  }));
-}
-
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -547,12 +528,7 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    scenarios: buildCandidateScenarios(
-      testSuite.scenarios,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
+    // TODO(ian): Extend scenario prompt filters when optimizing scenario-scoped prompt routes.
   };
 }
 
