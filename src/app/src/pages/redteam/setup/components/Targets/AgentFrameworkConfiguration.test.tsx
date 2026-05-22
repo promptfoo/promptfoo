@@ -33,7 +33,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const providerIdInput = screen.getByRole('textbox', {
-      name: /Provider ID \(Python file path\)/i,
+      name: /Python agent file path/i,
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -137,7 +137,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const providerIdInput = screen.getByRole('textbox', {
-      name: /Provider ID \(Python file path\)/i,
+      name: /Python agent file path/i,
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -166,7 +166,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const providerIdInput = screen.getByRole('textbox', {
-      name: /Provider ID \(Python file path\)/i,
+      name: /Python agent file path/i,
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -174,5 +174,36 @@ describe('AgentFrameworkConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);
+  });
+
+  it('describes required path syntax and associates provider validation with the input', () => {
+    renderWithProviders(
+      <AgentFrameworkConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        agentType="langchain"
+        providerIdError="Python agent file path is required"
+      />,
+    );
+
+    const input = screen.getByRole('textbox', { name: /Python agent file path/i });
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription(
+      'Enter a local path beginning with file://, for example file:///workspace/agents/agent.py. Python agent file path is required',
+    );
+  });
+
+  it('uses evaluation-specific quickstart guidance in eval mode', () => {
+    renderWithProviders(
+      <AgentFrameworkConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        agentType="langchain"
+        mode="eval"
+      />,
+    );
+
+    expect(screen.getByText(/connect your agent to this evaluation/i)).toBeInTheDocument();
+    expect(screen.queryByText(/red team evaluation system/i)).not.toBeInTheDocument();
   });
 });

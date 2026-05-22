@@ -57,7 +57,17 @@ vi.mock('./FoundationModelConfiguration', () => ({
   ),
 }));
 vi.mock('./AgentFrameworkConfiguration', () => ({
-  default: () => <div data-testid="agent-config" />,
+  default: ({
+    providerIdError,
+    mode,
+  }: {
+    providerIdError?: string | null;
+    mode?: 'eval' | 'redteam';
+  }) => (
+    <div data-testid="agent-config" data-mode={mode}>
+      {providerIdError}
+    </div>
+  ),
 }));
 vi.mock('./CommonConfigurationOptions', () => ({
   default: ({
@@ -205,6 +215,29 @@ describe('ProviderConfigEditor', () => {
       expect(isValid).toBe(true);
       expect(mockSetError).toHaveBeenCalledWith(null);
       expect(mockOnValidate).toHaveBeenCalledWith(true);
+    });
+
+    it('surfaces agent provider validation at its required file path field', async () => {
+      let validateFn: (() => boolean) | null = null;
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={{ id: '', config: {} }}
+          setProvider={vi.fn()}
+          onValidationRequest={(validator) => {
+            validateFn = validator;
+          }}
+          providerType="langchain"
+          mode="eval"
+        />,
+      );
+
+      act(() => {
+        expect(validateFn!()).toBe(false);
+      });
+
+      expect(await screen.findByText('Python agent file path is required')).toBeInTheDocument();
+      expect(screen.getByTestId('agent-config')).toHaveAttribute('data-mode', 'eval');
     });
 
     it('should reject example paths that have not been replaced for script providers', () => {

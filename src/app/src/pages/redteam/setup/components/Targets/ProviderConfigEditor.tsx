@@ -71,6 +71,7 @@ type ValidationError = string | React.ReactNode;
 interface ProviderValidationResult {
   errors: ValidationError[];
   foundationFieldErrors: FoundationModelFieldErrors;
+  agentIdError: string | null;
 }
 
 const hasConfiguredInputs = (provider: ProviderOptions): boolean =>
@@ -174,7 +175,7 @@ function validateFoundationModelProvider(
     errors.push(foundationFieldErrors.topP);
   }
 
-  return { errors, foundationFieldErrors };
+  return { errors, foundationFieldErrors, agentIdError: null };
 }
 
 function validateHttpProvider(
@@ -198,10 +199,10 @@ function validateHttpProvider(
 
 function validateAgentProvider(provider: ProviderOptions): string[] {
   if (!provider.id || provider.id.trim() === '') {
-    return ['Python file path is required'];
+    return ['Python agent file path is required'];
   }
   if (!provider.id.startsWith('file://')) {
-    return ['Provider ID must start with file:// for Python agent files'];
+    return ['Enter a Python agent path beginning with file://'];
   }
   return usesExamplePath(provider.id) ? ['Replace the example path with your agent file path'] : [];
 }
@@ -230,7 +231,11 @@ function getProviderValidationResult(
   extensionErrors: boolean,
   validateUrl: (url: string, type?: 'http' | 'websocket') => boolean,
 ): ProviderValidationResult {
-  let result: ProviderValidationResult = { errors: [], foundationFieldErrors: {} };
+  let result: ProviderValidationResult = {
+    errors: [],
+    foundationFieldErrors: {},
+    agentIdError: null,
+  };
   if (providerType === 'http') {
     result.errors = validateHttpProvider(provider, bodyError, validateUrl);
   } else if (providerType === 'websocket') {
@@ -241,6 +246,7 @@ function getProviderValidationResult(
     result = validateFoundationModelProvider(provider, providerType);
   } else if (AGENT_FRAMEWORKS.includes(providerType || '')) {
     result.errors = validateAgentProvider(provider);
+    result.agentIdError = typeof result.errors[0] === 'string' ? result.errors[0] : null;
   } else if (['javascript', 'python', 'go', 'custom', 'mcp', 'exec'].includes(providerType || '')) {
     result.errors = validateCustomProvider(provider, bodyError);
   }
@@ -275,6 +281,7 @@ function ProviderConfigEditor({
   const [foundationFieldErrors, setFoundationFieldErrors] = useState<FoundationModelFieldErrors>(
     {},
   );
+  const [agentIdError, setAgentIdError] = useState<string | null>(null);
 
   const validateUrl = useCallback((url: string, type: 'http' | 'websocket' = 'http'): boolean => {
     try {
@@ -302,6 +309,7 @@ function ProviderConfigEditor({
     const updatedTarget = cloneProvider(provider);
 
     if (field === 'id') {
+      setAgentIdError(null);
       updatedTarget.id = value as string;
       if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
@@ -362,9 +370,19 @@ function ProviderConfigEditor({
   };
 
   const validate = useCallback((): boolean => {
-    const { errors, foundationFieldErrors: nextFoundationFieldErrors } =
-      getProviderValidationResult(provider, providerType, bodyError, extensionErrors, validateUrl);
+    const {
+      errors,
+      foundationFieldErrors: nextFoundationFieldErrors,
+      agentIdError: nextAgentIdError,
+    } = getProviderValidationResult(
+      provider,
+      providerType,
+      bodyError,
+      extensionErrors,
+      validateUrl,
+    );
     setFoundationFieldErrors(nextFoundationFieldErrors);
+    setAgentIdError(nextAgentIdError);
     const hasErrors = errors.length > 0;
     if (setError) {
       const stringErrors = errors.filter((e): e is string => typeof e === 'string');
@@ -498,6 +516,8 @@ function ProviderConfigEditor({
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}
           agentType={providerType || ''}
+          mode={mode}
+          providerIdError={agentIdError}
         />
       )}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -21,6 +22,8 @@ interface AgentFrameworkConfigurationProps {
   selectedTarget: ProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   agentType: string;
+  mode?: 'eval' | 'redteam';
+  providerIdError?: string | null;
 }
 
 const frameworkInfo: Record<string, { name: string; description: string; pip: string }> = {
@@ -76,9 +79,13 @@ export default function AgentFrameworkConfiguration({
   selectedTarget,
   updateCustomTarget,
   agentType,
+  mode = 'redteam',
+  providerIdError,
 }: AgentFrameworkConfigurationProps) {
   const [copied, setCopied] = useState(false);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const providerIdHelpId = useId();
+  const providerIdErrorId = useId();
   const { recordEvent } = useTelemetry();
 
   const frameworkDetails = frameworkInfo[agentType] || {
@@ -86,6 +93,7 @@ export default function AgentFrameworkConfiguration({
     description: 'Agent framework',
     pip: agentType,
   };
+  const templatePurpose = mode === 'eval' ? 'this evaluation' : 'the red team evaluation system';
 
   const handleCopyTemplate = () => {
     navigator.clipboard.writeText(AGENT_TEMPLATE);
@@ -162,26 +170,33 @@ export default function AgentFrameworkConfiguration({
       <div className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="provider-id">
-            Provider ID (Python file path) <span className="text-destructive">*</span>
+            Python agent file path <span className="text-destructive">*</span>
           </Label>
           <Input
             id="provider-id"
             value={selectedTarget.id || ''}
             onChange={(e) => updateCustomTarget('id', e.target.value)}
             placeholder={`file:///path/to/${agentType}_agent.py`}
+            aria-invalid={Boolean(providerIdError)}
+            aria-describedby={`${providerIdHelpId}${providerIdError ? ` ${providerIdErrorId}` : ''}`}
           />
-          <p className="text-sm text-muted-foreground">
-            Path to your Python agent implementation file
-          </p>
+          <HelperText id={providerIdHelpId}>
+            Enter a local path beginning with <code>file://</code>, for example{' '}
+            <code>file:///workspace/agents/agent.py</code>.
+          </HelperText>
+          {providerIdError && (
+            <HelperText id={providerIdErrorId} error>
+              {providerIdError}
+            </HelperText>
+          )}
         </div>
 
         <div>
           <h3 className="mb-2 text-lg font-semibold">Quickstart Template</h3>
           <p className="mb-4 max-w-[1000px] text-muted-foreground">
             Want to see how it works? Promptfoo can generate a starter template for{' '}
-            {frameworkDetails.name} that shows you how to connect your agent to the red team
-            evaluation system. You can use this as a starting point and customize it to fit your
-            needs.
+            {frameworkDetails.name} that shows you how to connect your agent to {templatePurpose}.
+            You can use this as a starting point and customize it to fit your needs.
           </p>
           <Button onClick={handleOpenTemplateModal}>
             <Code className="mr-2 size-4" />
