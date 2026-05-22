@@ -381,9 +381,7 @@ All trace and trajectory assertions accept a `not-` prefix that flips the result
 - `not-trace-error-spans` passes when the error budget was **not** met (i.e. errors are present). Useful in negative tests where you intentionally trigger a tool failure.
 - `not-trace-span-duration` passes when at least one matching span exceeds the budget. Useful when proving that a slow path actually triggers your latency guardrail.
 
-:::warning Inverse `trace-*` forms need a span to act on
-For the no-match case, the inverse `trace-span-duration` and `trace-error-spans` assertions don't currently flip — when zero spans match the pattern they still report `pass: true`. Always pair these inverse forms with a `trace-span-count` presence check on a known span name so a missing trace can't silently satisfy an inverse assertion.
-:::
+`trace-span-duration` and `trace-error-spans` pass by default when no spans match. Their inverse forms flip that no-match pass into a failure. Use `requirePresence: true` on the positive form, or add an explicit `trace-span-count`, whenever missing trace data should fail independently of the budget.
 
 ## Assertion reference
 
@@ -806,11 +804,7 @@ Agents that loop have unbounded cost. Use the built-in `tokens-used` assertion t
     source: auto # auto (default) | trace | response
 ```
 
-`source: auto` sums any of `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`, and Promptfoo's own `tokens.used` it finds across matching spans, and falls back to `providerResponse.tokenUsage` when the trace yields zero. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
-
-:::warning Don't mix aggregate and component token attributes on the same span
-The summer reads every recognised key, so a span that records both the OTel-style component fields (`gen_ai.usage.input_tokens` + `gen_ai.usage.output_tokens`) **and** the aggregate (`gen_ai.usage.total_tokens`) is double-counted. Pick one shape per span — components or totals, not both — or use `source: response` for budget assertions.
-:::
+`source: auto` uses traces whenever trace spans exist and falls back to `providerResponse.tokenUsage` only when they do not. For each matched span, Promptfoo prefers an aggregate total such as `gen_ai.usage.total_tokens`, `llm.usage.total_tokens`, or `tokens.used`; otherwise it sums one matching input/output token family. When matched parent and child spans both carry totals, only the leaf token-bearing spans count so repeated hierarchy totals are not double-counted. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
 
 Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
 
@@ -860,7 +854,7 @@ Anything you put on a span travels to:
 
 Treat span attributes as you would log lines: redact at the source, not in the viewer.
 
-**What Promptfoo redacts automatically.** Promptfoo's GenAI provider tracer sanitizes API-key-like and token-like patterns from the request and response bodies it captures itself. It does **not** redact attributes you attach to your own spans. Custom provider spans, OpenAI Agents SDK spans, and Codex item spans are stored as-emitted.
+**What Promptfoo redacts automatically.** Promptfoo's GenAI provider tracer sanitizes API-key-like and token-like patterns from the request and response bodies it captures itself. The Codex SDK provider also applies best-effort redaction to text it attaches to Codex item spans from streaming events. Neither path redacts attributes you attach to your own spans. Spans that arrive over OTLP from your app, an external SDK, or a native runtime should be treated as emitted unless you redact them at the source or configure receiver-side redaction.
 
 **Redact in your provider before calling `setAttributes`.**
 
@@ -894,7 +888,7 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 - Bind the OTLP receiver to `127.0.0.1` for a single-machine eval. The config default is `0.0.0.0`, so set loopback explicitly when you want the receiver reachable only from the local host. The receiver has no in-process auth, rate limiting, mTLS, or audit logging — those belong at a higher layer.
 - For any non-loopback deployment (multi-tenant CI runners, sibling containers, public hosts), put a reverse proxy in front of the receiver. Run nginx, Caddy, or your service mesh to terminate TLS, enforce mTLS or OAuth, rate-limit by source, and forward authenticated traffic to `127.0.0.1:4318`. The proxy is the right boundary for those concerns; application-layer auth on this receiver does not replace a deployment boundary.
 
-- Use `tracing.otlp.http.redactAttributes` to redact sensitive attribute keys at the receiver, before they hit the SQLite store, the UI, or any forwarder. Substring match is case-insensitive:
+- Use `tracing.otlp.http.redactAttributes` to redact sensitive attribute keys at the receiver, before they hit the SQLite store or the UI. Substring match is case-insensitive:
 
   ```yaml
   tracing:
@@ -1052,7 +1046,7 @@ Confirm the assertion fires by running the eval and checking the Traces tab. The
 
 ## Related docs
 
-- [Tracing](/docs/tracing/) — full OTLP receiver setup, JS and Python provider examples, and forwarding to external backends
+- [Tracing](/docs/tracing/) — full OTLP receiver setup plus JS and Python provider examples
 - [Deterministic assertions](/docs/configuration/expected-outputs/deterministic/) — non-trace assertions that pair with `trace-*` and `trajectory:*`
 - [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) — judge configuration shared with `trajectory:goal-success`
 - [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)

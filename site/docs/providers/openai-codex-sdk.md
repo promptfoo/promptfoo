@@ -553,7 +553,7 @@ Then inspect traces in any of these places:
 
 - **Promptfoo Web UI**: run `promptfoo view`, open a result details panel, and switch to the **Traces** tab
 - **Exported eval JSON**: add `-o output.json` and inspect each result's trace-backed assertion scores and reasons
-- **External OTLP backend**: set Promptfoo tracing forwarding or override `cli_env.OTEL_EXPORTER_OTLP_ENDPOINT` for Codex CLI native spans
+- **External OTLP backend**: configure your app or collector to export there too; for native Codex CLI spans, override `cli_env.OTEL_EXPORTER_OTLP_ENDPOINT`
 
 For general OTEL receiver setup and UI details, see [Tracing](/docs/tracing/). If the trace exists but has no Codex item spans, check `enable_streaming: true`. If deep tracing spans are missing, check that `tracing.otlp.http.enabled: true`, the receiver port matches `OTEL_EXPORTER_OTLP_ENDPOINT`, and `acceptFormats` includes `json`.
 

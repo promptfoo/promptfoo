@@ -28,7 +28,6 @@ Tracing provides visibility into:
 - **Built-in OTLP receiver**: No external collector required for basic usage
 - **Web UI visualization**: View traces directly in the Promptfoo interface
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
-- **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
 
 ## Built-in Provider Instrumentation
 
@@ -279,22 +278,9 @@ export OTEL_SERVICE_NAME="my-rag-application"
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 ```
 
-### Forwarding to External Collectors
+### External Collectors
 
-Forward traces to external observability platforms:
-
-```yaml
-tracing:
-  enabled: true
-  otlp:
-    http:
-      enabled: true
-  forwarding:
-    enabled: true
-    endpoint: 'http://jaeger:4318' # or Tempo, Honeycomb, etc.
-    headers:
-      'api-key': '{{ env.OBSERVABILITY_API_KEY }}'
-```
+Promptfoo's OTLP receiver stores traces for evals. If you also need traces in Jaeger, Tempo, Honeycomb, or another OTLP-compatible backend, configure your provider SDK or collector pipeline to export there as well.
 
 ## Provider Implementation Guide
 
@@ -726,6 +712,6 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 - Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
-- Set up forwarding to your observability platform
+- Export traces to your observability platform from your provider SDK or collector when needed
 - Add custom instrumentation for your use case
 - Use traces to optimize provider performance
