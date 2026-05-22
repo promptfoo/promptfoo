@@ -495,9 +495,9 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           },
         })),
 
-      maxImageWidth: 256,
+      maxImageWidth: 500,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
-      maxImageHeight: 256,
+      maxImageHeight: 300,
       setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
     }),
     {

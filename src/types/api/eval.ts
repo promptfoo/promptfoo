@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import {
+  AssertionOrSetSchema,
+  EvalResultsFilterMode,
+  EvaluateOptionsSchema,
+  TestSuiteConfigSchema,
+} from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -82,22 +87,30 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 // GET /api/evals/:id/table
 
+/** Upper bound on `limit` for non-export page requests; must stay >= the UI's largest page-size option. */
+export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
+
 /** Query parameters for eval table endpoint. */
-export const EvalTableQuerySchema = z.object({
-  format: z.enum(['csv', 'json']).optional(),
-  limit: z.coerce.number().int().positive().prefault(50),
-  offset: z.coerce.number().int().nonnegative().prefault(0),
-  filterMode: EvalResultsFilterMode.prefault('all'),
-  search: z.string().prefault(''),
-  filter: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-  comparisonEvalIds: z
-    .union([z.string(), z.array(z.string())])
-    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
-    .prefault([]),
-});
+export const EvalTableQuerySchema = z
+  .object({
+    format: z.enum(['csv', 'json']).optional(),
+    limit: z.coerce.number().int().positive().prefault(50),
+    offset: z.coerce.number().int().nonnegative().prefault(0),
+    filterMode: EvalResultsFilterMode.prefault('all'),
+    search: z.string().prefault(''),
+    filter: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+      .prefault([]),
+    comparisonEvalIds: z
+      .union([z.string(), z.array(z.string())])
+      .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+      .prefault([]),
+  })
+  .refine((query) => query.format || query.limit <= EVAL_TABLE_MAX_PAGE_SIZE, {
+    message: `limit must be less than or equal to ${EVAL_TABLE_MAX_PAGE_SIZE}`,
+    path: ['limit'],
+  });
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
@@ -277,6 +290,52 @@ export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
 export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
+// POST /api/eval/:evalId/assertions
+
+export const EvalAssertionsParamsSchema = z.object({
+  evalId: z.string().min(1),
+});
+
+export const PosthocResultsFilterSchema = z.object({
+  type: z.string(),
+  operator: z.string(),
+  value: z.string().optional(),
+  field: z.string().optional(),
+  logicOperator: z.enum(['and', 'or']).optional(),
+});
+
+export const PosthocAssertionsScopeSchema = z.object({
+  type: z.enum(['results', 'tests', 'filtered']),
+  resultIds: z.array(z.string()).optional(),
+  testIndices: z.array(z.number()).optional(),
+  filters: z.array(PosthocResultsFilterSchema).optional(),
+  filterMode: EvalResultsFilterMode.optional(),
+  searchText: z.string().optional(),
+});
+
+export const AddEvalAssertionsRequestSchema = z.object({
+  assertions: z.array(AssertionOrSetSchema).min(1),
+  scope: PosthocAssertionsScopeSchema,
+});
+
+export const EvalAssertionJobParamsSchema = EvalAssertionsParamsSchema.extend({
+  jobId: z.string().min(1),
+});
+
+export const GenerateEvalAssertionsRequestSchema = z.object({
+  type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
+  numAssertions: z.number().int().min(1).max(20).default(5),
+  instructions: z.string().optional(),
+  provider: z.string().optional(),
+  testIndices: z.array(z.number()).optional(),
+  resultIds: z.array(z.string()).optional(),
+});
+
+export type EvalAssertionsParams = z.infer<typeof EvalAssertionsParamsSchema>;
+export type AddEvalAssertionsRequest = z.infer<typeof AddEvalAssertionsRequestSchema>;
+export type EvalAssertionJobParams = z.infer<typeof EvalAssertionJobParamsSchema>;
+export type GenerateEvalAssertionsRequest = z.infer<typeof GenerateEvalAssertionsRequestSchema>;
+
 // POST /api/eval (save eval to database)
 
 export const SaveEvalRequestSchema = z
@@ -375,6 +434,17 @@ export const EvalSchemas = {
     Params: SubmitRatingParamsSchema,
     Request: SubmitRatingRequestSchema,
     Response: SubmitRatingResponseSchema,
+  },
+  AddAssertions: {
+    Params: EvalAssertionsParamsSchema,
+    Request: AddEvalAssertionsRequestSchema,
+  },
+  AssertionJob: {
+    Params: EvalAssertionJobParamsSchema,
+  },
+  GenerateAssertions: {
+    Params: EvalAssertionsParamsSchema,
+    Request: GenerateEvalAssertionsRequestSchema,
   },
   Save: {
     Request: SaveEvalRequestSchema,

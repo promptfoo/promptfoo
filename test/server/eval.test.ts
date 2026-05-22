@@ -2,9 +2,11 @@ import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../../src/assertions';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { assertionJobs } from '../../src/server/routes/eval';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
 import invariant from '../../src/util/invariant';
@@ -60,6 +62,7 @@ describe('eval routes', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    assertionJobs.clear();
 
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
@@ -549,6 +552,88 @@ describe('eval routes', () => {
 
       const updatedResult = await EvalResult.findById(result.id);
       expect(updatedResult?.testCase.assert).toHaveLength(2);
+    });
+
+    it('keeps existing assert-set scores when recomputing post-hoc results', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const persistedResult = await EvalResult.findById(result.id);
+      invariant(persistedResult, 'Persisted result is required');
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        weight: 3,
+        assert: [{ type: 'contains' as const, value: 'denver' }],
+      };
+      persistedResult.testCase = {
+        ...persistedResult.testCase,
+        assert: [assertionSet],
+      };
+      persistedResult.gradingResult = await runAssertions({
+        prompt: 'What is the capital of colorado?',
+        providerResponse: persistedResult.response!,
+        test: persistedResult.testCase,
+      });
+      persistedResult.success = persistedResult.gradingResult.pass;
+      persistedResult.score = persistedResult.gradingResult.score;
+      await persistedResult.save();
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'missing' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(false);
+      expect(updatedResult?.score).toBeCloseTo(0.75, 5);
+    });
+
+    it('schedules completed assertion job cleanup without waiting for a terminal poll', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+
+      await vi.waitFor(() => {
+        expect(assertionJobs.get(res.body.data.jobId)?.status).toBe('complete');
+      });
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 5 * 60 * 1000);
+    });
+  });
+
+  describe('post("/:evalId/assertions/generate")', () => {
+    it('does not expose internal generation errors', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      vi.spyOn(EvalResult, 'findManyByEvalId').mockRejectedValueOnce(
+        new Error('sensitive assertion generation failure'),
+      );
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions/generate`).send({});
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to generate assertions' });
+      expect(res.text).not.toContain('sensitive assertion generation failure');
     });
   });
 

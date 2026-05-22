@@ -99,10 +99,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockReplayEvaluation.mockResolvedValue({ output: 'Updated output' });
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
 });
 
 afterEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
   restoreTestTimers();
 });
 
@@ -228,7 +230,7 @@ describe('EvalOutputCell', () => {
   it('passes metadata correctly to the dialog', async () => {
     const user = userEvent.setup();
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: /view details/i }));
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     expect(dialogComponent).toBeInTheDocument();
@@ -261,7 +263,7 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithSingleAssertionResult} />);
-    await user.click(screen.getByRole('button', { name: /view details/i }));
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     const passedGradingResults = JSON.parse(
@@ -274,7 +276,7 @@ describe('EvalOutputCell', () => {
 
   it('handles enter key press to open dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
-    const promptButton = screen.getByRole('button', { name: /view details/i });
+    const promptButton = screen.getByRole('button', { name: /view output and test details/i });
     expect(promptButton).toBeInTheDocument();
     promptButton.focus();
     await userEvent.keyboard('{enter}');
@@ -285,6 +287,32 @@ describe('EvalOutputCell', () => {
     // Check that metadata is passed correctly
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
     expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('adds row and details hints when the prompt dialog opens', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} rowPositionIndex={50} />);
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(window.location.search).toBe('?rowId=51');
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('opens the prompt dialog from a matching details hash', () => {
+    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('ignores a details hash that targets a different stable row index', () => {
+    window.history.replaceState({}, '', '/#details-row-51-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.queryByTestId('dialog-component')).not.toBeInTheDocument();
   });
 
   it('handles keyboard navigation between buttons', async () => {
@@ -303,7 +331,7 @@ describe('EvalOutputCell', () => {
     await userEvent.tab();
     expect(screen.getByRole('button', { name: /edit comment/i })).toHaveFocus();
     await userEvent.tab();
-    expect(screen.getByRole('button', { name: /view details/i })).toHaveFocus();
+    expect(screen.getByRole('button', { name: /view output and test details/i })).toHaveFocus();
   });
 
   it('preserves existing metadata citations', async () => {
@@ -320,7 +348,7 @@ describe('EvalOutputCell', () => {
     };
 
     renderWithProviders(<EvalOutputCell {...propsWithMetadataCitations} />);
-    await user.click(screen.getByRole('button', { name: /view details/i }));
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     const dialogComponent = screen.getByTestId('dialog-component');
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
@@ -850,11 +878,12 @@ describe('EvalOutputCell', () => {
     expect(container.querySelectorAll('img')).toHaveLength(0);
   });
 
-  it('allows copying row link to clipboard', async () => {
+  it('allows copying a cell deep-link to clipboard', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
     expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.hash = '#details-row-1-prompt-1';
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -866,6 +895,27 @@ describe('EvalOutputCell', () => {
     await waitFor(() => {
       expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
+  });
+
+  it('refreshes the rowId page hint when copying a cell deep-link', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    window.history.replaceState({}, '', '/eval/test-eval?rowId=99&filter=foo');
+
+    const expectedUrl = new URL(window.location.href);
+    expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.hash = '#details-row-1-prompt-1';
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByLabelText('Copy link to output'));
+
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+    });
+    const written = clipboard.writeText.mock.calls[0]?.[0];
+    expect(written).toContain('filter=foo');
+    expect(written).toContain('rowId=1');
   });
 
   it('shows checkmark after copying link', async () => {
@@ -2331,7 +2381,31 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     // Extra actions should be visible because shift key is mocked as pressed
     expect(screen.getByLabelText('Toggle test highlight')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy link to output')).toBeInTheDocument();
+    expect(screen.getByLabelText('Copy output to clipboard')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /more actions/i })).toBeInTheDocument();
+  });
+
+  it('keeps utility and review actions in a stable, grouped order', () => {
+    const { container } = renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    const actionsArea = container.querySelector('.cell-actions');
+    expect(actionsArea).toBeInTheDocument();
+
+    const actionNames = Array.from(actionsArea?.querySelectorAll('button') ?? []).map(
+      (button) => button.getAttribute('aria-label') ?? '',
+    );
+
+    expect(actionNames).toEqual([
+      'Copy output to clipboard',
+      'Copy link to output',
+      'Toggle test highlight',
+      'More actions',
+      'Mark test passed',
+      'Mark test failed',
+      'Set test score',
+      'Edit comment',
+      'View output and test details',
+    ]);
   });
 });
 

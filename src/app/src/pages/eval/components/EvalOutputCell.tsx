@@ -56,7 +56,13 @@ import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { getHumanRating } from './utils';
+import {
+  buildEvalOutputPromptHash,
+  getHumanRating,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -1117,18 +1123,15 @@ function renderOutputActions({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className={`action p-1 rounded hover:bg-muted transition-colors ${isHighlighted ? 'text-amber-500 dark:text-amber-400' : ''}`}
-                onClick={handleToggleHighlight}
+                className="action p-1 rounded hover:bg-muted transition-colors"
+                onClick={handleCopy}
                 onMouseDown={(e) => e.preventDefault()}
-                aria-label="Toggle test highlight"
+                aria-label="Copy output to clipboard"
               >
-                <Star
-                  className={`size-4 ${isHighlighted ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
-                  fill={isHighlighted ? 'currentColor' : 'none'}
-                />
+                {copied ? <Check className="size-4" /> : <ClipboardCopy className="size-4" />}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Toggle test highlight</TooltipContent>
+            <TooltipContent>Copy output to clipboard</TooltipContent>
           </Tooltip>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
@@ -1143,6 +1146,23 @@ function renderOutputActions({
               </button>
             </TooltipTrigger>
             <TooltipContent>Copy link to output</TooltipContent>
+          </Tooltip>
+          <Tooltip disableHoverableContent>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${isHighlighted ? 'text-amber-500 dark:text-amber-400' : ''}`}
+                onClick={handleToggleHighlight}
+                onMouseDown={(e) => e.preventDefault()}
+                aria-label="Toggle test highlight"
+              >
+                <Star
+                  className={`size-4 ${isHighlighted ? 'stroke-amber-600 dark:stroke-amber-300' : ''}`}
+                  fill={isHighlighted ? 'currentColor' : 'none'}
+                />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle test highlight</TooltipContent>
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1251,12 +1271,12 @@ function renderOutputActions({
                 type="button"
                 className="action p-1 rounded hover:bg-muted transition-colors"
                 onClick={handlePromptOpen}
-                aria-label="View details"
+                aria-label="View output and test details"
               >
                 <Search className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>View details</TooltipContent>
+            <TooltipContent>View output and test details</TooltipContent>
           </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
@@ -1304,6 +1324,7 @@ export interface EvalOutputCellProps {
   maxTextLength: number;
   rowIndex: number;
   testIdx?: number;
+  rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -1334,6 +1355,7 @@ function EvalOutputCell({
   maxTextLength,
   rowIndex,
   testIdx,
+  rowPositionIndex = rowIndex,
   promptIndex,
   onRating,
   firstOutput,
@@ -1367,6 +1389,7 @@ function EvalOutputCell({
   const [openPrompt, setOpen] = React.useState(false);
   const [openAssertions, setOpenAssertions] = React.useState(false);
   const [isReplaying, setIsReplaying] = React.useState(false);
+  const locationHash = useEvalDetailsHash();
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
@@ -1377,11 +1400,27 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
+  React.useEffect(() => {
+    const hashTarget = parseEvalOutputPromptHash(locationHash);
+    if (!hashTarget) {
+      setOpen(false);
+      return;
+    }
+
+    setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
+  }, [locationHash, rowIndex, promptIndex]);
+
+  const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
+
   const handlePromptOpen = () => {
     setOpen(true);
+    setEvalDetailsHash(promptDetailsHash, rowPositionIndex);
   };
   const handlePromptClose = () => {
     setOpen(false);
+    if (locationHash === promptDetailsHash) {
+      setEvalDetailsHash('');
+    }
   };
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -1582,7 +1621,10 @@ function EvalOutputCell({
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
-    url.searchParams.set('rowId', String(rowIndex + 1));
+    // Keep `rowId` as the filtered result position so pagination can reopen the
+    // right page, while the hash keeps the stable test/prompt identity for the dialog.
+    url.searchParams.set('rowId', String(rowPositionIndex + 1));
+    url.hash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
     navigator.clipboard
       .writeText(url.toString())

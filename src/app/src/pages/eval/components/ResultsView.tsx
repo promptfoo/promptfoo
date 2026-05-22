@@ -24,7 +24,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Plus, Settings, Share, Trash2, X } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import AddAssertionsDialog from './AddAssertionsDialog';
 import { ColumnSelector } from './ColumnSelector';
@@ -44,7 +44,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { hashVarSchema } from './utils';
+import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -246,7 +246,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const {
     table,
@@ -285,19 +286,23 @@ export default function ResultsView({
   const [searchInputValue, setSearchInputValue] = React.useState(initialSearchText); // local, for responsive input
   const [debouncedSearchText, setDebouncedSearchText] = React.useState(initialSearchText); // debounced, for table/URL/pill
 
-  // Debounced update for URL, table, and pill
+  // Debounced update for URL, table, and pill. Search changes can change the
+  // visible result set, so drop any existing details deep-link while replacing the URL.
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearchText(text);
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (text) {
-          next.set('search', text);
-        } else {
-          next.delete('search');
-        }
-        return next;
-      },
+    setEvalDetailsHash('');
+    navigate(
+      buildEvalUrlWithSearchParams(
+        { pathname: location.pathname, search: location.search, hash: '' },
+        (params) => {
+          params.delete('rowId');
+          if (text) {
+            params.set('search', text);
+          } else {
+            params.delete('search');
+          }
+        },
+      ),
       { replace: true },
     );
   }, 300);
@@ -306,12 +311,15 @@ export default function ResultsView({
     setSearchInputValue('');
     debouncedUpdate.cancel();
     setDebouncedSearchText('');
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('search');
-        return next;
-      },
+    setEvalDetailsHash('');
+    navigate(
+      buildEvalUrlWithSearchParams(
+        { pathname: location.pathname, search: location.search, hash: '' },
+        (params) => {
+          params.delete('rowId');
+          params.delete('search');
+        },
+      ),
       { replace: true },
     );
   };
@@ -329,20 +337,23 @@ export default function ResultsView({
   const activeView: ActiveView = viewParam === 'report' ? 'report' : 'results';
   const setActiveView = React.useCallback(
     (view: ActiveView) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          if (view === 'results') {
-            next.delete('view');
-          } else {
-            next.set('view', view);
-          }
-          return next;
-        },
+      setEvalDetailsHash('');
+      navigate(
+        buildEvalUrlWithSearchParams(
+          { pathname: location.pathname, search: location.search, hash: '' },
+          (params) => {
+            params.delete('rowId');
+            if (view === 'results') {
+              params.delete('view');
+            } else {
+              params.set('view', view);
+            }
+          },
+        ),
         { replace: true },
       );
     },
-    [setSearchParams],
+    [location.pathname, location.search, navigate],
   );
   const [reportActions, setReportActions] = React.useState<React.ReactNode>(null);
 

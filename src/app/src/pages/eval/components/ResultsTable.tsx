@@ -29,6 +29,7 @@ import {
   type ProviderOptions,
   type Vars,
 } from '@promptfoo/types';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -64,10 +65,30 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals } from './utils';
+import {
+  getNamedMetricTotals,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
+
+const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
+  (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
+);
 
 /**
- * Audio player component that handles both storage refs and base64 data
+ * Renders an audio player for evaluation outputs that may be stored in different representations.
+ *
+ * This component accepts either:
+ * - A storage/blob reference, which is resolved asynchronously, or
+ * - Inline base64/data URL audio content, which is used immediately.
+ *
+ * @param data Audio payload or reference. Supported inputs:
+ *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
+ *   - data URL (`data:audio/...`)
+ *   - raw base64 audio data
+ * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
+ * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
  */
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
@@ -123,6 +144,10 @@ const METADATA_COLUMN_HORIZONTAL_PADDING_PX = 48;
 const METADATA_COLUMN_CHARACTER_WIDTH_PX = 8;
 const METADATA_COLUMN_WIDTH_PERCENTILE = 0.8;
 const PROMPT_COLUMN_SIZE_PX = 480;
+const MEDIA_MIME_PATTERNS = {
+  audio: /(?:^|[;,\s=:])audio\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+  image: /(?:^|[;,\s=:])image\/[a-z0-9.+-]+(?:$|[;,\s])/i,
+} as const;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -322,8 +347,11 @@ function renderMediaVariableCell({
 
   const { type: mediaType, format = '' } = mediaMetadata;
   const normalizedValue = normalizeMediaText(value);
+  const isRefValue = isBlobRef(value) || isStorageRef(value);
   const audioSource =
-    mediaType === 'audio' ? resolveAudioSource({ data: value, format, blobRef: value }) : null;
+    mediaType === 'audio'
+      ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
+      : null;
   const imageSrc =
     mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
 
@@ -414,12 +442,12 @@ function renderDecodedVariableCell({
     strategyId === 'audio' ||
     (typeof value === 'string' &&
       (isStorageRef(value) || isBlobRef(value)) &&
-      value.includes('audio/'));
+      MEDIA_MIME_PATTERNS.audio.test(value));
   const isImageContent =
     strategyId === 'image' ||
     (typeof value === 'string' &&
       (isStorageRef(value) || isBlobRef(value)) &&
-      value.includes('image/'));
+      MEDIA_MIME_PATTERNS.image.test(value));
 
   return (
     <div className="cell" data-capture="true">
@@ -549,7 +577,35 @@ function formatMetricValue(
   value: number,
   options: Intl.NumberFormatOptions = { maximumFractionDigits: 0 },
 ): string {
-  return Intl.NumberFormat(undefined, options).format(value);
+  return getNumberFormatter(options).format(value);
+}
+
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormatter(
+  options: Intl.NumberFormatOptions,
+  locale?: string | string[],
+): Intl.NumberFormat {
+  let normalizedLocale = 'default';
+  const localeArray = Array.isArray(locale) ? locale : undefined;
+  if (localeArray) {
+    normalizedLocale = localeArray.join(',');
+  } else if (typeof locale === 'string') {
+    normalizedLocale = locale;
+  }
+  const normalizedOptions = Object.entries(options)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}:${String(value)}`)
+    .join('|');
+  const cacheKey = `${normalizedLocale}|${normalizedOptions}`;
+
+  let formatter = numberFormatCache.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, options);
+    numberFormatCache.set(cacheKey, formatter);
+  }
+
+  return formatter;
 }
 
 function renderFilteredSuffix(value: React.ReactNode, unit = 'filtered'): React.ReactNode {
@@ -650,9 +706,9 @@ function renderTokenMetrics({
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
-}): React.ReactNode[] {
+}): React.ReactNode {
   if (!metrics?.tokenUsage?.total) {
-    return [];
+    return null;
   }
 
   const totalTokens = metrics.tokenUsage.total;
@@ -661,16 +717,18 @@ function renderTokenMetrics({
   const filteredAverage =
     filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
 
-  return [
-    <div key="total-tokens">
-      <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-      {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
-    </div>,
-    <div key="avg-tokens">
-      <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-      {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
-    </div>,
-  ];
+  return (
+    <>
+      <div>
+        <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+      </div>
+      <div>
+        <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+      </div>
+    </>
+  );
 }
 
 function renderLatencyMetric({
@@ -1411,6 +1469,7 @@ interface ResultsTableProps {
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
+  originalRowPositionIndex?: number;
   originalPromptIndex?: number;
 }
 
@@ -1551,6 +1610,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1644,7 +1704,9 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
+    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1653,6 +1715,7 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
+              originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
@@ -1736,6 +1799,21 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
+  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
+  // below reads from each, and if either source still resolves to a row, the next paginate
+  // tick would bounce the user back to the deep-linked page.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('rowId')) {
+      url.searchParams.delete('rowId');
+      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+    }
+    if (parseEvalOutputPromptHash(window.location.hash)) {
+      setEvalDetailsHash('');
+    }
+  }, [navigate]);
+
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
@@ -1773,11 +1851,19 @@ function ResultsTable({
     );
   }, [filters.values]);
 
+  const hasMountedResultSetResetRef = useRef(false);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
+    if (!hasMountedResultSetResetRef.current) {
+      hasMountedResultSetResetRef.current = true;
+      return;
+    }
+
+    clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -2051,8 +2137,13 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.index}
                     testIdx={info.row.original.testIdx}
+                    rowIndex={
+                      info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
+                    }
+                    rowPositionIndex={
+                      output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
+                    }
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2148,22 +2239,20 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  const clearRowIdFromUrl = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
-    }
-  }, [navigate]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
+    const detailsHashTarget = parseEvalOutputPromptHash(locationHash);
     const rowId = params['rowId'];
+    const rowIndexFromQuery =
+      rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
+    // Copied detail links carry both forms:
+    // - `rowId` is the filtered-table position used to resolve the correct page.
+    // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
+    const requestedRowIndex = rowIndexFromQuery ?? detailsHashTarget?.rowIndex;
 
-    if (rowId && Number.isInteger(Number(rowId))) {
-      const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
+    if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
+      const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -2233,7 +2322,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount, locationHash]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.
@@ -2425,19 +2514,15 @@ function ResultsTable({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
-                  50
-                </SelectItem>
-                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
-                  100
-                </SelectItem>
-                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
-                  500
-                </SelectItem>
-                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
-                  1000
-                </SelectItem>
+                {PAGE_SIZE_OPTIONS.map((size, idx) => (
+                  <SelectItem
+                    key={size}
+                    value={String(size)}
+                    disabled={filteredResultsCount <= (PAGE_SIZE_OPTIONS[idx - 1] ?? 0)}
+                  >
+                    {size}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -2459,7 +2544,7 @@ function ResultsTable({
                     ...prev,
                     pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                   }));
-                  clearRowIdFromUrl();
+                  clearRowDeepLink();
                 }
               }}
               className="w-[60px] h-8 text-center"
@@ -2482,7 +2567,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -2499,7 +2584,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}

@@ -33,6 +33,13 @@
   align-items: center;
   gap: 0.25rem;
   flex: 1;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
   transition: all 0.15s ease-in-out;
 }
 

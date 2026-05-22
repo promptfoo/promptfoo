@@ -11,11 +11,7 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import {
-  AssertionOrSetSchema,
-  EvalResultsFilterMode,
-  ResultFailureReason,
-} from '../../types/index';
+import { ResultFailureReason } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -34,6 +30,7 @@ import {
 } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
+import type { AddEvalAssertionsRequest } from '../../types/api/eval';
 import type {
   Assertion,
   AssertionOrSet,
@@ -76,61 +73,60 @@ export interface AssertionJob {
 
 export const assertionJobs = new Map<string, AssertionJob>();
 
-const EvalIdRouteParamSchema = z.object({ evalId: z.string().min(1) });
+const ASSERTION_JOB_RETENTION_MS = 5 * 60 * 1000;
 
-const PosthocResultsFilterSchema = z.object({
-  type: z.string(),
-  operator: z.string(),
-  value: z.string().optional(),
-  field: z.string().optional(),
-  logicOperator: z.enum(['and', 'or']).optional(),
-});
-
-const PosthocAssertionsScopeSchema = z.object({
-  type: z.enum(['results', 'tests', 'filtered']),
-  resultIds: z.array(z.string()).optional(),
-  testIndices: z.array(z.number()).optional(),
-  filters: z.array(PosthocResultsFilterSchema).optional(),
-  filterMode: EvalResultsFilterMode.optional(),
-  searchText: z.string().optional(),
-});
-
-const PosthocAssertionsSchema = z.object({
-  assertions: z.array(AssertionOrSetSchema).min(1),
-  scope: PosthocAssertionsScopeSchema,
-});
-
-const GenerateAssertionsSchema = z.object({
-  type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
-  numAssertions: z.number().int().min(1).max(20).default(5),
-  instructions: z.string().optional(),
-  provider: z.string().optional(),
-  testIndices: z.array(z.number()).optional(),
-  resultIds: z.array(z.string()).optional(),
-});
+function scheduleAssertionJobCleanup(jobId: string): void {
+  const timer = setTimeout(() => {
+    assertionJobs.delete(jobId);
+  }, ASSERTION_JOB_RETENTION_MS);
+  timer.unref();
+}
 
 function assertionKey(assertion: AssertionOrSet): string {
   return safeJsonStringify(assertion) ?? JSON.stringify(assertion);
 }
 
 function getTopLevelComponentResults(componentResults: GradingResult[]): GradingResult[] {
-  const nestedResults = new Set<string>();
+  const topLevelResults: GradingResult[] = [];
 
-  for (const result of componentResults) {
-    if (result.componentResults && result.componentResults.length > 0) {
-      for (const subResult of result.componentResults) {
-        const serialized = safeJsonStringify(subResult);
-        if (serialized) {
-          nestedResults.add(serialized);
-        }
-      }
-    }
+  // AssertionsResult flattens each parent result immediately before its children.
+  // Keep parents for aggregation and skip their display-only child copies.
+  for (let index = 0; index < componentResults.length; index++) {
+    const result = componentResults[index];
+    topLevelResults.push(result);
+    index += result.componentResults?.length ?? 0;
   }
 
-  return componentResults.filter((result) => {
-    const serialized = safeJsonStringify(result);
-    return !serialized || !nestedResults.has(serialized);
-  });
+  return topLevelResults;
+}
+
+function getAggregateResultOptions(
+  result: GradingResult,
+  testCase: AtomicTestCase,
+): { metric?: string; weight?: number } | undefined {
+  if (result.assertion) {
+    return {
+      metric: renderMetricName(result.assertion.metric, testCase.vars || {}),
+      weight: result.assertion.weight,
+    };
+  }
+
+  const assertionSet = result.metadata?.assertionSet;
+  if (
+    typeof assertionSet !== 'object' ||
+    assertionSet === null ||
+    assertionSet.type !== 'assert-set'
+  ) {
+    return undefined;
+  }
+
+  return {
+    metric:
+      typeof assertionSet.metric === 'string'
+        ? renderMetricName(assertionSet.metric, testCase.vars || {})
+        : undefined,
+    weight: typeof assertionSet.weight === 'number' ? assertionSet.weight : undefined,
+  };
 }
 
 async function recomputeAggregateGradingResult(
@@ -141,19 +137,78 @@ async function recomputeAggregateGradingResult(
   const topLevelResults = getTopLevelComponentResults(componentResults);
 
   topLevelResults.forEach((result, index) => {
-    if (!result.assertion) {
+    const options = getAggregateResultOptions(result, testCase);
+    if (!options) {
       return;
     }
-    const metric = renderMetricName(result.assertion.metric, testCase.vars || {});
+
     assertionResults.addResult({
       index,
       result,
-      metric,
-      weight: result.assertion.weight,
+      ...options,
     });
   });
 
   return assertionResults.testResult();
+}
+
+type PosthocAssertionTargetResolution =
+  | {
+      targetResults: EvalResult[];
+      matchedTestCount: number;
+    }
+  | {
+      missingResultId: string;
+    };
+
+async function resolvePosthocAssertionTargets(
+  evalId: string,
+  evalRecord: Eval,
+  scope: AddEvalAssertionsRequest['scope'],
+): Promise<PosthocAssertionTargetResolution> {
+  if (scope.type === 'results') {
+    const results: EvalResult[] = [];
+    for (const resultId of scope.resultIds || []) {
+      const result = await EvalResult.findById(resultId);
+      if (!result || result.evalId !== evalId) {
+        return { missingResultId: resultId };
+      }
+      results.push(result);
+    }
+    return { targetResults: results, matchedTestCount: results.length };
+  }
+
+  if (scope.type === 'tests') {
+    return {
+      targetResults: await EvalResult.findManyByEvalIdAndTestIndices(
+        evalId,
+        scope.testIndices || [],
+      ),
+      matchedTestCount: scope.testIndices?.length || 0,
+    };
+  }
+
+  const filters =
+    scope.filters?.map((filter) =>
+      JSON.stringify({
+        logicOperator: filter.logicOperator ?? 'and',
+        type: filter.type,
+        operator: filter.operator,
+        value: filter.value,
+        field: filter.field,
+      }),
+    ) || [];
+
+  const { testIndices, filteredCount } = await evalRecord.getFilteredTestIndices({
+    filterMode: scope.filterMode ?? 'all',
+    searchQuery: scope.searchText ?? '',
+    filters,
+  });
+
+  return {
+    targetResults: await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices),
+    matchedTestCount: filteredCount,
+  };
 }
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
@@ -905,16 +960,18 @@ evalRouter.post(
   },
 );
 
+// OSS eval mutations run on the local server without request-user auth. Multi-tenant
+// hosts must guard this router and scope eval access before exposing these routes.
 evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = EvalIdRouteParamSchema.safeParse(req.params);
+  const paramsResult = EvalSchemas.AddAssertions.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
-  const parsed = PosthocAssertionsSchema.safeParse(req.body);
+  const parsed = EvalSchemas.AddAssertions.Request.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ success: false, error: z.prettifyError(parsed.error) });
+    replyValidationError(res, parsed.error);
     return;
   }
 
@@ -961,62 +1018,29 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
     return;
   }
 
-  let targetResults: EvalResult[] = [];
-  let matchedTestCount = 0;
-
-  if (scope.type === 'results') {
-    const results: EvalResult[] = [];
-    for (const resultId of scope.resultIds || []) {
-      const result = await EvalResult.findById(resultId);
-      if (!result || result.evalId !== evalId) {
-        res.status(404).json({ success: false, error: `Result not found: ${resultId}` });
-        return;
-      }
-      results.push(result);
-    }
-    targetResults = results;
-    matchedTestCount = results.length;
-  } else if (scope.type === 'tests') {
-    targetResults = await EvalResult.findManyByEvalIdAndTestIndices(
-      evalId,
-      scope.testIndices || [],
-    );
-    matchedTestCount = scope.testIndices?.length || 0;
-  } else if (scope.type === 'filtered') {
-    const filters =
-      scope.filters?.map((filter) =>
-        JSON.stringify({
-          logicOperator: filter.logicOperator ?? 'and',
-          type: filter.type,
-          operator: filter.operator,
-          value: filter.value,
-          field: filter.field,
-        }),
-      ) || [];
-
-    const { testIndices, filteredCount } = await eval_.getFilteredTestIndices({
-      filterMode: scope.filterMode ?? 'all',
-      searchQuery: scope.searchText ?? '',
-      filters,
+  const targetResolution = await resolvePosthocAssertionTargets(evalId, eval_, scope);
+  if ('missingResultId' in targetResolution) {
+    res.status(404).json({
+      success: false,
+      error: `Result not found: ${targetResolution.missingResultId}`,
     });
-    matchedTestCount = filteredCount;
+    return;
+  }
 
-    if (testIndices.length === 0) {
-      res.json({
-        success: true,
-        data: {
-          jobId: null,
-          updatedResults: 0,
-          skippedResults: 0,
-          skippedAssertions: 0,
-          errors: [],
-          matchedTestCount,
-        },
-      });
-      return;
-    }
-
-    targetResults = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
+  const { targetResults, matchedTestCount } = targetResolution;
+  if (targetResults.length === 0) {
+    res.json({
+      success: true,
+      data: {
+        jobId: null,
+        updatedResults: 0,
+        skippedResults: 0,
+        skippedAssertions: 0,
+        errors: [],
+        matchedTestCount,
+      },
+    });
+    return;
   }
 
   const jobId = crypto.randomUUID();
@@ -1128,9 +1152,15 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
             score: aggregated.score,
           });
         } catch (error) {
+          logger.warn('[POST /:evalId/assertions] Failed to run assertions for result', {
+            evalId,
+            jobId,
+            resultId: result.id,
+            error,
+          });
           job.errors.push({
             resultId: result.id,
-            error: error instanceof Error ? error.message : String(error),
+            error: 'Failed to run assertions',
           });
           job.skippedResults++;
         }
@@ -1143,8 +1173,10 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
       }
 
       job.status = 'complete';
+      scheduleAssertionJobCleanup(jobId);
     } catch (error) {
       job.status = 'error';
+      scheduleAssertionJobCleanup(jobId);
       logger.error('[POST /:evalId/assertions] Assertion job failed', {
         evalId,
         jobId,
@@ -1157,11 +1189,9 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
 evalRouter.get(
   '/:evalId/assertions/job/:jobId',
   async (req: Request, res: Response): Promise<void> => {
-    const paramsResult = z
-      .object({ evalId: z.string().min(1), jobId: z.string().min(1) })
-      .safeParse(req.params);
+    const paramsResult = EvalSchemas.AssertionJob.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
@@ -1186,30 +1216,21 @@ evalRouter.get(
         matchedTestCount: job.matchedTestCount,
       },
     });
-
-    if (job.status === 'complete' || job.status === 'error') {
-      setTimeout(
-        () => {
-          assertionJobs.delete(jobId);
-        },
-        5 * 60 * 1000,
-      );
-    }
   },
 );
 
 evalRouter.post(
   '/:evalId/assertions/generate',
   async (req: Request, res: Response): Promise<void> => {
-    const paramsResult = EvalIdRouteParamSchema.safeParse(req.params);
+    const paramsResult = EvalSchemas.GenerateAssertions.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
-    const parsed = GenerateAssertionsSchema.safeParse(req.body);
+    const parsed = EvalSchemas.GenerateAssertions.Request.safeParse(req.body);
     if (!parsed.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(parsed.error) });
+      replyValidationError(res, parsed.error);
       return;
     }
 
@@ -1304,14 +1325,7 @@ evalRouter.post(
         },
       });
     } catch (error) {
-      logger.error('[POST /:evalId/assertions/generate] Error generating assertions', {
-        evalId,
-        error,
-      });
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to generate assertions',
-      });
+      sendError(res, 500, 'Failed to generate assertions', error);
     }
   },
 );
