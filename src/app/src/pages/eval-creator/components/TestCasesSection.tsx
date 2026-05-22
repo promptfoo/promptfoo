@@ -193,6 +193,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const testCaseNumberToDelete = testCaseToDelete === null ? null : testCaseToDelete + 1;
+  const testCaseLabelToDelete = testCaseNumberToDelete
+    ? `test case ${testCaseNumberToDelete}`
+    : 'this test case';
   const [pendingImport, setPendingImport] = React.useState<PendingTestCaseImport | null>(null);
   const testCaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
@@ -623,9 +627,14 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete test case?</DialogTitle>
+            <DialogTitle>
+              Delete test case{testCaseNumberToDelete ? ` ${testCaseNumberToDelete}` : ''}?
+            </DialogTitle>
             <DialogDescription>
-              This removes the test case from this evaluation. This action cannot be undone.
+              This removes {testCaseLabelToDelete} from this evaluation. This action cannot be
+              undone.
+              {testCases.length === 1 &&
+                ' This is your only test case; add another test case before you can run the evaluation.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

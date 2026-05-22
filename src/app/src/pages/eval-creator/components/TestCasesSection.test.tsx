@@ -908,6 +908,10 @@ describe('TestCasesSection', () => {
         await user.click(deleteButton);
       });
 
+      expect(screen.getByRole('dialog', { name: 'Delete test case 1?' })).toBeInTheDocument();
+      expect(screen.getByText(/this is your only test case/i)).toBeInTheDocument();
+      expect(screen.getByText(/add another test case before you can run/i)).toBeInTheDocument();
+
       // Confirm deletion
       const confirmButton = screen.getByText('Delete');
       await act(async () => {

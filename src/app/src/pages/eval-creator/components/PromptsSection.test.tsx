@@ -273,7 +273,8 @@ describe('PromptsSection', () => {
     const deleteButton = screen.getByRole('button', { name: /delete prompt 2/i });
     await user.click(deleteButton);
 
-    expect(screen.getByRole('dialog', { name: /delete prompt/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Delete prompt 2?' })).toBeInTheDocument();
+    expect(screen.getByText(/removes prompt 2 from this evaluation/i)).toBeInTheDocument();
 
     const confirmDeleteButton = screen.getByRole('button', { name: /delete/i });
     await user.click(confirmDeleteButton);
@@ -288,6 +289,22 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Prompt 1/)).toBeInTheDocument();
     expect(screen.queryByText(/Prompt 2/)).toBeNull();
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
+  });
+
+  it('warns when deleting the only prompt will prevent running', async () => {
+    const user = userEvent.setup();
+    setupStore(['Only prompt']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete prompt 1' }));
+
+    expect(screen.getByText(/this is your only prompt/i)).toBeInTheDocument();
+    expect(screen.getByText(/add another prompt before you can run/i)).toBeInTheDocument();
   });
 
   it("should add a starter prompt when the 'Add Starter Prompt' button is clicked and the prompts list is empty", async () => {

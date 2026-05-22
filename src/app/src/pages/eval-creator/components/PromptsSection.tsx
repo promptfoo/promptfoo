@@ -38,6 +38,10 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
+  const promptNumberToDelete = promptToDelete === null ? null : promptToDelete + 1;
+  const promptLabelToDelete = promptNumberToDelete
+    ? `prompt ${promptNumberToDelete}`
+    : 'this prompt';
 
   const { config, updateConfig } = useStore();
   const { showToast } = useToast();
@@ -323,9 +327,13 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete prompt?</DialogTitle>
+            <DialogTitle>
+              Delete prompt{promptNumberToDelete ? ` ${promptNumberToDelete}` : ''}?
+            </DialogTitle>
             <DialogDescription>
-              This removes the prompt from this evaluation. This action cannot be undone.
+              This removes {promptLabelToDelete} from this evaluation. This action cannot be undone.
+              {prompts.length === 1 &&
+                ' This is your only prompt; add another prompt before you can run the evaluation.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
