@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 
 import Editor from '@app/components/ui/code-editor';
 import { HelperText } from '@app/components/ui/helper-text';
@@ -42,9 +42,23 @@ const WebSocketEndpointConfiguration = ({
   urlError,
 }: WebSocketEndpointConfigurationProps) => {
   const urlErrorId = useId();
+  const messageTemplateHelpId = useId();
+  const streamResponseHelpId = useId();
+  const streamResponseEditorContainerRef = useRef<HTMLDivElement>(null);
   const [streamResponse, setStreamResponse] = useState(
     Boolean(selectedTarget.config.streamResponse),
   );
+
+  useEffect(() => {
+    if (!streamResponse) {
+      return;
+    }
+
+    streamResponseEditorContainerRef.current
+      ?.querySelector('textarea')
+      ?.setAttribute('aria-describedby', streamResponseHelpId);
+  }, [streamResponse, streamResponseHelpId]);
+
   return (
     <div className="mt-4">
       <h3 className="mb-4 text-lg font-semibold">Custom WebSocket Endpoint Configuration</h3>
@@ -68,10 +82,14 @@ const WebSocketEndpointConfiguration = ({
 
         <div className="mt-4 space-y-2">
           <Label htmlFor="message-template">Message Template</Label>
+          <p id={messageTemplateHelpId} className="text-sm text-muted-foreground">
+            Include <code>{'{{prompt}}'}</code> where Promptfoo should insert each test input.
+          </p>
           <Textarea
             id="message-template"
             value={selectedTarget.config.messageTemplate}
             onChange={(e) => updateWebSocketTarget('messageTemplate', e.target.value)}
+            aria-describedby={messageTemplateHelpId}
             rows={3}
           />
         </div>
@@ -121,7 +139,7 @@ const WebSocketEndpointConfiguration = ({
         {streamResponse ? (
           <div className="mt-4 space-y-2">
             <Label htmlFor="stream-response-transform">Stream Response Transform</Label>
-            <p className="text-sm text-muted-foreground">
+            <p id={streamResponseHelpId} className="text-sm text-muted-foreground">
               Extract specific data from the WebSocket messages. See{' '}
               <a
                 href="https://www.promptfoo.dev/docs/providers/websocket/#streaming-responses"
@@ -133,10 +151,12 @@ const WebSocketEndpointConfiguration = ({
               </a>{' '}
               for more information.
             </p>
-            <div className="relative rounded-md border border-border bg-card">
+            <div
+              ref={streamResponseEditorContainerRef}
+              className="relative rounded-md border border-border bg-card"
+            >
               <Editor
-                id="stream-response-transform"
-                aria-describedby="stream-response-helper-text"
+                textareaId="stream-response-transform"
                 value={selectedTarget.config.streamResponse ?? DEFAULT_WEBSOCKET_STREAM_RESPONSE}
                 onValueChange={(code) => updateWebSocketTarget('streamResponse', code)}
                 highlight={highlightJS}

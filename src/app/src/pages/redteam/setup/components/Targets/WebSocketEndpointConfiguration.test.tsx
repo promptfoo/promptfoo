@@ -8,10 +8,9 @@ import type { ProviderOptions } from '../../types';
 
 // Mock the editor component to avoid prism.js issues and to enable label association via htmlFor
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ id, value, onValueChange, ...rest }: any) => (
+  default: ({ textareaId, value, onValueChange }: any) => (
     <textarea
-      id={id}
-      aria-describedby={(rest as any)['aria-describedby']}
+      id={textareaId}
       value={value}
       onChange={(e) => onValueChange((e.target as HTMLTextAreaElement).value)}
     />
@@ -80,6 +79,9 @@ describe('WebSocketEndpointConfiguration', () => {
     );
 
     const msgField = screen.getByLabelText('Message Template');
+    expect(msgField).toHaveAccessibleDescription(
+      'Include {{prompt}} where Promptfoo should insert each test input.',
+    );
     await user.click(msgField);
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('Hey {{name}}');
@@ -182,7 +184,9 @@ describe('WebSocketEndpointConfiguration', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Stream Response Transform')).toBeInTheDocument();
+    expect(screen.getByLabelText('Stream Response Transform')).toHaveAccessibleDescription(
+      /Extract specific data from the WebSocket messages/,
+    );
     expect(screen.queryByLabelText('Response Transform')).not.toBeInTheDocument();
   });
 
