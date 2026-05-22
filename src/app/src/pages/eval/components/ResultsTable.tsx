@@ -1876,7 +1876,7 @@ function ResultsTable({
       head.vars.map((varName, idx) =>
         estimateMetadataColumnSize(
           varName,
-          getMetadataColumnSizeValues(columnSizeSampleBody, tableBody, (row) =>
+          columnSizeSampleBody.map((row) =>
             getVariableCellValue({
               row,
               varName,
@@ -1886,7 +1886,7 @@ function ResultsTable({
           ),
         ),
       ),
-    [head.vars, injectVarName, columnSizeSampleBody, tableBody],
+    [head.vars, injectVarName, columnSizeSampleBody],
   );
 
   const transformDisplayVarColumnSizes = React.useMemo(() => {

@@ -5031,6 +5031,52 @@ describe('ResultsTable default column sizing', () => {
     expect(promptWidth).toBeLessThanOrEqual(360);
   });
 
+  it('keeps declared variable widths stable when values first appear on a later page', () => {
+    let table = {
+      ...mockTable,
+      body: [{ ...mockTable.body[0], vars: ['ok', ''] }],
+    };
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const firstPageHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const firstPageWidth = Number.parseFloat(firstPageHeader?.style.width || '0');
+
+    table = {
+      ...table,
+      body: [
+        {
+          ...table.body[0],
+          vars: ['ok', 'Later page variable value '.repeat(20)],
+        },
+      ],
+    };
+    rerender(<ResultsTable {...defaultProps} zoom={1.01} />);
+
+    const laterPageHeader = screen.getByText('large_metadata').closest('th') as HTMLElement | null;
+    const laterPageWidth = Number.parseFloat(laterPageHeader?.style.width || '0');
+
+    expect(firstPageHeader).not.toBeNull();
+    expect(laterPageHeader).not.toBeNull();
+    expect(laterPageWidth).toBe(firstPageWidth);
+  });
+
   it('sizes description columns from current rows when the stable sample has no descriptions', () => {
     let table = mockTable;
     vi.mocked(useTableStore).mockImplementation(() => ({
