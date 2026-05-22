@@ -114,6 +114,9 @@ describe('AgentFrameworkConfiguration', () => {
     }).parentElement;
 
     expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(dialog).toHaveAccessibleDescription(
+      'Copy or download a starter Python provider, customize it, then enter its local file path above.',
+    );
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
   });

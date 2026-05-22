@@ -5,6 +5,7 @@ import { Button } from '@app/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -86,6 +87,7 @@ export default function AgentFrameworkConfiguration({
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const providerIdHelpId = useId();
   const providerIdErrorId = useId();
+  const templateDialogDescriptionId = useId();
   const { recordEvent } = useTelemetry();
 
   const frameworkDetails = frameworkInfo[agentType] || {
@@ -211,11 +213,19 @@ export default function AgentFrameworkConfiguration({
 
       {/* Template Modal */}
       <Dialog open={templateModalOpen} onOpenChange={(open) => !open && handleCloseTemplateModal()}>
-        <DialogContent className="flex max-h-[85vh] min-h-0 flex-col overflow-hidden sm:max-w-4xl">
+        <DialogContent
+          className="flex max-h-[85vh] min-h-0 flex-col overflow-hidden sm:max-w-4xl"
+          hideDescription={false}
+          aria-describedby={templateDialogDescriptionId}
+        >
           <DialogHeader>
             <DialogTitle>
               {frameworkDetails.name} Template - {templateFilename}
             </DialogTitle>
+            <DialogDescription id={templateDialogDescriptionId}>
+              Copy or download a starter Python provider, customize it, then enter its local file
+              path above.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4">
