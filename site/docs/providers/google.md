@@ -140,7 +140,7 @@ providers:
   - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-2.0-flash
+  - google:gemini-3.5-flash
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -277,23 +277,23 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
+- `google:gemini-3.5-flash` - Gemini 3.5 Flash, the latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
-- `google:gemini-3.1-flash-lite-preview` - Gemini 3.1 Flash-Lite preview optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
+- `google:gemini-3.1-flash-lite` - Gemini 3.1 Flash-Lite optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
 - `google:gemini-flash-latest` - Google-maintained alias for the latest Gemini Flash release
 - `google:gemini-flash-lite-latest` - Google-maintained alias for the latest Gemini Flash-Lite release
-- `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
-- `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 
 ### Embedding Models
 
 Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
 
 - `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+- `google:embedding:gemini-embedding-2` - Latest Gemini embedding model with multimodal input (text, image, video, audio, and PDF)
 
 Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
 
@@ -694,6 +694,20 @@ For more details on capabilities and configuration options, see the [Gemini API 
 
 ## Model Examples
 
+### Gemini 3.5 Flash
+
+The latest frontier Flash model, tuned for agentic and coding workloads:
+
+```yaml
+providers:
+  - id: google:gemini-3.5-flash
+    config:
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM (default), or HIGH
+```
+
 ### Gemini 3 Flash Preview
 
 Gemini 3.0 Flash with frontier intelligence, Pro-grade reasoning, and thinking capabilities:
@@ -779,20 +793,6 @@ providers:
           thinkingBudget: 512 # Optimized for speed and cost efficiency
 ```
 
-### Gemini 2.0 Flash
-
-Best for fast, efficient responses and general tasks:
-
-```yaml
-providers:
-  - id: google:gemini-2.0-flash
-    config:
-      temperature: 0.7
-      maxOutputTokens: 2048
-      topP: 0.9
-      topK: 40
-```
-
 ## Advanced Features
 
 ### Overriding Providers
@@ -809,7 +809,7 @@ defaultTest:
     provider:
       # Override text generation provider
       text:
-        id: google:gemini-2.0-flash
+        id: google:gemini-2.5-flash
         config:
           temperature: 0.7
       # Override embedding provider for similarity comparisons
@@ -837,7 +837,7 @@ tests:
     options:
       provider:
         text:
-          id: google:gemini-2.0-flash
+          id: google:gemini-2.5-flash
         embedding:
           id: google:embedding:gemini-embedding-001
     assert:
@@ -948,9 +948,9 @@ providers:
 :::info
 Search grounding works with most recent Gemini models including:
 
-- Gemini 2.5 Flash and Pro models
-- Gemini 2.0 Flash and Pro models
-- Gemini 1.5 Flash and Pro models
+- Gemini 3.5 Flash
+- Gemini 3.1 Pro and Gemini 3 Flash
+- Gemini 2.5 Flash, Flash-Lite, and Pro models
   :::
 
 #### Use Cases

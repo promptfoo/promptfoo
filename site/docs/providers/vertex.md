@@ -16,11 +16,15 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 ### Gemini Models
 
+**Gemini 3.5:**
+
+- `vertex:gemini-3.5-flash` - Latest frontier Flash model for agentic and coding tasks ($1.50/1M input, $9/1M output)
+
 **Gemini 3.1 (Preview):**
 
 - `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `vertex:gemini-3.1-pro-preview-customtools` - Custom-tools variant with the same pricing as Gemini 3.1 Pro
-- `vertex:gemini-3.1-flash-lite-preview` - Cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output)
+- `vertex:gemini-3.1-flash-lite` - Cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output)
 
 **Gemini 3.0 (Preview):**
 
@@ -28,20 +32,9 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 
 **Gemini 2.5:**
 
-- `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 2M context
+- `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 1M context
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
-- `vertex:gemini-2.5-flash-preview-09-2025` - Preview: Enhanced quality improvements
-- `vertex:gemini-2.5-flash-lite-preview-09-2025` - Preview: Cost and latency optimizations
-
-**Gemini 2.0:**
-
-- `vertex:gemini-2.0-pro` - Experimental: Strong model quality for code and world knowledge with 2M context
-- `vertex:gemini-2.0-flash-001` - Multimodal model for daily tasks with strong performance and real-time streaming
-- `vertex:gemini-2.0-flash-exp` - Experimental: Enhanced capabilities
-- `vertex:gemini-2.0-flash-thinking-exp` - Experimental: Reasoning with thinking process in responses
-- `vertex:gemini-2.0-flash-lite` - Cost-effective for high throughput
-- `vertex:gemini-2.0-flash-lite-001` - GA version for existing customers; discontinuation scheduled for June 1, 2026
 
 ### Claude Models
 
@@ -189,20 +182,20 @@ providers:
 
 ## Model Capabilities
 
-### Gemini 2.0 Pro Specifications
+### Gemini Model Specifications
 
-- Max input tokens: 2,097,152
-- Max output tokens: 8,192
-- Training data: Up to June 2024
-- Supports: Text, code, images, audio, video, PDF inputs
-- Features: System instructions, JSON support, grounding with Google Search
+Current Gemini models on Vertex AI (2.5 and 3.x):
+
+- Input context: up to 1M tokens
+- Supports: Text, code, images, audio, video, and PDF inputs
+- Features: System instructions, structured JSON output, function calling, thinking, and grounding with Google Search
 
 ### Language Support
 
 Gemini models support a wide range of languages including:
 
 - Core languages: Arabic, Bengali, Chinese (simplified/traditional), English, French, German, Hindi, Indonesian, Italian, Japanese, Korean, Portuguese, Russian, Spanish, Thai, Turkish, Vietnamese
-- Gemini 1.5 adds support for 50+ additional languages including regional and less common languages
+- Plus dozens of additional regional and less common languages
 
 If you're using Google AI Studio directly, see the [`google` provider](/docs/providers/google) documentation instead.
 
@@ -583,7 +576,7 @@ providers:
 Control AI safety filters:
 
 ```yaml
-- id: vertex:gemini-pro
+- id: vertex:gemini-2.5-pro
   config:
     safetySettings:
       - category: HARM_CATEGORY_HARASSMENT
@@ -1041,6 +1034,30 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 
 For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Code Execution
+
+Code execution lets Gemini models write and run Python to solve computational problems, perform calculations, and analyze data.
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      tools:
+        - codeExecution: {}
+```
+
+### URL Context
+
+URL context lets Gemini models fetch and analyze content from specific web URLs.
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      tools:
+        - urlContext: {}
+```
 
 ### Model Armor Integration
 

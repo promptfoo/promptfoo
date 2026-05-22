@@ -1236,7 +1236,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-const DEFAULT_VERTEX_MODEL = 'gemini-2.5-pro';
+const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
 
 export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
