@@ -620,6 +620,23 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it('rejects a defaultTest-only config when an empty scenarios array is present', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      // An empty `scenarios` array still suppresses `eval`'s implicit-test
+      // synthesis, so this config runs zero tests and must be rejected.
+      scenarios: [],
+      defaultTest: {
+        assert: [{ type: 'contains', value: 'default' }],
+      },
+    };
+
+    await expect(optimizePromptTestSuite({}, testSuite)).rejects.toThrow(
+      'Prompt optimization requires at least one configured test or scenario.',
+    );
+  });
+
   it('accepts a defaultTest-only config (no tests or scenarios) like eval does', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',

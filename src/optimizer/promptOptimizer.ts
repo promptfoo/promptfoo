@@ -615,9 +615,15 @@ function countConfiguredOptimizationTests(testSuite: TestSuite): number {
     const scenarioTestCount = scenario.tests?.length ?? 1;
     return count + scenarioConfigCount * scenarioTestCount;
   }, 0);
-  // When neither `tests` nor `scenarios` are configured, a runnable `defaultTest`
-  // still yields one implicit test under `eval`, so accept it here too.
-  if (explicitTests === 0 && scenarioTests === 0 && hasRunnableDefaultTest(testSuite.defaultTest)) {
+  // `eval` synthesizes one implicit `[{}]` test (merging `defaultTest`) only
+  // when there are no `tests` and `scenarios` is absent — an empty `scenarios`
+  // array still suppresses it (see `getInitialTests` in `src/evaluator.ts`).
+  // Mirror that exactly so the preflight does not accept testless configs.
+  if (
+    explicitTests === 0 &&
+    !testSuite.scenarios &&
+    hasRunnableDefaultTest(testSuite.defaultTest)
+  ) {
     return 1;
   }
   return explicitTests + scenarioTests;
