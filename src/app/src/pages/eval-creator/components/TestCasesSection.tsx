@@ -46,6 +46,7 @@ interface PendingTestCaseImport {
 }
 
 const TEST_CASE_FIELDS = new Set(Object.keys(TestCaseSchema.shape));
+const FORM_EDITABLE_TEST_CASE_FIELDS = new Set(['description', 'vars', 'assert']);
 
 function isValidTestCase(obj: unknown): obj is TestCase {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
@@ -64,6 +65,14 @@ function isTestGeneratorConfig(obj: unknown): obj is TestGeneratorConfig {
 
 function isInlineTestCase(obj: unknown): obj is TestCase {
   return isValidTestCase(obj) && !isTestGeneratorConfig(obj);
+}
+
+function isFormEditableTestCase(obj: unknown): obj is TestCase {
+  return (
+    isInlineTestCase(obj) &&
+    Object.keys(obj).every((field) => FORM_EDITABLE_TEST_CASE_FIELDS.has(field)) &&
+    (obj.assert || []).every((assertion) => assertion.type !== 'assert-set')
+  );
 }
 
 const getManagedTestsLabel = (tests: unknown): string => {
@@ -240,6 +249,39 @@ function TestCaseIssueIndicator({ issues }: { issues: TestCaseIssues }) {
   );
 }
 
+function ManagedTestsDescription({
+  includesAdvancedTestEntries,
+  rawTests,
+}: {
+  includesAdvancedTestEntries: boolean;
+  rawTests: unknown;
+}) {
+  if (includesAdvancedTestEntries) {
+    return (
+      <>
+        These test entries include advanced YAML settings or assertion groups. Use the YAML editor
+        to update them without losing configuration.
+      </>
+    );
+  }
+
+  return (
+    <>
+      This test configuration is loaded from{' '}
+      <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
+        {getManagedTestsLabel(rawTests)}
+      </code>
+      . Use the YAML editor to update it.
+    </>
+  );
+}
+
+function getManagedTestTableMessage(includesAdvancedTestEntries: boolean): string {
+  return includesAdvancedTestEntries
+    ? 'Advanced test entries are edited in YAML to preserve their settings.'
+    : 'Test entries from YAML are not editable in the UI editor.';
+}
+
 const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
@@ -250,7 +292,8 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
       ? (config.defaultTest as TestCase)
       : undefined;
   const canEditInlineTests =
-    rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isInlineTestCase));
+    rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isFormEditableTestCase));
+  const includesAdvancedTestEntries = Array.isArray(rawTests) && !canEditInlineTests;
   const testCases = canEditInlineTests ? ((rawTests || []) as TestCase[]) : [];
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
@@ -410,11 +453,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
           <AlertContent>
             <AlertTitle>Managed in YAML</AlertTitle>
             <AlertDescription>
-              This test configuration is loaded from{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
-                {getManagedTestsLabel(rawTests)}
-              </code>
-              . Use the YAML editor to update it.
+              <ManagedTestsDescription
+                includesAdvancedTestEntries={includesAdvancedTestEntries}
+                rawTests={rawTests}
+              />
             </AlertDescription>
           </AlertContent>
           {onOpenYamlEditor && (
@@ -613,7 +655,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             ) : (
               <tr>
                 <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                  Test entries from YAML are not editable in the UI editor.
+                  {getManagedTestTableMessage(includesAdvancedTestEntries)}
                 </td>
               </tr>
             )}

@@ -312,6 +312,46 @@ describe('TestCasesSection', () => {
     expect(screen.queryByText('Something went wrong:')).toBeNull();
   });
 
+  it('routes advanced inline test cases to YAML to avoid lossy form edits', async () => {
+    const user = userEvent.setup();
+    const onOpenYamlEditor = vi.fn();
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Advanced test',
+            vars: { topic: 'safety' },
+            options: { runSerially: true },
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [{ type: 'contains', value: 'safe' }],
+              },
+            ],
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} onOpenYamlEditor={onOpenYamlEditor} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('note')).toHaveTextContent(
+      'advanced YAML settings or assertion groups',
+    );
+    expect(
+      screen.getByText('Advanced test entries are edited in YAML to preserve their settings.'),
+    ).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Add Test Case' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit YAML' }));
+    expect(onOpenYamlEditor).toHaveBeenCalledTimes(1);
+  });
+
   describe('File Upload', () => {
     // Helper to create FileReader mock
     const createFileReaderMock = (fileContent: string) => {
