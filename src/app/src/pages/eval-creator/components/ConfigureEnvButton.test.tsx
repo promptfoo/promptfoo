@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import ConfigureEnvButton from './ConfigureEnvButton';
 
 const openProviderSettingsDialog = async () => {
-  const apiKeysButton = screen.getByRole('button', { name: /api keys/i });
-  await userEvent.click(apiKeysButton);
+  const settingsButton = screen.getByRole('button', { name: /provider settings/i });
+  await userEvent.click(settingsButton);
   const dialog = await screen.findByRole('dialog', { name: /provider settings/i });
   expect(dialog).toBeInTheDocument();
   return dialog;
@@ -17,8 +17,10 @@ describe('ConfigureEnvButton', () => {
     useStore.getState().reset();
   });
 
-  it('should open the provider settings dialog when the API keys button is clicked', async () => {
+  it('should open the provider settings dialog from its accurately labeled launcher', async () => {
     render(<ConfigureEnvButton />);
+    expect(screen.getByRole('button', { name: 'Provider settings' })).toBeInTheDocument();
+
     const dialog = await openProviderSettingsDialog();
 
     expect(dialog).toHaveAccessibleDescription(
@@ -112,6 +114,7 @@ describe('ConfigureEnvButton', () => {
 
     render(<ConfigureEnvButton />);
 
+    expect(screen.getByRole('button', { name: 'Provider settings (configured)' })).toBeVisible();
     await openProviderSettingsDialog();
 
     const openaiApiKeyInput = screen.getByLabelText(/^openai api key$/i);

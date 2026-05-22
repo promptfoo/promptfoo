@@ -100,6 +100,9 @@ const ConfigureEnvButton = () => {
   const dialogDescriptionId = useId();
   const discardDialogDescriptionId = useId();
   const hasUnsavedChanges = JSON.stringify(env) !== JSON.stringify(cleanEnv);
+  const hasConfiguredSettings = Object.values(defaultEnv).some(
+    (value) => typeof value === 'string' && value.trim() !== '',
+  );
 
   const handleOpen = () => {
     const currentEnv = defaultEnv as Record<string, string>;
@@ -133,9 +136,18 @@ const ConfigureEnvButton = () => {
 
   return (
     <>
-      <Button variant="outline" onClick={handleOpen}>
+      <Button
+        variant="outline"
+        onClick={handleOpen}
+        aria-label={hasConfiguredSettings ? 'Provider settings (configured)' : undefined}
+      >
         <SettingsIcon className="size-4 mr-2" />
-        API keys
+        Provider settings
+        {hasConfiguredSettings && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            Configured
+          </span>
+        )}
       </Button>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && requestClose()}>
