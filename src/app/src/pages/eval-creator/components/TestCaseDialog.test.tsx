@@ -290,7 +290,7 @@ describe('TestCaseForm', () => {
     expect(lastAssertsFormCall[0].initialValues).toEqual(initialValues.assert);
   });
 
-  it('should call onAdd when form is submitted with empty data (empty vars and asserts)', async () => {
+  it('stores displayed blank variables as intentional empty inputs when submitted untouched', async () => {
     renderComponent();
 
     const addButton = screen.getByRole('button', { name: 'Add Test Case' });
@@ -301,7 +301,7 @@ describe('TestCaseForm', () => {
     expect(onAdd).toHaveBeenCalledWith(
       {
         description: '',
-        vars: {},
+        vars: { var1: '', var2: '' },
         assert: [],
       },
       true,

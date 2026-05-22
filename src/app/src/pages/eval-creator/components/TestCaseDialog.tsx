@@ -23,9 +23,19 @@ interface TestCaseFormProps {
   onCancel: () => void;
 }
 
+const getTestCaseVars = (
+  varsList: string[],
+  initialVars: Record<string, string> | undefined,
+): Record<string, string> => ({
+  ...(initialVars || {}),
+  ...Object.fromEntries(varsList.map((variable) => [variable, initialVars?.[variable] ?? ''])),
+});
+
 const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCaseFormProps) => {
   const [description, setDescription] = useState(initialValues?.description || '');
-  const [vars, setVars] = useState(initialValues?.vars || {});
+  const [vars, setVars] = useState(() =>
+    getTestCaseVars(varsList, initialValues?.vars as Record<string, string> | undefined),
+  );
   const [asserts, setAsserts] = useState(initialValues?.assert || []);
   const [assertsFormKey, setAssertsFormKey] = useState(0);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
@@ -34,19 +44,22 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
   React.useEffect(() => {
     if (initialValues) {
       setDescription(initialValues.description || '');
-      setVars(initialValues.vars || {});
+      setVars(getTestCaseVars(varsList, initialValues.vars as Record<string, string> | undefined));
       setAsserts(initialValues.assert || []);
     } else {
       setDescription('');
-      setVars({});
+      setVars(getTestCaseVars(varsList, undefined));
       setAsserts([]);
     }
     setDiscardDialogOpen(false);
     setAddAnotherStatus(null);
-  }, [initialValues]);
+  }, [initialValues, varsList]);
 
   const initialDescription = initialValues?.description || '';
-  const initialVars = initialValues?.vars || {};
+  const initialVars = getTestCaseVars(
+    varsList,
+    initialValues?.vars as Record<string, string> | undefined,
+  );
   const initialAsserts = initialValues?.assert || [];
   const isDirty =
     description !== initialDescription ||
