@@ -32,7 +32,7 @@ tests:
       - type: contains
         value: stock
       - type: contains
-        value: price
+        value: '$'
 
   # Test a technical question
   - vars:

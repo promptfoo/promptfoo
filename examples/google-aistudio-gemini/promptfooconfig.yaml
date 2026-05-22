@@ -75,7 +75,7 @@ providers:
   - id: google:gemini-2.5-pro
     config:
       temperature: 0.7
-      maxOutputTokens: 1024
+      maxOutputTokens: 8192
       topP: 0.9
       topK: 40
 
@@ -84,7 +84,7 @@ providers:
     label: gemini-with-system-instruction-file
     config:
       temperature: 0.3
-      maxOutputTokens: 1024
+      maxOutputTokens: 8192
       systemInstruction: file://system-instruction.txt
 
   # Structured output example
@@ -92,7 +92,7 @@ providers:
     config:
       generationConfig:
         temperature: 0
-        maxOutputTokens: 1024
+        maxOutputTokens: 8192
         response_mime_type: 'application/json'
         response_schema:
           type: 'object'

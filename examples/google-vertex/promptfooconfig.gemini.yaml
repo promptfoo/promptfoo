@@ -49,6 +49,7 @@ providers:
 
   - id: vertex:gemini-3.5-flash
     config:
+      region: global # Gemini 3.5 Flash is served on Vertex AI's global endpoint
       generationConfig:
         temperature: 0.7
         maxOutputTokens: 2048
