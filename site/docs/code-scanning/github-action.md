@@ -42,7 +42,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 | Input               | Description                                                      | Default                                        |
 | ------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
-| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app`                    |
+| `api-host`          | Promptfoo API host URL; overrides config when explicitly set     | Config value, then `https://api.promptfoo.app` |
 | `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | Effective `medium` when both aliases are unset |
 | `minimum-severity`  | Alias for `min-severity`                                         | Effective `medium` when both aliases are unset |
 | `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | None; omitted actions use generated defaults   |
@@ -56,7 +56,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 By default, the Action starts from the PR diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Set `diffs-only: true` when you want the generated action-input config constrained to the patch itself.
 
-For scan settings beyond these inputs, supply `config-path`. Once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults, which keeps workflow-owned policy explicit. In `pull_request` workflows, point `config-path` only at trusted workflow-controlled content, not a policy file the PR itself can edit.
+For scan settings beyond these inputs, supply `config-path`. Once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults, which keeps workflow-owned policy explicit. The one override is an explicitly supplied `api-host`; omit that input when the config file should select an enterprise or custom `apiHost`. In `pull_request` workflows, point `config-path` only at trusted workflow-controlled content, not a policy file the PR itself can edit.
 
 The action resolves severity to `medium` only when neither alias is provided, leaving the metadata inputs undeclared so either alias can supply the threshold without being shadowed by a baked-in YAML default.
 
@@ -162,6 +162,9 @@ diffsOnly: false
 guidance: |
   Focus on authentication and authorization vulnerabilities.
   Treat any PII exposure as high severity.
+
+# Optional: Promptfoo API host URL (overridden only by an explicit api-host input)
+# apiHost: https://api.promptfoo.dev
 ```
 
 ## Manual Installation

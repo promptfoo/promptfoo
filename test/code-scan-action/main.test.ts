@@ -4,9 +4,11 @@
  * Tests for the GitHub Action main entry point, specifically the CLI args construction.
  */
 
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import type { Stats } from 'node:fs';
 
+import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileChangeStatus } from '../../src/types/codeScan';
 import { mockProcessEnv } from '../util/utils';
@@ -393,6 +395,16 @@ describe('code-scan-action main', () => {
   });
 
   describe('CLI args construction', () => {
+    it('should not declare an api-host metadata default that overrides config-path', () => {
+      const actionDefinition = yaml.load(
+        readFileSync(path.resolve('code-scan-action/action.yml'), 'utf8'),
+      ) as {
+        inputs: Record<string, { default?: string }>;
+      };
+
+      expect(actionDefinition.inputs['api-host']).not.toHaveProperty('default');
+    });
+
     it('should pass --base with GITHUB_BASE_REF when set', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'feat/my-feature-branch' });
 
@@ -498,6 +510,43 @@ describe('code-scan-action main', () => {
       expectCliArg(args, '--config', 'configs/code-scan.yaml');
       expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
       expect(mocks.fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('should let an explicit config-path supply apiHost when api-host is omitted', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        return '';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expect(args).not.toContain('--api-host');
+      expectCliArg(args, '--config', 'configs/code-scan.yaml');
+    });
+
+    it('should pass an explicitly supplied api-host override alongside config-path', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        if (name === 'api-host') {
+          return 'https://enterprise.promptfoo.example';
+        }
+        return '';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', 'configs/code-scan.yaml');
+      expectCliArg(args, '--api-host', 'https://enterprise.promptfoo.example');
     });
 
     it('should prefer min-severity and warn when both severity aliases conflict', async () => {

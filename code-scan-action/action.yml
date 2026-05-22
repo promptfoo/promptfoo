@@ -8,9 +8,8 @@ branding:
 
 inputs:
   api-host:
-    description: 'Promptfoo API host url'
+    description: 'Promptfoo API host URL; when set, overrides apiHost from config-path'
     required: false
-    default: https://api.promptfoo.app
   min-severity:
     description: 'Minimum severity level to report (low|medium|high|critical); defaults to medium when neither severity alias is set'
     required: false
@@ -18,7 +17,7 @@ inputs:
     description: 'Alias for min-severity (low|medium|high|critical); defaults to medium when neither severity alias is set'
     required: false
   config-path:
-    description: 'Path to YAML configuration file; when set, the file supplies scan settings instead of generated action-input defaults'
+    description: 'Path to YAML configuration file; when set, the file supplies scan settings unless api-host is explicitly provided'
     required: false
   diffs-only:
     description: 'Scan only PR diffs instead of tracing into surrounding repository context'
