@@ -663,6 +663,28 @@ function getEvalRuntimeVars({
   };
 }
 
+/** Keys injected by {@link getEvalRuntimeVars}; keep in sync with it. */
+const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'];
+
+/**
+ * Returns a copy of `vars` without the reserved `__eval*` runtime vars. They are
+ * merged into an eval step's vars so prompts and providers can reference them,
+ * but must not reach the persisted `EvaluateResult.vars` or assertion/grader
+ * inputs: they are positional per-step identifiers that would pollute stored
+ * results and — being `_`-prefixed — get restored onto re-run `test.vars` by
+ * `--filter-*` re-runs. The input is not mutated; it is shared by reference
+ * with the provider call context.
+ */
+function omitEvalRuntimeVars(vars: Vars): Vars {
+  const result: Vars = {};
+  for (const [key, value] of Object.entries(vars)) {
+    if (!EVAL_RUNTIME_VAR_KEYS.includes(key)) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 function attachConversationVar({
   conversations,
   conversationKey,
@@ -1001,6 +1023,9 @@ function createEvaluateResult({
 }): EvaluateResult {
   const ret: EvaluateResult = {
     ...setup,
+    // Use the caller-provided vars (which exclude the __eval* runtime vars)
+    // for the persisted result rather than setup.vars.
+    vars,
     prompt: { ...rendered.setup.prompt, raw: rendered.renderedPrompt },
     response,
     success: false,
@@ -1401,6 +1426,12 @@ async function runEvalInternal({
 
     await applyProviderDelayIfNeeded(provider, response);
 
+    // The __eval* runtime vars were exposed to prompt/provider rendering above.
+    // Build a copy without them for the persisted result, assertions, and
+    // graders. state.vars itself is left intact — it is shared by reference
+    // with the provider call context.
+    const persistedVars = omitEvalRuntimeVars(state.vars);
+
     const ret = createEvaluateResult({
       fileMetadata: state.fileMetadata,
       latencyMs,
@@ -1411,7 +1442,7 @@ async function runEvalInternal({
       setup,
       test,
       testIdx: testIndex,
-      vars: state.vars,
+      vars: persistedVars,
     });
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
@@ -1434,7 +1465,7 @@ async function runEvalInternal({
       test,
       testIdx: testIndex,
       traceContext,
-      vars: state.vars,
+      vars: persistedVars,
     });
 
     // Update token usage stats
@@ -1466,6 +1497,8 @@ async function runEvalInternal({
     return [
       {
         ...setup,
+        // Exclude the __eval* runtime vars from the persisted error result.
+        vars: omitEvalRuntimeVars(setup.vars),
         error: errorWithStack,
         success: false,
         failureReason: ResultFailureReason.ERROR,
