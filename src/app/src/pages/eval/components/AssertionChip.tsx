@@ -28,9 +28,14 @@ interface AssertionChipProps {
   onClick?: () => void;
 }
 
-/** Get a stable key for a child result */
-function getChildKey(child: GradingResult, index: number): string {
-  return child.assertion?.metric || child.assertion?.type || `assertion-${index}`;
+/** Get the display label for a child result. */
+function getChildLabel(child: GradingResult, index: number): string {
+  return (
+    child.assertion?.metric ||
+    child.metadata?.assertSetMetric ||
+    child.assertion?.type ||
+    `assertion-${index}`
+  );
 }
 
 /** Status icon for pass/fail/neutral states */
@@ -133,20 +138,20 @@ function AssertionChip({
         {/* Child assertions */}
         <div className="space-y-2">
           {childResults!.map((child, index) => {
-            const childMetric = getChildKey(child, index);
+            const childLabel = getChildLabel(child, index);
             const childPassed = child.pass;
             // Show neutral for failed children when parent passed (e.g., Either/Or)
             const showNeutral = passed && !childPassed;
 
             return (
               <div
-                key={childMetric}
+                key={`${childLabel}-${index}`}
                 className="flex items-center justify-between gap-4 text-sm"
-                data-testid={`child-assertion-${childMetric}`}
+                data-testid={`child-assertion-${childLabel}`}
               >
                 <div className="flex items-center gap-2">
                   <StatusIcon passed={childPassed} neutral={showNeutral} />
-                  <span className={cn(showNeutral && 'text-muted-foreground')}>{childMetric}</span>
+                  <span className={cn(showNeutral && 'text-muted-foreground')}>{childLabel}</span>
                 </div>
                 <span
                   className={cn('font-medium', showNeutral && 'text-muted-foreground opacity-80')}

@@ -3,7 +3,7 @@ description: "Require a friendly French greeting that includes 'Bonjour' and sta
 prompts:
   - 'Greet the user in French.'
 providers:
-  - openai:gpt-4o-mini
+  - openai:chat:gpt-5.4-mini
 
 tests:
   - type: assert-set

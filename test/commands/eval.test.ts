@@ -1185,7 +1185,9 @@ describe('evalCommand', () => {
 
     await doEval({ table: true, write: false }, config, undefined, {});
 
-    expect(generateTable).toHaveBeenCalledWith(expect.anything(), undefined);
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), undefined, 25, {
+      showAssertions: undefined,
+    });
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {

@@ -442,6 +442,32 @@ describe('AssertionChip', () => {
     expect(screen.getByText('equals')).toBeInTheDocument();
   });
 
+  it('uses assert-set metadata for a nested child label', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Nested set passed',
+        metadata: { isAssertSet: true, assertSetMetric: 'Nested quality' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="parent"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show parent details'));
+
+    expect(screen.getByText('Nested quality')).toBeInTheDocument();
+  });
+
   it('uses generated fallback when child has no assertion label', async () => {
     const childResults: GradingResult[] = [
       {
