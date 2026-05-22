@@ -611,6 +611,14 @@ function createEvaluationOptions(config: Partial<UnifiedConfig>): InternalEvalua
   };
 }
 
+function assertOptimizationEvalHasResults(evalRecord: Eval | undefined, scope: string): void {
+  if (evalRecord?.results.length === 0) {
+    throw new Error(
+      `No eval test cases ran for ${scope} — check filters and other test scoping options.`,
+    );
+  }
+}
+
 export async function optimizePromptTestSuite(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
@@ -634,11 +642,7 @@ export async function optimizePromptTestSuite(
     new Eval(config, { persisted: false }),
     createEvaluationOptions(config),
   );
-  if (baselineEval.results.length === 0) {
-    throw new Error(
-      'No eval test cases ran for the selected prompt/provider — check filters and other test scoping options.',
-    );
-  }
+  assertOptimizationEvalHasResults(baselineEval, 'the selected prompt/provider');
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
@@ -646,14 +650,7 @@ export async function optimizePromptTestSuite(
         createEvaluationOptions(config),
       )
     : undefined;
-  if (baselineValidationEval && baselineValidationEval.results.length === 0) {
-    // The validation split produced no runnable rows (e.g. filters scoped the
-    // held-out tests away). Without held-out evidence the optimizer would adopt
-    // candidates on tied/zeroed validation scores, so fail fast instead.
-    throw new Error(
-      'No eval test cases ran for the validation split — check filters and other test scoping options.',
-    );
-  }
+  assertOptimizationEvalHasResults(baselineValidationEval, 'the validation split');
   const { searchPrompt: baselinePrompt, validationPrompt: baselineValidationPrompt } =
     selectBestPromptPair({
       searchPrompts: baselineEval.prompts,
