@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Spinner } from '@app/components/ui/spinner';
@@ -9,7 +9,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -19,6 +19,7 @@ import './Eval.css';
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
+import { buildEvalUrlWithSearchParams, setEvalDetailsHash } from './utils';
 
 interface EvalOptions {
   /**
@@ -27,10 +28,23 @@ interface EvalOptions {
   fetchId: string | null;
 }
 
+function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null {
+  if (!filtersParam) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(filtersParam) as ResultsFilter[];
+  } catch {
+    return null;
+  }
+}
+
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
 
   const {
@@ -58,6 +72,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [failed, setFailed] = useState(false);
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
+  const isHydratingFiltersRef = useRef(false);
 
   // ================================
   // Handlers
@@ -127,6 +142,25 @@ export default function Eval({ fetchId }: EvalOptions) {
     [searchParams, navigate],
   );
 
+  const replaceSearchParams = useCallback(
+    (mutateSearchParams: (params: URLSearchParams) => void) => {
+      // Filter changes can change the visible result set, so any existing details
+      // deep-link is stale and should not be carried into the replacement URL.
+      setEvalDetailsHash('');
+      navigate(
+        buildEvalUrlWithSearchParams(
+          { pathname: location.pathname, search: location.search, hash: '' },
+          (params) => {
+            mutateSearchParams(params);
+            params.delete('rowId');
+          },
+        ),
+        { replace: true },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
+
   // ================================
   // Effects
   // ================================
@@ -138,38 +172,34 @@ export default function Eval({ fetchId }: EvalOptions) {
     const unsubscribe = useTableStore.subscribe(
       (state) => state.filters,
       (_filters) => {
+        if (isHydratingFiltersRef.current) {
+          return;
+        }
+
         // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
         const _searchParams = new URLSearchParams(window.location.search);
 
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
-          // clear the search params
-          setSearchParams(
-            (prev) => {
-              prev.delete('filter');
-              return prev;
-            },
-            { replace: true },
-          );
+          if (_searchParams.has('filter')) {
+            replaceSearchParams((params) => {
+              params.delete('filter');
+            });
+          }
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
-            // Add each filter to the search params
-            setSearchParams(
-              (prev) => {
-                prev.set('filter', serializedFilters);
-                return prev;
-              },
-              { replace: true },
-            );
+            replaceSearchParams((params) => {
+              params.set('filter', serializedFilters);
+            });
           }
         }
       },
     );
     return () => unsubscribe();
-  }, [setSearchParams]);
+  }, [replaceSearchParams]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -178,22 +208,22 @@ export default function Eval({ fetchId }: EvalOptions) {
     // Use getState() to avoid adding functions to dependencies
     const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
 
-    doResetFilters();
-
     // Read search params
-    const filtersParam = _searchParams.get('filter');
+    const filters = parseFiltersParam(_searchParams.get('filter'));
 
-    if (filtersParam) {
-      let filters: ResultsFilter[] = [];
-      try {
-        filters = JSON.parse(filtersParam) as ResultsFilter[];
-      } catch {
-        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
-        return;
-      }
-      filters.forEach((filter: ResultsFilter) => {
+    isHydratingFiltersRef.current = true;
+    try {
+      doResetFilters();
+      filters?.forEach((filter) => {
         doAddFilter(filter);
       });
+    } finally {
+      isHydratingFiltersRef.current = false;
+    }
+
+    if (!filters) {
+      showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+      return;
     }
 
     if (fetchId) {
