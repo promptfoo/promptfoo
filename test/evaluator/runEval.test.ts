@@ -97,7 +97,7 @@ describe('runEval', () => {
     );
   });
 
-  it('should warn when a test var collides with a reserved runtime var name', async () => {
+  it('warns once when test vars collide with reserved runtime var names', async () => {
     const logger = (await import('../../src/logger')).default;
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
@@ -109,13 +109,18 @@ describe('runEval', () => {
       test: {
         vars: {
           __evalId: 'spoofed-eval-id',
+          __evalStepId: 'spoofed-step-id',
+          __repeatIndex: 99,
         },
       },
       conversations: {},
       registers: {},
     });
 
+    expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalId'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__evalStepId'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('__repeatIndex'));
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reserved'));
   });
 
