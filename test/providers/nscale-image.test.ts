@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises';
 
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../src/blobs/extractor';
 import { storeBlob } from '../../src/blobs/index';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
@@ -74,6 +74,10 @@ describe('NscaleImageProvider', () => {
         deduplicated: false,
       };
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('internalizes provider image URLs into blob-backed outputs', async () => {

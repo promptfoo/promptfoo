@@ -586,10 +586,14 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toMatchObject([
         { blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' },
       ]);
-      expect(fetchWithProxy).toHaveBeenCalledWith('https://example.com/image.jpg?size=large', {
-        redirect: 'error',
-        signal: expect.any(AbortSignal),
-      });
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://example.com/image.jpg?size=large',
+        expect.objectContaining({
+          redirect: 'error',
+          signal: expect.any(AbortSignal),
+          dispatcher: expect.anything(),
+        }),
+      );
     });
 
     it('should skip external URLs when blob storage is disabled', async () => {
@@ -654,6 +658,23 @@ describe('OpenAI Image Provider Functions', () => {
 
       const result = await buildSafeStructuredImageOutputs({
         data: [{ url: 'https://example.com/image.jpg' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(storeBlob).not.toHaveBeenCalled();
+    });
+
+    it('should reject external SVG payloads before storing blobs', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'content-type': 'image/svg+xml' }),
+        arrayBuffer: async () => new ArrayBuffer(1024),
+      } as Response);
+
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://example.com/image.svg' }],
       });
 
       expect(result).toBeUndefined();
