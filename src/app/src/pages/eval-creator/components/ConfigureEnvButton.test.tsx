@@ -1,8 +1,15 @@
 import { useStore } from '@app/stores/evalConfig';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigureEnvButton from './ConfigureEnvButton';
+
+const showToastMock = vi.fn();
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
+}));
 
 const openProviderSettingsDialog = async () => {
   const settingsButton = screen.getByRole('button', { name: /provider settings/i });
@@ -15,6 +22,7 @@ const openProviderSettingsDialog = async () => {
 describe('ConfigureEnvButton', () => {
   beforeEach(() => {
     useStore.getState().reset();
+    showToastMock.mockReset();
   });
 
   it('should open the provider settings dialog from its accurately labeled launcher', async () => {
@@ -56,6 +64,10 @@ describe('ConfigureEnvButton', () => {
       ...initialEnv,
       OPENAI_API_KEY: newOpenAiKey,
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Provider settings saved for this browser session.',
+      'success',
+    );
   });
 
   it('should confirm before discarding edited provider settings and leave the saved configuration unchanged', async () => {

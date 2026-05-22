@@ -17,6 +17,7 @@ import {
 import { ExpandMoreIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 
@@ -90,6 +91,7 @@ function EnvField({
 
 const ConfigureEnvButton = () => {
   const { config, updateConfig } = useStore();
+  const { showToast } = useToast();
   const defaultEnv = config.env || {};
   const [dialogOpen, setDialogOpen] = useState(false);
   const [env, setEnv] = useState<Record<string, string>>(defaultEnv as Record<string, string>);
@@ -128,6 +130,7 @@ const ConfigureEnvButton = () => {
     updateConfig({ env });
     setCleanEnv(env);
     closeDialog();
+    showToast('Provider settings saved for this browser session.', 'success');
   };
 
   const handleEnvChange = (key: string, value: string) => {
