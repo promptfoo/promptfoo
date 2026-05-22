@@ -80,6 +80,7 @@ function EnvField({
             size="sm"
             onClick={() => setShowSecret((shown) => !shown)}
             aria-label={`${showSecret ? 'Hide' : 'Show'} ${label}`}
+            aria-pressed={showSecret}
           >
             {showSecret ? 'Hide' : 'Show'}
           </Button>

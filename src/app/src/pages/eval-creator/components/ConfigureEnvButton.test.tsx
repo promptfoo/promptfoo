@@ -170,10 +170,15 @@ describe('ConfigureEnvButton', () => {
     expect(hostInput).toHaveAttribute('type', 'url');
     expect(organizationInput).toHaveAttribute('type', 'text');
 
-    await userEvent.click(screen.getByRole('button', { name: /show openai api key/i }));
+    const revealButton = screen.getByRole('button', { name: /show openai api key/i });
+    expect(revealButton).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(revealButton);
 
     expect(apiKeyInput).toHaveAttribute('type', 'text');
-    expect(screen.getByRole('button', { name: /hide openai api key/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /hide openai api key/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
   it('leaves non-secret Vertex project and region fields readable', async () => {
