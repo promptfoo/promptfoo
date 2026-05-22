@@ -186,6 +186,10 @@ const ASSERTION_HELP: Partial<Record<AssertionType, string>> = {
   pi: 'Uses the external Pi Labs scorer. This requires WITHPI_API_KEY and may add service cost.',
   'answer-relevance':
     'Scores how well the response answers the prompt or query. This uses grading and embedding providers and can add cost.',
+  factuality:
+    'A grading model checks the response against a factual reference statement. Configure category scoring or custom graders in YAML.',
+  'model-graded-closedqa':
+    'A grading model answers yes or no about whether the response meets your criterion.',
   'context-faithfulness':
     'Scores whether the response is supported by retrieved context. This uses a grading provider and can add cost.',
   'context-recall':
@@ -1067,6 +1071,40 @@ interface AssertionValueFieldsProps {
   onChange: (assertion: Assertion) => void;
 }
 
+function getValueFieldLabel(type: AssertionType): string {
+  if (type === 'moderation' || type === 'not-moderation') {
+    return 'Categories (optional)';
+  }
+  if (type === 'select-best') {
+    return 'Selection criteria (required)';
+  }
+  if (type === 'factuality' || type === 'not-factuality') {
+    return 'Reference statement (required)';
+  }
+  if (type === 'model-graded-closedqa' || type === 'not-model-graded-closedqa') {
+    return 'Evaluation criterion (required)';
+  }
+  if (OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(type)) {
+    return 'JSON schema (optional)';
+  }
+
+  return 'Value';
+}
+
+function getValueFieldPlaceholder(type: AssertionType): string {
+  if (OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(type)) {
+    return 'type: object\nrequired: [answer]';
+  }
+  if (type === 'factuality' || type === 'not-factuality') {
+    return 'Example: Sacramento is the capital of California.';
+  }
+  if (type === 'model-graded-closedqa' || type === 'not-model-graded-closedqa') {
+    return 'Example: Explains the concept without unnecessary jargon.';
+  }
+
+  return 'Enter expected value or criteria...';
+}
+
 const AssertionValueFields = ({
   arrayValueDraft,
   assertion,
@@ -1154,13 +1192,7 @@ const AssertionValueFields = ({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
-          {assertion.type === 'moderation' || assertion.type === 'not-moderation'
-            ? 'Categories (optional)'
-            : assertion.type === 'select-best'
-              ? 'Selection criteria (required)'
-              : OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
-                ? 'JSON schema (optional)'
-                : 'Value'}
+          {getValueFieldLabel(assertion.type)}
         </Label>
         {OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type) && (
           <Button
@@ -1186,11 +1218,7 @@ const AssertionValueFields = ({
               ? `assert-moderation-help-${index}`
               : undefined
         }
-        placeholder={
-          OPTIONAL_JSON_SCHEMA_ASSERTION_TYPES.has(assertion.type)
-            ? 'type: object\nrequired: [answer]'
-            : 'Enter expected value or criteria...'
-        }
+        placeholder={getValueFieldPlaceholder(assertion.type)}
         value={
           COMMA_SEPARATED_VALUE_ASSERTION_TYPES.has(assertion.type)
             ? (arrayValueDraft ?? formatAssertionValue(assertion))

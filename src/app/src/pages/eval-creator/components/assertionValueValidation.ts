@@ -309,6 +309,15 @@ function getRequiredStringValueError(assertion: Assertion): string | undefined {
   if (PI_SCORE_ASSERTION_TYPES.has(assertion.type)) {
     return 'Enter criteria for Pi Labs scoring.';
   }
+  if (assertion.type === 'factuality' || assertion.type === 'not-factuality') {
+    return 'Enter the factual reference statement.';
+  }
+  if (
+    assertion.type === 'model-graded-closedqa' ||
+    assertion.type === 'not-model-graded-closedqa'
+  ) {
+    return 'Enter the criterion the response must meet.';
+  }
 
   return 'Enter an expected value before saving this check.';
 }

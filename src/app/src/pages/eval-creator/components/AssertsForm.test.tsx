@@ -226,9 +226,29 @@ describe('AssertsForm', () => {
       />,
     );
 
-    expect(screen.getByRole('textbox', { name: 'Value' })).toHaveAccessibleDescription(
-      'Enter an expected value before saving this check.',
+    const reference = screen.getByRole('textbox', { name: 'Reference statement (required)' });
+    expect(reference).toHaveAccessibleDescription('Enter the factual reference statement.');
+    expect(reference).toHaveAttribute('placeholder', expect.stringContaining('Example:'));
+    expect(screen.getByText(/Configure category scoring or custom graders in YAML/i)).toBeVisible();
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
+  });
+
+  it('asks for a closed QA evaluation criterion without exposing an unused threshold', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'model-graded-closedqa', value: '' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
     );
+
+    const criterion = screen.getByRole('textbox', { name: 'Evaluation criterion (required)' });
+    expect(criterion).toHaveAccessibleDescription('Enter the criterion the response must meet.');
+    expect(screen.getByText(/answers yes or no/i)).toBeVisible();
+    expect(screen.queryByRole('spinbutton')).toBeNull();
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
   });
 
