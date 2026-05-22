@@ -129,6 +129,19 @@ describe('AssertsForm', () => {
     expect(await screen.findByText('Recommended starting checks')).toBeInTheDocument();
     expect(screen.getByText('Model-graded quality')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Equals exactly \(equals\)/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: /Contains text, ignoring case \(icontains\)/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {
+        name: /Normalized perplexity score \(perplexity-score\)/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {
+        name: /Does not match regular expression \(not-regex\)/,
+      }),
+    ).toBeInTheDocument();
   });
 
   it('stores comma-separated list assertions as the array required by evaluation', async () => {
