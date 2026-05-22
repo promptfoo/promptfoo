@@ -156,7 +156,20 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
-const REQUIRED_TEXT_VALUE_ASSERTION_TYPES = new Set<AssertionType>(['llm-rubric', 'similar']);
+const REQUIRED_TEXT_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'contains',
+  'icontains',
+  'starts-with',
+  'regex',
+  'webhook',
+  'not-contains',
+  'not-icontains',
+  'not-starts-with',
+  'not-regex',
+  'not-webhook',
+  'llm-rubric',
+  'similar',
+]);
 
 const formatAssertionValue = (assert: Assertion): string => {
   if (ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && Array.isArray(assert.value)) {
@@ -197,9 +210,14 @@ const getAssertionValueError = (assert: Assertion): string | undefined => {
     REQUIRED_TEXT_VALUE_ASSERTION_TYPES.has(assert.type) &&
     (typeof assert.value !== 'string' || assert.value.trim() === '')
   ) {
-    return assert.type === 'llm-rubric'
-      ? 'Enter grading criteria before using an LLM rubric.'
-      : 'Enter an expected answer for semantic similarity.';
+    if (assert.type === 'llm-rubric') {
+      return 'Enter grading criteria before using an LLM rubric.';
+    }
+    if (assert.type === 'similar') {
+      return 'Enter an expected answer for semantic similarity.';
+    }
+
+    return 'Enter an expected value before saving this check.';
   }
 
   return undefined;
@@ -222,7 +240,7 @@ const AssertsForm = ({ onAdd, initialValues, onValidityChange }: AssertsFormProp
   }, [isValid, onValidityChange]);
 
   const handleAdd = () => {
-    const newAsserts = [...asserts, { type: 'equals' as AssertionType, value: '' }];
+    const newAsserts = [...asserts, { type: 'contains' as AssertionType, value: '' }];
     setAsserts(newAsserts);
     onAdd(newAsserts);
   };

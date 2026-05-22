@@ -51,23 +51,35 @@ describe('AssertsForm', () => {
     expect(valueInputs[2]).toHaveValue(String(1000));
   });
 
-  it('should add a new assertion with type equals and empty value when the Add Assertion button is clicked, and call onAdd with the updated assertions array', async () => {
+  it('starts new assertions as a deterministic text check that requires an expected value', async () => {
     const user = userEvent.setup();
-    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+    const onValidityChange = vi.fn();
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
 
     const addButton = screen.getByRole('button', { name: 'Add Assertion' });
 
     await user.click(addButton);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
-    expect(onAdd).toHaveBeenCalledWith([{ type: 'equals', value: '' }]);
+    expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: '' }]);
+    expect(screen.getByRole('textbox', { name: 'Value' })).toHaveAttribute('aria-invalid', 'true');
+    expect(
+      screen.getByText('Enter an expected value before saving this check.'),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(false));
 
     await user.click(addButton);
 
     expect(onAdd).toHaveBeenCalledTimes(2);
     expect(onAdd).toHaveBeenCalledWith([
-      { type: 'equals', value: '' },
-      { type: 'equals', value: '' },
+      { type: 'contains', value: '' },
+      { type: 'contains', value: '' },
     ]);
   });
 
@@ -152,6 +164,21 @@ describe('AssertsForm', () => {
     await user.type(valueInput, 'Answer accurately and cite the source.');
 
     expect(valueInput).toHaveAttribute('aria-invalid', 'false');
+    await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
+  });
+
+  it('allows an explicit exact-match check for an intentionally empty response', async () => {
+    const onValidityChange = vi.fn();
+    initialValues = [{ type: 'equals', value: '' }];
+    renderComponent(
+      <AssertsForm
+        onAdd={onAdd}
+        initialValues={initialValues}
+        onValidityChange={onValidityChange}
+      />,
+    );
+
+    expect(screen.getByRole('textbox', { name: 'Value' })).toHaveAttribute('aria-invalid', 'false');
     await waitFor(() => expect(onValidityChange).toHaveBeenLastCalledWith(true));
   });
 
