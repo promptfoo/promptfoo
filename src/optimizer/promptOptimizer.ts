@@ -618,7 +618,7 @@ function createEvaluationOptions(
   };
   // Match the `eval` command: a configured delay only rate-limits API calls
   // when concurrency is forced to 1, otherwise delayed evals still run in parallel.
-  if (options.delay) {
+  if (typeof options.delay === 'number' && options.delay > 0) {
     options.maxConcurrency = 1;
   }
   return options;

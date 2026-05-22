@@ -421,7 +421,116 @@ describe('prompt optimizer', () => {
     }
   });
 
+  it('preserves configured concurrency when the internal eval delay is not positive', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}],
+    };
+
+    await optimizePromptTestSuite(
+      {
+        evaluateOptions: {
+          delay: -25,
+          maxConcurrency: 4,
+        },
+      },
+      testSuite,
+    );
+
+    for (const call of vi.mocked(evaluate).mock.calls) {
+      expect(call[2]).toEqual(
+        expect.objectContaining({
+          delay: -25,
+          maxConcurrency: 4,
+        }),
+      );
+    }
+  });
+
   it('marks internal optimizer evals as redteam when the config has a redteam block', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}],
+    };
+
+    await optimizePromptTestSuite({ redteam: { plugins: [{ id: 'harmful' }] } }, testSuite);
+
+    for (const call of vi.mocked(evaluate).mock.calls) {
+      expect(call[2]).toEqual(
+        expect.objectContaining({
+          isRedteam: true,
+        }),
+      );
+    }
+  });
+
+  it('marks internal optimizer evals as redteam when the test suite has a redteam block', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
       response: optimizerResponse('Optimized Seed'),
@@ -461,7 +570,7 @@ describe('prompt optimizer', () => {
       redteam: { plugins: [{ id: 'harmful' }] },
     };
 
-    await optimizePromptTestSuite({ redteam: { plugins: [{ id: 'harmful' }] } }, testSuite);
+    await optimizePromptTestSuite({}, testSuite);
 
     for (const call of vi.mocked(evaluate).mock.calls) {
       expect(call[2]).toEqual(
