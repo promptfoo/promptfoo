@@ -111,6 +111,7 @@ describe('ConfigureEnvButton', () => {
     render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
+    expect(screen.queryByRole('status', { name: /unsaved provider setting changes/i })).toBeNull();
     expect(screen.getByRole('button', { name: /save/i })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
@@ -118,6 +119,18 @@ describe('ConfigureEnvButton', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
+  });
+
+  it('announces unsaved provider setting changes after editing a field', async () => {
+    render(<ConfigureEnvButton />);
+
+    await openProviderSettingsDialog();
+    await userEvent.type(screen.getByLabelText(/^openai api host$/i), 'https://example.test');
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Unsaved provider setting changes');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
   });
 
   it('should pre-fill environment fields with values from config.env when the dialog is opened', async () => {

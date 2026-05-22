@@ -262,6 +262,16 @@ const ConfigureEnvButton = () => {
             </div>
           </div>
 
+          {hasUnsavedChanges && (
+            <p
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className="shrink-0 pb-3 text-sm text-muted-foreground"
+            >
+              Unsaved provider setting changes
+            </p>
+          )}
           <DialogFooter data-testid="configure-env-dialog-footer" className="shrink-0">
             <Button variant="outline" onClick={requestClose}>
               Cancel
