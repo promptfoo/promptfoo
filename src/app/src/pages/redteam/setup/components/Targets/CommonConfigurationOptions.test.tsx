@@ -74,6 +74,12 @@ describe('CommonConfigurationOptions', () => {
     expect(screen.getByTestId('mock-extension-editor')).toBeInTheDocument();
   });
 
+  it('hides extension configuration when it cannot be persisted in eval provider setup', () => {
+    renderWithProviders(<CommonConfigurationOptions {...defaultProps} hideExtensions />);
+
+    expect(screen.queryByTestId('mock-extension-editor')).not.toBeInTheDocument();
+  });
+
   it('should render the InputsEditor component inside Test Generation section', async () => {
     const user = userEvent.setup();
     const onPromptsChange = vi.fn();

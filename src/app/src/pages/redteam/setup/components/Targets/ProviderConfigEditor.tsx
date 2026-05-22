@@ -521,6 +521,7 @@ function ProviderConfigEditor({
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
+          hideExtensions={!isRedTeam}
           {...(isRedTeam && {
             testGenerationInstructions: config.testGenerationInstructions ?? '',
             onTestGenerationInstructionsChange: (instructions: string) =>

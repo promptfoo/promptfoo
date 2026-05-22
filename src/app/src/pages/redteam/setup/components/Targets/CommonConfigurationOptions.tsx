@@ -28,6 +28,8 @@ interface CommonConfigurationOptionsProps {
   onPromptsChange?: (prompts: string[]) => void;
   /** Hide the Test Generation section (useful for non-redteam contexts) */
   hideTestGeneration?: boolean;
+  /** Hide global extension hooks where this editor has no extension persistence callback */
+  hideExtensions?: boolean;
 }
 
 const CommonConfigurationOptions = ({
@@ -40,6 +42,7 @@ const CommonConfigurationOptions = ({
   onTestGenerationInstructionsChange,
   onPromptsChange,
   hideTestGeneration = false,
+  hideExtensions = false,
 }: CommonConfigurationOptionsProps) => {
   const inputs = (selectedTarget as { inputs?: Inputs }).inputs;
   const hasInputs = inputs && Object.keys(inputs).length > 0;
@@ -197,11 +200,13 @@ const CommonConfigurationOptions = ({
         </CollapsibleContent>
       </Collapsible>
 
-      <ExtensionEditor
-        extensions={extensions}
-        onExtensionsChange={handleExtensionsChange}
-        onValidationChange={onValidationChange}
-      />
+      {!hideExtensions && (
+        <ExtensionEditor
+          extensions={extensions}
+          onExtensionsChange={handleExtensionsChange}
+          onValidationChange={onValidationChange}
+        />
+      )}
     </div>
   );
 };

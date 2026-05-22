@@ -60,13 +60,19 @@ vi.mock('./AgentFrameworkConfiguration', () => ({
   default: () => <div data-testid="agent-config" />,
 }));
 vi.mock('./CommonConfigurationOptions', () => ({
-  default: ({ onValidationChange }: { onValidationChange?: (hasErrors: boolean) => void }) => {
+  default: ({
+    onValidationChange,
+    hideExtensions,
+  }: {
+    onValidationChange?: (hasErrors: boolean) => void;
+    hideExtensions?: boolean;
+  }) => {
     React.useEffect(() => {
       if (onValidationChange) {
         onValidationChange(false);
       }
     }, [onValidationChange]);
-    return <div data-testid="common-config" />;
+    return <div data-testid="common-config" data-hide-extensions={String(hideExtensions)} />;
   },
 }));
 
@@ -599,6 +605,19 @@ describe('ProviderConfigEditor', () => {
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);
     expect(mockOnValidate).toHaveBeenCalledWith(true);
+  });
+
+  it('hides unsupported global extension hooks in eval mode', () => {
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'openai:gpt-5.5', config: {} }}
+        setProvider={vi.fn()}
+        providerType="openai"
+        mode="eval"
+      />,
+    );
+
+    expect(screen.getByTestId('common-config')).toHaveAttribute('data-hide-extensions', 'true');
   });
 
   it('should render Bedrock with the foundation model configuration', () => {
