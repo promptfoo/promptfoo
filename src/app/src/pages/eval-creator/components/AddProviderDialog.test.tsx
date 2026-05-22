@@ -28,15 +28,27 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () =
   default: ({
     onValidationRequest,
     setError,
+    setProvider,
   }: {
     onValidationRequest?: (validator: () => boolean) => void;
     setError?: (error: string | null) => void;
+    setProvider?: (provider: { id: string; config: { temperature: number } }) => void;
   }) => {
     onValidationRequest?.(() => {
       setError?.(providerValidationError);
       return providerValidationError === null;
     });
-    return <div>provider config editor</div>;
+    return (
+      <div>
+        provider config editor
+        <button
+          type="button"
+          onClick={() => setProvider?.({ id: 'openai:gpt-5.5', config: { temperature: 0.4 } })}
+        >
+          Change Provider Settings
+        </button>
+      </div>
+    );
   },
 }));
 
@@ -172,6 +184,60 @@ describe('AddProviderDialog layout', () => {
       screen.getByText(/update the connection and model settings used for this evaluation/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Step \d of 2/)).not.toBeInTheDocument();
+  });
+
+  it('closes an untouched add flow without a discard warning', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(<AddProviderDialog open onClose={onClose} onSave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Discard provider changes?')).toBeNull();
+  });
+
+  it('confirms before discarding a selected provider', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={onClose} onSave={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms before discarding edits to an existing provider', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <AddProviderDialog
+        open
+        onClose={onClose}
+        onSave={vi.fn()}
+        initialProvider={{ id: 'openai:gpt-5.5', config: {} }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Change Provider Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('requires valid provider configuration before saving and keeps recovery available', async () => {

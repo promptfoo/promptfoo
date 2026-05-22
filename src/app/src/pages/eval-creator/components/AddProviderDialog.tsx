@@ -76,6 +76,7 @@ export default function AddProviderDialog({
     initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
+  const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const validationMessageId = useId();
   const validateProviderRef = useRef<(() => boolean) | null>(null);
 
@@ -93,8 +94,13 @@ export default function AddProviderDialog({
         setStep('select');
       }
       setError(null);
+      setDiscardDialogOpen(false);
     }
   }, [open, initialProvider]);
+
+  const hasUnsavedChanges = initialProvider
+    ? JSON.stringify(provider) !== JSON.stringify(initialProvider)
+    : Boolean(provider && provider.id !== '__selecting__');
 
   const handleProviderTypeSelect = (newProvider: ProviderOptions, type: string) => {
     // Only move to configure step if user has made an explicit selection
@@ -120,13 +126,21 @@ export default function AddProviderDialog({
     onClose();
   };
 
+  const requestClose = () => {
+    if (hasUnsavedChanges) {
+      setDiscardDialogOpen(true);
+      return;
+    }
+    onClose();
+  };
+
   const handleBack = () => {
     setError(null);
     validateProviderRef.current = null;
     if (step === 'configure') {
       setStep('select');
     } else {
-      onClose();
+      requestClose();
     }
   };
 
@@ -141,7 +155,7 @@ export default function AddProviderDialog({
           }
         `}
       </style>
-      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Dialog open={open} onOpenChange={(isOpen) => !isOpen && requestClose()}>
         <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
@@ -220,6 +234,34 @@ export default function AddProviderDialog({
                 {initialProvider ? 'Save Changes' : 'Add Provider'}
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={discardDialogOpen}
+        onOpenChange={(isOpen) => !isOpen && setDiscardDialogOpen(false)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard provider changes?</DialogTitle>
+            <DialogDescription>
+              Your provider selection and configuration changes will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDiscardDialogOpen(false)}>
+              Continue editing
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setDiscardDialogOpen(false);
+                onClose();
+              }}
+            >
+              Discard changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
