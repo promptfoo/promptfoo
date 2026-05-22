@@ -7,11 +7,13 @@ import { describe, expect, it, vi } from 'vitest';
 import TransformTestDialog from './TransformTestDialog';
 
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange }: any) => (
+  default: ({ value, onValueChange, textareaId, readOnly }: any) => (
     <textarea
       data-testid="code-editor"
+      id={textareaId}
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
+      readOnly={readOnly}
     />
   ),
 }));
@@ -47,8 +49,9 @@ describe('TransformTestDialog', () => {
     const collapsibleTrigger = screen.getByRole('button', { name: /test input/i });
     expect(collapsibleTrigger).toHaveAttribute('data-state', 'open');
 
-    const editor = screen.getByDisplayValue(defaultProps.testInput);
+    const editor = screen.getByLabelText(defaultProps.testInputLabel);
     expect(editor).toBeInTheDocument();
+    expect(screen.getByLabelText('Transform Function')).toHaveValue(defaultProps.transformCode);
   });
 
   it('should format the test input as pretty-printed JSON and clear any error when the Format JSON button is clicked and the input is valid JSON', async () => {
@@ -92,6 +95,8 @@ describe('TransformTestDialog', () => {
         .getAllByTestId('code-editor')
         .find((editor) => (editor as HTMLTextAreaElement).value.includes('"output"'));
       expect(outputEditor).toHaveValue(JSON.stringify({ output: 'test output' }, null, 2));
+      expect(screen.getByLabelText('Test Output:')).toBe(outputEditor);
+      expect(screen.getByLabelText('Test Output:')).toHaveAttribute('readonly');
     });
   });
 
@@ -181,6 +186,9 @@ describe('TransformTestDialog', () => {
     const alert = screen.getByRole('alert');
     expect(alert).toBeInTheDocument();
     expect(alert).toHaveTextContent(/invalid json/i);
+    const inputEditor = screen.getByLabelText(defaultProps.testInputLabel);
+    expect(inputEditor).toHaveAttribute('aria-invalid', 'true');
+    expect(inputEditor).toHaveAttribute('aria-describedby', alert.id);
 
     const filteredCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 3000);
     const timeoutCallback = filteredCalls[filteredCalls.length - 1]?.[0] as
@@ -192,6 +200,47 @@ describe('TransformTestDialog', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     setTimeoutSpy.mockRestore();
+  });
+
+  it('should clear a JSON format error when the user edits the test input', async () => {
+    const user = userEvent.setup();
+    renderWithTooltipProvider(<TransformTestDialog {...defaultProps} testInput="invalid json" />);
+
+    await user.click(screen.getByRole('button', { name: /format json/i }));
+    const inputEditor = screen.getByLabelText(defaultProps.testInputLabel);
+    expect(inputEditor).toHaveAttribute('aria-invalid', 'true');
+
+    await user.type(inputEditor, ' corrected');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(inputEditor).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('should announce progress while a transform test is running', async () => {
+    const user = userEvent.setup();
+    let resolveTest: ((result: { success: boolean; result: string }) => void) | undefined;
+    const onTest = vi.fn(
+      () =>
+        new Promise<{ success: boolean; result: string }>((resolve) => {
+          resolveTest = resolve;
+        }),
+    );
+    renderWithTooltipProvider(<TransformTestDialog {...defaultProps} onTest={onTest} />);
+
+    await user.click(screen.getByRole('button', { name: /run test/i }));
+
+    const progress = screen.getByRole('status');
+    expect(progress).toHaveTextContent('Running transform test');
+    expect(screen.getByRole('button', { name: /running test/i })).toHaveAttribute(
+      'aria-describedby',
+      progress.id,
+    );
+
+    await act(async () => {
+      resolveTest?.({ success: true, result: 'ok' });
+    });
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('should display deeply nested JSON objects in the test result output', async () => {
