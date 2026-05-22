@@ -75,6 +75,7 @@ describe('OTLPReceiver', () => {
     addSpans: MockedFunction<(traceId: string, spans: any[], options?: any) => Promise<void>>;
     getTracesByEvaluation: MockedFunction<() => Promise<any[]>>;
     getTrace: MockedFunction<() => Promise<any | null>>;
+    getTraceMetadata: MockedFunction<() => Promise<Record<string, any> | undefined>>;
     deleteOldTraces: MockedFunction<() => Promise<void>>;
   };
 
@@ -94,6 +95,9 @@ describe('OTLPReceiver', () => {
         .mockResolvedValue(undefined),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
+      getTraceMetadata: vi
+        .fn<() => Promise<Record<string, any> | undefined>>()
+        .mockResolvedValue(undefined),
       deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
 
@@ -643,16 +647,14 @@ describe('OTLPReceiver', () => {
       );
     });
 
-    it('keeps live formats and redaction patterns when receiver options merge', async () => {
+    it('uses trace-specific redaction config instead of the receiver default', async () => {
       const redactingReceiver = new OTLPReceiver({
         acceptFormats: ['json'],
         redactAttributes: ['authorization'],
       });
       (redactingReceiver as any).traceStore = mockTraceStore;
-
-      redactingReceiver.mergeOptions({
-        acceptFormats: ['protobuf'],
-        redactAttributes: ['password'],
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({
+        otlpHttpRedactAttributes: ['password'],
       });
 
       await request(redactingReceiver.getApp())
@@ -688,7 +690,7 @@ describe('OTLPReceiver', () => {
         [
           expect.objectContaining({
             attributes: expect.objectContaining({
-              AUTHORIZATION: '[REDACTED]',
+              AUTHORIZATION: 'Bearer abc',
               'http.password': '[REDACTED]',
             }),
           }),

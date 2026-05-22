@@ -239,34 +239,26 @@ export class OTLPReceiver {
     this.redactAttributePatterns = normalizeRedactAttributePatterns(redactAttributes);
   }
 
-  mergeOptions(options: OTLPReceiverOptions = {}): void {
-    this.acceptFormats = normalizeAcceptFormats([
-      ...this.acceptFormats,
-      ...(options.acceptFormats ?? []),
-    ]);
-    this.redactAttributePatterns = [
-      ...new Set([
-        ...this.redactAttributePatterns,
-        ...normalizeRedactAttributePatterns(options.redactAttributes),
-      ]),
-    ];
-  }
-
-  private shouldRedactAttribute(key: string): boolean {
-    if (this.redactAttributePatterns.length === 0) {
+  private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
+    if (redactAttributePatterns.length === 0) {
       return false;
     }
     const lowered = key.toLowerCase();
-    return this.redactAttributePatterns.some((pattern) => lowered.includes(pattern));
+    return redactAttributePatterns.some((pattern) => lowered.includes(pattern));
   }
 
-  redactAttributes(attributes: Record<string, unknown> | undefined): Record<string, unknown> {
-    if (!attributes || this.redactAttributePatterns.length === 0) {
+  redactAttributes(
+    attributes: Record<string, unknown> | undefined,
+    redactAttributePatterns = this.redactAttributePatterns,
+  ): Record<string, unknown> {
+    if (!attributes || redactAttributePatterns.length === 0) {
       return attributes ?? {};
     }
     const redacted: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(attributes)) {
-      redacted[key] = this.shouldRedactAttribute(key) ? '[REDACTED]' : value;
+      redacted[key] = this.shouldRedactAttribute(key, redactAttributePatterns)
+        ? '[REDACTED]'
+        : value;
     }
     return redacted;
   }
@@ -497,11 +489,12 @@ export class OTLPReceiver {
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
+      const redactAttributePatterns = await this.getRedactAttributePatterns(traceId);
       const sanitized =
-        this.redactAttributePatterns.length > 0
+        redactAttributePatterns.length > 0
           ? spans.map((span) => ({
               ...span,
-              attributes: this.redactAttributes(span.attributes),
+              attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
             }))
           : spans;
       await this.traceStore.addSpans(traceId, sanitized, {
@@ -509,6 +502,15 @@ export class OTLPReceiver {
         warnIfMissingTrace: false,
       });
     }
+  }
+
+  private async getRedactAttributePatterns(traceId: string): Promise<string[]> {
+    const metadata = await this.traceStore.getTraceMetadata(traceId);
+    if (!Array.isArray(metadata?.otlpHttpRedactAttributes)) {
+      return this.redactAttributePatterns;
+    }
+
+    return normalizeRedactAttributePatterns(metadata.otlpHttpRedactAttributes);
   }
 
   private handleProcessingError(error: unknown, res: express.Response): void {
@@ -943,9 +945,6 @@ let otlpReceiver: OTLPReceiver | null = null;
 
 function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   if (otlpReceiver) {
-    // The singleton can serve overlapping evals. Preserve options already in use
-    // while adding formats and redaction patterns requested by the new eval.
-    otlpReceiver.mergeOptions(options);
     return otlpReceiver;
   }
 
@@ -962,19 +961,6 @@ export async function startOTLPReceiver(
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });
   await receiver.listen(port, host);
-}
-
-export function updateOTLPReceiverOptions(options?: {
-  acceptFormats?: OTLPFormat[];
-  redactAttributes?: string[];
-}): void {
-  if (!otlpReceiver) {
-    return;
-  }
-
-  // A live receiver can serve overlapping evals, so refreshes must not drop
-  // formats or redaction patterns that another active eval still depends on.
-  otlpReceiver.mergeOptions(options);
 }
 
 export async function stopOTLPReceiver(): Promise<void> {

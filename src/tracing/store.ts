@@ -200,6 +200,7 @@ export class TraceStore {
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
+          createdAt: Date.now(),
           metadata: trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId });
@@ -350,6 +351,23 @@ export class TraceStore {
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
+      throw error;
+    }
+  }
+
+  async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
+    try {
+      logger.debug(`[TraceStore] Fetching metadata for trace ${traceId}`);
+      const db = this.getDatabase();
+      const traces = await db
+        .select({ metadata: tracesTable.metadata })
+        .from(tracesTable)
+        .where(eq(tracesTable.traceId, traceId))
+        .limit(1);
+
+      return traces[0]?.metadata ?? undefined;
+    } catch (error) {
+      logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
       throw error;
     }
   }
