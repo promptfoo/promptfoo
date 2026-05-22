@@ -108,7 +108,10 @@ function ProviderConfigEditor({
   };
 
   const getHttpUrlError = (target: ProviderOptions): string | null => {
-    if (target.config.request !== undefined || validateUrl(target.config.url)) {
+    if (
+      target.config.request !== undefined ||
+      (typeof target.config.url === 'string' && validateUrl(target.config.url))
+    ) {
       return null;
     }
     return 'Invalid URL format';
