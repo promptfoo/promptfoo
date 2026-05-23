@@ -406,6 +406,30 @@ describe('CustomMetrics', () => {
       expect(container.querySelector('.bg-red-50')).toBeInTheDocument();
     });
 
+    it('keeps aggregated duplicate metrics neutral instead of selecting one result', () => {
+      const lookup = { Accuracy: 0.5 };
+      const componentResults: GradingResult[] = [
+        {
+          pass: true,
+          score: 1,
+          reason: 'Passed',
+          assertion: { type: 'equals', metric: 'Accuracy' },
+        },
+        {
+          pass: false,
+          score: 0,
+          reason: 'Failed',
+          assertion: { type: 'equals', metric: 'Accuracy' },
+        },
+      ];
+
+      renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
+
+      expect(screen.getByTestId('metric-name-Accuracy')).toHaveTextContent('Accuracy');
+      expect(screen.getByTestId('metric-value-Accuracy')).toHaveTextContent('0.50');
+      expect(screen.queryByTestId('assertion-chip-Accuracy')).not.toBeInTheDocument();
+    });
+
     it('identifies assert-sets and renders with chevron', () => {
       const lookup = { 'assert-set': 1 };
       const componentResults: GradingResult[] = [

@@ -86,6 +86,7 @@ function buildMetricResultLookup(componentResults: GradingResult[] | undefined):
     string,
     { result: GradingResult; isAssertSet: boolean; childResults: GradingResult[] }
   >();
+  const ambiguousMetrics = new Set<string>();
 
   if (!componentResults) {
     return lookup;
@@ -119,6 +120,16 @@ function buildMetricResultLookup(componentResults: GradingResult[] | undefined):
 
     const isAssertSet = result.metadata?.isAssertSet === true;
     const childResults = isAssertSet ? (childResultsByParentIndex.get(index) ?? []) : [];
+
+    // A named score may aggregate several results, so one row cannot supply its status.
+    if (ambiguousMetrics.has(metric)) {
+      continue;
+    }
+    if (lookup.has(metric)) {
+      lookup.delete(metric);
+      ambiguousMetrics.add(metric);
+      continue;
+    }
 
     lookup.set(metric, { result, isAssertSet, childResults });
   }

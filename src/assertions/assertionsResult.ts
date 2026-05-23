@@ -189,7 +189,6 @@ export class AssertionsResult {
       options: {
         parentAssertSetIndex?: number;
         inheritedAssertion?: GradingResult['assertion'];
-        inheritedWeight?: number;
       } = {},
     ) => {
       const currentIndex = flattenedComponentResults.length;
@@ -209,8 +208,7 @@ export class AssertionsResult {
       const assertionSetMetadata = result.metadata?.assertionSet as
         | { threshold?: number; weight?: number }
         | undefined;
-      const weight =
-        result.assertion?.weight ?? assertionSetMetadata?.weight ?? options.inheritedWeight;
+      const weight = result.assertion?.weight ?? assertionSetMetadata?.weight;
       const metadata = { ...result.metadata };
 
       if (options.parentAssertSetIndex !== undefined) {
@@ -243,7 +241,6 @@ export class AssertionsResult {
         flattenComponentResult(childResult, {
           parentAssertSetIndex: currentIndex,
           inheritedAssertion: assertion,
-          inheritedWeight: weight,
         });
       }
     };

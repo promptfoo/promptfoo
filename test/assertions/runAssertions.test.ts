@@ -445,6 +445,8 @@ describe('runAssertions', () => {
         providerResponse: { output },
       });
       expect(result.score).toBe(0.9);
+      expect(result.componentResults?.[1].metadata?.assertSetWeight).toBe(90);
+      expect(result.componentResults?.[2].metadata?.assertSetWeight).toBeUndefined();
     });
 
     it('supports nested assert-sets without duplicating descendant results', async () => {
