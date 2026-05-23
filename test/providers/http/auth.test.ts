@@ -545,6 +545,70 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     expect(cacheKeys.join('\n')).not.toContain('test-client-id');
   });
 
+  it('should return refreshed OAuth tokens when concurrent keys exceed the cache limit', async () => {
+    let releaseRefreshes!: () => void;
+    const refreshesBlocked = new Promise<void>((resolve) => {
+      releaseRefreshes = resolve;
+    });
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: '{{ clientSecret }}',
+        },
+      },
+    });
+
+    const apiAuthHeaders = new Set<string>();
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo, options: any) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        tokenRefreshCallCount += 1;
+        await refreshesBlocked;
+        const clientSecret = new URLSearchParams(String(options.body)).get('client_secret');
+        return {
+          data: JSON.stringify({
+            access_token: `token-${clientSecret}`,
+            expires_in: 3600,
+          }),
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        };
+      }
+
+      apiAuthHeaders.add(options.headers.authorization);
+      return {
+        data: JSON.stringify({ result: 'success' }),
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      };
+    });
+
+    const requests = Array.from({ length: 257 }, (_, index) =>
+      provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: { clientSecret: `secret-${index}` },
+      }),
+    );
+
+    await vi.waitFor(() => expect(tokenRefreshCallCount).toBe(257));
+    releaseRefreshes();
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(257);
+    expect(apiAuthHeaders.size).toBe(257);
+    expect((provider as any).authTokenCache.size).toBe(256);
+  });
+
   it('should not cross-use OAuth tokens across concurrent raw requests', async () => {
     let releaseFirstTransform!: () => void;
     let resolveFirstTransformStarted!: () => void;
