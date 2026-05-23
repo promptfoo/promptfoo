@@ -118,6 +118,22 @@ describe('DEFAULT_EXCLUSIONS', () => {
 
   it('should exclude secret files', () => {
     expect(DEFAULT_EXCLUSIONS).toContain('.env*');
+    expect(DEFAULT_EXCLUSIONS).toContain('.npmrc');
+    expect(DEFAULT_EXCLUSIONS).toContain('.pypirc');
+    expect(DEFAULT_EXCLUSIONS).toContain('.netrc');
+    expect(DEFAULT_EXCLUSIONS).toContain('.git-credentials');
+    expect(DEFAULT_EXCLUSIONS).toContain('.ssh/**');
+    expect(DEFAULT_EXCLUSIONS).toContain('.docker/config.json');
+    expect(DEFAULT_EXCLUSIONS).toContain('.aws/credentials');
+    expect(DEFAULT_EXCLUSIONS).toContain('.kube/config');
+    expect(DEFAULT_EXCLUSIONS).toContain('id_rsa');
+    expect(DEFAULT_EXCLUSIONS).toContain('id_ed25519');
+    expect(DEFAULT_EXCLUSIONS).toContain('*.pem');
+    expect(DEFAULT_EXCLUSIONS).toContain('*.key');
+    expect(DEFAULT_EXCLUSIONS).toContain('*.p12');
+    expect(DEFAULT_EXCLUSIONS).toContain('*.pfx');
+    expect(DEFAULT_EXCLUSIONS).toContain('*.jks');
+    expect(DEFAULT_EXCLUSIONS).toContain('*.keystore');
   });
 
   it('should exclude git directory', () => {

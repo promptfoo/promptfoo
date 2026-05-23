@@ -22,7 +22,9 @@ function toPosixPath(value: string): string {
 }
 
 function normalizePattern(pattern: string): string {
-  return toPosixPath(pattern).replace(/^\.?\//, '').replace(/\/+$/, '');
+  return toPosixPath(pattern)
+    .replace(/^\.?\//, '')
+    .replace(/\/+$/, '');
 }
 
 function hasGlobMagic(pattern: string): boolean {
@@ -64,7 +66,10 @@ export function isReconPathExcluded(relativePath: string, exclusions: string[]):
   }
 
   return exclusions.some((pattern) => {
-    if (matchesPlainPathSegment(normalizedPath, pattern) || matchesDirectoryGlob(normalizedPath, pattern)) {
+    if (
+      matchesPlainPathSegment(normalizedPath, pattern) ||
+      matchesDirectoryGlob(normalizedPath, pattern)
+    ) {
       return true;
     }
 
@@ -110,9 +115,7 @@ export function prepareReconTarget(
     if (stats.isDirectory()) {
       fs.mkdirSync(destinationPath, { recursive: true, mode: 0o700 });
       for (const entry of fs.readdirSync(sourcePath, { withFileTypes: true })) {
-        const childRelativePath = relativePath
-          ? `${relativePath}/${entry.name}`
-          : entry.name;
+        const childRelativePath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
         copyEntry(
           path.join(sourcePath, entry.name),
           path.join(destinationPath, entry.name),

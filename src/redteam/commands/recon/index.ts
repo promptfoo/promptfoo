@@ -93,6 +93,7 @@ async function openReconHandoff(handoffToken: string): Promise<void> {
   await openBrowserWithRecon(handoffToken);
   handoffOpened = true;
   logger.info(chalk.dim('Press Ctrl+C to stop the local promptfoo server when you are done.'));
+  await serverPromise;
 }
 
 /**

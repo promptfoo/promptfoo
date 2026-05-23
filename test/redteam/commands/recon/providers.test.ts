@@ -591,7 +591,7 @@ describe('recon provider factories', () => {
         model: 'gpt-test',
         sandbox_mode: 'read-only',
         approval_policy: 'never',
-        network_access_enabled: true,
+        network_access_enabled: false,
         web_search_mode: 'live',
         enable_streaming: true,
       }),

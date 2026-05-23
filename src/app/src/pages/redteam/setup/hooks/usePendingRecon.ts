@@ -46,7 +46,7 @@ export function usePendingRecon(
   const hasAttemptedLoad = useRef(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setFullConfig, setReconContext: setStoreReconContext } = useRedTeamConfig();
+  const { setFullConfig } = useRedTeamConfig();
 
   const applyReconConfig = useCallback(
     async (data: GetPendingReconResponse) => {
@@ -55,14 +55,10 @@ export function usePendingRecon(
       // Build the full config for the Zustand store
       const stateful = metadata.reconDetails?.stateful ?? false;
 
-      // Prepare target with stateful flag if needed
-      let target = DEFAULT_HTTP_TARGET;
-      if (stateful) {
-        target = {
-          ...DEFAULT_HTTP_TARGET,
-          config: { ...DEFAULT_HTTP_TARGET.config, stateful: true },
-        };
-      }
+      const target = {
+        ...DEFAULT_HTTP_TARGET,
+        config: { ...DEFAULT_HTTP_TARGET.config, stateful },
+      };
 
       // Build application definition from recon metadata
       const appDef = metadata.applicationDefinition || {};
@@ -118,10 +114,9 @@ export function usePendingRecon(
 
       // Apply to store
       setFullConfig(fullConfig, newReconContext);
-      setStoreReconContext(newReconContext);
       setReconContext(newReconContext);
     },
-    [setFullConfig, setStoreReconContext],
+    [setFullConfig],
   );
 
   useEffect(() => {

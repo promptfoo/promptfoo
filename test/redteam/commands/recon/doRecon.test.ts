@@ -66,6 +66,7 @@ vi.mock('../../../../src/logger', () => ({
   default: {
     info: vi.fn(),
     debug: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
@@ -233,13 +234,69 @@ describe('doRecon', () => {
   });
 
   it('starts the local server before opening recon handoff when none is running', async () => {
-    mockedCheckServerRunning.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    mockedCheckServerRunning
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
 
     await doRecon({ dir: '/repo', yes: true });
 
     expect(startServer).toHaveBeenCalledWith(15500, 2);
     expect(opener).toHaveBeenCalledWith(
       'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
+    );
+  });
+
+  it('keeps a recon-started server on the CLI lifecycle after opening the handoff', async () => {
+    mockedCheckServerRunning.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    let stopServer!: () => void;
+    mockedStartServer.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        stopServer = resolve;
+      }),
+    );
+
+    const reconPromise = doRecon({ dir: '/repo', yes: true });
+
+    await vi.waitFor(() => {
+      expect(opener).toHaveBeenCalledWith(
+        'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
+      );
+    });
+
+    let settled = false;
+    reconPromise.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    stopServer();
+    await expect(reconPromise).resolves.toEqual(expect.objectContaining({ purpose: 'Target app' }));
+  });
+
+  it('logs when a recon-started server stops unexpectedly after handoff opens', async () => {
+    mockedCheckServerRunning.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    let stopServer!: (error: Error) => void;
+    mockedStartServer.mockReturnValueOnce(
+      new Promise<void>((_resolve, reject) => {
+        stopServer = reject;
+      }),
+    );
+
+    const reconPromise = doRecon({ dir: '/repo', yes: true });
+
+    await vi.waitFor(() => {
+      expect(opener).toHaveBeenCalled();
+    });
+
+    stopServer(new Error('server crashed'));
+
+    await expect(reconPromise).resolves.toEqual(expect.objectContaining({ purpose: 'Target app' }));
+    expect(logger.error).toHaveBeenCalledWith(
+      'Local promptfoo server stopped unexpectedly: server crashed',
     );
   });
 

@@ -117,7 +117,7 @@ export async function createOpenAIReconProvider(
       model: model || DEFAULT_OPENAI_MODEL,
       sandbox_mode: 'read-only',
       approval_policy: 'never',
-      network_access_enabled: true,
+      network_access_enabled: false,
       web_search_mode: 'live',
       output_schema: ReconOutputSchema,
       enable_streaming: !!onProgress,

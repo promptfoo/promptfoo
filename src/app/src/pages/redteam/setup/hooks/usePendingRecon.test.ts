@@ -25,7 +25,7 @@ vi.mock('./useRedTeamConfig', () => ({
   DEFAULT_HTTP_TARGET: {
     id: 'http',
     label: 'HTTP/HTTPS Endpoint',
-    config: {},
+    config: { stateful: true },
   },
 }));
 
@@ -234,6 +234,57 @@ describe('usePendingRecon', () => {
 
       const [appliedConfig] = mockSetFullConfig.mock.calls[0];
       expect(appliedConfig.target.config.stateful).toBe(true);
+    });
+
+    it('should clear the stateful default when recon identifies a stateless app', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            config: { redteam: { purpose: 'Stateless app' } },
+            metadata: {
+              source: 'recon-cli' as const,
+              timestamp: Date.now(),
+              reconDetails: {
+                stateful: false,
+              },
+            },
+          }),
+      } as Response);
+
+      renderHook(() => usePendingRecon());
+
+      await waitFor(() => {
+        expect(mockSetFullConfig).toHaveBeenCalled();
+      });
+
+      const [appliedConfig] = mockSetFullConfig.mock.calls[0];
+      expect(appliedConfig.target.config.stateful).toBe(false);
+    });
+
+    it('should default unknown recon statefulness to stateless for browser handoff', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            config: { redteam: { purpose: 'Unknown statefulness app' } },
+            metadata: {
+              source: 'recon-cli' as const,
+              timestamp: Date.now(),
+            },
+          }),
+      } as Response);
+
+      renderHook(() => usePendingRecon());
+
+      await waitFor(() => {
+        expect(mockSetFullConfig).toHaveBeenCalled();
+      });
+
+      const [appliedConfig] = mockSetFullConfig.mock.calls[0];
+      expect(appliedConfig.target.config.stateful).toBe(false);
     });
 
     it('should only attempt to load once per mount', async () => {
