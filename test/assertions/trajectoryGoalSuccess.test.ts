@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
 import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
+import { getProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
@@ -289,12 +290,13 @@ describe('handleTrajectoryGoalSuccess', () => {
   it('fails the assertion when the judge exceeds timeoutMs', async () => {
     vi.useFakeTimers();
     try {
-      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(
-        () =>
-          new Promise(() => {
-            /* never resolves; simulate a stuck judge call */
-          }),
-      );
+      let judgeAbortSignal: AbortSignal | undefined;
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(() => {
+        judgeAbortSignal = getProviderCallExecutionContext()?.abortSignal;
+        return new Promise(() => {
+          /* never resolves; simulate a stuck judge call */
+        });
+      });
 
       const params: AssertionParams = {
         ...defaultParams,
@@ -314,6 +316,7 @@ describe('handleTrajectoryGoalSuccess', () => {
       expect(result.reason).toBe('trajectory:goal-success judge timed out after 250ms');
       expect(result.assertion).toBe(params.assertion);
       expect(result.metadata?.graderError).toBe(true);
+      expect(judgeAbortSignal?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }
