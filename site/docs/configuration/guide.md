@@ -188,6 +188,21 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
+File-backed variable values can also be nested inside objects or arrays:
+
+```yaml
+prompts:
+  - 'Compare this report: {{ reporting_period.previous.report }}'
+tests:
+  - vars:
+      reporting_period:
+        previous:
+          report: file://data/previous-report.txt
+```
+
+Nested file-backed values use the same variable loading behavior as top-level values, including
+scripted variables, PDF text extraction, and multimedia inputs.
+
 Javascript and Python variable files are supported. For example:
 
 ```yaml
