@@ -361,6 +361,61 @@ describe('prompt optimizer', () => {
     );
   });
 
+  it('strips outputPath from internal optimizer evals so they do not pollute the user output file', async () => {
+    const provider = createMockProvider({
+      id: 'optimizer-provider',
+      response: optimizerResponse('Optimized Seed'),
+    });
+    vi.mocked(provider.callApi)
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 2'))
+      .mockResolvedValueOnce(optimizerResponse('Optimized Seed 3'));
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } as any);
+
+    const baselineEval = evalWith([completedPrompt('Seed', 'Seed', 0.5)], []);
+    const candidateEval = evalWith(
+      [
+        completedPrompt('Seed', 'Seed', 0.5),
+        completedPrompt('Optimized Seed', 'Seed [optimized 1]', 0.8),
+      ],
+      [],
+    );
+
+    vi.mocked(evaluate)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(baselineEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval)
+      .mockResolvedValueOnce(candidateEval);
+
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Seed', label: 'Seed' }],
+      tests: [{}, {}],
+    };
+
+    await optimizePromptTestSuite({ outputPath: 'results.jsonl' }, testSuite, {
+      validationSplit: 0.5,
+    });
+
+    const evalCalls = vi.mocked(evaluate).mock.calls;
+    expect(evalCalls).toHaveLength(8);
+    for (const call of evalCalls) {
+      expect(call[1]).toBeInstanceOf(Eval);
+      expect(call[1].config.outputPath).toBeUndefined();
+    }
+  });
+
   it('keeps optimized candidates eligible when provider prompt routing uses prompt ids', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',
