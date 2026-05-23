@@ -453,28 +453,22 @@ describe('Assertion Fallback Mechanism', () => {
     });
   });
 
-  describe('Thrown errors in chain primaries', () => {
-    it('treats a thrown primary as a failure and falls through when fallback is set', async () => {
+  describe('Failure boundaries in chain primaries', () => {
+    it('propagates a thrown primary even when fallback is set', async () => {
       const assertions: Assertion[] = [
         {
-          // Unknown assertion type causes runAssertion to throw.
           type: 'this-type-does-not-exist' as any,
           fallback: 'next',
         },
         { type: 'contains', value: 'test' },
       ];
 
-      const result = await runAssertions({
-        test: createTestCase(assertions),
-        providerResponse: mockProviderResponse,
-      });
-
-      expect(result.pass).toBe(true);
-      expect(result.score).toBe(1);
-      const synthetic = (result.componentResults ?? []).find((r) =>
-        (r.reason ?? '').startsWith('Assertion threw:'),
-      );
-      expect(synthetic).toBeDefined();
+      await expect(
+        runAssertions({
+          test: createTestCase(assertions),
+          providerResponse: mockProviderResponse,
+        }),
+      ).rejects.toThrow('Unknown assertion type');
     });
 
     it('still propagates throws from the terminal (non-fallback) link', async () => {
@@ -489,6 +483,32 @@ describe('Assertion Fallback Mechanism', () => {
           providerResponse: mockProviderResponse,
         }),
       ).rejects.toThrow('Unknown assertion type');
+    });
+
+    it('does not fall through a tagged grader failure', async () => {
+      const assertions: Assertion[] = [
+        {
+          type: 'javascript',
+          value: () => ({
+            pass: false,
+            score: 0,
+            reason: 'grader unavailable',
+            metadata: { graderError: true as const },
+          }),
+          fallback: 'next',
+        },
+        { type: 'contains', value: 'test' },
+      ];
+
+      const result = await runAssertions({
+        test: createTestCase(assertions),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('grader unavailable');
+      expect(result.componentResults).toHaveLength(1);
+      expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
     });
   });
 

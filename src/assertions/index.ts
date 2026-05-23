@@ -10,7 +10,12 @@ import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
 import { matchesClassification } from '../matchers/classification';
 import { matchesSelectBest } from '../matchers/comparison';
-import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import {
+  isGraderFailure,
+  matchesClosedQa,
+  matchesFactuality,
+  matchesLlmRubric,
+} from '../matchers/llmGrading';
 import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
@@ -804,11 +809,9 @@ function sumTokensInto(target: GradingResult, source: GradingResult['tokensUsed'
  * Scoring contract: only the terminating assertion (the first to pass, or the
  * last to fail) contributes weight/score. Intermediate failed primaries are
  * exposed via `componentResults` and their `tokensUsed` is summed into the
- * returned result so cost telemetry remains accurate. Throws from
- * fallback-bearing primaries are converted to synthetic failed results and
- * the chain continues — that is the user-declared contract of
- * `fallback: 'next'`. Throws from the terminal link propagate, matching the
- * behavior of non-chain assertions.
+ * returned result so cost telemetry remains accurate. Thrown assertion errors
+ * and tagged grader failures are not mismatches: they terminate the chain as
+ * errors or failures rather than allowing a fallback to mask them.
  */
 async function executeFallbackChain(
   asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
@@ -834,35 +837,20 @@ async function executeFallbackChain(
     const { assertion, index } = asserts[currentIndex];
     const assertionHasFallback = hasFallback(assertion);
 
-    let result: GradingResult;
-    try {
-      result = await runAssertion({
-        prompt: context.prompt,
-        provider: context.provider,
-        providerResponse: context.providerResponse,
-        assertion,
-        test: context.test,
-        vars: context.vars,
-        latencyMs: context.latencyMs,
-        assertIndex: index,
-        traceId: context.traceId,
-        traceData: context.traceData,
-      });
-    } catch (err) {
-      if (!assertionHasFallback) {
-        throw err;
-      }
-      const reason = err instanceof Error ? err.message : String(err);
-      logger.debug(`[fallback] assertion threw, falling through: ${reason}`);
-      result = {
-        pass: false,
-        score: 0,
-        reason: `Assertion threw: ${reason}`,
-        assertion,
-      };
-    }
+    const result = await runAssertion({
+      prompt: context.prompt,
+      provider: context.provider,
+      providerResponse: context.providerResponse,
+      assertion,
+      test: context.test,
+      vars: context.vars,
+      latencyMs: context.latencyMs,
+      assertIndex: index,
+      traceId: context.traceId,
+      traceData: context.traceData,
+    });
 
-    if (result.pass || !assertionHasFallback) {
+    if (result.pass || !assertionHasFallback || isGraderFailure(result)) {
       for (const earlier of intermediateResults) {
         sumTokensInto(result, earlier.tokensUsed);
       }

@@ -71,7 +71,7 @@ tests:
         value: 'The response correctly identifies Paris as the capital of France'
 ```
 
-Fallbacks are useful when you want cheap deterministic checks to handle common cases and reserve model-graded assertions for ambiguous outputs. Assertions that are bypassed because an earlier fallback passed do not affect the score or named metrics. Failed-then-fallback primaries that actually executed remain visible in `componentResults` and named metrics, and their token usage is summed into the chain's result so per-test cost telemetry stays accurate. Fallback targets cannot be assertion sets, `select-*` assertions, or `max-score`.
+Fallbacks are useful when you want cheap deterministic checks to handle common cases and reserve model-graded assertions for ambiguous outputs. Assertions that are bypassed because an earlier fallback passed do not affect the score or named metrics. Failed-then-fallback primaries that actually executed remain visible in `componentResults` and named metrics, and their token usage is summed into the chain's result so per-test cost telemetry stays accurate. Assertion errors and model-grader failures do not activate fallbacks; they continue to surface as errors or failures. Fallback targets cannot be assertion sets, `select-*` assertions, or `max-score`.
 
 ## Grouping assertions via Assertion Sets
 

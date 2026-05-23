@@ -87,7 +87,7 @@ The chain executes until:
 
 - Failed primaries that triggered the fallback **remain visible** in `componentResults` and named metrics. They are not silently dropped, so the eval UI/JSON shows exactly what was tried.
 - Token counts from every assertion that actually executed (including failed primaries) are summed into the test's aggregate `tokensUsed`, so cost telemetry stays accurate.
-- A throw from a `fallback`-bearing primary is caught and converted into a synthetic failure — the chain continues. A throw from the terminal (non-fallback) link still propagates, matching non-chain assertion behavior.
+- Assertion errors and model-grader failures are not eligible for fallback: they still surface as errors or failed checks rather than allowing a cheaper fallback to hide a broken validation path.
 
 ### Independent vs. Fallback Assertions
 
