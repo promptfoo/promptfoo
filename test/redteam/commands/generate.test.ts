@@ -41,6 +41,7 @@ import type {
   RedteamPluginObject,
 } from '../../../src/redteam/types';
 import type { ApiProvider, TestCaseWithPlugin } from '../../../src/types/index';
+import type { TokenUsage } from '../../../src/types/shared';
 
 // Type for synthesize mock return value to avoid type inference issues in CI
 type SynthesizeMockResult = {
@@ -49,6 +50,7 @@ type SynthesizeMockResult = {
   entities: string[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
+  generationTokenUsage?: TokenUsage;
 };
 
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
@@ -378,6 +380,133 @@ describe('doGenerateRedteam', () => {
             metadata: { pluginId: 'redteam' },
           },
         ],
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should persist semantic frontier diagnostics in generated output metadata', async () => {
+    const semanticFrontier = {
+      active: true,
+      complete: false,
+      minimumPortfolioSize: 3,
+      bands: {
+        'sensitive-field': {
+          featureCount: 2,
+          observedFeatureCount: 1,
+          observedFeatureIds: ['requestsPrescriptionDetails'],
+          reachableFeatureCount: 1,
+          reachableFeatureIds: ['requestsPrescriptionDetails'],
+          unreachableFeatureIds: ['requestsRefillDates'],
+        },
+      },
+    };
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input one' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'pii:social', semanticFrontier },
+        },
+        {
+          vars: { input: 'Test input two' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'pii:social', semanticFrontier },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          semanticFrontierDiagnostics: [
+            {
+              completeFrontierCount: 0,
+              frontierCount: 1,
+              pluginId: 'pii:social',
+              structurallyDegraded: true,
+              unreachableFeatureIds: ['requestsRefillDates'],
+            },
+          ],
+        }),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should persist aggregate generation token usage in generated output metadata', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({
+      prompts: [{ raw: 'Test prompt' }],
+      providers: [],
+      tests: [],
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: {
+        cached: 0,
+        completion: 7,
+        numRequests: 2,
+        prompt: 13,
+        total: 20,
+      },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          generationTokenUsage: {
+            cached: 0,
+            completion: 7,
+            numRequests: 2,
+            prompt: 13,
+            total: 20,
+          },
+        }),
       }),
       'output.yaml',
       expect.any(Array),

@@ -246,6 +246,49 @@ describe('synthesize', () => {
       ]);
     });
 
+    it('should aggregate token usage and count unmetered generation provider calls', async () => {
+      mockProvider.callApi
+        .mockResolvedValueOnce({
+          output: 'first',
+          tokenUsage: { completion: 5, numRequests: 1, prompt: 10, total: 15 },
+        })
+        .mockResolvedValueOnce({
+          output: 'second',
+          tokenUsage: { completion: 3, numRequests: 1, prompt: 7, total: 10 },
+        })
+        .mockResolvedValueOnce({ output: 'third' });
+      const pluginAction = vi.fn().mockImplementation(async ({ provider }) => {
+        await provider.callApi('first prompt');
+        await provider.callApi('second prompt');
+        await provider.callApi('third prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'token-plugin' });
+
+      const result = await synthesize({
+        entities: [],
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'token-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Test purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      findSpy.mockRestore();
+      expect(result.generationTokenUsage).toEqual({
+        cached: 0,
+        completion: 8,
+        numRequests: 3,
+        prompt: 17,
+        total: 25,
+      });
+    });
+
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
@@ -609,6 +652,59 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('test-plugin'));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
+    });
+
+    it('should render semantic frontier diagnostics when generated tests expose them', async () => {
+      const semanticFrontier = {
+        active: true,
+        complete: false,
+        minimumPortfolioSize: 3,
+        bands: {
+          'sensitive-field': {
+            featureCount: 2,
+            observedFeatureCount: 1,
+            observedFeatureIds: ['requestsPrescriptionDetails'],
+            reachableFeatureCount: 1,
+            reachableFeatureIds: ['requestsPrescriptionDetails'],
+            unreachableFeatureIds: ['requestsRefillDates'],
+          },
+        },
+      };
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: { semanticFrontier },
+          vars: { query: 'frontier-aware prompt one' },
+        },
+        {
+          metadata: { semanticFrontier },
+          vars: { query: 'frontier-aware prompt two' },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'pii:social' });
+
+      await synthesize({
+        language: 'en',
+        numTests: 2,
+        plugins: [{ id: 'pii:social', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+      expect(cleanReport).toContain('Semantic Frontier Diagnostics:');
+      expect(cleanReport).toContain('pii:social');
+      expect(cleanReport).toContain('0/1');
+      expect(cleanReport).toContain('Degraded');
+      expect(cleanReport).toContain('requestsRefillDates');
     });
 
     it('should use default fan-out values when strategy config omits n', async () => {
