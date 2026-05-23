@@ -1182,6 +1182,48 @@ describe('combineConfigs', () => {
     // When no defaultTest is provided, combineConfigs returns undefined
     expect(result.defaultTest).toBeUndefined();
   });
+
+  it('should preserve all distinct CallApiFunction providers without deduplication', async () => {
+    const providerA = async (prompt: string) => ({ output: `a: ${prompt}` });
+    const providerB = async (prompt: string) => ({ output: `b: ${prompt}` });
+    const providerC = async (prompt: string) => ({ output: `c: ${prompt}` });
+
+    const mockConfig = {
+      prompts: ['{{prompt}}'],
+      providers: [providerA, providerB, providerC],
+      tests: [{ vars: { prompt: 'hi' } }],
+    };
+
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await combineConfigs(['config.ts']);
+
+    // All three distinct function providers must be preserved.
+    // Previously JSON.stringify(fn) === undefined for all functions, so only
+    // the first survived the dedup Set check.
+    expect(result.providers).toHaveLength(3);
+    expect(result.providers).toContain(providerA);
+    expect(result.providers).toContain(providerB);
+    expect(result.providers).toContain(providerC);
+  });
+
+  it('should deduplicate the same CallApiFunction instance when it appears multiple times', async () => {
+    const sharedProvider = async (prompt: string) => ({ output: `shared: ${prompt}` });
+
+    const mockConfig = {
+      prompts: ['{{prompt}}'],
+      providers: [sharedProvider, sharedProvider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    };
+
+    vi.mocked(importModule).mockResolvedValue(mockConfig);
+
+    const result = await combineConfigs(['config.ts']);
+
+    // The same function reference listed twice should be deduplicated to one entry.
+    expect(result.providers).toHaveLength(1);
+    expect(result.providers).toContain(sharedProvider);
+  });
 });
 
 describe('dereferenceConfig', () => {

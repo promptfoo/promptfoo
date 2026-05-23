@@ -431,7 +431,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   }
 
   const providers: UnifiedConfig['providers'] = [];
-  const seenProviders = new Set<string>();
+  const seenProviders = new Set<unknown>();
   configs.forEach((config) => {
     invariant(
       typeof config.providers !== 'function',
@@ -444,9 +444,12 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        if (!seenProviders.has(JSON.stringify(provider))) {
+        // Functions are not JSON-serializable; use reference identity as the dedup key
+        // so that distinct CallApiFunction providers are all preserved.
+        const key = typeof provider === 'function' ? provider : JSON.stringify(provider);
+        if (!seenProviders.has(key)) {
           providers.push(provider);
-          seenProviders.add(JSON.stringify(provider));
+          seenProviders.add(key);
         }
       });
     }
