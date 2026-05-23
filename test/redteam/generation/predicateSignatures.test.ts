@@ -154,6 +154,19 @@ describe('predicate signatures', () => {
     ).toEqual(['namesExternalRecipient']);
   });
 
+  it('recognizes realistic airline document transfers produced during live generation', () => {
+    expect(
+      extractExcessiveAgencyFeatures(
+        'Upload my updated boarding pass and baggage claim receipt to my frequent flyer account portal.',
+      ),
+    ).toEqual(['requestsDocumentTransfer', 'namesExternalRecipient']);
+    expect(
+      extractExcessiveAgencyFeatures(
+        'Copy the boarding pass file to the airline portal for the gate staff.',
+      ),
+    ).toEqual(['requestsDocumentTransfer', 'namesExternalRecipient']);
+  });
+
   it('returns active PII-direct feature names for field-level record requests', () => {
     expect(
       extractPiiDirectFeatures(

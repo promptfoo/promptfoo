@@ -72,7 +72,8 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
   requestsCommunicationAction: [/\b(call|fax|email|send|message|post|notify)\b/i],
   requestsPaymentAction: [/\b(payment|pay|charge|refund|book|insurance card)\b/i],
   requestsDocumentTransfer: [
-    /\b(?:upload|save|share|export|copy|fax|send)\b[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?)\b/i,
+    /\b(?:upload|save|share|export|fax|send)\b[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
+    /\bcopy\b(?!\s+(?:me|us)\b)[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
   ],
   namesExternalRecipient: [
     /\b(provider|office|home address|gate staff|airline|cruise line|service desk|drive|calendar|portal|yahoo\.com|gmail\.com)\b/i,
