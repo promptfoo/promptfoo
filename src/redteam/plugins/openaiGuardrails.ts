@@ -19,6 +19,87 @@ interface OpenAIGuardrailsRow {
   };
 }
 
+function splitJsonObjectRecords(data: string): string[] {
+  const records: string[] = [];
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+
+  for (let i = 0; i < data.length; i++) {
+    const char = data[i];
+
+    if (start === -1) {
+      if (char === '{') {
+        start = i;
+        depth = 1;
+      }
+      continue;
+    }
+
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+      } else if (char === '\\') {
+        isEscaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth++;
+    } else if (char === '}') {
+      depth--;
+      if (depth === 0) {
+        records.push(data.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+
+  if (start !== -1) {
+    logger.warn('[OpenAI Guardrails] Ignoring incomplete JSON record at end of dataset');
+  }
+
+  return records;
+}
+
+function isOpenAIGuardrailsRow(row: unknown): row is OpenAIGuardrailsRow {
+  if (row == null || typeof row !== 'object') {
+    return false;
+  }
+  const candidate = row as Partial<OpenAIGuardrailsRow>;
+  const expectedTriggers = candidate.expected_triggers;
+
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.data === 'string' &&
+    candidate.data.trim() !== '' &&
+    expectedTriggers != null &&
+    typeof expectedTriggers === 'object' &&
+    typeof expectedTriggers.Jailbreak === 'boolean'
+  );
+}
+
+function parseDatasetRows(data: string): OpenAIGuardrailsRow[] {
+  return splitJsonObjectRecords(data).flatMap((record, index) => {
+    try {
+      const parsed = JSON.parse(record);
+      if (isOpenAIGuardrailsRow(parsed)) {
+        return [parsed];
+      }
+      logger.warn(`[OpenAI Guardrails] Ignoring invalid dataset row at index ${index}`);
+    } catch (error) {
+      logger.warn(`[OpenAI Guardrails] Ignoring malformed dataset row at index ${index}: ${error}`);
+    }
+    return [];
+  });
+}
+
 type OpenAIGuardrailsVars = {
   prompt: string;
   id: string;
@@ -84,27 +165,16 @@ export async function fetchDataset(
 
     logger.debug(`[OpenAI Guardrails] Got ${jsonlData.length} bytes of JSONL data`);
 
-    // Parse JSONL - each line is a JSON object
-    const rows = jsonlData
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line) => JSON.parse(line)) as OpenAIGuardrailsRow[];
+    const rows = parseDatasetRows(jsonlData);
 
-    logger.debug(`[OpenAI Guardrails] Parsed ${rows.length} rows from JSONL`);
+    logger.debug(`[OpenAI Guardrails] Parsed ${rows.length} valid rows from dataset`);
 
     if (rows.length === 0) {
-      throw new Error(`[OpenAI Guardrails] No data rows in JSONL`);
+      throw new Error(`[OpenAI Guardrails] No valid data rows in dataset`);
     }
 
-    const isValidRow = (row: OpenAIGuardrailsRow): boolean =>
-      row.expected_triggers != null && row.data?.trim() !== '';
-
-    const jailbreakRows = rows.filter(
-      (row) => isValidRow(row) && row.expected_triggers.Jailbreak === true,
-    );
-    const safeRows = rows.filter(
-      (row) => isValidRow(row) && row.expected_triggers.Jailbreak === false,
-    );
+    const jailbreakRows = rows.filter((row) => row.expected_triggers.Jailbreak === true);
+    const safeRows = rows.filter((row) => row.expected_triggers.Jailbreak === false);
 
     logger.debug(
       `[OpenAI Guardrails] Found ${jailbreakRows.length} jailbreak and ${safeRows.length} safe test cases after filtering`,
@@ -232,6 +302,8 @@ Be strict in your evaluation. Any indication that the model engaged with the har
       const isSafe = test.vars.isSafe ?? false;
       return {
         vars: {
+          prompt: test.vars.prompt,
+          purpose: this.purpose,
           [this.injectVar]: test.vars.prompt,
         },
         metadata: {

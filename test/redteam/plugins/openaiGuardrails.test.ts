@@ -66,6 +66,32 @@ describe('OpenAIGuardrailsPlugin', () => {
       expect(result).toHaveLength(2);
     });
 
+    it('should parse pretty-printed JSON object records', async () => {
+      const mockData = `{
+  "id": "jailbreak-01930",
+  "expected_triggers": {
+    "Jailbreak": true
+  },
+  "data": "Test jailbreak"
+}
+{
+  "id": "safe-00001",
+  "expected_triggers": {
+    "Jailbreak": false
+  },
+  "data": "Safe prompt"
+}`;
+
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(mockData),
+      } as Response);
+
+      const result = await fetchDataset(2, true);
+      expect(result).toHaveLength(2);
+      expect(result.map((test) => test.vars.id).sort()).toEqual(['jailbreak-01930', 'safe-00001']);
+    });
+
     it('should shuffle and limit results', async () => {
       const mockData = Array.from({ length: 100 }, (_, i) => ({
         id: `jailbreak-${i}`,
@@ -91,7 +117,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching dataset'));
     });
 
-    it('should handle malformed JSONL', async () => {
+    it('should ignore malformed records without dropping valid rows', async () => {
       const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Test"}
 {this is not valid json}`;
 
@@ -101,8 +127,43 @@ describe('OpenAIGuardrailsPlugin', () => {
       } as Response);
 
       const result = await fetchDataset(10);
-      expect(result).toEqual([]);
-      expect(logger.error).toHaveBeenCalled();
+      expect(result).toHaveLength(1);
+      expect(result[0].vars.id).toBe('jailbreak-01930');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring malformed dataset row'),
+      );
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('should filter invalid row shapes without failing the dataset', async () => {
+      const mockData = [
+        JSON.stringify({
+          id: 'jailbreak-01930',
+          expected_triggers: { Jailbreak: true },
+          data: 'Valid jailbreak',
+        }),
+        JSON.stringify({
+          id: 'jailbreak-01931',
+          expected_triggers: { Jailbreak: true },
+          data: ['not a string'],
+        }),
+        JSON.stringify({
+          expected_triggers: { Jailbreak: true },
+          data: 'Missing id',
+        }),
+      ].join('\n');
+
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(mockData),
+      } as Response);
+
+      const result = await fetchDataset(10);
+      expect(result).toHaveLength(1);
+      expect(result[0].vars.prompt).toBe('Valid jailbreak');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring invalid dataset row'),
+      );
     });
   });
 
@@ -158,6 +219,8 @@ describe('OpenAIGuardrailsPlugin', () => {
       expect(tests).toHaveLength(1);
       expect(tests[0]).toMatchObject({
         vars: {
+          prompt: 'Test jailbreak prompt',
+          purpose: 'test',
           input: 'Test jailbreak prompt',
         },
         metadata: {
@@ -286,12 +349,22 @@ describe('OpenAIGuardrailsPlugin', () => {
       const jailbreakTest = tests.find((test) => !test.metadata?.isSafe);
 
       expect(safeTest).toBeDefined();
+      expect(safeTest?.vars).toMatchObject({
+        prompt: 'Safe prompt',
+        purpose: 'test',
+        input: 'Safe prompt',
+      });
       expect(safeTest?.metadata).toMatchObject({
         isSafe: true,
         label: 'safe',
       });
 
       expect(jailbreakTest).toBeDefined();
+      expect(jailbreakTest?.vars).toMatchObject({
+        prompt: 'Jailbreak prompt',
+        purpose: 'test',
+        input: 'Jailbreak prompt',
+      });
       expect(jailbreakTest?.metadata).toMatchObject({
         isSafe: false,
         label: 'jailbreak',
