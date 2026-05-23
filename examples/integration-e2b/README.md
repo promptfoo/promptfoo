@@ -1,71 +1,50 @@
 # integration-e2b (E2B Code Evaluation)
 
-## What This Example Demonstrates
+This example evaluates LLM-generated Python functions by executing them in an
+[E2B](https://e2b.dev/docs) sandbox from a promptfoo Python assertion. The
+assertion disables internet access for the sandbox, imposes a five-second
+execution timeout, compares stdout to the expected result, and records metrics
+in `.promptfoo_results/`.
 
-This example shows a complete prompt→LLM→sandboxed-execution→metric pipeline using:
+The lightweight static scan in `validate_and_run_code_e2b.py` is an additional
+example guard, not a complete security boundary. Configure E2B templates and
+network policies appropriate for your production workload.
 
-- `promptfoo` to run LLM prompts and manage evaluation cases.
-- An LLM provider to generate Python functions from a short problem prompt.
-- e2b sandboxes (via `e2b-code-interpreter`) to run generated code safely.
-- OpenAI step to generate small verification unit tests and re-run them in the sandbox.
-- Per-run JSON metrics written to .promptfoo_results/ and a human-friendly markdown report produced by report.py.
-
-You can run this example with:
+## Setup
 
 ```bash
 npx promptfoo@latest init --example integration-e2b
 cd integration-e2b
-```
 
-## Environment Variables
-
-Set these in your shell before running the example.
-
-```bash
-# Required
-export E2B_API_KEY="e2b_xxx_your_key_here"        # e2b sandbox API key
-export OPENAI_API_KEY="sk_xxx_your_key_here"     # OpenAI key (or your chosen LLM provider)
-
-# Recommended
-export PROMPTFOO_PYTHON="$(pwd)/.venv/bin/python"  # tell promptfoo which Python/venv to use
-```
-
-- If you use a different provider name in promptfooconfig.yaml, add that provider's key instead.
-
-## Prerequisites
-
-Install and prepare a Python virtual environment, and install the required packages.
-
-```bash
-# create & activate venv
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
+pip install 'e2b-code-interpreter>=2.7.0'
 
-# install Python packages
-pip install --upgrade pip
-pip install e2b-code-interpreter
-npm i -g promptfoo
+export E2B_API_KEY="e2b_your_key"
+export OPENAI_API_KEY="sk_your_key"
+export PROMPTFOO_PYTHON="$PWD/.venv/bin/python"
 ```
 
-## Running the Example
+If you select another provider in `promptfooconfig.yaml`, set that provider's
+credentials instead of `OPENAI_API_KEY`.
 
-Activate venv and ensure env vars are set:
+## Run
+
+Run a fresh evaluation and export the results:
 
 ```bash
-source .venv/bin/activate
-export E2B_API_KEY="e2b_xxx"
-export OPENAI_API_KEY="sk_xxx"
-export PROMPTFOO_PYTHON="$(pwd)/.venv/bin/python"
+npx promptfoo eval --no-cache -o output.json
 ```
 
-Run the evaluation:
+Inspect `output.json` for pass/fail results, scores, and errors. You can also
+open the local viewer:
 
 ```bash
-promptfoo eval
+npx promptfoo view
 ```
 
-Open the interactive viewer:
+To produce a Markdown summary from collected metric files:
 
 ```bash
-promptfoo view
+python report.py
 ```

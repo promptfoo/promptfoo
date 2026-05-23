@@ -163,28 +163,8 @@ def _stdout_from_result(res) -> tuple[str, str]:
 
 
 def _run_code_in_sandbox(sbx, code: str):
-    """Try a few run_code signatures safely (SDKs vary)."""
-    # Preferred: named args (limits, disable network)
-    try:
-        return sbx.run_code(
-            code=code,
-            language="python",
-            limits={"cputime": 1, "wall_time": 5, "memory": 128},
-            allow_network=False,
-        )
-    except TypeError:
-        pass
-    except Exception:
-        logger.debug("Preferred sandbox run_code signature failed", exc_info=True)
-    # Try alternate signatures
-    try:
-        return sbx.run_code(
-            code, "python", {"cputime": 1, "wall_time": 5, "memory": 128}
-        )
-    except Exception:
-        logger.debug("Positional sandbox run_code signature failed", exc_info=True)
-    # Last resort
-    return sbx.run_code(code)
+    """Execute Python code with the supported E2B execution timeout."""
+    return sbx.run_code(code, language="python", timeout=5)
 
 
 def get_assert(output, context):
@@ -209,7 +189,7 @@ def get_assert(output, context):
             "reason": f"No Python code block found (first 300 chars: {snippet})",
         }
 
-    # Pre-exec safety
+    # Defense in depth only; the E2B sandbox is the execution boundary.
     if is_unsafe(function_code):
         write_metrics(
             task_id, provider, model, False, 0.0, extra={"reason": "unsafe_pattern"}
@@ -226,7 +206,7 @@ print({fn_name}({test_input}))
 """
 
     start = time.time()
-    with Sandbox.create() as sbx:
+    with Sandbox.create(allow_internet_access=False) as sbx:
         try:
             res = _run_code_in_sandbox(sbx, test_program)
         except Exception as e:
