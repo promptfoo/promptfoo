@@ -52,8 +52,6 @@ export type BedrockModelFamily =
  */
 interface BedrockInvokeModelOptions extends BedrockOptions {
   inferenceModelType?: BedrockModelFamily;
-  /** Custom cost override. Can be a single number (per token) or { input, output } per token. */
-  cost?: number | { input: number; output: number };
 }
 
 export interface TextGenerationOptions {
@@ -2519,20 +2517,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
     }
 
-    let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
+    const resolvedConfig = {
+      ...this.config,
+      ...context?.prompt.config,
+    } as BedrockInvokeModelOptions;
+    let model = getHandlerForModel(this.modelName, resolvedConfig);
     if (!model) {
       logger.warn(
         `Unknown Amazon Bedrock model: ${this.modelName}. Assuming its API is Claude-like.`,
       );
       model = BEDROCK_MODEL.CLAUDE_MESSAGES;
     }
-    const params = await model.params(
-      { ...this.config, ...context?.prompt.config },
-      prompt,
-      stop,
-      this.modelName,
-      context?.vars,
-    );
+    const params = await model.params(resolvedConfig, prompt, stop, this.modelName, context?.vars);
 
     logger.debug('Calling Amazon Bedrock API', { params });
 
@@ -2665,7 +2661,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       let cost: number | undefined;
       if (tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
         // Check for custom cost override in config
-        const configCost = this.config.cost;
+        const configCost = resolvedConfig.cost;
         if (typeof configCost === 'object' && configCost !== null) {
           // Custom cost override: { input: number, output: number }
           cost = tokenUsage.prompt * configCost.input + tokenUsage.completion * configCost.output;

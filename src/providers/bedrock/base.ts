@@ -16,6 +16,7 @@ import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
 import type { EnvOverrides } from '../../types/env';
+import type { ModelCost } from '../shared';
 
 export interface BedrockOptions {
   accessKeyId?: string;
@@ -29,8 +30,8 @@ export interface BedrockOptions {
   trace?: Trace;
   showThinking?: boolean;
   endpoint?: string;
-  /** Custom cost override. Can be a single number (per token) or { input, output } per token. */
-  cost?: number | { input: number; output: number };
+  /** Custom per-token cost override. */
+  cost?: number | ModelCost;
 }
 
 const BEDROCK_CACHE_KEY_HMAC_KEY = 'promptfoo:bedrock:cache-key:v1';

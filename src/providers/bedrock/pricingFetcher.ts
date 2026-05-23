@@ -84,6 +84,7 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'amazon.nova-lite-v1': 'Nova Lite',
     'amazon.nova-pro-v1': 'Nova Pro',
     'amazon.nova-premier-v1': 'Nova Premier',
+    'amazon.nova-2-lite-v1': 'Nova 2.0 Lite',
     // Amazon Titan models
     'amazon.titan-text-express-v1': 'Titan Text G1 - Express',
     'amazon.titan-text-lite-v1': 'Titan Text G1 - Lite',
@@ -129,15 +130,22 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
 
     // DeepSeek models
     'deepseek.r1-v1': 'R1',
+    'deepseek.v3-v1': 'DeepSeek V3.1',
+    'deepseek.v3.2': 'DeepSeek v3.2',
 
     // OpenAI models
     'openai.gpt-oss-120b-1': 'gpt-oss-120b',
     'openai.gpt-oss-20b-1': 'gpt-oss-20b',
+    'openai.gpt-oss-safeguard-120b': 'GPT OSS Safeguard 120B',
+    'openai.gpt-oss-safeguard-20b': 'GPT OSS Safeguard 20B',
 
     // Qwen models
-    'qwen.qwen3-coder-480b-a35b-v1': 'Qwen3 Coder 480B',
-    'qwen.qwen3-coder-30b-a3b-v1': 'Qwen3 Coder 30B',
-    'qwen.qwen3-235b-a22b-2507-v1': 'Qwen3 235B',
+    'qwen.qwen3-coder-next': 'Qwen3 Coder Next',
+    'qwen.qwen3-coder-480b-a35b-v1': 'Qwen3 Coder 480B A35B',
+    'qwen.qwen3-coder-30b-a3b-v1': 'Qwen3 Coder 30B A3B',
+    'qwen.qwen3-next-80b-a3b': 'Qwen3 Next 80B A3B',
+    'qwen.qwen3-vl-235b-a22b': 'Qwen3 VL 235B A22B',
+    'qwen.qwen3-235b-a22b-2507-v1': 'Qwen3 235B A22B 2507',
     'qwen.qwen3-32b-v1': 'Qwen3 32B',
 
     // Writer AI models
@@ -145,10 +153,7 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'writer.palmyra-x5-v1': 'Palmyra X5',
 
     // Mistral Pixtral models
-    'mistral.pixtral-large-2502-v1': 'Pixtral Large',
-
-    // DeepSeek v3
-    'deepseek.v3-v1': 'DeepSeek V3',
+    'mistral.pixtral-large-2502-v1': 'Pixtral Large 25.02',
   };
 
   return mappings[baseId] || baseId;
@@ -338,23 +343,24 @@ function setModelPricingRate(
   inferenceType: string,
   price: number,
 ) {
+  const normalizedInferenceType = inferenceType.toLowerCase();
+  const rateType =
+    normalizedInferenceType === 'input tokens' || normalizedInferenceType === 'text input token'
+      ? 'input'
+      : normalizedInferenceType === 'output tokens' ||
+          normalizedInferenceType === 'text output token'
+        ? 'output'
+        : undefined;
+
+  if (!rateType) {
+    return;
+  }
+
   if (!models.has(modelName)) {
     models.set(modelName, { input: 0, output: 0 });
   }
 
-  const modelPricing = models.get(modelName)!;
-  const rate = price / 1000;
-  const normalizedInferenceType = inferenceType.toLowerCase();
-
-  if (normalizedInferenceType.includes('cache')) {
-    return;
-  }
-
-  if (normalizedInferenceType.includes('input')) {
-    modelPricing.input = rate;
-  } else if (normalizedInferenceType.includes('output')) {
-    modelPricing.output = rate;
-  }
+  models.get(modelName)![rateType] = price / 1000;
 }
 
 function removeIncompleteModelPricing(models: Map<string, BedrockModelPricing>) {
@@ -461,106 +467,6 @@ async function fetchBedrockPricing(
   }
 }
 
-/**
- * Fallback pricing for models not yet in AWS Pricing API.
- * Prices from official vendor documentation and third-party sources.
- * Patterns use hyphens to match Bedrock model ID format (e.g., claude-haiku-4-5).
- *
- * Sources:
- * - Anthropic: https://platform.claude.com/docs/en/about-claude/pricing
- * - AI21 Jamba: Azure pricing and Artificial Analysis
- * - Qwen: Estimated based on model size and market rates
- * - Llama: AWS Bedrock pricing patterns
- * - Writer AI: Estimated based on model capabilities
- * - Mistral Pixtral: Estimated based on Mistral Large pricing
- * - DeepSeek v3: Estimated based on model size and capabilities
- */
-const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
-  // ===== Claude Models =====
-  // Claude 4.5 models (Anthropic official pricing - different from 4.0/4.1)
-  // Source: https://claude.com/pricing
-  'claude-opus-4-5': { input: 0.000005, output: 0.000025 }, // $5/$25 per MTok
-  'claude-opus-4-5-20251101': { input: 0.000005, output: 0.000025 },
-  'claude-sonnet-4-5': { input: 0.000003, output: 0.000015 }, // $3/$15 per MTok
-  'claude-sonnet-4-5-20250929': { input: 0.000003, output: 0.000015 },
-  'claude-haiku-4-5': { input: 0.000001, output: 0.000005 }, // $1/$5 per MTok
-  'claude-haiku-4-5-20251001': { input: 0.000001, output: 0.000005 },
-  // Claude 4.0/4.1 models (higher pricing than 4.5)
-  'claude-opus-4': { input: 0.000015, output: 0.000075 }, // $15/$75 per MTok
-  'claude-opus-4-1': { input: 0.000015, output: 0.000075 },
-  'claude-opus-4-20250514': { input: 0.000015, output: 0.000075 },
-  'claude-opus-4-1-20250805': { input: 0.000015, output: 0.000075 },
-  'claude-sonnet-4': { input: 0.000003, output: 0.000015 }, // $3/$15 per MTok
-  'claude-sonnet-4-20250514': { input: 0.000003, output: 0.000015 },
-  // Claude 3.7 Sonnet
-  'claude-3-7-sonnet': { input: 0.000003, output: 0.000015 }, // $3/$15 per MTok
-  'claude-3-7-sonnet-20250219': { input: 0.000003, output: 0.000015 },
-
-  // Claude 3.5 Sonnet v2 (October 2024 release, same pricing as v1)
-  'claude-3-5-sonnet-20241022-v2': { input: 0.000003, output: 0.000015 },
-  'claude-3-5-sonnet-v2': { input: 0.000003, output: 0.000015 },
-
-  // ===== AI21 Jamba Models =====
-  // From Azure pricing and Artificial Analysis
-  'jamba-1-5-large': { input: 0.000002, output: 0.000008 },
-  'jamba-1-5-mini': { input: 0.0000002, output: 0.0000004 },
-
-  // ===== Qwen Models =====
-  // Estimated based on model size and market rates
-  'qwen3-coder-480b': { input: 0.000003, output: 0.000015 }, // Large coder model
-  'qwen3-coder-30b': { input: 0.000001, output: 0.000005 }, // Medium coder model
-  'qwen3-235b': { input: 0.000002, output: 0.00001 }, // Large general model
-  'qwen3-32b': { input: 0.0000005, output: 0.0000025 }, // Medium general model
-
-  // ===== Llama Models =====
-  // Llama 3.2 3B (between 1B and 11B pricing)
-  'llama3-2-3b': { input: 0.00000015, output: 0.00000015 }, // $0.15 per MTok (estimate)
-
-  // ===== Writer AI Models =====
-  // Estimated based on model capabilities and Writer API pricing
-  'palmyra-x4': { input: 0.000001, output: 0.000003 }, // ~$1/$3 per MTok (estimate)
-  'palmyra-x5': { input: 0.000002, output: 0.000006 }, // ~$2/$6 per MTok (estimate)
-
-  // ===== Mistral Pixtral Models =====
-  // Multimodal model pricing (estimated based on Mistral Large pricing)
-  'pixtral-large': { input: 0.000003, output: 0.000009 }, // ~$3/$9 per MTok (estimate)
-
-  // ===== DeepSeek Models =====
-  // DeepSeek v3 (estimated based on model size and capabilities)
-  'deepseek-v3': { input: 0.0000006, output: 0.000002 }, // ~$0.6/$2 per MTok (estimate)
-  'deepseek.v3': { input: 0.0000006, output: 0.000002 }, // Alternative pattern
-};
-
-/**
- * Attempts to find fallback pricing for a model not in AWS Pricing API.
- * Matches common model name patterns against known pricing.
- */
-function getFallbackPricing(modelId: string): BedrockModelPricing | undefined {
-  if (isApplicationInferenceProfileArn(modelId)) {
-    return undefined;
-  }
-
-  // Normalize model ID: remove region prefix, version suffix
-  // Must match the same prefixes as mapBedrockModelIdToApiName
-  const normalized = getPricingModelId(modelId)
-    .replace(/^(us|eu|apac|us-gov|global|au|jp)\./, '')
-    .toLowerCase();
-
-  // Try exact match patterns
-  for (const [pattern, pricing] of Object.entries(FALLBACK_PRICING)) {
-    if (normalized.includes(pattern)) {
-      logger.debug('[Bedrock Pricing]: Using fallback pricing', {
-        modelId,
-        pattern,
-        pricing,
-      });
-      return pricing;
-    }
-  }
-
-  return undefined;
-}
-
 function calculateModelCost(
   modelPricing: BedrockModelPricing,
   promptTokens: number,
@@ -606,41 +512,21 @@ export function calculateCostWithFetchedPricing(
   const modelName = mapBedrockModelIdToApiName(modelId);
 
   if (!pricingData) {
-    const fallbackPricing = getFallbackPricing(modelId);
-    if (!fallbackPricing) {
-      logger.debug('[Bedrock Pricing]: No pricing data available', {
-        modelId,
-      });
-      return undefined;
-    }
-
-    logger.debug('[Bedrock Pricing]: Using fallback pricing because pricing data is unavailable', {
+    logger.debug('[Bedrock Pricing]: No AWS regional pricing data available', {
       modelId,
-      pricing: fallbackPricing,
     });
-    return calculateModelCost(fallbackPricing, promptTokens, completionTokens);
+    return undefined;
   }
 
-  let modelPricing = pricingData.models.get(modelName);
-
-  // If not found in API pricing, try fallback pricing
+  const modelPricing = pricingData.models.get(modelName);
   if (!modelPricing) {
-    modelPricing = getFallbackPricing(modelId);
-
-    if (!modelPricing) {
-      logger.debug('[Bedrock Pricing]: No pricing found (API or fallback)', {
-        modelId,
-        modelName,
-        region: pricingData.region,
-        availableModels: Array.from(pricingData.models.keys()),
-      });
-      return undefined;
-    }
-
-    logger.debug('[Bedrock Pricing]: Using fallback pricing (not in API)', {
+    logger.debug('[Bedrock Pricing]: No AWS regional pricing found for model', {
       modelId,
-      pricing: modelPricing,
+      modelName,
+      region: pricingData.region,
+      availableModels: Array.from(pricingData.models.keys()),
     });
+    return undefined;
   }
 
   logger.debug('[Bedrock Pricing]: Using fetched pricing', {

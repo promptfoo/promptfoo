@@ -1132,7 +1132,7 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 2. If not cached, fetches from AWS Pricing API (~500ms)
 3. Caches pricing data
 4. Subsequent evals use cached pricing (0ms overhead)
-5. Falls back to built-in pricing for known models if fetch fails
+5. Omits automatic cost reporting when regional pricing cannot be retrieved; use an explicit `cost` override when deterministic offline cost reporting is required
 
 **Requirements:**
 
@@ -1140,7 +1140,7 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 - Pricing API requires IAM authentication
 - Promptfoo attempts explicit credentials or the AWS default credential chain for pricing lookups, even when Bedrock inference itself uses API-key authentication
 
-No configuration is needed. When IAM pricing credentials are unavailable, Promptfoo falls back to built-in pricing for known models.
+No configuration is needed. When IAM pricing credentials are unavailable or AWS does not return standard token pricing for a model, Promptfoo omits automatic cost reporting rather than estimate a charge. Configure `cost` when deterministic cost reporting is required without Pricing API access.
 
 Automatic pricing can identify direct Bedrock model IDs and system-defined inference profile ARNs because those identifiers include the underlying model ID. Application inference profile ARNs are opaque profile resources, so Promptfoo does not infer pricing from their names. Add a `cost` override when you need deterministic cost reporting for application inference profile calls.
 
@@ -1158,7 +1158,7 @@ Real-time pricing supports Bedrock models returned by the AWS Pricing API, inclu
 - **OpenAI**: GPT-OSS (via Bedrock)
 - **Alibaba**: Qwen
 
-When real-time pricing is unavailable, Promptfoo uses built-in pricing for common models that may not yet appear in the AWS Pricing API.
+Automatic pricing uses AWS regional standard input/output token prices only. Batch, flex, priority-tier, and prompt-cache rates are not substituted for standard request pricing.
 
 ### Custom Pricing Override
 
@@ -1173,7 +1173,7 @@ providers:
         output: 0.0002 # USD per token (AWS lists prices per 1K tokens - divide by 1000)
 ```
 
-Custom pricing takes precedence over both real-time and static pricing.
+Custom pricing takes precedence over real-time pricing.
 
 **Note:** AWS Bedrock pricing is typically shown per 1,000 tokens on their pricing page. When configuring `cost` overrides, convert to per-token rates by dividing by 1000. For example, if AWS shows $0.05 per 1K input tokens, use `input: 0.00005` (0.05 / 1000).
 

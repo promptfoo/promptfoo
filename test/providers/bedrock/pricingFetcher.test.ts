@@ -131,6 +131,24 @@ describe('pricingFetcher', () => {
     it('should map DeepSeek R1 model correctly', () => {
       expect(mapBedrockModelIdToApiName('deepseek.r1-v1:0')).toBe('R1');
     });
+
+    it('should map supported newer model IDs to current AWS pricing catalog names', () => {
+      expect(mapBedrockModelIdToApiName('amazon.nova-2-lite-v1:0')).toBe('Nova 2.0 Lite');
+      expect(mapBedrockModelIdToApiName('deepseek.v3-v1:0')).toBe('DeepSeek V3.1');
+      expect(mapBedrockModelIdToApiName('deepseek.v3.2')).toBe('DeepSeek v3.2');
+      expect(mapBedrockModelIdToApiName('mistral.pixtral-large-2502-v1:0')).toBe(
+        'Pixtral Large 25.02',
+      );
+      expect(mapBedrockModelIdToApiName('qwen.qwen3-coder-480b-a35b-v1:0')).toBe(
+        'Qwen3 Coder 480B A35B',
+      );
+      expect(mapBedrockModelIdToApiName('qwen.qwen3-coder-30b-a3b-v1:0')).toBe(
+        'Qwen3 Coder 30B A3B',
+      );
+      expect(mapBedrockModelIdToApiName('qwen.qwen3-235b-a22b-2507-v1:0')).toBe(
+        'Qwen3 235B A22B 2507',
+      );
+    });
   });
 
   describe('calculateCostWithFetchedPricing', () => {
@@ -155,7 +173,7 @@ describe('pricingFetcher', () => {
       expect(cost).toBeCloseTo(0.0105, 6);
     });
 
-    it('should not infer fallback pricing from application inference-profile ARN names', () => {
+    it('should not infer pricing from application inference-profile ARN names', () => {
       const cost = calculateCostWithFetchedPricing(
         'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-4-5-prod',
         null,
@@ -178,7 +196,7 @@ describe('pricingFetcher', () => {
       expect(cost).toBeCloseTo(0.00105, 6);
     });
 
-    it('should use fallback pricing when pricing data is null and the model is known', () => {
+    it('should not estimate costs when regional pricing data is unavailable', () => {
       const cost = calculateCostWithFetchedPricing(
         'anthropic.claude-3-5-sonnet-20241022-v2:0',
         null,
@@ -186,7 +204,7 @@ describe('pricingFetcher', () => {
         500,
       );
 
-      expect(cost).toBeCloseTo(0.0105, 6);
+      expect(cost).toBeUndefined();
     });
 
     it('should return undefined when pricing data is null and no fallback exists', () => {
@@ -217,8 +235,7 @@ describe('pricingFetcher', () => {
       expect(cost).toBeUndefined();
     });
 
-    it('should use fallback pricing for Claude 4 models not in API', () => {
-      // Claude 4 models may not be in the pricing API yet
+    it('should not estimate costs for models absent from returned regional pricing', () => {
       const cost = calculateCostWithFetchedPricing(
         'anthropic.claude-opus-4-20250514-v1:0',
         mockPricingData,
@@ -226,23 +243,7 @@ describe('pricingFetcher', () => {
         500,
       );
 
-      // Should use fallback pricing for claude-opus-4
-      // Fallback: input: 0.000015, output: 0.000075
-      // Expected: 1000 * 0.000015 + 500 * 0.000075 = 0.015 + 0.0375 = 0.0525
-      expect(cost).toBeCloseTo(0.0525, 6);
-    });
-
-    it('should use fallback pricing for DeepSeek v3', () => {
-      const cost = calculateCostWithFetchedPricing(
-        'deepseek.v3-v1:0',
-        mockPricingData,
-        10000,
-        5000,
-      );
-
-      // Fallback: input: 0.0000006, output: 0.000002
-      // Expected: 10000 * 0.0000006 + 5000 * 0.000002 = 0.006 + 0.01 = 0.016
-      expect(cost).toBeCloseTo(0.016, 6);
+      expect(cost).toBeUndefined();
     });
 
     it('should return undefined for completely unknown models', () => {
@@ -254,33 +255,6 @@ describe('pricingFetcher', () => {
       );
 
       expect(cost).toBeUndefined();
-    });
-
-    it('should handle region prefixes in fallback lookup', () => {
-      const cost = calculateCostWithFetchedPricing(
-        'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-        mockPricingData,
-        1000,
-        500,
-      );
-
-      // Should use fallback pricing for claude-sonnet-4-5
-      // Fallback: input: 0.000003, output: 0.000015
-      // Expected: 1000 * 0.000003 + 500 * 0.000015 = 0.003 + 0.0075 = 0.0105
-      expect(cost).toBeCloseTo(0.0105, 6);
-    });
-
-    it('should handle us-gov region prefix in fallback lookup', () => {
-      const cost = calculateCostWithFetchedPricing(
-        'us-gov.anthropic.claude-sonnet-4-5-20250929-v1:0',
-        mockPricingData,
-        1000,
-        500,
-      );
-
-      // Should strip us-gov prefix and use fallback pricing for claude-sonnet-4-5
-      // Fallback: input: 0.000003, output: 0.000015
-      expect(cost).toBeCloseTo(0.0105, 6);
     });
 
     it('should return undefined for negative prompt tokens', () => {
@@ -473,7 +447,7 @@ describe('pricingFetcher', () => {
       expect(result?.models.has('Nova Micro')).toBe(false);
     });
 
-    it('should ignore cache-token rows when selecting base input pricing', async () => {
+    it('should use only standard text-token rows when selecting model pricing', async () => {
       const testRegion = 'eu-central-1';
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),
@@ -529,6 +503,26 @@ describe('pricingFetcher', () => {
             product: {
               attributes: {
                 model: 'Nova Micro',
+                inferenceType: 'Input tokens priority',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.35' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
                 inferenceType: 'Output tokens',
                 feature: 'On-demand Inference',
               },
@@ -539,6 +533,66 @@ describe('pricingFetcher', () => {
                   priceDimensions: {
                     dim1: {
                       pricePerUnit: { USD: '0.00014' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'output tokens batch',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.0000014' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova 2.0 Pro',
+                inferenceType: 'Text Input Token',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.00015' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova 2.0 Pro',
+                inferenceType: 'Text output token',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.0006' },
                     },
                   },
                 },
@@ -559,6 +613,8 @@ describe('pricingFetcher', () => {
 
       expect(result?.models.get('Nova Micro')?.input).toBeCloseTo(0.000000035);
       expect(result?.models.get('Nova Micro')?.output).toBeCloseTo(0.00000014);
+      expect(result?.models.get('Nova 2.0 Pro')?.input).toBeCloseTo(0.00000015);
+      expect(result?.models.get('Nova 2.0 Pro')?.output).toBeCloseTo(0.0000006);
     });
 
     it('should return null when cache is disabled and API fails', async () => {
