@@ -27,7 +27,7 @@ npx promptfoo@latest eval
 ## How it works
 
 1. **Video Generation**: Uses Google Veo to generate videos from text prompts
-2. **Validity Check**: The `is-valid-video` assertion ensures a video was produced
+2. **Managed Video Asset**: The video provider stores the generated video for grading
 3. **Rubric Evaluation**: The `video-rubric` assertion sends the video to Gemini for evaluation
 
 The assertion grades Promptfoo-managed video assets. Built-in video providers store generated

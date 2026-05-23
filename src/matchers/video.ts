@@ -1,5 +1,6 @@
 import logger from '../logger';
 import { DEFAULT_VIDEO_GRADING_PROMPT } from '../prompts/index';
+import { getDefaultProviders } from '../providers/defaults';
 import { DefaultVideoGradingProvider } from '../providers/google/ai.studio';
 import { extractJsonObjects } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
@@ -14,6 +15,7 @@ import { loadRubricPrompt } from './rubric';
 import { fail, normalizeMatcherTokenUsage } from './shared';
 
 import type {
+  ApiProvider,
   Assertion,
   CallApiContextParams,
   GradingConfig,
@@ -30,6 +32,11 @@ interface RawVideoRubricResult {
 }
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
+
+async function getDefaultVideoGradingProvider(): Promise<ApiProvider> {
+  const defaultProviders = await getDefaultProviders();
+  return defaultProviders.videoGradingProvider ?? DefaultVideoGradingProvider;
+}
 
 function failure(
   reason: string,
@@ -133,11 +140,14 @@ export async function matchesVideoRubric(
     ...(vars || {}),
   });
   const videoBase64 = videoToBase64(resolvedVideo.buffer);
+  const defaultProvider = grading.provider
+    ? DefaultVideoGradingProvider
+    : await getDefaultVideoGradingProvider();
 
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
-    DefaultVideoGradingProvider,
+    defaultProvider,
     'video-rubric check',
   );
 
@@ -215,15 +225,15 @@ export async function matchesVideoRubric(
   const { score } = normalized;
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
-  }
+  const thresholdFailed =
+    typeof threshold === 'number' && Number.isFinite(threshold) && score < threshold;
+  pass = pass && !thresholdFailed;
 
   const reason =
     normalized.reason ||
     (pass
       ? 'Video grading passed'
-      : typeof threshold === 'number'
+      : thresholdFailed
         ? `Score ${score} below threshold ${threshold}`
         : 'Video grading failed');
 
