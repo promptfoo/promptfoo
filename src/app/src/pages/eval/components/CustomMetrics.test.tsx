@@ -199,6 +199,18 @@ describe('CustomMetrics', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Click to filter by this metric');
   });
 
+  it('keeps the clickable button as the chip child so the whole chip area filters', () => {
+    renderWithProviders(<CustomMetrics lookup={{ metric1: 10 }} />);
+
+    const chip = screen.getByTestId('metric-metric1');
+    const metricButton = screen.getByRole('button', { name: 'Filter by metric metric1' });
+
+    // The button must be a direct child of the chip so the chip has no
+    // non-clickable padding ring around the button.
+    expect(metricButton.parentElement).toBe(chip);
+    expect(metricButton).toHaveClass('metric-content');
+  });
+
   it('keeps policy details alongside the filter hint tooltip', async () => {
     const user = userEvent.setup();
     const policyMetric = 'policy:policy-1';
