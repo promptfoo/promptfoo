@@ -361,11 +361,6 @@ export async function runPython<T = unknown>(
     let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
-      logger.debug('[Python] Parsed script result', {
-        scriptPath: absPath,
-        resultType: typeof result,
-        resultKeys: result ? Object.keys(result) : undefined,
-      });
     } catch (error) {
       throw new Error(
         `Invalid JSON returned by Python script: ${(error as Error).message}\nStack Trace: ${

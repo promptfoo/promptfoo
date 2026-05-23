@@ -293,6 +293,7 @@ describeOrSkip('PythonWorker', () => {
   let wrongNameWorker: PythonWorker;
   let embeddingsOnlyWorker: PythonWorker;
   let loggingWorker: PythonWorker;
+  let protocolCollisionWorker: PythonWorker;
   const fixturesDir = path.join(__dirname, 'fixtures');
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
   const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
@@ -301,6 +302,7 @@ describeOrSkip('PythonWorker', () => {
   const wrongNamePath = path.join(__dirname, 'fixtures', 'test_wrong_function_name.py');
   const embeddingsOnlyPath = path.join(__dirname, 'fixtures', 'test_embeddings_only.py');
   const loggingPath = path.join(__dirname, 'fixtures', 'logging_provider.py');
+  const protocolCollisionPath = path.join(__dirname, 'fixtures', 'protocol_collision_provider.py');
 
   beforeAll(async () => {
     // Create test fixture
@@ -354,6 +356,18 @@ def call_api(prompt, options, context):
 `,
     );
 
+    await fs.promises.writeFile(
+      protocolCollisionPath,
+      `
+import time
+
+def call_api(prompt, options, context):
+    print("DONE", flush=True)
+    time.sleep(0.02)
+    return {"output": f"Completed: {prompt}"}
+`,
+    );
+
     await Promise.all([
       fs.promises.access(nonexistentPath),
       fs.promises.access(wrongNamePath),
@@ -367,6 +381,7 @@ def call_api(prompt, options, context):
     wrongNameWorker = new PythonWorker(wrongNamePath, 'call_api');
     embeddingsOnlyWorker = new PythonWorker(embeddingsOnlyPath, 'call_api');
     loggingWorker = new PythonWorker(loggingPath, 'call_api');
+    protocolCollisionWorker = new PythonWorker(protocolCollisionPath, 'call_api');
 
     await Promise.all([
       sharedWorker.initialize(),
@@ -376,6 +391,7 @@ def call_api(prompt, options, context):
       wrongNameWorker.initialize(),
       embeddingsOnlyWorker.initialize(),
       loggingWorker.initialize(),
+      protocolCollisionWorker.initialize(),
     ]);
   });
 
@@ -389,12 +405,19 @@ def call_api(prompt, options, context):
         wrongNameWorker,
         embeddingsOnlyWorker,
         loggingWorker,
+        protocolCollisionWorker,
       ]
         .filter((worker): worker is PythonWorker => Boolean(worker))
         .map((worker) => worker.shutdown()),
     );
 
-    for (const fixturePath of [testScriptPath, multiApiPath, errorPath, loggingPath]) {
+    for (const fixturePath of [
+      testScriptPath,
+      multiApiPath,
+      errorPath,
+      loggingPath,
+      protocolCollisionPath,
+    ]) {
       if (fs.existsSync(fixturePath)) {
         fs.unlinkSync(fixturePath);
       }
@@ -474,6 +497,22 @@ def call_api(prompt, options, context):
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringContaining('Python worker stderr: INFO:root:provider startup details'),
       );
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should not treat provider stdout as a response completion marker',
+    async () => {
+      const result = (await protocolCollisionWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+      const secondResult = (await protocolCollisionWorker.call('call_api', ['again', {}, {}])) as {
+        output: string;
+      };
+
+      expect(result.output).toBe('Completed: hello');
+      expect(secondResult.output).toBe('Completed: again');
     },
     TEST_TIMEOUT,
   );

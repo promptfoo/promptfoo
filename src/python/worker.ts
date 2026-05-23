@@ -27,6 +27,7 @@ export class PythonWorker {
   private inTraceback: boolean = false;
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
+    responseFile: string;
     resolve: (result: unknown) => void;
     reject: (error: Error) => void;
   } | null = null;
@@ -83,8 +84,8 @@ export class PythonWorker {
             this.onReady();
           }
           resolve();
-        } else if (message.startsWith('DONE')) {
-          this.handleDone();
+        } else if (message.startsWith('DONE|')) {
+          this.handleDone(message.slice('DONE|'.length));
         }
       });
 
@@ -273,12 +274,12 @@ export class PythonWorker {
 
       // Wait for DONE
       await new Promise<unknown>((resolve, reject) => {
-        this.pendingRequest = { resolve, reject };
+        this.pendingRequest = { responseFile, resolve, reject };
       });
 
-      // Read response with exponential backoff retry
-      // Python verifies file readability before sending DONE, but OS-level delays may still occur
-      let responseData: string;
+      // Read response with exponential backoff retry.
+      // Python verifies file readability before sending DONE, but OS-level delays may still occur.
+      let responseData: string | undefined;
       let lastError: unknown;
 
       // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms, 2048ms, 4096ms, 5000ms (capped)...
@@ -287,23 +288,23 @@ export class PythonWorker {
         try {
           responseData = await fs.readFile(responseFile, 'utf-8');
           if (attempt > 0) {
-            logger.debug(`Response file read succeeded on attempt ${attempt + 1} after ${delay}ms`);
+            logger.debug(`Response file read succeeded on attempt ${attempt + 1}`);
           }
           break;
         } catch (error: unknown) {
           lastError = error;
           if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
-            // File doesn't exist yet, wait and retry with exponential backoff
+            // File doesn't exist yet, wait and retry with exponential backoff.
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
           }
-          // Non-ENOENT error, don't retry
+          // Non-ENOENT error, don't retry.
           throw error;
         }
       }
 
       // If we exhausted all retries, throw with debugging info
-      if (!responseData!) {
+      if (!responseData) {
         try {
           const files = await fs.readdir(tempDirectory);
           logger.error(
@@ -314,10 +315,12 @@ export class PythonWorker {
             `Failed to read Python worker response file: ${path.basename(responseFile)}`,
           );
         }
-        throw lastError;
+        throw lastError instanceof Error
+          ? lastError
+          : new Error('Python worker response file was empty after completion signal');
       }
 
-      const response = JSON.parse(responseData!);
+      const response = JSON.parse(responseData);
 
       if (response.type === 'error') {
         throw new Error(`Python error: ${response.error}\n${response.traceback || ''}`);
@@ -345,8 +348,8 @@ export class PythonWorker {
     });
   }
 
-  private handleDone(): void {
-    if (this.pendingRequest) {
+  private handleDone(responseFile: string): void {
+    if (this.pendingRequest?.responseFile === responseFile) {
       this.pendingRequest.resolve(undefined);
       this.pendingRequest = null;
     }
