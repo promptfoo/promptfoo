@@ -836,20 +836,20 @@ When brainstorming assertions:
 - Generates python code for any objective assertions
 - Uses a specified natural language assertion type (pi, llm-rubric, or g-eval) for any subjective assertion.
 
-| Option                      | Description                                                     | Default              |
-| --------------------------- | --------------------------------------------------------------- | -------------------- |
-| `-t, --type <type>`         | The assertion type to use for generated subjective assertions.  | pi                   |
-| `-c, --config <path>`       | Path to the configuration file that contains at least 1 prompt. | promptfooconfig.yaml |
-| `-w, --write`               | Write the generated assertions directly to the config file      | false                |
-| `-i, --instructions <text>` | Custom instructions for assertion generation                    |                      |
-| `-o, --output <path>`       | Path to write the generated assertions                          | stdout               |
-| `--numAssertions <number>`  | Number of assertions to generate                                | 5                    |
-| `--provider <provider>`     | Provider to use for generating assertions                       | default grader       |
-| `--no-cache`                | Do not read or write results to disk cache                      | false                |
-| `--enhanced`                | Use enhanced assertion generation                               | false                |
-| `--coverage`                | Enable coverage analysis to map assertions to requirements      | false                |
-| `--validate`                | Validate assertions against sample outputs                      | false                |
-| `--negative-tests`          | Generate negative test assertions (should-not patterns)         | false                |
+| Option                      | Description                                                     | Default                                        |
+| --------------------------- | --------------------------------------------------------------- | ---------------------------------------------- |
+| `-t, --type <type>`         | The assertion type to use for generated subjective assertions.  | pi with `WITHPI_API_KEY`; otherwise llm-rubric |
+| `-c, --config <path>`       | Path to the configuration file that contains at least 1 prompt. | promptfooconfig.yaml                           |
+| `-w, --write`               | Write the generated assertions directly to the config file      | false                                          |
+| `-i, --instructions <text>` | Custom instructions for assertion generation                    |                                                |
+| `-o, --output <path>`       | Path to write the generated assertions                          | stdout                                         |
+| `--numAssertions <number>`  | Number of assertions to generate                                | 5                                              |
+| `--provider <provider>`     | Provider to use for generating assertions                       | default grader                                 |
+| `--no-cache`                | Do not read or write results to disk cache                      | false                                          |
+| `--enhanced`                | Use enhanced assertion generation                               | false                                          |
+| `--coverage`                | Enable coverage analysis to map assertions to requirements      | false                                          |
+| `--validate`                | Validate assertions against sample outputs                      | false                                          |
+| `--negative-tests`          | Generate negative test assertions (should-not patterns)         | false                                          |
 
 For example, this command will modify your default config file (usually `promptfooconfig.yaml`) with new test cases:
 
@@ -857,7 +857,7 @@ For example, this command will modify your default config file (usually `promptf
 promptfoo generate assertions -w
 ```
 
-This command will generate `pi` and `python` assertions for a specific config and write them to a file, while following special instructions:
+This command will generate subjective and `python` assertions for a specific config and write them to a file, while following special instructions:
 
 ```sh
 promptfoo generate assertions -c my_config.yaml -o new_tests.yaml -i 'I need assertions about pronunciation'

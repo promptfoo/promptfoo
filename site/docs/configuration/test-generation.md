@@ -89,17 +89,17 @@ promptfoo generate assertions
 
 Use `--type` to specify the assertion style:
 
-| Type         | Description                                 |
-| ------------ | ------------------------------------------- |
-| `pi`         | Prompt-based inference assertions (default) |
-| `g-eval`     | G-Eval style numeric scoring                |
-| `llm-rubric` | Rubric-based LLM grading                    |
+| Type         | Description                                                           |
+| ------------ | --------------------------------------------------------------------- |
+| `pi`         | Prompt-based inference assertions when `WITHPI_API_KEY` is configured |
+| `g-eval`     | G-Eval style numeric scoring                                          |
+| `llm-rubric` | Rubric-based LLM grading (default without Pi access)                  |
 
 ### Options
 
 | Option                | Description                                                |
 | --------------------- | ---------------------------------------------------------- |
-| `--type <type>`       | Assertion type: pi, g-eval, llm-rubric                     |
+| `--type <type>`       | Assertion type override: pi, g-eval, llm-rubric            |
 | `--numAssertions <n>` | Number of assertions to generate (default: 5)              |
 | `--enhanced`          | Use enhanced assertion generation                          |
 | `--coverage`          | Enable coverage analysis to map assertions to requirements |

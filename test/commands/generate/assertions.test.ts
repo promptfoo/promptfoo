@@ -5,6 +5,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { synthesizeFromTestSuite } from '../../../src/assertions/synthesis';
 import { disableCache } from '../../../src/cache';
 import { doGenerateAssertions } from '../../../src/commands/generate/assertions';
+import { getEnvString } from '../../../src/envars';
+import { generateAssertions } from '../../../src/generation/assertions';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
 
@@ -38,6 +40,13 @@ vi.mock('fs/promises', () => ({
 }));
 vi.mock('js-yaml');
 vi.mock('../../../src/assertions/synthesis');
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
+  getEnvString: vi.fn(),
+}));
+vi.mock('../../../src/generation/assertions', () => ({
+  generateAssertions: vi.fn(),
+}));
 vi.mock('../../../src/util/config/load', () => ({
   resolveConfigs: vi.fn(),
 }));
@@ -122,6 +131,16 @@ describe('assertion generation', () => {
       vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
       vi.mocked(disableCache).mockImplementation(() => undefined);
       vi.mocked(telemetry.record).mockImplementation(() => undefined);
+      vi.mocked(getEnvString).mockReturnValue(undefined as never);
+      vi.mocked(generateAssertions).mockResolvedValue({
+        assertions: [],
+        metadata: {
+          totalGenerated: 0,
+          pythonConverted: 0,
+          durationMs: 0,
+          provider: 'test-provider',
+        },
+      } as never);
 
       vi.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,
@@ -145,6 +164,26 @@ describe('assertion generation', () => {
       });
 
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', 'yaml content');
+    });
+
+    it('uses llm-rubric for enhanced generation when Pi access is unavailable', async () => {
+      const configPath = 'config.yaml';
+
+      await doGenerateAssertions({
+        cache: true,
+        config: configPath,
+        enhanced: true,
+        output: 'output.yaml',
+        write: false,
+        defaultConfig: {},
+        defaultConfigPath: configPath,
+      });
+
+      expect(generateAssertions).toHaveBeenCalledWith(
+        mockTestSuite.prompts,
+        mockTestSuite.tests || [],
+        expect.objectContaining({ type: 'llm-rubric' }),
+      );
     });
 
     it('should throw error for unsupported file type', async () => {

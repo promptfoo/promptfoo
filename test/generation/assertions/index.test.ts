@@ -112,7 +112,7 @@ describe('generation assertions index', () => {
       .mockImplementation((prompt: string) =>
         Promise.resolve({
           output: prompt.includes('Return JSON?')
-            ? '```python\nreturn {"pass": True, "score": 1.0}\n```'
+            ? '```python\nreturn {"pass": True, "score": 1.0, "reason": "Valid JSON"}\n```'
             : 'None',
         }),
       );
@@ -133,7 +133,11 @@ describe('generation assertions index', () => {
 
     expect(result.assertions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'python', metric: 'JSON' }),
+        expect.objectContaining({
+          type: 'python',
+          metric: 'JSON',
+          value: 'return {"pass": True, "score": 1.0, "reason": "Valid JSON"}\n',
+        }),
         expect.objectContaining({ type: 'llm-rubric', metric: 'Tone' }),
       ]),
     );

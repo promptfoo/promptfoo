@@ -207,7 +207,7 @@ export function GenerationProgressDialog({
       <DialogContent className={cn('sm:max-w-md', hasStreamedItems && 'sm:max-w-2xl')}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-5 text-amber-500" />
+            <Sparkles className="size-5 text-primary" />
             {title}
           </DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}

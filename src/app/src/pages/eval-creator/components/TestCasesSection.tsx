@@ -383,12 +383,8 @@ const TestCasesSection = ({ varsList, prompts = [], onOpenYamlEditor }: TestCase
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    onClick={() => setGenerateDialogOpen(true)}
-                    className="border-amber-300 hover:bg-amber-50 dark:border-amber-700 dark:hover:bg-amber-950/30"
-                  >
-                    <Sparkles className="mr-2 size-4 text-amber-500" />
+                  <Button variant="outline" onClick={() => setGenerateDialogOpen(true)}>
+                    <Sparkles className="mr-2 size-4 text-primary" />
                     Generate with AI
                   </Button>
                 </TooltipTrigger>

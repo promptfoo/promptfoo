@@ -452,40 +452,57 @@ generationRouter.get('/stream/:jobId', (req: Request, res: Response): void => {
     return;
   }
 
+  const eventName = `job:${jobId}`;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let isClosed = false;
+
+  const cleanup = () => {
+    if (isClosed) {
+      return;
+    }
+
+    isClosed = true;
+    jobEventEmitter.off(eventName, eventHandler);
+    if (heartbeat) {
+      clearInterval(heartbeat);
+      heartbeat = undefined;
+    }
+    logger.debug(`SSE connection closed for job ${jobId}`);
+  };
+
   // Subscribe to job events
   const eventHandler = (event: JobEvent) => {
+    if (isClosed) {
+      return;
+    }
+
     try {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
 
       // Close connection on complete or error
       if (event.type === 'complete' || event.type === 'error') {
+        cleanup();
         res.end();
       }
     } catch (err) {
+      cleanup();
       logger.debug(`SSE write error for job ${jobId}: ${err}`);
     }
   };
 
-  jobEventEmitter.on(`job:${jobId}`, eventHandler);
-
-  // Handle client disconnect
-  req.on('close', () => {
-    logger.debug(`SSE connection closed for job ${jobId}`);
-    jobEventEmitter.off(`job:${jobId}`, eventHandler);
-  });
+  jobEventEmitter.on(eventName, eventHandler);
 
   // Send heartbeat every 30s to keep connection alive
-  const heartbeat = setInterval(() => {
+  heartbeat = setInterval(() => {
     try {
       res.write(`:heartbeat\n\n`);
     } catch {
-      clearInterval(heartbeat);
+      cleanup();
     }
   }, 30000);
 
-  req.on('close', () => {
-    clearInterval(heartbeat);
-  });
+  // Handle both client disconnects and terminal server events.
+  req.on('close', cleanup);
 });
 
 // =============================================================================

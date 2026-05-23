@@ -5,6 +5,7 @@ import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache } from '../../../src/cache';
 import { doGenerateTests, generateTestsCommand } from '../../../src/commands/generate/tests';
+import { getEnvString } from '../../../src/envars';
 import { generateTestSuite } from '../../../src/generation/index';
 import telemetry from '../../../src/telemetry';
 import { resolveConfigs } from '../../../src/util/config/load';
@@ -21,6 +22,10 @@ vi.mock('../../../src/util/config/load', () => ({
 }));
 vi.mock('../../../src/cache', () => ({
   disableCache: vi.fn(),
+}));
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
+  getEnvString: vi.fn(),
 }));
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -114,6 +119,7 @@ describe('generate tests command', () => {
       vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
       vi.mocked(disableCache).mockImplementation(() => undefined);
       vi.mocked(telemetry.record).mockResolvedValue(undefined as never);
+      vi.mocked(getEnvString).mockReturnValue(undefined as never);
 
       vi.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,
@@ -147,6 +153,29 @@ describe('generate tests command', () => {
         }),
       );
       expect(fs.writeFileSync).toHaveBeenCalledWith('output.yaml', 'yaml content');
+    });
+
+    it('defaults generated assertions to llm-rubric without Pi access', async () => {
+      const configPath = 'config.yaml';
+
+      await doGenerateTests({
+        cache: true,
+        config: configPath,
+        numPersonas: '1',
+        numTestCasesPerPersona: '1',
+        output: 'output.yaml',
+        write: false,
+        defaultConfig: {},
+        defaultConfigPath: configPath,
+      });
+
+      expect(generateTestSuite).toHaveBeenCalledWith(
+        mockTestSuite.prompts,
+        mockTestSuite.tests || [],
+        expect.objectContaining({
+          assertions: expect.objectContaining({ type: 'llm-rubric' }),
+        }),
+      );
     });
 
     it('should throw error for unsupported file type', async () => {

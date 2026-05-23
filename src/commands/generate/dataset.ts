@@ -48,6 +48,26 @@ type GeneratedConfigTest = {
   metadata?: Record<string, unknown>;
 };
 
+type ConfigAddition = {
+  tests: GeneratedConfigTest[];
+  defaultTest?: { assert: Assertion[] };
+};
+
+interface GeneratedDatasetOutput {
+  results: Record<string, string>[];
+  configTests: GeneratedConfigTest[];
+  diversityScore?: number;
+  generatedAssertions?: Assertion[];
+}
+
+interface GenerationSettings {
+  useEnhanced: boolean;
+  shouldGenerateAssertions: boolean;
+  hasPiAccess: boolean;
+  effectiveAssertionType: 'pi' | 'g-eval' | 'llm-rubric';
+  numAssertions: number;
+}
+
 function buildGeneratedConfigTests(
   testCases: Record<string, string>[],
   edgeCases: Array<{ vars: Record<string, string>; type: string; description: string }> = [],
@@ -65,32 +85,275 @@ function buildGeneratedConfigTests(
   ];
 }
 
-export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
-  setupEnv(options.envFile);
-  if (!options.cache) {
-    logger.info('Cache is disabled.');
-    disableCache();
-  }
-
-  let testSuite: TestSuite;
+function getConfigPath(options: DatasetGenerateOptions): string {
   const configPath = options.config || options.defaultConfigPath;
-  if (configPath) {
-    const resolved = await resolveConfigs(
-      {
-        config: [configPath],
-      },
-      options.defaultConfig,
-      'DatasetGeneration',
-    );
-    testSuite = resolved.testSuite;
-  } else {
+  if (!configPath) {
     throw new Error(
       `Could not find a config file. Pass --config path/to/promptfooconfig.yaml or run "${promptfooCommand(
         'init',
       )}" to create one.`,
     );
   }
+  return configPath;
+}
 
+function getGenerationSettings(options: DatasetGenerateOptions): GenerationSettings {
+  const useEnhanced =
+    options.enhanced || options.edgeCases || options.diversity || options.iterative;
+  const shouldGenerateAssertions = options.withAssertions ?? options.assertions ?? true;
+  const hasPiAccess = !!getEnvString('WITHPI_API_KEY');
+  return {
+    useEnhanced: Boolean(useEnhanced),
+    shouldGenerateAssertions,
+    hasPiAccess,
+    effectiveAssertionType: options.assertionType || (hasPiAccess ? 'pi' : 'llm-rubric'),
+    numAssertions: Number.parseInt(options.numAssertions || '3', 10),
+  };
+}
+
+function buildDatasetOptions(options: DatasetGenerateOptions): Partial<DatasetGenerationOptions> {
+  const datasetOptions: Partial<DatasetGenerationOptions> = {
+    instructions: options.instructions,
+    numPersonas: Number.parseInt(options.numPersonas, 10),
+    numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+    provider: options.provider,
+  };
+  if (options.edgeCases) {
+    datasetOptions.edgeCases = {
+      enabled: true,
+      types: ['boundary', 'format', 'empty', 'special-chars'],
+      count: 10,
+      includeAdversarial: false,
+    };
+  }
+  if (options.diversity) {
+    datasetOptions.diversity = {
+      enabled: true,
+      targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
+      measureMethod: 'text',
+    };
+  }
+  if (options.iterative) {
+    datasetOptions.iterative = { enabled: true, maxRounds: 2, targetDiversity: 0.7 };
+  }
+  return datasetOptions;
+}
+
+function logEnhancedDetails(
+  edgeCases: Array<unknown> | undefined,
+  diversityScore: number | undefined,
+  generatedAssertions?: Assertion[],
+): void {
+  if (edgeCases && edgeCases.length > 0) {
+    logger.info(`Generated ${edgeCases.length} edge cases`);
+  }
+  if (diversityScore !== undefined) {
+    logger.info(`Diversity score: ${(diversityScore * 100).toFixed(1)}%`);
+  }
+  if (generatedAssertions && generatedAssertions.length > 0) {
+    logger.info(`Generated ${generatedAssertions.length} assertions`);
+  }
+}
+
+async function generateEnhancedWithAssertions(
+  testSuite: TestSuite,
+  options: DatasetGenerateOptions,
+  settings: GenerationSettings,
+): Promise<GeneratedDatasetOutput> {
+  logger.info('Using enhanced generation with assertions...');
+  logger.info(
+    settings.hasPiAccess
+      ? 'Using PI-based assertions'
+      : 'Using LLM-rubric assertions (set WITHPI_API_KEY for PI assertions)',
+  );
+  const genResult = await generateTestSuite(testSuite.prompts, testSuite.tests || [], {
+    dataset: buildDatasetOptions(options),
+    assertions: {
+      type: settings.effectiveAssertionType,
+      numAssertions: settings.numAssertions,
+    },
+  });
+  const configTests = buildGeneratedConfigTests(
+    genResult.dataset?.testCases || [],
+    genResult.dataset?.edgeCases,
+  );
+  const generatedAssertions = genResult.assertions?.assertions;
+  const diversityScore = genResult.dataset?.diversity?.score;
+  logEnhancedDetails(genResult.dataset?.edgeCases, diversityScore, generatedAssertions);
+  return {
+    configTests,
+    results: configTests.map((test) => test.vars),
+    diversityScore,
+    generatedAssertions,
+  };
+}
+
+async function generateEnhancedDataset(
+  testSuite: TestSuite,
+  options: DatasetGenerateOptions,
+): Promise<GeneratedDatasetOutput> {
+  logger.info('Using enhanced dataset generation...');
+  const genResult = await generateDataset(
+    testSuite.prompts,
+    testSuite.tests || [],
+    buildDatasetOptions(options),
+  );
+  const configTests = buildGeneratedConfigTests(genResult.testCases, genResult.edgeCases);
+  const diversityScore = genResult.diversity?.score;
+  logEnhancedDetails(genResult.edgeCases, diversityScore);
+  return {
+    configTests,
+    results: configTests.map((test) => test.vars),
+    diversityScore,
+  };
+}
+
+async function generateLegacyDataset(
+  testSuite: TestSuite,
+  options: DatasetGenerateOptions,
+): Promise<GeneratedDatasetOutput> {
+  const results = await synthesizeFromTestSuite(testSuite, {
+    instructions: options.instructions,
+    numPersonas: Number.parseInt(options.numPersonas, 10),
+    numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
+    provider: options.provider,
+  });
+  return { configTests: buildGeneratedConfigTests(results), results };
+}
+
+async function generateOutput(
+  testSuite: TestSuite,
+  options: DatasetGenerateOptions,
+  settings: GenerationSettings,
+): Promise<GeneratedDatasetOutput> {
+  if (settings.useEnhanced && settings.shouldGenerateAssertions) {
+    return generateEnhancedWithAssertions(testSuite, options, settings);
+  }
+  if (settings.useEnhanced) {
+    return generateEnhancedDataset(testSuite, options);
+  }
+  return generateLegacyDataset(testSuite, options);
+}
+
+function buildConfigAddition(generated: GeneratedDatasetOutput): ConfigAddition {
+  const configAddition: ConfigAddition = { tests: generated.configTests };
+  if (generated.generatedAssertions?.length) {
+    configAddition.defaultTest = { assert: generated.generatedAssertions };
+  }
+  return configAddition;
+}
+
+function assertionsMessage(assertions?: Assertion[]): string {
+  if (!assertions?.length) {
+    return '';
+  }
+  return ` and ${assertions.length} assertion${assertions.length === 1 ? '' : 's'}`;
+}
+
+async function writeOutput(
+  options: DatasetGenerateOptions,
+  generated: GeneratedDatasetOutput,
+  yamlString: string,
+): Promise<void> {
+  if (!options.output) {
+    printBorder();
+    logger.info('New test Cases');
+    printBorder();
+    logger.info(yamlString);
+    return;
+  }
+  if (options.output.endsWith('.csv')) {
+    await fs.writeFile(options.output, serializeObjectArrayAsCSV(generated.results));
+    printBorder();
+    logger.info(`Wrote ${generated.results.length} new test cases to ${options.output}`);
+    if (generated.generatedAssertions?.length) {
+      logger.info(
+        chalk.yellow(
+          'Note: CSV format does not support assertions. Use YAML output to include assertions.',
+        ),
+      );
+    }
+  } else if (options.output.endsWith('.yaml')) {
+    await fs.writeFile(options.output, yamlString);
+    printBorder();
+    logger.info(
+      `Wrote ${generated.results.length} new test cases${assertionsMessage(generated.generatedAssertions)} to ${options.output}`,
+    );
+  } else {
+    throw new Error(`Unsupported output file type: ${options.output}`);
+  }
+  printBorder();
+}
+
+function asTestArray(
+  tests: UnifiedConfig['tests'],
+): Array<TestCase | string | GeneratedConfigTest> {
+  if (Array.isArray(tests)) {
+    return tests as Array<TestCase | string | GeneratedConfigTest>;
+  }
+  return tests ? [tests as TestCase | string] : [];
+}
+
+async function appendToConfig(
+  configPath: string,
+  configAddition: ConfigAddition,
+  generated: GeneratedDatasetOutput,
+): Promise<void> {
+  const existingConfig = yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>;
+  existingConfig.tests = [...asTestArray(existingConfig.tests), ...configAddition.tests];
+  if (configAddition.defaultTest?.assert) {
+    const existingDefaultTest =
+      typeof existingConfig.defaultTest === 'object' && existingConfig.defaultTest !== null
+        ? existingConfig.defaultTest
+        : {};
+    const existingAssertions = Array.isArray(
+      (existingDefaultTest as { assert?: Assertion[] }).assert,
+    )
+      ? (existingDefaultTest as { assert: Assertion[] }).assert
+      : [];
+    existingConfig.defaultTest = {
+      ...existingDefaultTest,
+      assert: [...existingAssertions, ...configAddition.defaultTest.assert],
+    };
+  }
+  await fs.writeFile(configPath, yaml.dump(existingConfig));
+  logger.info(
+    `Wrote ${generated.results.length} new test cases${assertionsMessage(generated.generatedAssertions)} to ${configPath}`,
+  );
+  logger.info(
+    chalk.green(`Run ${chalk.bold(promptfooCommand('eval'))} to run the generated tests`),
+  );
+}
+
+async function finishOutput(
+  options: DatasetGenerateOptions,
+  configPath: string,
+  generated: GeneratedDatasetOutput,
+): Promise<void> {
+  const configAddition = buildConfigAddition(generated);
+  await writeOutput(options, generated, yaml.dump(configAddition));
+  printBorder();
+  if (!options.write) {
+    logger.info(
+      `Copy the above test cases or run ${chalk.greenBright(
+        'promptfoo generate dataset --write',
+      )} to write directly to the config`,
+    );
+    return;
+  }
+  await appendToConfig(configPath, configAddition, generated);
+}
+
+export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
+  setupEnv(options.envFile);
+  if (!options.cache) {
+    logger.info('Cache is disabled.');
+    disableCache();
+  }
+  const configPath = getConfigPath(options);
+  const testSuite: TestSuite = (
+    await resolveConfigs({ config: [configPath] }, options.defaultConfig, 'DatasetGeneration')
+  ).testSuite;
   const startTime = Date.now();
   telemetry.record('command_used', {
     name: 'generate_dataset - started',
@@ -98,239 +361,24 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numTestsExisting: (testSuite.tests || []).length,
   });
 
-  // Determine whether to use the enhanced generation system
-  const useEnhanced =
-    options.enhanced || options.edgeCases || options.diversity || options.iterative;
-
-  // Determine whether to generate assertions (default: true, unless --no-assertions)
-  const shouldGenerateAssertions = options.withAssertions ?? options.assertions ?? true;
-
-  // Detect PI access and determine assertion type
-  const hasPiAccess = !!getEnvString('WITHPI_API_KEY');
-  const effectiveAssertionType: 'pi' | 'g-eval' | 'llm-rubric' =
-    options.assertionType || (hasPiAccess ? 'pi' : 'llm-rubric');
-  const numAssertions = Number.parseInt(options.numAssertions || '3', 10);
-
-  let results: Record<string, string>[];
-  let configTests: GeneratedConfigTest[] = [];
-  let diversityScore: number | undefined;
-  let generatedAssertions: Assertion[] | undefined;
-
-  if (shouldGenerateAssertions && useEnhanced) {
-    // Use combined generation for test cases + assertions
-    logger.info('Using enhanced generation with assertions...');
-    if (hasPiAccess) {
-      logger.info('Using PI-based assertions');
-    } else {
-      logger.info('Using LLM-rubric assertions (set WITHPI_API_KEY for PI assertions)');
-    }
-
-    const datasetOpts: Partial<DatasetGenerationOptions> = {
-      instructions: options.instructions,
-      numPersonas: Number.parseInt(options.numPersonas, 10),
-      numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
-      provider: options.provider,
-    };
-    if (options.edgeCases) {
-      datasetOpts.edgeCases = {
-        enabled: true,
-        types: ['boundary', 'format', 'empty', 'special-chars'],
-        count: 10,
-        includeAdversarial: false,
-      };
-    }
-    if (options.diversity) {
-      datasetOpts.diversity = {
-        enabled: true,
-        targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
-        measureMethod: 'text',
-      };
-    }
-    if (options.iterative) {
-      datasetOpts.iterative = { enabled: true, maxRounds: 2, targetDiversity: 0.7 };
-    }
-
-    const genResult = await generateTestSuite(testSuite.prompts, testSuite.tests || [], {
-      dataset: datasetOpts,
-      assertions: {
-        type: effectiveAssertionType,
-        numAssertions,
-      },
-    });
-
-    configTests = buildGeneratedConfigTests(
-      genResult.dataset?.testCases || [],
-      genResult.dataset?.edgeCases,
-    );
-    results = configTests.map((test) => test.vars);
-    diversityScore = genResult.dataset?.diversity?.score;
-    generatedAssertions = genResult.assertions?.assertions;
-
-    // Log generation details
-    if (genResult.dataset?.edgeCases && genResult.dataset.edgeCases.length > 0) {
-      logger.info(`Generated ${genResult.dataset.edgeCases.length} edge cases`);
-    }
-    if (genResult.dataset?.diversity) {
-      logger.info(`Diversity score: ${(genResult.dataset.diversity.score * 100).toFixed(1)}%`);
-    }
-    if (generatedAssertions && generatedAssertions.length > 0) {
-      logger.info(`Generated ${generatedAssertions.length} assertions`);
-    }
-  } else if (useEnhanced) {
-    logger.info('Using enhanced dataset generation...');
-
-    const datasetOpts: Partial<DatasetGenerationOptions> = {
-      instructions: options.instructions,
-      numPersonas: Number.parseInt(options.numPersonas, 10),
-      numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
-      provider: options.provider,
-    };
-    if (options.edgeCases) {
-      datasetOpts.edgeCases = {
-        enabled: true,
-        types: ['boundary', 'format', 'empty', 'special-chars'],
-        count: 10,
-        includeAdversarial: false,
-      };
-    }
-    if (options.diversity) {
-      datasetOpts.diversity = {
-        enabled: true,
-        targetScore: options.diversityTarget ? Number.parseFloat(options.diversityTarget) : 0.7,
-        measureMethod: 'text',
-      };
-    }
-    if (options.iterative) {
-      datasetOpts.iterative = { enabled: true, maxRounds: 2, targetDiversity: 0.7 };
-    }
-
-    const genResult = await generateDataset(testSuite.prompts, testSuite.tests || [], datasetOpts);
-
-    configTests = buildGeneratedConfigTests(genResult.testCases, genResult.edgeCases);
-    results = configTests.map((test) => test.vars);
-    diversityScore = genResult.diversity?.score;
-
-    // Log enhanced generation details
-    if (genResult.edgeCases && genResult.edgeCases.length > 0) {
-      logger.info(`Generated ${genResult.edgeCases.length} edge cases`);
-    }
-    if (genResult.diversity) {
-      logger.info(`Diversity score: ${(genResult.diversity.score * 100).toFixed(1)}%`);
-    }
-  } else {
-    // Use the original synthesis for backward compatibility
-    results = await synthesizeFromTestSuite(testSuite, {
-      instructions: options.instructions,
-      numPersonas: Number.parseInt(options.numPersonas, 10),
-      numTestCasesPerPersona: Number.parseInt(options.numTestCasesPerPersona, 10),
-      provider: options.provider,
-    });
-    configTests = buildGeneratedConfigTests(results);
-  }
-
-  // Build config addition with test cases and optionally assertions
-  const configAddition: {
-    tests: Array<{ vars: Record<string, string> }>;
-    defaultTest?: { assert: Assertion[] };
-  } = {
-    tests: configTests,
-  };
-  if (generatedAssertions && generatedAssertions.length > 0) {
-    configAddition.defaultTest = { assert: generatedAssertions };
-  }
-  const yamlString = yaml.dump(configAddition);
-  if (options.output) {
-    // Should the output be written as a YAML or CSV?
-    if (options.output.endsWith('.csv')) {
-      // Note: CSV output only contains test cases, not assertions
-      await fs.writeFile(options.output, serializeObjectArrayAsCSV(results));
-      printBorder();
-      logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
-      if (generatedAssertions && generatedAssertions.length > 0) {
-        logger.info(
-          chalk.yellow(
-            'Note: CSV format does not support assertions. Use YAML output to include assertions.',
-          ),
-        );
-      }
-    } else if (options.output.endsWith('.yaml')) {
-      await fs.writeFile(options.output, yamlString);
-      printBorder();
-      const assertionMsg =
-        generatedAssertions && generatedAssertions.length > 0
-          ? ` and ${generatedAssertions.length} assertion${generatedAssertions.length === 1 ? '' : 's'}`
-          : '';
-      logger.info(`Wrote ${results.length} new test cases${assertionMsg} to ${options.output}`);
-    } else {
-      throw new Error(`Unsupported output file type: ${options.output}`);
-    }
-    printBorder();
-  } else {
-    printBorder();
-    logger.info('New test Cases');
-    printBorder();
-    logger.info(yamlString);
-  }
-
-  printBorder();
-  if (options.write && configPath) {
-    const existingConfig = yaml.load(
-      await fs.readFile(configPath, 'utf8'),
-    ) as Partial<UnifiedConfig>;
-    // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
-    const existingTests = existingConfig.tests;
-    let testsArray: Array<TestCase | string | { vars: Record<string, string> }> = [];
-    if (Array.isArray(existingTests)) {
-      testsArray = existingTests as typeof testsArray;
-    } else if (existingTests) {
-      testsArray = [existingTests as TestCase | string];
-    }
-    existingConfig.tests = [...testsArray, ...configAddition.tests];
-    // Add generated assertions to defaultTest.assert if present
-    if (configAddition.defaultTest?.assert) {
-      const existingDefaultTest =
-        typeof existingConfig.defaultTest === 'object' && existingConfig.defaultTest !== null
-          ? existingConfig.defaultTest
-          : {};
-      const existingAssertions = Array.isArray(
-        (existingDefaultTest as { assert?: Assertion[] }).assert,
-      )
-        ? (existingDefaultTest as { assert: Assertion[] }).assert
-        : [];
-      existingConfig.defaultTest = {
-        ...existingDefaultTest,
-        assert: [...existingAssertions, ...configAddition.defaultTest.assert],
-      };
-    }
-
-    await fs.writeFile(configPath, yaml.dump(existingConfig));
-    const assertionMsg =
-      generatedAssertions && generatedAssertions.length > 0
-        ? ` and ${generatedAssertions.length} assertion${generatedAssertions.length === 1 ? '' : 's'}`
-        : '';
-    logger.info(`Wrote ${results.length} new test cases${assertionMsg} to ${configPath}`);
-    const runCommand = promptfooCommand('eval');
-    logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated tests`));
-  } else {
-    logger.info(
-      `Copy the above test cases or run ${chalk.greenBright(
-        'promptfoo generate dataset --write',
-      )} to write directly to the config`,
-    );
-  }
+  const settings = getGenerationSettings(options);
+  const generated = await generateOutput(testSuite, options, settings);
+  await finishOutput(options, configPath, generated);
 
   telemetry.record('command_used', {
     duration: Math.round((Date.now() - startTime) / 1000),
     name: 'generate_dataset',
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
-    numTestsGenerated: results.length,
+    numTestsGenerated: generated.results.length,
     provider: options.provider || 'default',
-    enhanced: useEnhanced || false,
-    withAssertions: shouldGenerateAssertions,
-    numAssertionsGenerated: generatedAssertions?.length || 0,
-    ...(shouldGenerateAssertions && { assertionType: effectiveAssertionType }),
-    ...(diversityScore !== undefined && { diversityScore }),
+    enhanced: settings.useEnhanced,
+    withAssertions: settings.shouldGenerateAssertions,
+    numAssertionsGenerated: generated.generatedAssertions?.length || 0,
+    ...(settings.shouldGenerateAssertions && {
+      assertionType: settings.effectiveAssertionType,
+    }),
+    ...(generated.diversityScore !== undefined && { diversityScore: generated.diversityScore }),
   });
 }
 

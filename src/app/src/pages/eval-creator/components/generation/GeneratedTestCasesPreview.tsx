@@ -169,7 +169,7 @@ export function GeneratedTestCasesPreview({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-5 text-amber-500" />
+            <Sparkles className="size-5 text-primary" />
             Generated Test Cases
           </DialogTitle>
           <DialogDescription>
@@ -294,11 +294,7 @@ export function GeneratedTestCasesPreview({
               </Button>
             )}
           </div>
-          <Button
-            onClick={handleAdd}
-            disabled={selectedIndices.size === 0}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
-          >
+          <Button onClick={handleAdd} disabled={selectedIndices.size === 0}>
             Add Selected ({selectedIndices.size})
           </Button>
         </DialogFooter>

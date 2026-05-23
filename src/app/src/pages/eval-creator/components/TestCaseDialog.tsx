@@ -129,9 +129,8 @@ const TestCaseForm = ({
                       variant="outline"
                       size="sm"
                       onClick={() => setGenerateAssertionsOpen(true)}
-                      className="border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30"
                     >
-                      <Sparkles className="size-4 mr-2 text-amber-500" />
+                      <Sparkles className="size-4 mr-2 text-primary" />
                       Generate with AI
                     </Button>
                   </TooltipTrigger>

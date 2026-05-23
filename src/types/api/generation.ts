@@ -7,6 +7,7 @@ import {
   SampleOutputSchema,
   TestSuiteGenerationOptionsSchema,
 } from '../../generation/types';
+import { AssertionOrSetSchema, AssertionSchema } from '../index';
 
 export const GenerationPromptInputSchema = z.union([
   z.string(),
@@ -23,7 +24,7 @@ export type GenerationPromptInput = z.infer<typeof GenerationPromptInputSchema>;
 export const GenerationTestCaseInputSchema = z
   .object({
     vars: z.record(z.string(), z.unknown()).optional(),
-    assert: z.array(z.unknown()).optional(),
+    assert: z.array(AssertionOrSetSchema).optional(),
     description: z.string().optional(),
   })
   .passthrough();
@@ -70,13 +71,13 @@ export type MeasureDiversityRequest = z.infer<typeof MeasureDiversityRequestSche
 
 export const AnalyzeCoverageRequestSchema = z.object({
   prompts: z.array(GenerationPromptInputSchema).min(1),
-  assertions: z.array(z.unknown()).min(1),
+  assertions: z.array(AssertionSchema).min(1),
 });
 
 export type AnalyzeCoverageRequest = z.infer<typeof AnalyzeCoverageRequestSchema>;
 
 export const ValidateAssertionsRequestSchema = z.object({
-  assertions: z.array(z.unknown()).min(1),
+  assertions: z.array(AssertionSchema).min(1),
   samples: z.array(SampleOutputSchema).min(1),
 });
 

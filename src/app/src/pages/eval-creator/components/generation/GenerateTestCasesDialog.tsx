@@ -232,7 +232,7 @@ export function GenerateTestCasesDialog({
       <DialogContent className="sm:max-w-[380px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-5 text-amber-500" />
+            <Sparkles className="size-5 text-primary" />
             Generate Test Cases
           </DialogTitle>
           <DialogDescription>
@@ -342,11 +342,7 @@ export function GenerateTestCasesDialog({
           <Button variant="ghost" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleGenerate}
-            disabled={!hasPrompts}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
-          >
+          <Button onClick={handleGenerate} disabled={!hasPrompts}>
             <Sparkles className="size-4 mr-2" />
             Generate
           </Button>

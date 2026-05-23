@@ -238,11 +238,12 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
     - Determine if the question can be reliably answered with a deterministic Python function using ONLY the LLM response
     - If YES: Return only the Python function body (without the function signature) that:
       - Assumes the LLM's response text is available as a string variable named \`output\`
-      - Returns a dictionary with two keys:
+      - Returns a dictionary with three keys:
         - \`'pass'\`: boolean value (True if criterion is met, False if not)
         - \`'score'\`: float value (1.0 if criterion is met, 0.0 if not)
-      - The Answer "Yes" to the question should correspond to \`{'pass': True, 'score': 1.0}\`
-      - The answer "No" to the question should correspond to \`{'pass': False, 'score': 0.0}\`
+        - \`'reason'\`: concise string explaining why the criterion passed or failed
+      - The Answer "Yes" to the question should correspond to \`{'pass': True, 'score': 1.0, 'reason': 'Criterion met'}\`
+      - The answer "No" to the question should correspond to \`{'pass': False, 'score': 0.0, 'reason': 'Criterion not met'}\`
       - Includes clear comments
       - Handles edge cases gracefully (e.g., empty responses, invalid formats)
       - Performs any necessary parsing of the response string (JSON parsing, text extraction, etc.)
@@ -316,17 +317,17 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
     
     # If we don't find any potential JSON patterns, return False
     if not all_potential_json:
-        return {'pass': False, 'score': 0.0}
+        return {'pass': False, 'score': 0.0, 'reason': 'No JSON content found'}
     
     # Try to parse each potential JSON block
     for json_str in all_potential_json:
         try:
             json.loads(json_str)
-            return {'pass': True, 'score': 1.0}  # Valid JSON found
+            return {'pass': True, 'score': 1.0, 'reason': 'Valid JSON found'}
         except json.JSONDecodeError:
             continue
     
-    return {'pass': False, 'score': 0.0}  # No valid JSON found
+    return {'pass': False, 'score': 0.0, 'reason': 'No valid JSON found'}
     \`\`\`
     
     ### Example 2:
@@ -355,7 +356,7 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
         for block in code_blocks:
             # Check for JOIN keyword with word boundaries
             if re.search(r'\\b(join|inner\\s+join|left\\s+join|right\\s+join|full\\s+join|cross\\s+join)\\b', block):
-                return {'pass': True, 'score': 1.0}
+                return {'pass': True, 'score': 1.0, 'reason': 'JOIN found in code block'}
     
     # If no code blocks or no JOIN found in code blocks, check the entire output
     join_patterns = [
@@ -369,9 +370,9 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
     
     for pattern in join_patterns:
         if re.search(pattern, output_lower):
-            return {'pass': True, 'score': 1.0}
+            return {'pass': True, 'score': 1.0, 'reason': 'JOIN found in output'}
     
-    return {'pass': False, 'score': 0.0}
+    return {'pass': False, 'score': 0.0, 'reason': 'No JOIN found'}
     \`\`\`
     
     ### Example 4:
@@ -388,8 +389,8 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
     
     # Check if the word count exceeds 1500
     if word_count > 1500:
-        return {'pass': True, 'score': 1.0}
-    return {'pass': False, 'score': 0.0}
+        return {'pass': True, 'score': 1.0, 'reason': 'Output exceeds 1500 words'}
+    return {'pass': False, 'score': 0.0, 'reason': 'Output does not exceed 1500 words'}
     \`\`\`
     
     ### Example 5:

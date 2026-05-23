@@ -7,14 +7,21 @@ import { GenerateAssertionsDialog } from './GenerateAssertionsDialog';
 
 import type { GenerationResult } from '../../api/generation';
 
-const { mockGenerateAssertions, mockUseGenerationJob, mockStartJob, mockCancelJob, mockReset } =
-  vi.hoisted(() => ({
-    mockGenerateAssertions: vi.fn(),
-    mockUseGenerationJob: vi.fn(),
-    mockStartJob: vi.fn(),
-    mockCancelJob: vi.fn(),
-    mockReset: vi.fn(),
-  }));
+const {
+  mockGenerateAssertions,
+  mockGetGenerationCapabilities,
+  mockUseGenerationJob,
+  mockStartJob,
+  mockCancelJob,
+  mockReset,
+} = vi.hoisted(() => ({
+  mockGenerateAssertions: vi.fn(),
+  mockGetGenerationCapabilities: vi.fn(),
+  mockUseGenerationJob: vi.fn(),
+  mockStartJob: vi.fn(),
+  mockCancelJob: vi.fn(),
+  mockReset: vi.fn(),
+}));
 
 vi.mock('../../api/generation', async () => {
   const actual =
@@ -23,6 +30,7 @@ vi.mock('../../api/generation', async () => {
   return {
     ...actual,
     generateAssertions: mockGenerateAssertions,
+    getGenerationCapabilities: mockGetGenerationCapabilities,
   };
 });
 
@@ -42,6 +50,10 @@ describe('GenerateAssertionsDialog', () => {
     vi.resetAllMocks();
     completeJob = undefined;
     mockGenerateAssertions.mockResolvedValue({ jobId: 'assertions-1' });
+    mockGetGenerationCapabilities.mockResolvedValue({
+      hasPiAccess: true,
+      defaultAssertionType: 'pi',
+    });
     mockStartJob.mockImplementation(
       async (
         _type: 'dataset' | 'assertions' | 'tests',
@@ -118,6 +130,28 @@ describe('GenerateAssertionsDialog', () => {
         enabled: true,
         types: ['should-not-contain', 'should-not-hallucinate'],
       },
+    });
+  });
+
+  it('defaults to llm-rubric when Pi is unavailable', async () => {
+    const user = userEvent.setup();
+    mockGetGenerationCapabilities.mockResolvedValueOnce({
+      hasPiAccess: false,
+      defaultAssertionType: 'llm-rubric',
+    });
+    renderDialog();
+
+    await waitFor(() => {
+      expect(screen.getByText('Detailed rubric-based evaluation')).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole('button', { name: /Generate Now/ }));
+
+    await waitFor(() => {
+      expect(mockGenerateAssertions).toHaveBeenCalledWith(
+        prompts,
+        existingTests,
+        expect.objectContaining({ type: 'llm-rubric' }),
+      );
     });
   });
 

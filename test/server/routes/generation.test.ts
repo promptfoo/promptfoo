@@ -1,4 +1,5 @@
-import type { Server } from 'node:http';
+import { get as httpGet, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import express from 'express';
 import request from 'supertest';
@@ -166,6 +167,21 @@ describe('generation routes', () => {
     await api.post('/api/generation/dataset/measure-diversity').send({}).expect(400);
     await api.post('/api/generation/assertions/analyze-coverage').send({}).expect(400);
     await api.post('/api/generation/assertions/validate').send({}).expect(400);
+    await api
+      .post('/api/generation/assertions/generate')
+      .send({ prompts: ['Prompt'], tests: [{ assert: [{ value: 'missing type' }] }] })
+      .expect(400);
+    await api
+      .post('/api/generation/assertions/analyze-coverage')
+      .send({ prompts: ['Prompt'], assertions: [{ value: 'missing type' }] })
+      .expect(400);
+    await api
+      .post('/api/generation/assertions/validate')
+      .send({
+        assertions: [{ value: 'missing type' }],
+        samples: [{ output: 'JSON', expectedPass: true }],
+      })
+      .expect(400);
   });
 
   it('starts dataset, assertion, and combined generation jobs and exposes job lookups', async () => {
@@ -405,5 +421,44 @@ describe('generation routes', () => {
       .expect((response) => {
         expect(response.text).toContain('"type":"error"');
       });
+  });
+
+  it('cleans up a live SSE listener immediately when generation completes', async () => {
+    const job = createJob('dataset');
+    const address = server.address() as AddressInfo;
+    const eventName = `job:${job.id}`;
+
+    await new Promise<void>((resolve, reject) => {
+      const streamRequest = httpGet(
+        `http://127.0.0.1:${address.port}/api/generation/stream/${job.id}`,
+        (response) => {
+          let completed = false;
+          response.setEncoding('utf8');
+          response.once('data', () => {
+            try {
+              expect(jobEventEmitter.listenerCount(eventName)).toBe(1);
+              completeJob(job.id, {
+                testCases: [],
+                metadata: { totalGenerated: 0, durationMs: 0, provider: 'dataset' },
+              });
+              expect(jobEventEmitter.listenerCount(eventName)).toBe(0);
+              completed = true;
+            } catch (error) {
+              streamRequest.destroy();
+              reject(error);
+            }
+          });
+          response.on('end', () => {
+            if (!completed) {
+              reject(new Error('SSE connection ended before completion was sent'));
+              return;
+            }
+            resolve();
+          });
+          response.on('error', reject);
+        },
+      );
+      streamRequest.on('error', reject);
+    });
   });
 });

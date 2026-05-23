@@ -142,6 +142,53 @@ function generatePersonaPrompt(
   `;
 }
 
+function salvagePersona(rawPersona: unknown): Persona | undefined {
+  if (typeof rawPersona !== 'object' || rawPersona === null) {
+    return undefined;
+  }
+  const partial = rawPersona as Record<string, unknown>;
+  if (typeof partial.name !== 'string' || typeof partial.description !== 'string') {
+    return undefined;
+  }
+  return {
+    name: partial.name,
+    description: partial.description,
+    demographics:
+      typeof partial.demographics === 'object'
+        ? (partial.demographics as Persona['demographics'])
+        : undefined,
+    goals: Array.isArray(partial.goals)
+      ? partial.goals.filter((goal): goal is string => typeof goal === 'string')
+      : undefined,
+    behaviors: Array.isArray(partial.behaviors)
+      ? partial.behaviors.filter((behavior): behavior is string => typeof behavior === 'string')
+      : undefined,
+    edge: typeof partial.edge === 'string' ? partial.edge : undefined,
+  };
+}
+
+function parsePersona(rawPersona: unknown): Persona | undefined {
+  const parseResult = PersonaSchema.safeParse(rawPersona);
+  if (parseResult.success) {
+    return parseResult.data;
+  }
+  logger.warn(`Persona validation failed: ${parseResult.error.message}`);
+  return salvagePersona(rawPersona);
+}
+
+function parsePersonas(output: string): Persona[] {
+  const jsonObjects = extractJsonObjects(output);
+  invariant(
+    jsonObjects.length >= 1,
+    `Expected at least one JSON object in persona generation response, got ${jsonObjects.length}`,
+  );
+  const rawResult = jsonObjects[0] as { personas: unknown[] };
+  invariant(Array.isArray(rawResult.personas), 'Expected personas array in response');
+  return rawResult.personas
+    .map((rawPersona) => parsePersona(rawPersona))
+    .filter((persona): persona is Persona => persona !== undefined);
+}
+
 /**
  * Generates diverse, grounded user personas based on prompts and concepts.
  *
@@ -177,50 +224,7 @@ export async function generatePersonas(
   const output =
     typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
   logger.debug(`Received persona generation response: ${output.substring(0, 200)}...`);
-
-  // Parse the JSON response
-  const jsonObjects = extractJsonObjects(output);
-  invariant(
-    jsonObjects.length >= 1,
-    `Expected at least one JSON object in persona generation response, got ${jsonObjects.length}`,
-  );
-
-  const rawResult = jsonObjects[0] as { personas: unknown[] };
-  invariant(Array.isArray(rawResult.personas), 'Expected personas array in response');
-
-  // Validate and transform personas
-  const personas: Persona[] = [];
-  for (const rawPersona of rawResult.personas) {
-    const parseResult = PersonaSchema.safeParse(rawPersona);
-
-    if (parseResult.success) {
-      personas.push(parseResult.data);
-    } else {
-      // Try to salvage partial persona data
-      logger.warn(`Persona validation failed: ${parseResult.error.message}`);
-      if (typeof rawPersona === 'object' && rawPersona !== null) {
-        const partial = rawPersona as Record<string, unknown>;
-        if (typeof partial.name === 'string' && typeof partial.description === 'string') {
-          personas.push({
-            name: partial.name,
-            description: partial.description,
-            demographics:
-              typeof partial.demographics === 'object'
-                ? (partial.demographics as Persona['demographics'])
-                : undefined,
-            goals: Array.isArray(partial.goals)
-              ? partial.goals.filter((g): g is string => typeof g === 'string')
-              : undefined,
-            behaviors: Array.isArray(partial.behaviors)
-              ? partial.behaviors.filter((b): b is string => typeof b === 'string')
-              : undefined,
-            edge: typeof partial.edge === 'string' ? partial.edge : undefined,
-          });
-        }
-      }
-    }
-  }
-
+  const personas = parsePersonas(output);
   logger.debug(`Generated ${personas.length} valid personas`);
 
   // Ensure we have at least the requested count

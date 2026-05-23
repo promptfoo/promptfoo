@@ -6,7 +6,7 @@
  * - Coverage analysis option
  * - Negative tests option
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
@@ -28,7 +28,7 @@ import {
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
 import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
-import { generateAssertions } from '../../api/generation';
+import { generateAssertions, getGenerationCapabilities } from '../../api/generation';
 import { useGenerationJob } from '../../hooks/useGenerationJob';
 import { GenerationProgressDialog } from './GenerationProgressDialog';
 import type { Assertion, TestCase } from '@promptfoo/types';
@@ -56,7 +56,7 @@ export function GenerateAssertionsDialog({
 }: GenerateAssertionsDialogProps) {
   // Form state
   const [numAssertions, setNumAssertions] = useState(5);
-  const [assertionType, setAssertionType] = useState<'pi' | 'g-eval' | 'llm-rubric'>('pi');
+  const [assertionType, setAssertionType] = useState<'pi' | 'g-eval' | 'llm-rubric'>('llm-rubric');
   const [enableCoverage, setEnableCoverage] = useState(true);
   const [enableNegativeTests, setEnableNegativeTests] = useState(false);
   const [instructions, setInstructions] = useState('');
@@ -64,6 +64,29 @@ export function GenerateAssertionsDialog({
 
   // Dialog state
   const [showProgress, setShowProgress] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let isMounted = true;
+    getGenerationCapabilities()
+      .then((caps) => {
+        if (isMounted) {
+          setAssertionType(caps.defaultAssertionType);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setAssertionType('llm-rubric');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [open]);
 
   // Generation job hook
   const { startJob, cancelJob, status, progress, total, phase, error, reset } = useGenerationJob({
@@ -155,7 +178,7 @@ export function GenerateAssertionsDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="size-5 text-amber-500" />
+            <Sparkles className="size-5 text-primary" />
             Generate Assertions
           </DialogTitle>
           <DialogDescription>
@@ -284,11 +307,7 @@ export function GenerateAssertionsDialog({
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            onClick={handleGenerate}
-            disabled={!hasPrompts}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
-          >
+          <Button onClick={handleGenerate} disabled={!hasPrompts}>
             <Sparkles className="size-4 mr-2" />
             Generate Now
           </Button>
