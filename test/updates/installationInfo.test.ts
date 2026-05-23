@@ -304,6 +304,7 @@ describe('getInstallationInfo', () => {
   });
 
   it('should detect PNPM global installation from PNPM_HOME on Windows', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
     vi.stubEnv('PNPM_HOME', 'C:\\pnpm-global');
     process.argv = [
       'node',
@@ -318,7 +319,7 @@ describe('getInstallationInfo', () => {
     expect(result).toEqual({
       packageManager: PackageManager.PNPM,
       isGlobal: true,
-      updateCommand: 'pnpm add -g promptfoo@latest',
+      updateCommand: 'pnpm.cmd add -g promptfoo@latest',
       updateMessage: 'Installed with pnpm. Attempting to automatically update now...',
     });
   });
@@ -338,7 +339,7 @@ describe('getInstallationInfo', () => {
     expect(result).toEqual({
       packageManager: PackageManager.YARN,
       isGlobal: true,
-      updateCommand: 'yarn global add promptfoo@latest',
+      updateCommand: 'yarn.cmd global add promptfoo@latest',
       updateMessage: 'Installed with yarn. Attempting to automatically update now...',
     });
   });
@@ -509,6 +510,34 @@ describe('getInstallationInfo', () => {
       packageManager: PackageManager.NPM,
       isGlobal: true,
       updateCommand: 'npm install -g promptfoo@latest',
+      updateMessage: 'Installed with npm. Attempting to automatically update now...',
+    });
+  });
+
+  it('should return Windows npm shim command for confirmed global npm installations', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    process.argv = [
+      'node',
+      'C:\\Users\\Alice\\AppData\\Roaming\\npm\\node_modules\\promptfoo\\dist\\src\\main.js',
+    ];
+    mockFs.realpathSync.mockReturnValue(
+      'C:\\Users\\Alice\\AppData\\Roaming\\npm\\node_modules\\promptfoo\\dist\\src\\main.js',
+    );
+    mockChildProcess.execFileSync.mockReturnValue(
+      'C:\\Users\\Alice\\AppData\\Roaming\\npm\\node_modules\n',
+    );
+
+    const result = getInstallationInfo('C:\\Users\\Alice\\Project', false);
+
+    expect(mockChildProcess.execFileSync).toHaveBeenCalledWith(
+      'npm.cmd',
+      ['root', '--global'],
+      expect.any(Object),
+    );
+    expect(result).toEqual({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm.cmd install -g promptfoo@latest',
       updateMessage: 'Installed with npm. Attempting to automatically update now...',
     });
   });

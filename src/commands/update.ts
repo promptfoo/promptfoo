@@ -5,6 +5,7 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { getInstallationInfo } from '../updates/installationInfo';
 import { checkForUpdates } from '../updates/updateCheck';
+import { parseUpdateCommandForSpawn, withTargetVersion } from '../updates/updateCommandUtils';
 
 export function updateCommand(program: Command) {
   const updateCmd = program
@@ -51,18 +52,11 @@ export function updateCommand(program: Command) {
         }
 
         const targetVersion = updateInfo ? updateInfo.update.latest : 'latest';
-        const updateCommand = installationInfo.updateCommand.replace(
-          '@latest',
-          `@${targetVersion}`,
-        );
+        const updateCommand = withTargetVersion(installationInfo.updateCommand, targetVersion);
 
         logger.info(`Running: ${updateCommand}`);
 
-        // Parse command into array to avoid shell injection
-        // Example: "npm install -g promptfoo@1.2.3" -> ["npm", "install", "-g", "promptfoo@1.2.3"]
-        const commandParts = updateCommand.split(' ');
-        const command = commandParts[0];
-        const args = commandParts.slice(1);
+        const { command, args } = parseUpdateCommandForSpawn(updateCommand);
 
         // Execute the update command and wait for it to complete
         await new Promise<void>((resolve, reject) => {

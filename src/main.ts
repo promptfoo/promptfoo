@@ -76,8 +76,9 @@ async function main() {
   const enableAutoUpdate = getEnvBool('PROMPTFOO_ENABLE_AUTO_UPDATE');
   const updateCommandRequested = isUpdateCommandRequested(argv);
 
+  let updateCheckPromise: Promise<void> | undefined;
   if (!disableUpdateNag && !updateCommandRequested) {
-    checkForUpdates()
+    updateCheckPromise = checkForUpdates()
       .then((info) => {
         if (info) {
           logger.info(info.message);
@@ -94,9 +95,11 @@ async function main() {
       });
   }
 
-  await runDbMigrations({ suppressNativeAddonLogging: true });
-
   const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
+  if (!updateCommandRequested) {
+    await runDbMigrations({ suppressNativeAddonLogging: true });
+  }
+
   const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
     ? { defaultConfig: {}, defaultConfigPath: undefined }
     : await loadDefaultConfig();
@@ -179,6 +182,7 @@ async function main() {
   });
 
   await program.parseAsync();
+  await updateCheckPromise;
 }
 
 // ESM replacement for require.main === module check

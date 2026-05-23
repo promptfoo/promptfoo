@@ -112,7 +112,7 @@ export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.sli
       continue;
     }
 
-    return arg === 'code-scans';
+    return arg === 'code-scans' || arg === 'update';
   }
 
   return false;

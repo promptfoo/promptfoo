@@ -32,10 +32,13 @@ const mockUpdateEventEmitter = updateEventEmitter as Mocked<typeof updateEventEm
 describe('handleAutoUpdate', () => {
   let mockSpawn: Mock;
   let mockProcess: Partial<ChildProcess>;
+  let originalPlatform: string;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
 
     mockProcess = {
       on: vi.fn(),
@@ -52,6 +55,7 @@ describe('handleAutoUpdate', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   function getProcessEventHandler<T extends (...args: any[]) => void>(eventName: string): T {
@@ -150,6 +154,32 @@ describe('handleAutoUpdate', () => {
       shell: false,
       detached: true,
     });
+  });
+
+  it('should invoke Windows package manager shims through cmd.exe', () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const info: UpdateObject = {
+      message: 'Update available',
+      update: { current: '1.0.0', latest: '1.1.0', name: 'promptfoo' },
+    };
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm.cmd install -g promptfoo@latest',
+    });
+
+    handleAutoUpdate(info, false, false, '/project', mockSpawn);
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      process.env.ComSpec || 'cmd.exe',
+      ['/d', '/s', '/c', 'npm.cmd', 'install', '-g', 'promptfoo@1.1.0'],
+      {
+        stdio: 'ignore',
+        shell: false,
+        detached: true,
+      },
+    );
   });
 
   it('should emit update-success on successful update', () => {

@@ -1,8 +1,7 @@
 import semver from 'semver';
-// Use require to load package.json - works reliably in both dev and published package
-import packageJson from '../../package.json';
 import logger from '../logger';
 import { getLatestVersion } from '../updates';
+import { VERSION } from '../version';
 
 export interface UpdateInfo {
   current: string;
@@ -19,19 +18,7 @@ export interface CheckForUpdatesOptions {
   throwOnError?: boolean;
 }
 
-/**
- * Read package.json from the current package
- */
-function getPackageJson(): { name: string; version: string } | null {
-  try {
-    return {
-      name: packageJson.name || 'promptfoo',
-      version: packageJson.version,
-    };
-  } catch {
-    return null;
-  }
-}
+const PACKAGE_NAME = 'promptfoo';
 
 export async function checkForUpdates(
   options: CheckForUpdatesOptions = {},
@@ -42,24 +29,21 @@ export async function checkForUpdates(
       return null;
     }
 
-    const packageJson = getPackageJson();
-    if (!packageJson || !packageJson.name || !packageJson.version) {
+    if (!VERSION) {
       return null;
     }
-
-    const { name, version: currentVersion } = packageJson;
 
     // Use custom API to get latest version
     const latestVersion = await getLatestVersion();
 
-    if (semver.gt(latestVersion, currentVersion)) {
-      const message = `Promptfoo update available! ${currentVersion} → ${latestVersion}`;
+    if (semver.gt(latestVersion, VERSION)) {
+      const message = `Promptfoo update available! ${VERSION} → ${latestVersion}`;
       return {
         message,
         update: {
-          current: currentVersion,
+          current: VERSION,
           latest: latestVersion,
-          name,
+          name: PACKAGE_NAME,
         },
       };
     }

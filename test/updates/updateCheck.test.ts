@@ -10,12 +10,8 @@ vi.mock('semver', () => ({
   },
 }));
 
-// Mock package.json import
-vi.mock('../../package.json', () => ({
-  default: {
-    name: 'promptfoo',
-    version: '1.0.0',
-  },
+vi.mock('../../src/version', () => ({
+  VERSION: '1.0.0',
 }));
 
 import semver from 'semver';

@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import type { spawn } from 'node:child_process';
 
 import { getInstallationInfo } from './installationInfo';
+import { parseUpdateCommandForSpawn, withTargetVersion } from './updateCommandUtils';
 import { updateEventEmitter } from './updateEventEmitter';
 
 import type { UpdateObject } from './updateCheck';
@@ -50,14 +51,8 @@ export function handleAutoUpdate(
     return;
   }
 
-  const updateCommand = installationInfo.updateCommand.replace('@latest', `@${info.update.latest}`);
-
-  // Parse command into array to avoid shell injection
-  // Example: "npm install -g promptfoo@1.2.3" -> ["npm", "install", "-g", "promptfoo@1.2.3"]
-  // Note: Simple split on spaces - doesn't handle quoted args, but our commands don't need that
-  const commandParts = updateCommand.split(' ');
-  const command = commandParts[0];
-  const args = commandParts.slice(1);
+  const updateCommand = withTargetVersion(installationInfo.updateCommand, info.update.latest);
+  const { command, args } = parseUpdateCommandForSpawn(updateCommand);
 
   // Use 'ignore' to prevent deadlocks from pipe buffer filling
   // Use 'detached' so the process can continue after parent exits (especially on Windows)

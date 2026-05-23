@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 
 vi.mock('../../src/updates/updateCheck');
 vi.mock('../../src/updates/installationInfo');
@@ -60,11 +60,18 @@ function createMockProcess({ closeCode, error }: { closeCode?: number; error?: E
 
 describe('update command', () => {
   let program: Command;
+  let originalPlatform: string;
 
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
     process.exitCode = undefined;
+    originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
   it('should show already up to date message when no update available', async () => {
@@ -131,6 +138,39 @@ describe('update command', () => {
       stdio: 'inherit',
       shell: false,
     });
+  });
+
+  it('should invoke Windows package manager shims through cmd.exe', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    mockCheckForUpdates.mockResolvedValue({
+      message: 'Update available: 1.0.0 → 1.1.0',
+      update: {
+        current: '1.0.0',
+        latest: '1.1.0',
+        name: 'promptfoo',
+      },
+    });
+
+    mockGetInstallationInfo.mockReturnValue({
+      packageManager: PackageManager.NPM,
+      isGlobal: true,
+      updateCommand: 'npm.cmd install -g promptfoo@latest',
+      updateMessage: 'Installed with npm.',
+    });
+
+    mockSpawn.mockReturnValue(createMockProcess({ closeCode: 0 }));
+
+    updateCommand(program);
+    await program.parseAsync(['node', 'test', 'update']);
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      process.env.ComSpec || 'cmd.exe',
+      ['/d', '/s', '/c', 'npm.cmd', 'install', '-g', 'promptfoo@1.1.0'],
+      {
+        stdio: 'inherit',
+        shell: false,
+      },
+    );
   });
 
   it('should handle installations that cannot be auto-updated', async () => {

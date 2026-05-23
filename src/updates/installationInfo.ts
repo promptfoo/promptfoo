@@ -10,6 +10,7 @@ import {
   pathContains,
   pathStartsWith,
 } from '../util/installationDetection';
+import { getPackageManagerExecutable } from './updateCommandUtils';
 
 // Re-export for backward compatibility
 export { PackageManager };
@@ -63,7 +64,7 @@ function getPnpmInstallationInfo(
     ? globalInstallationInfo(
         PackageManager.PNPM,
         'pnpm',
-        'pnpm add -g promptfoo@latest',
+        `${getPackageManagerExecutable('pnpm')} add -g promptfoo@latest`,
         isAutoUpdateDisabled,
       )
     : localInstallationInfo(PackageManager.PNPM);
@@ -85,7 +86,7 @@ function getYarnInstallationInfo(
     ? globalInstallationInfo(
         PackageManager.YARN,
         'yarn',
-        'yarn global add promptfoo@latest',
+        `${getPackageManagerExecutable('yarn')} global add promptfoo@latest`,
         isAutoUpdateDisabled,
       )
     : localInstallationInfo(PackageManager.YARN);
@@ -96,7 +97,7 @@ function getBunInstallationInfo(realPath: string, isAutoUpdateDisabled: boolean)
     ? globalInstallationInfo(
         PackageManager.BUN,
         'bun',
-        'bun add -g promptfoo@latest',
+        `${getPackageManagerExecutable('bun')} add -g promptfoo@latest`,
         isAutoUpdateDisabled,
       )
     : localInstallationInfo(PackageManager.BUN);
@@ -112,7 +113,7 @@ function getNpmInstallationInfo(
   }
 
   try {
-    const npmExecutable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const npmExecutable = getPackageManagerExecutable('npm');
     const globalRoot = execFileSync(npmExecutable, ['root', '--global'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -125,7 +126,7 @@ function getNpmInstallationInfo(
       return globalInstallationInfo(
         PackageManager.NPM,
         'npm',
-        'npm install -g promptfoo@latest',
+        `${npmExecutable} install -g promptfoo@latest`,
         isAutoUpdateDisabled,
       );
     }

@@ -150,6 +150,12 @@ describe('shouldSkipDefaultConfigLoading', () => {
     );
   });
 
+  it('skips default config discovery for update commands', () => {
+    expect(shouldSkipDefaultConfigLoading(['update'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--verbose', 'update', '--check'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-file', '.env.local', 'update'])).toBe(true);
+  });
+
   it('keeps default config discovery for other commands and post-separator arguments', () => {
     expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
     expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
