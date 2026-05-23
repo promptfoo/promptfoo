@@ -351,6 +351,24 @@ describe('handleTraceSpanDuration', () => {
     expect(result.reason).toContain('latency budget was satisfied');
   });
 
+  it('should fail inverse assertions when required spans are absent', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('requirePresence is true');
+  });
+
   it('should fail when no trace data is available', () => {
     const params: AssertionParams = {
       ...defaultParams,

@@ -25,14 +25,14 @@ function buildNoMatchingSpansResult({
   requirePresence: boolean;
 }): GradingResult {
   const basePass = !requirePresence;
-  const pass = inverse ? !basePass : basePass;
+  const pass = inverse ? false : basePass;
   const baseReason = requirePresence
     ? `No spans found matching pattern "${pattern}" with complete timing data (requirePresence: true)`
     : `No spans found matching pattern "${pattern}" with complete timing data`;
   const reason = inverse
-    ? basePass
-      ? `not-trace-span-duration: no spans matched pattern "${pattern}", so the latency budget was satisfied and violates the inverse assertion`
-      : `not-trace-span-duration: no spans matched pattern "${pattern}" while requirePresence is true, which is the expected outcome for the inverse assertion`
+    ? requirePresence
+      ? `not-trace-span-duration: no spans matched pattern "${pattern}" while requirePresence is true`
+      : `not-trace-span-duration: no spans matched pattern "${pattern}", so the latency budget was satisfied and violates the inverse assertion`
     : baseReason;
 
   return {
