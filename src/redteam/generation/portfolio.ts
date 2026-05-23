@@ -144,6 +144,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
     const plan = this.buildAttackPlan(n);
     const candidates: AttackCandidate[] = [];
+    const overgenerationFactor = n > 1 ? this.getOvergenerationFactor() : 1;
 
     for (const family of plan.families) {
       const plannedCount = Math.max(1, family.count);
@@ -158,7 +159,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       ) {
         const generatedCount = Math.max(
           plannedCount,
-          Math.ceil(plannedCount * this.getOvergenerationFactor()),
+          Math.ceil(plannedCount * overgenerationFactor),
         );
         const prompts = await this.generatePrompts(generatedCount, delayMs, () =>
           this.getFamilyTemplate(family),
@@ -182,10 +183,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
         attempt += 1
       ) {
         const repairCount = plannedCount - validFamilyCandidates.length;
-        const generatedCount = Math.max(
-          repairCount,
-          Math.ceil(repairCount * this.getOvergenerationFactor()),
-        );
+        const generatedCount = Math.max(repairCount, Math.ceil(repairCount * overgenerationFactor));
         const prompts = await this.generatePrompts(generatedCount, delayMs, () =>
           this.getFamilyRepairTemplate(
             family,
@@ -225,9 +223,13 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     }
 
     const semanticFrontier = this.getSemanticFrontierConfig();
-    const semanticFrontierSummary = semanticFrontier
-      ? this.summarizeSemanticFrontier(selected, semanticFrontier, n)
-      : undefined;
+    const isSemanticFrontierActive =
+      semanticFrontier !== undefined &&
+      (n >= semanticFrontier.minimumPortfolioSize || this.useSemanticFrontierBelowMinimumSize());
+    const semanticFrontierSummary =
+      semanticFrontier && isSemanticFrontierActive
+        ? this.summarizeSemanticFrontier(selected, semanticFrontier, n)
+        : undefined;
     const prompts: GeneratedPrompt[] = selected.map((candidate) => ({
       __prompt: candidate.prompt,
       metadata: {

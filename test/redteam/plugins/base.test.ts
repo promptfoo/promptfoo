@@ -84,6 +84,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'another prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
+            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -92,6 +93,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'test prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
+            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -120,6 +122,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'another prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
+            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -128,6 +131,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'test prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
+            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -182,6 +186,7 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
+            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -190,6 +195,7 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
+            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -276,6 +282,27 @@ describe('RedteamPluginBase', () => {
       language: 'German',
       maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
     });
+  });
+
+  it('should reject empty parsed prompts and retry for replacement content', async () => {
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({
+        output: 'Prompt:\nPrompt: valid request',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: replacement request',
+      });
+
+    const result = await plugin.generateTests(2);
+
+    expect(result.map((test) => test.vars?.testVar).sort()).toEqual([
+      'replacement request',
+      'valid request',
+    ]);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('no user-facing content after the output marker'),
+    );
   });
 
   it('should honor maxCharsPerMessage from plugin config without cliState', async () => {

@@ -60,4 +60,17 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
       },
     ]);
   });
+
+  it('omits inactive frontiers from operator diagnostics', () => {
+    const inactiveSummary = { ...createSummary(false), active: false };
+
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: { pluginId: 'prompt-extraction', semanticFrontier: inactiveSummary },
+          vars: { prompt: 'small non-frontier batch' },
+        },
+      ]),
+    ).toEqual([]);
+  });
 });

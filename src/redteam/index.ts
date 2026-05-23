@@ -575,6 +575,7 @@ function addLanguageToPluginMetadata(
   test: TestCase,
   lang: string | undefined,
   plugin: RedteamPluginObject,
+  injectVar: string,
   maxCharsPerMessage?: number,
   testGenerationInstructions?: string,
 ): TestCase {
@@ -602,6 +603,7 @@ function addLanguageToPluginMetadata(
     metadata: {
       ...test.metadata,
       pluginId: plugin.id,
+      injectVar,
       ...(includePluginConfig && {
         pluginConfig: {
           ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
@@ -1451,6 +1453,7 @@ export async function synthesize({
                 test,
                 lang,
                 plugin,
+                injectVar,
                 maxCharsPerMessage,
                 testGenerationInstructions,
               ),
@@ -1609,6 +1612,7 @@ export async function synthesize({
                 t,
                 lang,
                 plugin,
+                injectVar,
                 maxCharsPerMessage,
                 testGenerationInstructions,
               ),

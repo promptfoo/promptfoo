@@ -253,11 +253,17 @@ export abstract class RedteamPluginBase {
     parsedPrompts: ParsedGeneratedPrompt[],
   ): PromptLengthValidationResult {
     const acceptedPrompts: ParsedGeneratedPrompt[] = [];
+    let rejectedEmptyPromptCount = 0;
     const rejectedPromptLengths: number[] = [];
     let rejectedPromptLimit: number | undefined;
 
     for (const prompt of parsedPrompts) {
       const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
+      if (!promptText.trim()) {
+        rejectedEmptyPromptCount += 1;
+        continue;
+      }
+
       // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
       // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
       const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
@@ -270,22 +276,36 @@ export abstract class RedteamPluginBase {
       rejectedPromptLimit = violation.limit;
     }
 
-    if (rejectedPromptLengths.length === 0) {
+    if (rejectedEmptyPromptCount === 0 && rejectedPromptLengths.length === 0) {
       return {
         acceptedPrompts,
         retryInstructions: undefined,
       };
     }
 
-    return {
-      acceptedPrompts,
-      retryInstructions: dedent`
+    const retryReasons: string[] = [];
+    if (rejectedEmptyPromptCount > 0) {
+      retryReasons.push(dedent`
+        Your previous response included ${rejectedEmptyPromptCount} generated prompt${
+          rejectedEmptyPromptCount === 1 ? '' : 's'
+        } with no user-facing content after the output marker.
+        Generate replacement prompts only, and put a complete standalone user request immediately after each output marker.
+      `);
+    }
+
+    if (rejectedPromptLengths.length > 0) {
+      retryReasons.push(dedent`
         Your previous response included ${rejectedPromptLengths.length} generated prompt${
           rejectedPromptLengths.length === 1 ? '' : 's'
         } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
         The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
         Generate replacement prompts only, and keep every user message within the character limit.
-      `.trim(),
+      `);
+    }
+
+    return {
+      acceptedPrompts,
+      retryInstructions: retryReasons.join('\n\n').trim(),
     };
   }
 
@@ -329,6 +349,7 @@ export abstract class RedteamPluginBase {
             assert: this.getAssertions(promptObj.__prompt),
             metadata: {
               pluginId: getShortPluginId(this.id),
+              injectVar: this.injectVar,
               pluginConfig: this.config,
               ...(promptObj.metadata ?? {}),
               ...(materializedInputVars?.metadata
@@ -505,7 +526,9 @@ export abstract class RedteamGraderBase {
       Boolean(pluginConfig?.graderExamples?.length) ||
       Boolean(test.options?.redteamGraderExamples?.length) ||
       Boolean(additionalRubric);
-    const injectedPrompt = test.vars?.prompt;
+    const injectVar =
+      typeof test.metadata?.injectVar === 'string' ? test.metadata.injectVar : 'prompt';
+    const injectedPrompt = test.vars?.[injectVar];
 
     return (
       !hasCustomGradingPolicy &&
