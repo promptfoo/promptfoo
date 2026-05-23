@@ -100,6 +100,27 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
+  it('should skip the Authorization header for cloud API requests when requested', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('test-api-key-123');
+
+    const url = CLOUD_API_HOST + '/api/v1/auth/device/code';
+    await monkeyPatchFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      skipCloudAuth: true,
+    });
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  });
+
   it('should not add Authorization header for cloud API requests when no token available', async () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);

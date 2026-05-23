@@ -31,17 +31,22 @@ export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
   }
 }
 
+function shouldAttachCloudAuth(url: string | URL | Request, skipCloudAuth?: boolean): boolean {
+  return !skipCloudAuth && isPromptfooCloudApiHost(url);
+}
+
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
 ): Promise<Response> {
   const NO_LOG_URLS = [R_ENDPOINT, CONSENT_ENDPOINT, EVENTS_ENDPOINT];
-  const headers = (options?.headers as Record<string, string>) || {};
+  const { skipCloudAuth, ...requestOptions } = options ?? {};
+  const headers = (requestOptions.headers as Record<string, string>) || {};
   const isSilent = headers['x-promptfoo-silent'] === 'true';
   const logEnabled = !NO_LOG_URLS.some((logUrl) => url.toString().startsWith(logUrl)) && !isSilent;
 
   const opts: RequestInit = {
-    ...options,
+    ...requestOptions,
   };
 
   const originalBody = opts.body;
@@ -60,7 +65,7 @@ export async function monkeyPatchFetch(
     }
   }
 
-  if (isPromptfooCloudApiHost(url)) {
+  if (shouldAttachCloudAuth(url, skipCloudAuth)) {
     const token = cloudConfig.getApiKey();
     opts.headers = {
       ...(opts.headers || {}),

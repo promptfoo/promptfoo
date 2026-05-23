@@ -7,7 +7,7 @@ import opener from 'opener';
 import ora from 'ora';
 import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
-import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import {
@@ -32,7 +32,7 @@ type DeviceCodeResponse = {
   device_code: string;
   user_code: string;
   verification_uri: string;
-  verification_uri_complete: string;
+  verification_uri_complete?: string;
   expires_in: number;
   interval?: number;
 };
@@ -297,6 +297,7 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: DEVICE_CLIENT_ID }),
+      skipCloudAuth: true,
     },
     DEVICE_AUTH_REQUEST_TIMEOUT_MS,
   );
@@ -319,7 +320,8 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
     typeof (data as DeviceCodeResponse).device_code !== 'string' ||
     typeof (data as DeviceCodeResponse).user_code !== 'string' ||
     typeof (data as DeviceCodeResponse).verification_uri !== 'string' ||
-    typeof (data as DeviceCodeResponse).verification_uri_complete !== 'string' ||
+    ((data as DeviceCodeResponse).verification_uri_complete !== undefined &&
+      typeof (data as DeviceCodeResponse).verification_uri_complete !== 'string') ||
     !Number.isFinite((data as DeviceCodeResponse).expires_in) ||
     (data as DeviceCodeResponse).expires_in <= 0 ||
     ((data as DeviceCodeResponse).interval !== undefined &&
@@ -362,6 +364,7 @@ async function pollForDeviceToken(
           grant_type: DEVICE_GRANT_TYPE,
           client_id: DEVICE_CLIENT_ID,
         }),
+        skipCloudAuth: true,
       },
       DEVICE_AUTH_REQUEST_TIMEOUT_MS,
     );
@@ -422,18 +425,31 @@ async function openDeviceVerificationUrl(url: string): Promise<void> {
   }
 }
 
+function getDeviceVerificationUrl(deviceCode: DeviceCodeResponse): string {
+  return deviceCode.verification_uri_complete || deviceCode.verification_uri;
+}
+
 function displayDeviceVerificationDetails(deviceCode: DeviceCodeResponse): void {
   // Device codes are short-lived credentials: display them to the user without persisting them in run logs.
+  const verificationUrl = getDeviceVerificationUrl(deviceCode);
+  const verificationInstructions = deviceCode.verification_uri_complete
+    ? [
+        chalk.bold('To complete login, visit:'),
+        chalk.cyan.bold(`  ${verificationUrl}`),
+        '',
+        `Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`,
+      ]
+    : [
+        chalk.bold('To complete login, visit:'),
+        chalk.cyan.bold(`  ${verificationUrl}`),
+        '',
+        'Then enter code:',
+      ];
+
   process.stdout.write(
-    [
-      '',
-      chalk.bold('To complete login, visit:'),
-      chalk.cyan.bold(`  ${deviceCode.verification_uri_complete}`),
-      '',
-      `Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`,
-      chalk.yellow.bold(`  ${deviceCode.user_code}`),
-      '',
-    ].join('\n') + '\n',
+    ['', ...verificationInstructions, chalk.yellow.bold(`  ${deviceCode.user_code}`), ''].join(
+      '\n',
+    ) + '\n',
   );
 }
 
@@ -482,7 +498,7 @@ async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<st
   });
 
   if (instanceType === 'cloud') {
-    return CLOUD_API_HOST;
+    return normalizeApiHost(cloudConfig.getApiHost());
   }
 
   const enterpriseUrl = await input({
@@ -519,7 +535,7 @@ async function loginWithDeviceCode(cmdObj: LoginCommandOptions): Promise<void> {
 
   displayDeviceVerificationDetails(deviceCode);
 
-  await openDeviceVerificationUrl(deviceCode.verification_uri_complete);
+  await openDeviceVerificationUrl(getDeviceVerificationUrl(deviceCode));
 
   const pollingSpinner = ora({ text: 'Waiting for authorization...', spinner: 'dots' }).start();
 
