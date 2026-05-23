@@ -239,6 +239,100 @@ describe('evalConfig store', () => {
         endpoint: 'https://example.com',
       });
     });
+
+    it('preserves non-secret auth selectors and token settings while stripping credential values', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              apiKeyEnvar: 'CUSTOM_HTTP_API_KEY',
+              auth: {
+                type: 'oauth',
+                tokenUrl: 'https://auth.example.com/oauth/token',
+                clientId: 'client-id',
+                clientSecret: 'client-secret',
+                keyName: 'X-API-Key',
+                keyValue: 'secret-key-value',
+              },
+              azureTokenScope: 'https://cognitiveservices.azure.com/.default',
+              maxTokens: 256,
+              maxOutputTokens: 384,
+              max_tokens: 128,
+              max_completion_tokens: 64,
+              session_key: 'session-continuity-id',
+              signature: 'computed-signature-secret',
+              signatureAlgorithm: 'HMAC-SHA256',
+              signatureDataTemplate: '{{body}}',
+              signatureRefreshBufferMs: 30_000,
+              signatureValidityMs: 300_000,
+              tokenEstimation: {
+                enabled: true,
+                multiplier: 1.5,
+              },
+              privateKey: 'inline-private-key',
+              privateKeyPath: '/var/run/certs/signing-key.pem',
+              keyAlias: 'service-signing-key',
+              tls: {
+                keyPath: '/var/run/certs/client.key',
+                certPath: '/var/run/certs/client.crt',
+                key: 'inline-client-key',
+              },
+            } as any,
+          },
+        ],
+        env: {
+          AZURE_TOKEN_SCOPE: 'https://cognitiveservices.azure.com/.default',
+          OPENAI_MAX_TOKENS: '512',
+          OPENAI_MAX_COMPLETION_TOKENS: '128',
+          OPENAI_API_KEY: 'secret-openai-key',
+          GITHUB_TOKEN: 'secret-github-token',
+        } as any,
+      });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        apiKeyEnvar: 'CUSTOM_HTTP_API_KEY',
+        auth: {
+          type: 'oauth',
+          tokenUrl: 'https://auth.example.com/oauth/token',
+          clientId: 'client-id',
+          keyName: 'X-API-Key',
+        },
+        azureTokenScope: 'https://cognitiveservices.azure.com/.default',
+        maxTokens: 256,
+        maxOutputTokens: 384,
+        max_tokens: 128,
+        max_completion_tokens: 64,
+        session_key: 'session-continuity-id',
+        signatureAlgorithm: 'HMAC-SHA256',
+        signatureDataTemplate: '{{body}}',
+        signatureRefreshBufferMs: 30_000,
+        signatureValidityMs: 300_000,
+        tokenEstimation: {
+          enabled: true,
+          multiplier: 1.5,
+        },
+        privateKeyPath: '/var/run/certs/signing-key.pem',
+        keyAlias: 'service-signing-key',
+        tls: {
+          keyPath: '/var/run/certs/client.key',
+          certPath: '/var/run/certs/client.crt',
+        },
+      });
+      expect(persistedState.state.config.env).toEqual({
+        AZURE_TOKEN_SCOPE: 'https://cognitiveservices.azure.com/.default',
+        OPENAI_MAX_TOKENS: '512',
+        OPENAI_MAX_COMPLETION_TOKENS: '128',
+      });
+      expect(JSON.stringify(persistedState)).not.toContain('secret-openai-key');
+      expect(JSON.stringify(persistedState)).not.toContain('secret-github-token');
+      expect(JSON.stringify(persistedState)).not.toContain('client-secret');
+      expect(JSON.stringify(persistedState)).not.toContain('secret-key-value');
+      expect(JSON.stringify(persistedState)).not.toContain('computed-signature-secret');
+      expect(JSON.stringify(persistedState)).not.toContain('inline-private-key');
+      expect(JSON.stringify(persistedState)).not.toContain('inline-client-key');
+    });
   });
 
   describe('defaultTest handling', () => {
