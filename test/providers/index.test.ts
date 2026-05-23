@@ -1715,6 +1715,21 @@ describe('loadApiProvider', () => {
     });
   });
 
+  it('preserves DeepSeek config when loaded through the registry', async () => {
+    const provider = await loadApiProvider('deepseek:deepseek-chat', {
+      options: {
+        config: {
+          temperature: 0.2,
+          apiKey: 'configured-deepseek-token',
+        },
+      },
+    });
+
+    expect(provider.config.temperature).toBe(0.2);
+    expect(provider.config.apiKey).toBe('configured-deepseek-token');
+    expect(provider.config.apiKeyEnvar).toBe('DEEPSEEK_API_KEY');
+  });
+
   it.each([
     ['dashscope:chat:qwen-max', 'qwen-max'],
     ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],

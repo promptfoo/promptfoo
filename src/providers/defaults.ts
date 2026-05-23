@@ -4,23 +4,9 @@ import { getAnthropicProviders } from './anthropic/defaults';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
-import {
-  DefaultGradingJsonProvider as BedrockGradingJsonProvider,
-  DefaultGradingProvider as BedrockGradingProvider,
-  DefaultSuggestionsProvider as BedrockSuggestionsProvider,
-  DefaultSynthesizeProvider as BedrockSynthesizeProvider,
-} from './bedrock/defaults';
-import {
-  DefaultGradingJsonProvider as DeepSeekGradingJsonProvider,
-  DefaultGradingProvider as DeepSeekGradingProvider,
-  DefaultSuggestionsProvider as DeepSeekSuggestionsProvider,
-  DefaultSynthesizeProvider as DeepSeekSynthesizeProvider,
-} from './deepseek/defaults';
-import {
-  DefaultGitHubGradingJsonProvider as GitHubGradingJsonProvider,
-  DefaultGitHubGradingProvider as GitHubGradingProvider,
-  DefaultGitHubSuggestionsProvider as GitHubSuggestionsProvider,
-} from './github/defaults';
+import { getBedrockProviders } from './bedrock/defaults';
+import { getDeepSeekProviders } from './deepseek/defaults';
+import { getGitHubProviders } from './github/defaults';
 import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
 import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
@@ -158,6 +144,12 @@ function hasAzureCredentials(env?: EnvOverrides): boolean {
   );
 
   return (hasApiKey || hasClientCreds) && hasDeployment;
+}
+
+function hasBedrockCredentials(env?: EnvOverrides): boolean {
+  const hasStaticCredentials =
+    hasCredential('AWS_ACCESS_KEY_ID', env) && hasCredential('AWS_SECRET_ACCESS_KEY', env);
+  return hasStaticCredentials || hasCredential('AWS_PROFILE', env);
 }
 
 async function hasGoogleDefaultCredentialsForSelection(
@@ -322,13 +314,15 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   {
     name: 'DeepSeek',
     check: (env) => hasCredential('DEEPSEEK_API_KEY', env),
-    create: () =>
-      createCompletionProviderSet({
-        grading: DeepSeekGradingProvider,
-        gradingJson: DeepSeekGradingJsonProvider,
-        suggestions: DeepSeekSuggestionsProvider,
-        synthesize: DeepSeekSynthesizeProvider,
-      }),
+    create: (env) => {
+      const deepSeek = getDeepSeekProviders(env);
+      return createCompletionProviderSet({
+        grading: deepSeek.gradingProvider,
+        gradingJson: deepSeek.gradingJsonProvider,
+        suggestions: deepSeek.suggestionsProvider,
+        synthesize: deepSeek.synthesizeProvider,
+      });
+    },
   },
   {
     name: 'Mistral',
@@ -366,24 +360,28 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   },
   {
     name: 'AWS Bedrock',
-    check: (env) => hasAnyCredential(['AWS_ACCESS_KEY_ID', 'AWS_PROFILE'], env),
-    create: () =>
-      createCompletionProviderSet({
-        grading: BedrockGradingProvider,
-        gradingJson: BedrockGradingJsonProvider,
-        suggestions: BedrockSuggestionsProvider,
-        synthesize: BedrockSynthesizeProvider,
-      }),
+    check: (env) => hasBedrockCredentials(env),
+    create: (env) => {
+      const bedrock = getBedrockProviders(env);
+      return createCompletionProviderSet({
+        grading: bedrock.gradingProvider,
+        gradingJson: bedrock.gradingJsonProvider,
+        suggestions: bedrock.suggestionsProvider,
+        synthesize: bedrock.synthesizeProvider,
+      });
+    },
   },
   {
     name: 'GitHub Models',
     check: (env) => hasCredential('GITHUB_TOKEN', env),
-    create: () =>
-      createCompletionProviderSet({
-        grading: GitHubGradingProvider,
-        gradingJson: GitHubGradingJsonProvider,
-        suggestions: GitHubSuggestionsProvider,
-      }),
+    create: (env) => {
+      const github = getGitHubProviders(env);
+      return createCompletionProviderSet({
+        grading: github.gradingProvider,
+        gradingJson: github.gradingJsonProvider,
+        suggestions: github.suggestionsProvider,
+      });
+    },
   },
 ];
 
@@ -396,11 +394,6 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
  */
 // Default Voyage embedding model - voyage-3.5 offers balanced performance
 // Anthropic recommends Voyage for embeddings: https://docs.anthropic.com/en/docs/build-with-claude/embeddings
-const GoogleAiStudioDefaultEmbeddingProvider = new AIStudioEmbeddingProvider(
-  'gemini-embedding-001',
-);
-const VoyageDefaultEmbeddingProvider = new VoyageEmbeddingProvider('voyage-3.5');
-
 const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   {
     name: 'OpenAI',
@@ -415,14 +408,14 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   {
     name: 'Google AI Studio',
     check: (env) => hasAnyCredential(['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'], env),
-    create: () => GoogleAiStudioDefaultEmbeddingProvider,
+    create: (env) => new AIStudioEmbeddingProvider('gemini-embedding-001', { env }),
   },
   {
     // Voyage AI - Anthropic's recommended embedding provider
     // Offers high-quality embeddings with domain-specific models available
     name: 'Voyage',
     check: (env) => hasCredential('VOYAGE_API_KEY', env),
-    create: () => VoyageDefaultEmbeddingProvider,
+    create: (env) => new VoyageEmbeddingProvider('voyage-3.5', {}, env),
   },
   {
     name: 'Mistral',

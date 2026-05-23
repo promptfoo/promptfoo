@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../../src/envars';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { hasCodexDefaultCredentials } from '../../../src/providers/openai/codexDefaults';
 
 vi.mock('../../../src/envars');
@@ -51,9 +52,9 @@ describe('GitHub Models Default Providers', () => {
     const providers = await getDefaultProviders();
 
     // Should use GitHub Models for grading and suggestions
-    expect(providers.gradingProvider.id()).toBe('openai/gpt-5.1');
-    expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-5.1');
-    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5.1');
+    expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
+    expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-5');
+    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
 
     // Should fall back to OpenAI for embeddings and moderation (not supported by GitHub)
     expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
@@ -104,7 +105,10 @@ describe('GitHub Models Default Providers', () => {
     });
 
     // Should use GitHub Models
-    expect(providers.gradingProvider.id()).toBe('openai/gpt-5.1');
-    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5.1');
+    expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
+    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
+    expect((providers.gradingProvider as OpenAiChatCompletionProvider).getApiKey()).toBe(
+      'override-github-token',
+    );
   });
 });

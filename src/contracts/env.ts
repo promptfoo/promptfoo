@@ -125,6 +125,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AWS_DEFAULT_REGION: z.string().optional(),
   AWS_PROFILE: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  AWS_SESSION_TOKEN: z.string().optional(),
   AWS_SAGEMAKER_MAX_TOKENS: z.string().optional(),
   AWS_SAGEMAKER_TEMPERATURE: z.string().optional(),
   AWS_SAGEMAKER_TOP_P: z.string().optional(),

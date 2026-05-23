@@ -539,6 +539,9 @@
         "AWS_SECRET_ACCESS_KEY": {
           "type": "string"
         },
+        "AWS_SESSION_TOKEN": {
+          "type": "string"
+        },
         "AWS_SAGEMAKER_MAX_TOKENS": {
           "type": "string"
         },
@@ -1971,6 +1974,9 @@
                       "type": "string"
                     },
                     "AWS_SECRET_ACCESS_KEY": {
+                      "type": "string"
+                    },
+                    "AWS_SESSION_TOKEN": {
                       "type": "string"
                     },
                     "AWS_SAGEMAKER_MAX_TOKENS": {
