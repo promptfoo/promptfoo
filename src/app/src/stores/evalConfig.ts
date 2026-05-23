@@ -39,6 +39,11 @@ const CREDENTIAL_FIELD_NAMES = new Set([
   'token',
 ]);
 
+// Matches env-var names that look like credentials regardless of vendor prefix —
+// covers e.g. OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN, …_PASSWORD.
+const SENSITIVE_ENV_KEY_PATTERN =
+  /(?:^|_)(api_key|key|secret|token|password|credential|auth)(?:_|$)/i;
+
 const omitProviderCredentials = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(omitProviderCredentials);
@@ -57,9 +62,19 @@ const omitProviderCredentials = (value: unknown): unknown => {
   );
 };
 
+const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedConfig>['env'] => {
+  if (!env || typeof env !== 'object') {
+    return env;
+  }
+  const filtered = Object.fromEntries(
+    Object.entries(env).filter(([key]) => !SENSITIVE_ENV_KEY_PATTERN.test(key)),
+  );
+  return filtered as Partial<UnifiedConfig>['env'];
+};
+
 const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => ({
   ...config,
-  env: {},
+  env: omitSensitiveEnv(config.env),
   providers: omitProviderCredentials(config.providers) as UnifiedConfig['providers'],
 });
 

@@ -838,8 +838,9 @@ const EvaluateTestSuiteCreator = () => {
             <DialogDescription>
               Importing{' '}
               <code className="rounded bg-muted px-1 py-0.5">{pendingYamlImport?.fileName}</code>{' '}
-              replaces providers, prompts, test cases, run options, and any API key values entered
-              in this setup. This action cannot be undone.
+              replaces the entire setup — including providers, prompts, test cases, run options,
+              entered API key values, and any other configuration not present in the imported file.
+              This action cannot be undone.
               {yamlHasUnsavedChanges && ' Your unsaved YAML edits will also be discarded.'}
             </DialogDescription>
           </DialogHeader>

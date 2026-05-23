@@ -58,17 +58,30 @@ describe('evalConfig store', () => {
       expect(config).toEqual(DEFAULT_CONFIG);
     });
 
-    it('does not persist environment values used for the current evaluation', () => {
+    it('does not persist sensitive environment values used for the current evaluation', () => {
       useStore.getState().updateConfig({
         description: 'Session config',
-        env: { OPENAI_API_KEY: 'session-only-key' },
+        env: {
+          OPENAI_API_KEY: 'session-only-key',
+          OPENAI_API_HOST: 'https://api.example.com',
+          AWS_BEDROCK_REGION: 'us-east-1',
+        },
       });
 
-      expect(useStore.getState().config.env).toEqual({ OPENAI_API_KEY: 'session-only-key' });
+      expect(useStore.getState().config.env).toEqual({
+        OPENAI_API_KEY: 'session-only-key',
+        OPENAI_API_HOST: 'https://api.example.com',
+        AWS_BEDROCK_REGION: 'us-east-1',
+      });
 
       const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
       expect(persistedState.state.config.description).toBe('Session config');
-      expect(persistedState.state.config.env).toEqual({});
+      // Sensitive keys (API keys/secrets/tokens) are stripped; non-sensitive
+      // configuration values like hostnames and region names are preserved.
+      expect(persistedState.state.config.env).toEqual({
+        OPENAI_API_HOST: 'https://api.example.com',
+        AWS_BEDROCK_REGION: 'us-east-1',
+      });
     });
 
     it('does not persist inline provider API keys used for the current evaluation', () => {
@@ -101,14 +114,17 @@ describe('evalConfig store', () => {
       });
     });
 
-    it('removes environment values from previously persisted browser state on rehydrate', async () => {
+    it('removes sensitive environment values from previously persisted browser state on rehydrate', async () => {
       localStorage.setItem(
         'promptfoo',
         JSON.stringify({
           state: {
             config: {
               description: 'Previously saved config',
-              env: { OPENAI_API_KEY: 'old-persisted-key' },
+              env: {
+                OPENAI_API_KEY: 'old-persisted-key',
+                OPENAI_API_HOST: 'https://api.example.com',
+              },
               providers: [
                 {
                   id: 'openai:gpt-4o',
@@ -128,7 +144,9 @@ describe('evalConfig store', () => {
       await useStore.persist.rehydrate();
 
       expect(useStore.getState().config.description).toBe('Previously saved config');
-      expect(useStore.getState().config.env).toEqual({});
+      expect(useStore.getState().config.env).toEqual({
+        OPENAI_API_HOST: 'https://api.example.com',
+      });
       const rehydratedProviders = useStore.getState().config.providers;
       expect(Array.isArray(rehydratedProviders)).toBe(true);
       if (!Array.isArray(rehydratedProviders)) {

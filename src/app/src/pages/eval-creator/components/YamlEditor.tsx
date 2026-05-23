@@ -62,7 +62,7 @@ const YamlEditorComponent = ({
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
-  const { getTestSuite, setConfig } = useStore();
+  const { getTestSuite, updateConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -71,7 +71,9 @@ const YamlEditorComponent = ({
       const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
 
       if (isFullYamlConfig(parsedConfig)) {
-        setConfig(parsedConfig);
+        // Merge rather than replace so fields not surfaced by getTestSuite() —
+        // e.g. redteam, sharing, outputPath — survive a YAML save.
+        updateConfig(parsedConfig);
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');

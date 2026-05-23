@@ -27,13 +27,13 @@ const mockGetTestSuite = vi.fn().mockReturnValue({
   prompts: ['test prompt'],
   tests: [{ description: 'test case' }],
 });
-const mockSetConfig = vi.fn();
+const mockUpdateConfig = vi.fn();
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: vi.fn(() => ({
     config: {}, // Mock config object
     getTestSuite: mockGetTestSuite,
-    setConfig: mockSetConfig,
+    updateConfig: mockUpdateConfig,
     setState: vi.fn(),
   })),
 }));
@@ -131,7 +131,7 @@ describe('YamlEditor', () => {
     await user.paste('description: Saved with shortcut');
     await user.keyboard('{Control>}s{/Control}');
 
-    expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
+    expect(mockUpdateConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });
@@ -145,7 +145,7 @@ describe('YamlEditor', () => {
     await user.type(editor, '- vars:\n    topic: safety');
     await user.click(screen.getByRole('button', { name: /Save/ }));
 
-    expect(mockSetConfig).not.toHaveBeenCalled();
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(
       'To import individual test cases, use Import CSV or YAML',
     );
@@ -164,7 +164,7 @@ describe('YamlEditor', () => {
     await user.type(editor, 'vars:\n  topic: safety\nassert:\n  - type: contains');
     await user.click(screen.getByRole('button', { name: /Save/ }));
 
-    expect(mockSetConfig).not.toHaveBeenCalled();
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
     expect(screen.getByRole('alert')).toHaveTextContent(
       'To import individual test cases, use Import CSV or YAML',
     );
@@ -371,7 +371,7 @@ describe('YamlEditor', () => {
         vi.fn(() => ({
           config: {},
           getTestSuite: mockGetTestSuite,
-          setConfig: mockSetConfig,
+          updateConfig: mockUpdateConfig,
           setState: vi.fn(),
         })),
       );

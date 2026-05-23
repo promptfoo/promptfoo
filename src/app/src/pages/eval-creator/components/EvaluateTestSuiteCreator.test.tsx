@@ -490,7 +490,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.upload(fileInput, mockFile);
 
     const dialog = await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' });
-    expect(dialog).toHaveAccessibleDescription(/replaces providers, prompts, test cases/);
+    expect(dialog).toHaveAccessibleDescription(/replaces the entire setup/);
     expect(dialog).toHaveTextContent('test.yaml');
     expect(dialog).toHaveTextContent('API key values');
     expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
