@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { getPluginDocumentationUrl, hasSpecificPluginDocumentation } from './pluginDocumentationMap';
+import {
+  getPluginDocumentationUrl,
+  hasSpecificPluginDocumentation,
+} from './pluginDocumentationMap';
 
 describe('pluginDocumentationMap', () => {
   it('links the resource exhaustion plugin to its specific guide', () => {
