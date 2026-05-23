@@ -1,6 +1,6 @@
 ---
 sidebar_position: 40
-description: Share your promptfoo eval results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure
+description: Share your promptfoo eval results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure with private links and CI/CD guidance.
 keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team sharing]
 ---
 
@@ -23,7 +23,7 @@ promptfoo eval
 promptfoo share
 ```
 
-The login command opens your browser to authenticate. If you don't have an account, visit https://promptfoo.app/welcome to create one.
+The login command opens your browser to authenticate. If you don't have an account, visit [promptfoo.app/welcome](https://promptfoo.app/welcome) to create one.
 
 :::note
 

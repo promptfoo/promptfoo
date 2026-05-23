@@ -28,6 +28,7 @@ async function createDeviceCode() {
     response = await fetch(`${API_BASE}/auth/device/code`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: 'promptfoo-cli' }),
     });
   } catch (error) {
     throw new Error(`Failed to connect to API at ${API_BASE}. Is the server running? ${error}`);
@@ -78,7 +79,7 @@ async function main() {
     // Screenshot 1: Code verified state (unauthenticated user with email form)
     console.log('Capturing: device-auth-code-verified.png');
     const deviceCode1 = await createDeviceCode();
-    console.log(`  Device code: ${deviceCode1.user_code}`);
+    console.log('  Device code created');
 
     const page1 = await context.newPage();
     await page1.goto(`${APP_BASE}/device?code=${deviceCode1.user_code}`);
@@ -107,7 +108,7 @@ async function main() {
     // Need to create a new code and authorize it to get the success state
     console.log('Capturing: device-auth-success.png');
     const deviceCode2 = await createDeviceCode();
-    console.log(`  Device code: ${deviceCode2.user_code}`);
+    console.log('  Device code created');
 
     const page2 = await context.newPage();
     await page2.goto(`${APP_BASE}/device?code=${deviceCode2.user_code}`);
@@ -148,7 +149,7 @@ async function main() {
     // Screenshot 3: Already authenticated user with Authorize button
     console.log('Capturing: device-auth-already-logged-in.png');
     const deviceCode3 = await createDeviceCode();
-    console.log(`  Device code: ${deviceCode3.user_code}`);
+    console.log('  Device code created');
 
     const page3 = await context.newPage();
     await page3.goto(`${APP_BASE}/device?code=${deviceCode3.user_code}`);
