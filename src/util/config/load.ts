@@ -153,23 +153,19 @@ export function resolveCliProvidersWithConfig(
  *
  * @see https://github.com/promptfoo/promptfoo/issues/364
  */
-const JSON_SCHEMA_PATH_PATTERNS: readonly RegExp[] = [
-  /^#\/(?:providers|targets)\/\d+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
-  /^#\/(?:providers|targets)\/\d+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
-  /^#\/(?:providers|targets)\/\d+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
-  /^#\/(?:providers|targets)\/\d+\/[^/]+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
-  /^#\/(?:providers|targets)\/\d+\/[^/]+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
-  /^#\/(?:providers|targets)\/\d+\/[^/]+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
-  /^#\/defaultTest\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
-  /^#\/defaultTest\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
-  /^#\/defaultTest\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
-  /^#\/tests\/\d+\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
-  /^#\/tests\/\d+\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
-  /^#\/tests\/\d+\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+const PROVIDER_CONFIG_PATH_PATTERNS: readonly RegExp[] = [
+  /^#\/(?:providers|targets)\/\d+\/(?:[^/]+\/)?config(?:\/|$)/,
+  /^#\/(?:[^/]+\/)*provider\/(?:[^/]+\/)?config(?:\/|$)/,
 ] as const;
 
+const STANDALONE_JSON_SCHEMA_PATH_PATTERN =
+  /\/(?:tools\/\d+\/function\/parameters|functions\/\d+\/parameters|response_format\/(?:json_schema\/)?schema)(?:\/.*)?$/;
+
 function isJsonSchemaPath(refPath: string): boolean {
-  return JSON_SCHEMA_PATH_PATTERNS.some((pattern) => pattern.test(refPath));
+  return (
+    STANDALONE_JSON_SCHEMA_PATH_PATTERN.test(refPath) &&
+    PROVIDER_CONFIG_PATH_PATTERNS.some((pattern) => pattern.test(refPath))
+  );
 }
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
