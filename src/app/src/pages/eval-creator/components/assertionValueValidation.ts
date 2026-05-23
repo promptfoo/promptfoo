@@ -1,0 +1,443 @@
+import type { Assertion, AssertionType } from '@promptfoo/types';
+
+export const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'contains-any',
+  'contains-all',
+  'icontains-any',
+  'icontains-all',
+  'not-contains-any',
+  'not-contains-all',
+  'not-icontains-any',
+  'not-icontains-all',
+]);
+
+export const COMMA_SEPARATED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  ...ARRAY_VALUE_ASSERTION_TYPES,
+  'moderation',
+  'not-moderation',
+]);
+
+export const THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
+  'cost',
+  'latency',
+  'perplexity',
+  'perplexity-score',
+  'not-cost',
+  'not-latency',
+  'not-perplexity',
+  'not-perplexity-score',
+]);
+
+export const REQUIRED_THRESHOLD_ASSERTION_TYPES = new Set<AssertionType>([
+  'cost',
+  'latency',
+  'not-cost',
+  'not-latency',
+]);
+
+export const WORD_COUNT_ASSERTION_TYPES = new Set<AssertionType>(['word-count', 'not-word-count']);
+
+export const TEXT_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'bleu',
+  'not-bleu',
+  'rouge-n',
+  'not-rouge-n',
+  'similar',
+  'not-similar',
+]);
+
+export const PI_SCORE_ASSERTION_TYPES = new Set<AssertionType>(['pi', 'not-pi']);
+
+export const RAG_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'answer-relevance',
+  'not-answer-relevance',
+  'context-faithfulness',
+  'not-context-faithfulness',
+  'context-recall',
+  'not-context-recall',
+  'context-relevance',
+  'not-context-relevance',
+]);
+
+export const MODEL_JUDGE_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
+  'llm-rubric',
+  'not-llm-rubric',
+  'g-eval',
+  'not-g-eval',
+]);
+
+export const TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES = new Set<AssertionType>([
+  'trajectory:goal-success',
+  'not-trajectory:goal-success',
+]);
+
+export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'is-sql',
+  'contains-sql',
+  'not-is-sql',
+  'not-contains-sql',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:step-count',
+  'not-trajectory:tool-args-match',
+  'not-trajectory:tool-sequence',
+  'not-trajectory:step-count',
+]);
+
+const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([
+  'is-sql',
+  'contains-sql',
+  'not-is-sql',
+  'not-contains-sql',
+]);
+
+const REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES = new Set<AssertionType>([
+  'contains',
+  'icontains',
+  'not-contains',
+  'not-icontains',
+]);
+
+const REQUIRED_STRING_ASSERTION_TYPES = new Set<AssertionType>([
+  'starts-with',
+  'regex',
+  'webhook',
+  'not-starts-with',
+  'not-regex',
+  'not-webhook',
+  'context-recall',
+  'not-context-recall',
+  'factuality',
+  'not-factuality',
+  'finish-reason',
+  'not-finish-reason',
+  'model-graded-closedqa',
+  'not-model-graded-closedqa',
+  'pi',
+  'not-pi',
+  'rouge-n',
+  'not-rouge-n',
+  'select-best',
+]);
+
+const REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES = new Set<AssertionType>([
+  'bleu',
+  'not-bleu',
+  'g-eval',
+  'not-g-eval',
+  'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
+  'not-similar',
+  'not-similar:cosine',
+  'not-similar:dot',
+  'not-similar:euclidean',
+]);
+
+export const NAMED_MATCHER_ASSERTION_TYPES = new Set<AssertionType>([
+  'skill-used',
+  'not-skill-used',
+  'trajectory:tool-used',
+  'not-trajectory:tool-used',
+]);
+
+function hasNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+function hasNonBlankStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(hasNonBlankString);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasMatcherName(value: Record<string, unknown>): boolean {
+  return hasNonBlankString(value.name) || hasNonBlankString(value.pattern);
+}
+
+function getThresholdError(assertion: Assertion): string | undefined {
+  if (REQUIRED_THRESHOLD_ASSERTION_TYPES.has(assertion.type)) {
+    if (
+      typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0
+    ) {
+      return assertion.type === 'latency'
+        ? 'Enter a maximum latency in milliseconds, 0 or greater.'
+        : 'Enter a maximum cost, 0 or greater.';
+    }
+  }
+
+  if (
+    (assertion.type === 'perplexity-score' || assertion.type === 'not-perplexity-score') &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0 ||
+      assertion.threshold > 1)
+  ) {
+    return 'Enter a normalized score threshold from 0 to 1.';
+  }
+
+  if (
+    THRESHOLD_ASSERTION_TYPES.has(assertion.type) &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0)
+  ) {
+    return 'Enter a threshold value of 0 or greater.';
+  }
+
+  if (
+    (TEXT_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+      RAG_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+      MODEL_JUDGE_SCORE_ASSERTION_TYPES.has(assertion.type) ||
+      TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type)) &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0 ||
+      assertion.threshold > 1)
+  ) {
+    return 'Enter a score threshold from 0 to 1.';
+  }
+
+  if (
+    PI_SCORE_ASSERTION_TYPES.has(assertion.type) &&
+    assertion.threshold !== undefined &&
+    (typeof assertion.threshold !== 'number' ||
+      !Number.isFinite(assertion.threshold) ||
+      assertion.threshold < 0)
+  ) {
+    return 'Enter a passing score threshold of 0 or greater.';
+  }
+
+  return undefined;
+}
+
+function isUsableWordCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function getWordCountError(assertion: Assertion): string | undefined {
+  if (!WORD_COUNT_ASSERTION_TYPES.has(assertion.type)) {
+    return undefined;
+  }
+
+  if (isUsableWordCount(assertion.value)) {
+    return undefined;
+  }
+
+  if (typeof assertion.value === 'string' && assertion.value.trim() !== '') {
+    const parsedValue = Number(assertion.value);
+    return isUsableWordCount(parsedValue)
+      ? undefined
+      : 'Enter word counts as whole numbers, 0 or greater.';
+  }
+
+  if (!isRecord(assertion.value)) {
+    return 'Enter an exact word count or at least one limit.';
+  }
+
+  const { min, max } = assertion.value;
+  if (min === undefined && max === undefined) {
+    return 'Enter an exact word count or at least one limit.';
+  }
+  if (
+    (min !== undefined && !isUsableWordCount(min)) ||
+    (max !== undefined && !isUsableWordCount(max))
+  ) {
+    return 'Enter word counts as whole numbers, 0 or greater.';
+  }
+  if (typeof min === 'number' && typeof max === 'number' && min > max) {
+    return 'Minimum word count cannot exceed maximum word count.';
+  }
+
+  return undefined;
+}
+
+function getStructuredValueError(assertion: Assertion): string | undefined {
+  if (
+    OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
+    assertion.value !== undefined &&
+    !isRecord(assertion.value)
+  ) {
+    return 'Enter optional SQL validation settings as a JSON object.';
+  }
+
+  if (
+    (assertion.type === 'trajectory:tool-args-match' ||
+      assertion.type === 'not-trajectory:tool-args-match') &&
+    (!isRecord(assertion.value) ||
+      !hasMatcherName(assertion.value) ||
+      (!('args' in assertion.value) && !('arguments' in assertion.value)))
+  ) {
+    return 'Enter JSON with a tool name or pattern and expected args.';
+  }
+
+  if (
+    (assertion.type === 'trajectory:step-count' ||
+      assertion.type === 'not-trajectory:step-count') &&
+    (!isRecord(assertion.value) ||
+      (typeof assertion.value.min !== 'number' && typeof assertion.value.max !== 'number'))
+  ) {
+    return 'Enter JSON with a minimum or maximum trajectory step count.';
+  }
+
+  if (
+    (assertion.type === 'trajectory:tool-sequence' ||
+      assertion.type === 'not-trajectory:tool-sequence') &&
+    !(
+      (Array.isArray(assertion.value) && assertion.value.length > 0) ||
+      (isRecord(assertion.value) &&
+        Array.isArray(assertion.value.steps) &&
+        assertion.value.steps.length > 0)
+    )
+  ) {
+    return 'Enter a non-empty JSON tool sequence.';
+  }
+
+  return undefined;
+}
+
+function getRequiredStringValueError(assertion: Assertion): string | undefined {
+  if (!REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) || hasNonBlankString(assertion.value)) {
+    return undefined;
+  }
+
+  if (assertion.type === 'select-best') {
+    return 'Enter criteria for selecting the best output.';
+  }
+  if (assertion.type === 'finish-reason' || assertion.type === 'not-finish-reason') {
+    return 'Select or enter the expected finish reason.';
+  }
+  if (assertion.type === 'webhook' || assertion.type === 'not-webhook') {
+    return 'Enter the webhook URL that will validate responses.';
+  }
+  if (PI_SCORE_ASSERTION_TYPES.has(assertion.type)) {
+    return 'Enter criteria for Pi Labs scoring.';
+  }
+  if (assertion.type === 'context-recall' || assertion.type === 'not-context-recall') {
+    return 'Enter the ground truth answer for context recall.';
+  }
+  if (assertion.type === 'factuality' || assertion.type === 'not-factuality') {
+    return 'Enter the factual reference statement.';
+  }
+  if (
+    assertion.type === 'model-graded-closedqa' ||
+    assertion.type === 'not-model-graded-closedqa'
+  ) {
+    return 'Enter the criterion the response must meet.';
+  }
+
+  return 'Enter an expected value before saving this check.';
+}
+
+function getExpectedValueError(assertion: Assertion): string | undefined {
+  if (
+    (assertion.type === 'moderation' || assertion.type === 'not-moderation') &&
+    assertion.value !== undefined &&
+    (!Array.isArray(assertion.value) ||
+      !assertion.value.every((value) => typeof value === 'string'))
+  ) {
+    return 'Enter moderation categories as a comma-separated list.';
+  }
+
+  if (ARRAY_VALUE_ASSERTION_TYPES.has(assertion.type) && !hasNonBlankStringArray(assertion.value)) {
+    return 'Enter at least one comma-separated value for this check.';
+  }
+
+  if (
+    REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES.has(assertion.type) &&
+    !hasNonBlankString(assertion.value) &&
+    !(typeof assertion.value === 'number' && Number.isFinite(assertion.value))
+  ) {
+    return 'Enter an expected value before saving this check.';
+  }
+
+  const requiredStringValueError = getRequiredStringValueError(assertion);
+  if (requiredStringValueError) {
+    return requiredStringValueError;
+  }
+
+  if (
+    REQUIRED_STRING_OR_ARRAY_ASSERTION_TYPES.has(assertion.type) &&
+    !hasNonBlankString(assertion.value) &&
+    !hasNonBlankStringArray(assertion.value)
+  ) {
+    if (assertion.type.includes('similar')) {
+      return 'Enter an expected answer for semantic similarity.';
+    }
+    if (assertion.type.includes('g-eval')) {
+      return 'Enter at least one grading criterion for G-Eval.';
+    }
+
+    return 'Enter at least one reference answer for this check.';
+  }
+
+  if (
+    TRAJECTORY_GOAL_SUCCESS_ASSERTION_TYPES.has(assertion.type) &&
+    !hasNonBlankString(assertion.value) &&
+    !(isRecord(assertion.value) && hasNonBlankString(assertion.value.goal))
+  ) {
+    return 'Enter the goal that the agent should achieve.';
+  }
+
+  if (
+    NAMED_MATCHER_ASSERTION_TYPES.has(assertion.type) &&
+    !hasNonBlankString(assertion.value) &&
+    !hasNonBlankStringArray(assertion.value) &&
+    !(isRecord(assertion.value) && hasMatcherName(assertion.value))
+  ) {
+    return assertion.type.includes('skill')
+      ? 'Enter the expected skill name.'
+      : 'Enter the expected traced tool name.';
+  }
+
+  return undefined;
+}
+
+export function getRunnableAssertionValueError(assertion: Assertion): string | undefined {
+  return (
+    getThresholdError(assertion) ||
+    getWordCountError(assertion) ||
+    getStructuredValueError(assertion) ||
+    getExpectedValueError(assertion)
+  );
+}
+
+export function getAssertionValueError(assertion: Assertion): string | undefined {
+  return getRunnableAssertionValueError(assertion);
+}
+
+export function getFirstRunnableAssertionValueError(
+  assertions: unknown[] | undefined,
+): string | undefined {
+  for (const assertion of assertions ?? []) {
+    if (!isRecord(assertion) || typeof assertion.type !== 'string') {
+      return 'Select a valid assertion type before running.';
+    }
+
+    if (assertion.type === 'assert-set') {
+      if (!Array.isArray(assertion.assert)) {
+        return 'Select a valid assertion type before running.';
+      }
+      const nestedError = getFirstRunnableAssertionValueError(assertion.assert);
+      if (nestedError) {
+        return nestedError;
+      }
+      continue;
+    }
+
+    const error = getRunnableAssertionValueError(assertion as Assertion);
+    if (error) {
+      return error;
+    }
+  }
+
+  return undefined;
+}
