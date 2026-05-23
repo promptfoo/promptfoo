@@ -17,6 +17,7 @@ vi.mock('../../../src/util/sharing', () => ({
 vi.mock('../../../src/models/eval', () => ({
   default: {
     create: vi.fn(),
+    findById: vi.fn(),
   },
 }));
 vi.mock('../../../src/globalConfig/accounts');
@@ -29,6 +30,7 @@ import { shouldShareResults } from '../../../src/util/sharing';
 
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
+const mockedEvalFindById = vi.mocked(Eval.findById);
 const mockedEvaluateWithSource = vi.mocked(evaluateWithSource);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
@@ -146,6 +148,24 @@ describe('Eval Routes - Sharing behavior', () => {
       }),
     );
     expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('sk-test-12345678901234567890');
+  });
+
+  it('restores redacted Azure SAS tokens before rerunning a stored eval', async () => {
+    const sasUri = 'az://account/container/tests.yaml?sp=r&sig=azure-secret';
+    mockedEvalFindById.mockResolvedValueOnce({ config: { tests: sasUri } } as never);
+
+    await postJob({
+      ...minimalTestSuite,
+      tests: 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+      sourceEvalId: 'source-eval-id',
+    });
+
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
+    expect(evaluateArg.tests).toBe(sasUri);
   });
 
   it('should not log the raw save body on database failure', async () => {
