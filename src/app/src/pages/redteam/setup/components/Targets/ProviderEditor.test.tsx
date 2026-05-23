@@ -118,7 +118,7 @@ describe('ProviderEditor', () => {
     expect(configEditor).toHaveAttribute('data-providertype', 'http');
 
     // Provider list is always expanded - find and click OpenAI
-    const openAiProviderCard = screen.getByText('OpenAI').closest('[role="button"]');
+    const openAiProviderCard = screen.getByText('OpenAI').closest('button');
     expect(openAiProviderCard).toBeInTheDocument();
     await user.click(openAiProviderCard!);
 

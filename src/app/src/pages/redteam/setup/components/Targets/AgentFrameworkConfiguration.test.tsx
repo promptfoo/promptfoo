@@ -33,7 +33,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const providerIdInput = screen.getByRole('textbox', {
-      name: /Provider ID \(Python file path\)/i,
+      name: /Python agent file path/i,
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -114,6 +114,9 @@ describe('AgentFrameworkConfiguration', () => {
     }).parentElement;
 
     expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(dialog).toHaveAccessibleDescription(
+      'Copy or download a starter Python provider, customize it, then enter its local file path above.',
+    );
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
   });
@@ -137,7 +140,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const providerIdInput = screen.getByRole('textbox', {
-      name: /Provider ID \(Python file path\)/i,
+      name: /Python agent file path/i,
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -166,7 +169,7 @@ describe('AgentFrameworkConfiguration', () => {
     );
 
     const providerIdInput = screen.getByRole('textbox', {
-      name: /Provider ID \(Python file path\)/i,
+      name: /Python agent file path/i,
     });
     await user.click(providerIdInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -174,5 +177,37 @@ describe('AgentFrameworkConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', invalidPath);
+  });
+
+  it('describes required path syntax and associates provider validation with the input', () => {
+    renderWithProviders(
+      <AgentFrameworkConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        agentType="langchain"
+        providerIdError="Python agent file path is required"
+      />,
+    );
+
+    const input = screen.getByRole('textbox', { name: 'Python agent file path' });
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription(
+      'Enter a local path beginning with file://, for example file:///workspace/agents/agent.py. Python agent file path is required',
+    );
+  });
+
+  it('uses evaluation-specific quickstart guidance in eval mode', () => {
+    renderWithProviders(
+      <AgentFrameworkConfiguration
+        selectedTarget={{ id: '', config: {} }}
+        updateCustomTarget={vi.fn()}
+        agentType="langchain"
+        mode="eval"
+      />,
+    );
+
+    expect(screen.getByText(/connect your agent to this evaluation/i)).toBeInTheDocument();
+    expect(screen.queryByText(/red team evaluation system/i)).not.toBeInTheDocument();
   });
 });

@@ -46,7 +46,17 @@ describe('FoundationModelConfiguration', () => {
     expect(maxTokensInput).toHaveValue(1024);
     expect(topPInput).toHaveValue(0.9);
     expect(apiKeyInput).toHaveValue('test-key-123');
+    expect(apiKeyInput).toHaveAttribute('type', 'password');
+    expect(apiKeyInput).toHaveAttribute('autocomplete', 'new-password');
+    expect(apiKeyInput).toHaveAccessibleDescription(/included in this provider configuration/i);
     expect(apiBaseUrlInput).toHaveValue('https://custom.api.example.com/v1');
+    expect(apiBaseUrlInput).toHaveAccessibleDescription(/For proxies, local models/i);
+    expect(screen.getByText(/Prefer the OPENAI_API_KEY environment variable/i)).toBeInTheDocument();
+    expect(screen.getByText(/not restored after a page reload/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show API Key' }));
+    expect(apiKeyInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide API Key' })).toBeInTheDocument();
 
     await user.click(temperatureInput);
     await user.keyboard('{Control>}a{/Control}');
@@ -91,8 +101,10 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    const modelIdInput = screen.getByRole('textbox', { name: 'Model ID' });
     expect(modelIdInput).toHaveValue('test-model-id');
+    expect(modelIdInput).toBeRequired();
+    expect(modelIdInput).toHaveAccessibleDescription(/Specify the model to use/i);
   });
 
   it('should call updateCustomTarget with the correct arguments when the user types a new model ID', async () => {
@@ -152,6 +164,64 @@ describe('FoundationModelConfiguration', () => {
     const temperatureInput = screen.getByLabelText('Temperature');
     await user.clear(temperatureInput);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', undefined);
+  });
+
+  it('preserves zero values for sampling controls and max token validation', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+
+    await user.click(screen.getByLabelText('Temperature'));
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    await user.click(screen.getByLabelText('Max Tokens'));
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    await user.click(screen.getByLabelText('Top P'));
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('temperature', 0);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('max_tokens', 0);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('top_p', 0);
+  });
+
+  it('associates validation messages with fields and reveals invalid advanced settings', async () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+        fieldErrors={{
+          modelId: 'Model ID is required',
+          temperature: 'Temperature must be between 0 and 2',
+          maxTokens: 'Max tokens must be greater than 0',
+        }}
+      />,
+    );
+
+    const modelIdInput = screen.getByLabelText(/Model ID/i);
+    expect(modelIdInput).toHaveAttribute('aria-invalid', 'true');
+    expect(modelIdInput).toHaveAccessibleDescription(/Model ID is required.*Specify the model/i);
+
+    const temperatureInput = await screen.findByLabelText('Temperature');
+    expect(temperatureInput).toHaveAttribute('aria-invalid', 'true');
+    expect(temperatureInput).toHaveAccessibleDescription(
+      /Temperature must be between 0 and 2.*Controls randomness/i,
+    );
+
+    const maxTokensInput = screen.getByLabelText('Max Tokens');
+    expect(maxTokensInput).toHaveAttribute('aria-invalid', 'true');
+    expect(maxTokensInput).toHaveAccessibleDescription(
+      /Max tokens must be greater than 0.*Maximum number of tokens/i,
+    );
   });
 
   it('should call updateCustomTarget with undefined when API Base URL field is cleared', async () => {
@@ -281,6 +351,32 @@ describe('FoundationModelConfiguration', () => {
     );
   });
 
+  it('masks a revealed API key again when the configured model changes', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    await user.click(screen.getByRole('button', { name: 'Show API Key' }));
+    expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
+
+    rerender(
+      <FoundationModelConfiguration
+        selectedTarget={{ ...initialTarget, id: 'openai:gpt-5.4' }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openai"
+      />,
+    );
+
+    expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Show API Key' })).toBeInTheDocument();
+  });
+
   it('should prioritize Google AI Studio when both Google AI Studio and Vertex API keys are present', () => {
     render(
       <FoundationModelConfiguration
@@ -392,11 +488,41 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('invoke');
-    expect(screen.getByRole('textbox', { name: /Model ID/i })).toHaveValue(
+    expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toHaveValue('invoke');
+    expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toBeRequired();
+    expect(screen.getByRole('combobox', { name: 'Bedrock API' })).toHaveAccessibleDescription(
+      /Use Converse for Bedrock-native tool calling and MCP servers/i,
+    );
+    expect(screen.getByRole('textbox', { name: 'Model ID' })).toHaveValue(
       'anthropic.claude-3-5-sonnet-20241022-v2:0',
     );
     expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+  });
+
+  it('should associate disclosed Bedrock setting guidance with its fields', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Bedrock Settings/i }));
+
+    expect(screen.getByLabelText('AWS Region')).toHaveAccessibleDescription(
+      /Defaults to us-east-1/i,
+    );
+    expect(screen.getByLabelText('AWS Profile')).toHaveAccessibleDescription(
+      /Falls back to the default credential chain/i,
+    );
+    expect(screen.getByLabelText('Inference Model Type')).toHaveAccessibleDescription(
+      /Required when the model ID is an Application Inference Profile ARN/i,
+    );
   });
 
   it('should switch Bedrock to Converse ids and show MCP configuration', async () => {
@@ -472,6 +598,13 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const commandInput = screen.getByLabelText(/Command/i);
+    expect(commandInput).toHaveAccessibleDescription(
+      'Not active. Enter a command, path, or URL to enable this server.',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Not active. Enter a command, path, or URL to enable this server.',
+    );
+    expect(screen.getByRole('button', { name: 'Remove MCP server 1' })).toBeInTheDocument();
     await user.click(commandInput);
     await user.paste('npx');
 
@@ -505,6 +638,9 @@ describe('FoundationModelConfiguration', () => {
     );
 
     const commandInput = screen.getByLabelText(/Command/i);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Active. This server will be available during Bedrock Converse evaluations.',
+    );
     await user.clear(commandInput);
 
     const calls = vi.mocked(mockUpdateCustomTarget).mock.calls;

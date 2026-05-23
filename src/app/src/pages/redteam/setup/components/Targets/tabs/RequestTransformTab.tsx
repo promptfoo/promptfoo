@@ -2,6 +2,7 @@ import React from 'react';
 
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
+import { Label } from '@app/components/ui/label';
 import Prism from '@app/lib/prism';
 import { callApi } from '@app/utils/api';
 import dedent from 'dedent';
@@ -105,9 +106,13 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
         </a>{' '}
         for more information.
       </p>
+      <Label htmlFor="http-request-transform" className="mb-2 block font-medium">
+        Request Transform Function
+      </Label>
       <div className="relative">
         <div className="rounded-md border border-border bg-white dark:bg-zinc-900">
           <Editor
+            textareaId="http-request-transform"
             value={
               (selectedTarget.config?.transformRequest as string) || defaultRequestTransform || ''
             }

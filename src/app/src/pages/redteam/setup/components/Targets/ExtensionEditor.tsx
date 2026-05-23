@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 
 import { HelperText } from '@app/components/ui/helper-text';
@@ -32,7 +32,7 @@ const validatePath = (value: string, isTyping: boolean): ValidationError | undef
   const [filePath, functionName] = withoutPrefix.split(':');
 
   // During typing, only show format error if they've already typed a colon
-  if (isTyping && !value.includes(':')) {
+  if (isTyping && !withoutPrefix.includes(':')) {
     return undefined;
   }
 
@@ -56,8 +56,13 @@ export default function ExtensionEditor({
   const [isTyping, setIsTyping] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const helperTextId = useId();
 
   const error = useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
+
+  useEffect(() => {
+    onValidationChange?.(Boolean(error));
+  }, [error, onValidationChange]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,12 +78,9 @@ export default function ExtensionEditor({
       typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(false);
       }, 500);
-      const validationResult = validatePath(newValue, true);
-      onValidationChange?.(!!validationResult);
-
       onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
     },
-    [onExtensionsChange, onValidationChange],
+    [onExtensionsChange],
   );
 
   // Cleanup timeout on unmount
@@ -158,9 +160,11 @@ export default function ExtensionEditor({
             placeholder="/path/to/hook.js:extensionHook"
             value={extensions[0]?.replace(FILE_PROTOCOL_PREFIX, '') || ''}
             onChange={handleChange}
+            aria-invalid={Boolean(error)}
+            aria-describedby={helperTextId}
           />
         </div>
-        <HelperText error={!!error}>
+        <HelperText id={helperTextId} error={!!error}>
           {error ? error.message : 'Path to your extension file and exported function name'}
         </HelperText>
       </div>
