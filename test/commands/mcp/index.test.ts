@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mcpCommand } from '../../../src/commands/mcp/index';
-import { startHttpMcpServer } from '../../../src/commands/mcp/server';
+import { startHttpMcpServer, startStdioMcpServer } from '../../../src/commands/mcp/server';
 import logger from '../../../src/logger';
 
 vi.mock('../../../src/logger', () => ({
@@ -71,6 +71,23 @@ describe('mcp command', () => {
       await mcpCmd!.parseAsync(['node', 'test', '--transport', 'http']);
 
       expect(startHttpMcpServer).toHaveBeenCalledWith(3100);
+    });
+  });
+
+  describe('startup failures', () => {
+    it('logs dependency errors and sets exitCode=1', async () => {
+      vi.mocked(startStdioMcpServer).mockRejectedValueOnce(
+        new Error('The @modelcontextprotocol/sdk package is required for MCP server support.'),
+      );
+
+      const mcpCmd = program.commands.find((cmd) => cmd.name() === 'mcp');
+      expect(mcpCmd).toBeDefined();
+      await mcpCmd!.parseAsync(['node', 'test', '--transport', 'stdio']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to start MCP server: The @modelcontextprotocol/sdk package is required for MCP server support.',
+      );
+      expect(process.exitCode).toBe(1);
     });
   });
 });

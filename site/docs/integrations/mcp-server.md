@@ -14,8 +14,19 @@ Expose promptfoo's eval tools to local AI agents via Model Context Protocol (MCP
 - Node.js installed on your system
 - A promptfoo project with some evaluations (for testing the connection)
 - Cursor IDE, Claude Desktop, or another MCP-compatible AI tool
+- The optional `@modelcontextprotocol/sdk` runtime package when your promptfoo install omits optional dependencies
 
 :::
+
+For slim installs created with omitted optional dependencies, use a local install that includes
+both promptfoo and the MCP SDK:
+
+```bash
+npm install promptfoo @modelcontextprotocol/sdk
+```
+
+When using that local slim-install setup, run the MCP commands below as `npx promptfoo ...`
+instead of `npx promptfoo@latest ...` so both packages resolve from the same project.
 
 ## Quick Start
 
@@ -206,6 +217,14 @@ npx promptfoo@latest validate
 
 # Test the MCP server manually
 npx promptfoo@latest mcp --transport stdio
+```
+
+If the error says `@modelcontextprotocol/sdk` is required, install that optional runtime package
+alongside the promptfoo installation that runs the server. For example, add both packages to the
+same project before using a local `npx promptfoo ...` command:
+
+```bash
+npm install promptfoo @modelcontextprotocol/sdk
 ```
 
 **Port conflicts (HTTP mode):**
