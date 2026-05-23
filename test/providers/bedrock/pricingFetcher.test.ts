@@ -724,6 +724,36 @@ describe('pricingFetcher', () => {
       expect(mockGetCache).not.toHaveBeenCalled();
     });
 
+    it('should abort pricing API requests that exceed the timeout', async () => {
+      vi.useFakeTimers();
+      mockIsCacheEnabled.mockReturnValue(false);
+      let abortSignal: AbortSignal | undefined;
+      const mockSend = vi.fn((_command, options?: { abortSignal?: AbortSignal }) => {
+        abortSignal = options?.abortSignal;
+        return new Promise(() => undefined);
+      });
+
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
+
+      try {
+        const resultPromise = getPricingData('us-east-1');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(mockSend).toHaveBeenCalled();
+        expect(abortSignal?.aborted).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(5_000);
+
+        await expect(resultPromise).resolves.toBeNull();
+        expect(abortSignal?.aborted).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should not share an in-flight credential failure with a valid caller', async () => {
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),

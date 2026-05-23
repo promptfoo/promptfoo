@@ -32,6 +32,10 @@ export interface BedrockOptions {
   endpoint?: string;
   /** Custom per-token cost override. */
   cost?: number | ModelCost;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
 }
 
 const BEDROCK_CACHE_KEY_HMAC_KEY = 'promptfoo:bedrock:cache-key:v1';

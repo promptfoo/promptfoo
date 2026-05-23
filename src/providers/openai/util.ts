@@ -709,9 +709,9 @@ export function calculateOpenAICost(
         ? model.cost.audioOutput
         : 0;
     const audioInputCost =
-      config.audioInputCost ?? objectCost?.audioInput ?? config.audioCost ?? modelAudioInputCost;
+      config.audioInputCost ?? config.audioCost ?? objectCost?.audioInput ?? modelAudioInputCost;
     const audioOutputCost =
-      config.audioOutputCost ?? objectCost?.audioOutput ?? config.audioCost ?? modelAudioOutputCost;
+      config.audioOutputCost ?? config.audioCost ?? objectCost?.audioOutput ?? modelAudioOutputCost;
     totalCost += audioInputCost * audioPromptTokens + audioOutputCost * audioCompletionTokens;
   }
 

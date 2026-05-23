@@ -31,6 +31,7 @@ import { MCPClient } from '../mcp/client';
 import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
+  getTokenCostRates,
   isOpenAIToolArray,
   isOpenAIToolChoice,
   type OpenAIToolChoice,
@@ -219,6 +220,7 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
  */
 function calculateBedrockConverseCost(
   modelId: string,
+  config: BedrockConverseOptions,
   promptTokens?: number,
   completionTokens?: number,
 ): number | undefined {
@@ -230,10 +232,19 @@ function calculateBedrockConverseCost(
   const normalizedModelId = modelId.toLowerCase();
   for (const [modelPrefix, pricing] of Object.entries(BEDROCK_CONVERSE_PRICING)) {
     if (normalizedModelId.includes(modelPrefix)) {
-      const inputCost = (promptTokens / 1_000_000) * pricing.input;
-      const outputCost = (completionTokens / 1_000_000) * pricing.output;
-      return inputCost + outputCost;
+      const { inputCost, outputCost } = getTokenCostRates(config, {
+        input: pricing.input / 1_000_000,
+        output: pricing.output / 1_000_000,
+      });
+      return inputCost * promptTokens + outputCost * completionTokens;
     }
+  }
+
+  const hasExplicitCostOverride =
+    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
+  if (hasExplicitCostOverride) {
+    const { inputCost, outputCost } = getTokenCostRates(config, { input: 0, output: 0 });
+    return inputCost * promptTokens + outputCost * completionTokens;
   }
 
   return undefined;
@@ -1551,7 +1562,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     };
 
     // Calculate cost
-    const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
+    const cost = calculateBedrockConverseCost(
+      this.modelName,
+      this.config,
+      promptTokens,
+      completionTokens,
+    );
 
     // Build metadata
     const metadata: Record<string, unknown> = {};
@@ -1893,6 +1909,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       const cost = calculateBedrockConverseCost(
         this.modelName,
+        this.config,
         usage.inputTokens,
         usage.outputTokens,
       );

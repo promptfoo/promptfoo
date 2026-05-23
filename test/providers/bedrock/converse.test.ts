@@ -1164,6 +1164,22 @@ describe('AwsBedrockConverseProvider', () => {
       // Default usage: (100/1M * 3) + (50/1M * 15) = 0.0003 + 0.00075 = 0.00105
       expect(result.cost).toBeCloseTo(0.00105, 6);
     });
+
+    it('should prefer explicit cost overrides for Converse models', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { cost: { input: 0.01, output: 0.02 }, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test');
+
+      expect(result.cost).toBe(20);
+    });
   });
 
   describe('MCP helper functions (via Converse command input)', () => {

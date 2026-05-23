@@ -259,14 +259,18 @@ async function sendPricingCommandWithTimeout(
 ): Promise<GetProductsCommandOutput> {
   const timeoutMs = 5_000;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const abortController = new AbortController();
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(
-      () => reject(new Error(`Pricing API request timed out after ${timeoutMs / 1000} seconds`)),
-      timeoutMs,
-    );
+    timeoutId = setTimeout(() => {
+      abortController.abort();
+      reject(new Error(`Pricing API request timed out after ${timeoutMs / 1000} seconds`));
+    }, timeoutMs);
   });
 
-  return Promise.race([pricingClient.send(command), timeoutPromise]).finally(() => {
+  return Promise.race([
+    pricingClient.send(command, { abortSignal: abortController.signal }),
+    timeoutPromise,
+  ]).finally(() => {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
