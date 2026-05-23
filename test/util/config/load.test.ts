@@ -1184,17 +1184,11 @@ describe('combineConfigs', () => {
   });
 
   it('preserves all CallApiFunction providers without deduping them', async () => {
-    // Regression test for https://github.com/promptfoo/promptfoo/issues/9383.
-    // JSON.stringify(fn) returns undefined, so the dedupe used to collapse every
-    // function provider into a single entry.
-    const makeProvider = (label: string) => {
-      const fn = async (prompt: string) => ({ output: `${label}: ${prompt}` });
-      (fn as any).label = label;
-      return fn;
-    };
-    const providerA = makeProvider('a');
-    const providerB = makeProvider('b');
-    const providerC = makeProvider('c');
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/9383:
+    // JSON.stringify(fn) returns undefined, so dedupe used to collapse function providers.
+    const providerA = async (prompt: string) => ({ output: `a: ${prompt}` });
+    const providerB = async (prompt: string) => ({ output: `b: ${prompt}` });
+    const providerC = async (prompt: string) => ({ output: `c: ${prompt}` });
 
     vi.mocked(importModule).mockResolvedValueOnce({
       prompts: ['{{prompt}}'],
@@ -1204,8 +1198,35 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['promptfooconfig.ts']);
 
-    expect(result.providers).toHaveLength(3);
     expect(result.providers).toEqual([providerA, providerB, providerC]);
+  });
+
+  it('dedupes string providers consistently across array and string forms', async () => {
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify({ providers: 'openai:gpt-4', prompts: ['p'] }))
+      .mockReturnValueOnce(JSON.stringify({ providers: ['openai:gpt-4'], prompts: ['p'] }));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.providers).toEqual(['openai:gpt-4']);
+  });
+
+  it('does not dedupe provider objects that contain function fields', async () => {
+    const transformA = (output: string) => `${output}-a`;
+    const transformB = (output: string) => `${output}-b`;
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [
+        { id: 'openai:gpt-4', transform: transformA },
+        { id: 'openai:gpt-4', transform: transformB },
+      ],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toHaveLength(2);
   });
 });
 

@@ -404,6 +404,35 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   }
 }
 
+function hasFunctionValue(value: unknown, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Object.values(value).some((v) => hasFunctionValue(v, seen));
+}
+
+/**
+ * Build a dedupe key for a provider entry. Returns `undefined` when no stable
+ * key is possible (the value is a function, or an object that holds function
+ * values that JSON.stringify would silently drop).
+ */
+function providerDedupeKey(provider: unknown): string | undefined {
+  if (typeof provider === 'string') {
+    return provider;
+  }
+  if (hasFunctionValue(provider)) {
+    return undefined;
+  }
+  return JSON.stringify(provider);
+}
+
 /**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
@@ -444,13 +473,11 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        // Function providers can't be JSON.stringify'd (they serialize to undefined),
-        // so the dedupe would collapse them all into one. Always keep functions as-is.
-        if (typeof provider === 'function') {
+        const key = providerDedupeKey(provider);
+        if (key === undefined) {
           providers.push(provider);
           return;
         }
-        const key = JSON.stringify(provider);
         if (!seenProviders.has(key)) {
           providers.push(provider);
           seenProviders.add(key);
