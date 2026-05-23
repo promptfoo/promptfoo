@@ -62,14 +62,6 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
     });
 
     const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
-    if (promptLocations.length === 0) {
-      logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
-        evalId,
-      });
-      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
-      return;
-    }
-
     const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
       const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
         parsedPayload,
@@ -101,7 +93,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       upperBound *= 2;
     }
 
-    if (!responseBody) {
+    if (!responseBody && promptLocations.length > 0) {
       upperBound = promptLocations.length;
       responseBody = tryStringifyWithStrippedPrompts(upperBound);
     }
@@ -122,7 +114,28 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       return;
     }
 
-    logger.error('[GET /:id/table] Response still too large after stripping prompts', {
+    const promptStrippedPayload =
+      promptLocations.length > 0
+        ? getEvalTablePromptStrippedPayload(parsedPayload, promptLocations, promptLocations.length)
+        : parsedPayload;
+    const { tests: _tests, ...configWithoutTests } = promptStrippedPayload.config;
+
+    try {
+      const responseWithoutTests = JSON.stringify({
+        ...promptStrippedPayload,
+        config: configWithoutTests,
+      });
+      invariant(typeof responseWithoutTests === 'string', 'Eval table response must serialize');
+      logger.warn('[GET /:id/table] Response too large, omitting config.tests', { evalId });
+      res.type('json').send(responseWithoutTests);
+      return;
+    } catch (retryError) {
+      if (!(retryError instanceof RangeError)) {
+        throw retryError;
+      }
+    }
+
+    logger.error('[GET /:id/table] Response still too large after trimming fallback fields', {
       evalId,
     });
     res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
@@ -464,21 +477,19 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Trim cell data for the API response to prevent large table payloads.
-  // Full prompt/response/testCase details are fetched on demand by result ID.
+  // Trim non-display cell detail for the API response to prevent large table payloads.
+  // Full provider response/testCase detail, and any prompt removed by the size fallback,
+  // can be fetched on demand by result ID.
   for (const row of returnTable.body) {
     row.outputs = row.outputs.map((output) => (output ? trimTableCellForApi(output) : output));
   }
-
-  // The frontend does not need config.tests from this endpoint, and it can be very large.
-  const { tests: _tests, ...configWithoutTests } = eval_.config;
 
   const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: configWithoutTests,
+    config: eval_.config,
     author: eval_.author || null,
     version: eval_.version(),
     id,
@@ -489,7 +500,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 });
 
 // Returns the full prompt, response, and test case for a single result cell.
-// The table endpoint trims these fields to keep payloads small.
+// The table endpoint trims hidden details and may strip prompts in its size fallback.
 evalRouter.get(
   '/:evalId/results/:resultId/detail',
   async (req: Request, res: Response): Promise<void> => {

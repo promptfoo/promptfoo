@@ -6,6 +6,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -56,7 +57,9 @@ describe('eval routes', () => {
     testEvalIds.clear();
   });
 
-  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
+  function mockTablePayloadRangeError(
+    shouldThrow: (attempt: number, payload: Record<string, unknown>) => boolean,
+  ) {
     const originalStringify = JSON.stringify;
     let tablePayloadAttempts = 0;
 
@@ -66,7 +69,7 @@ describe('eval routes', () => {
         const value = args[0];
         if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
           tablePayloadAttempts += 1;
-          if (shouldThrow(tablePayloadAttempts)) {
+          if (shouldThrow(tablePayloadAttempts, value as Record<string, unknown>)) {
             throw new RangeError('Invalid string length');
           }
         }
@@ -342,14 +345,14 @@ describe('eval routes', () => {
   });
 
   describe('GET /:id/table - large payload handling', () => {
-    it('preserves existing config tests when table config is saved back without tests', async () => {
+    it('preserves config tests returned from the table endpoint when saved back', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(200);
-      expect(res.body.config).not.toHaveProperty('tests');
+      expect(res.body.config.tests).toHaveLength(2);
 
       const patchRes = await api
         .patch(`/api/eval/${eval_.id}`)
@@ -362,7 +365,7 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
-    it('trims per-cell prompts before sending table payloads', async () => {
+    it('retains visible prompts while trimming hidden cell detail in ordinary payloads', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);
       await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
@@ -372,17 +375,65 @@ describe('eval routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('table');
       expect(res.body.table.body.length).toBeGreaterThan(0);
-      expect(res.body.config).not.toHaveProperty('tests');
+      expect(res.body.config.tests).toHaveLength(2);
 
       const outputs: EvaluateTableOutput[] = res.body.table.body.flatMap(
         (row: { outputs: EvaluateTableOutput[] }) => row.outputs,
       );
       expect(outputs).toHaveLength(3);
-      expect(outputs.every((output) => output.prompt === '')).toBe(true);
+      expect(outputs.map((output) => output.prompt)).toEqual([
+        'small prompt',
+        'x'.repeat(100),
+        'x'.repeat(50),
+      ]);
       expect(outputs.every((output) => output.isTruncated)).toBe(true);
     });
 
-    it('returns 413 when the table response is still too large after stripping prompts', async () => {
+    it('strips per-cell prompts largest first while preserving config tests when possible', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
+
+      mockTablePayloadRangeError((attempt) => attempt === 1);
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config.tests).toHaveLength(2);
+      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(1);
+      expect(prompts).toContain('small prompt');
+      expect(prompts).toContain('x'.repeat(50));
+    });
+
+    it('omits config tests only when the prompt-stripped response remains oversized', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      mockTablePayloadRangeError((_attempt, payload) => {
+        const config = payload.config as Record<string, unknown> | undefined;
+        return Boolean(config?.tests);
+      });
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config).not.toHaveProperty('tests');
+
+      const patchRes = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'large eval renamed' } });
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toHaveLength(2);
+    });
+
+    it('returns 413 when the table response is still too large after all fallbacks', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
@@ -450,8 +501,8 @@ describe('eval routes', () => {
 
       const cell: EvaluateTableOutput = res.body.table.body[0].outputs[0];
 
-      // Prompt should be stripped (empty string)
-      expect(cell.prompt).toBe('');
+      // The visible prompt is retained until serialization fallbacks are required.
+      expect(cell.prompt).not.toBe('');
 
       // evalId is preserved (needed for detail endpoint in comparison mode)
       expect(cell).toHaveProperty('evalId');
@@ -494,14 +545,14 @@ describe('eval routes', () => {
       }
     });
 
-    it('should strip config.tests from table response', async () => {
+    it('should retain config.tests in an ordinary table response', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
       expect(res.status).toBe(200);
 
-      expect(res.body.config).not.toHaveProperty('tests');
+      expect(res.body.config.tests).toHaveLength(2);
       // Other config fields should remain
       expect(res.body.config).toHaveProperty('providers');
       expect(res.body.config).toHaveProperty('prompts');

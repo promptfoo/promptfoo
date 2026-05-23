@@ -78,13 +78,14 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
  * Strips redundant/large fields from a table cell for the API response.
  *
  * The full `convertEvalResultToTableCell` output includes data that is either
- * duplicated elsewhere in the response (testCase is in row.test, prompt is
- * reconstructible from head.prompts + row.vars) or unnecessary for the table
- * view (raw HTTP response, internal IDs). Stripping these fields prevents
+ * duplicated elsewhere in the response (testCase is in row.test) or unnecessary
+ * for the table view (raw HTTP response, internal IDs). Stripping these fields prevents
  * RangeError crashes from JSON.stringify on large evals (e.g. base64 images
  * repeated across every cell) and dramatically reduces payload size.
  * Structured `images` are preserved because the table renders them directly,
  * but duplicate inline data is dropped when a blob reference is available.
+ * The rendered prompt is retained for normal table requests; the server's
+ * serialization fallback strips oversized prompts only when needed.
  *
  * Callers that need the full cell data (export, download) should use the
  * un-trimmed output from convertEvalResultToTableCell directly.
@@ -113,7 +114,7 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     ...(cell.evalId === undefined ? {} : { evalId: cell.evalId }),
     isTruncated: true,
     text: cell.text,
-    prompt: '', // Stripped — fetch on demand via /results/:id/detail
+    prompt: cell.prompt,
     provider: cell.provider,
     pass: cell.pass,
     score: cell.score,

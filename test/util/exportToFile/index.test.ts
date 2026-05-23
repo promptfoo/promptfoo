@@ -421,9 +421,9 @@ describe('exportToFile utils', () => {
         ...overrides,
       }) as any;
 
-    it('should strip prompt content', () => {
+    it('should preserve prompt content used by the table display', () => {
       const trimmed = trimTableCellForApi(makeCell());
-      expect(trimmed.prompt).toBe('');
+      expect(trimmed.prompt).toBe('What is the capital of colorado?');
       expect(trimmed.isTruncated).toBe(true);
     });
 
