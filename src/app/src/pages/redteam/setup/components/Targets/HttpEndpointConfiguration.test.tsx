@@ -656,6 +656,52 @@ describe('HttpEndpointConfiguration - handleApply batched updates', () => {
       }),
     );
   });
+
+  it('applies generated raw config with one batched provider update', async () => {
+    const user = userEvent.setup();
+    mockCallApiResponse({
+      id: 'http',
+      config: {
+        request: 'POST /chat HTTP/1.1\nHost: generated.example.com\n\n{"message":"{{prompt}}"}',
+        transformRequest: 'requestTransform',
+        transformResponse: 'responseTransform',
+        sessionParser: 'session.id',
+      },
+    });
+
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await screen.findByRole('button', { name: 'Apply Configuration' });
+
+    vi.mocked(mockUpdateCustomTarget).mockClear();
+    await user.click(screen.getByRole('button', { name: 'Apply Configuration' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'config',
+      expect.objectContaining({
+        request: expect.stringContaining('{{prompt}}'),
+        url: undefined,
+        method: undefined,
+        headers: undefined,
+        body: undefined,
+        transformRequest: 'requestTransform',
+        transformResponse: 'responseTransform',
+        sessionParser: 'session.id',
+      }),
+    );
+  });
 });
 
 describe('HttpEndpointConfiguration - handlePostmanImport batched updates', () => {

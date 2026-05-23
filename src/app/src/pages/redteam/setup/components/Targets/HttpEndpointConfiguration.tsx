@@ -76,6 +76,30 @@ interface GeneratedConfig {
   };
 }
 
+const toHeaderFields = (
+  headers: Record<string, string> | undefined,
+): Array<{ key: string; value: string }> =>
+  Object.entries(headers ?? {}).map(([key, value]) => ({
+    key,
+    value: String(value),
+  }));
+
+const formatGeneratedBody = (body: unknown): string => {
+  if (!body) {
+    return '';
+  }
+  return typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+};
+
+const getStructuredGeneratedOverrides = (
+  config: GeneratedConfig['config'],
+): Record<string, unknown> => ({
+  ...(config.url ? { url: config.url } : {}),
+  ...(config.method ? { method: config.method } : {}),
+  ...(config.headers ? { headers: config.headers } : {}),
+  ...(config.body ? { body: config.body } : {}),
+});
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -466,44 +490,33 @@ ${exampleRequest}`;
   };
 
   const handleApply = () => {
-    if (generatedConfig) {
-      const commonOverrides = {
-        transformRequest: generatedConfig.config.transformRequest,
-        transformResponse: generatedConfig.config.transformResponse,
-        sessionParser: generatedConfig.config.sessionParser,
-      };
-
-      if (generatedConfig.config.request) {
-        resetState(true, {
-          request: generatedConfig.config.request,
-          ...commonOverrides,
-        });
-      } else {
-        resetState(false, {
-          ...(generatedConfig.config.url ? { url: generatedConfig.config.url } : {}),
-          ...(generatedConfig.config.method ? { method: generatedConfig.config.method } : {}),
-          ...(generatedConfig.config.headers ? { headers: generatedConfig.config.headers } : {}),
-          ...(generatedConfig.config.body ? { body: generatedConfig.config.body } : {}),
-          ...commonOverrides,
-        });
-        if (generatedConfig.config.headers) {
-          setHeaders(
-            Object.entries(generatedConfig.config.headers).map(([key, value]) => ({
-              key,
-              value: String(value),
-            })),
-          );
-        }
-        if (generatedConfig.config.body) {
-          const formattedBody =
-            typeof generatedConfig.config.body === 'string'
-              ? generatedConfig.config.body
-              : JSON.stringify(generatedConfig.config.body, null, 2);
-          setRequestBody(formattedBody);
-        }
-      }
-      setConfigDialogOpen(false);
+    if (!generatedConfig) {
+      return;
     }
+
+    const { config } = generatedConfig;
+    const commonOverrides = {
+      transformRequest: config.transformRequest,
+      transformResponse: config.transformResponse,
+      sessionParser: config.sessionParser,
+    };
+
+    if (config.request) {
+      resetState(true, {
+        request: config.request,
+        ...commonOverrides,
+      });
+      setConfigDialogOpen(false);
+      return;
+    }
+
+    resetState(false, {
+      ...getStructuredGeneratedOverrides(config),
+      ...commonOverrides,
+    });
+    setHeaders(toHeaderFields(config.headers));
+    setRequestBody(formatGeneratedBody(config.body));
+    setConfigDialogOpen(false);
   };
 
   const handlePostmanImport = (config: {
