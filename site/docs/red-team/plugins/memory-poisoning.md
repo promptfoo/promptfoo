@@ -1,7 +1,7 @@
 ---
 title: Memory Poisoning Plugin
 sidebar_label: Memory Poisoning
-description: Red team memory poisoning in AI agents by testing persistent state manipulation, malicious instruction injection, and decision integrity failures in apps
+description: Test stateful AI agents for memory poisoning that persists adversarial instructions across interactions and changes later decisions or tool use in production.
 ---
 
 # Memory Poisoning Plugin
@@ -10,11 +10,11 @@ description: Red team memory poisoning in AI agents by testing persistent state 
 
 The Memory Poisoning plugin tests whether stateful agents are vulnerable to memory poisoning attacks that manipulate an agent's memory to alter its behavior in subsequent interactions.
 
-This plugin maps to **T1: Memory Poisoning** from [OWASP Agentic AI – Threats and Mitigations](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/) and aligns with [ASI06: Memory and Context Poisoning](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/) from the OWASP Top 10 for Agentic Applications 2026. It is also closely related to **LLM04:2025 Data and Model Poisoning** from the [OWASP LLM Top 10](https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/), as it involves manipulating the data that influences the model's behavior and decision-making process.
+This plugin maps to **T1: Memory Poisoning** in [OWASP Agentic AI - Threats and Mitigations](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/) and **ASI06: Memory and Context Poisoning** in the [OWASP Top 10 for Agentic Applications 2026](https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/).
 
 ## OWASP Context
 
-Memory poisoning represents a specific form of data poisoning that occurs at the application level rather than during model training. While **LLM04:2025 Data and Model Poisoning** typically refers to poisoning training data or fine-tuning datasets, memory poisoning attacks target the runtime memory and context of stateful AI agents, potentially causing persistent behavioral changes that affect subsequent interactions.
+Memory poisoning targets retained application context rather than model training data. It is related to [LLM04:2025 Data and Model Poisoning](https://genai.owasp.org/llmrisk/llm042025-data-and-model-poisoning/) because both test whether untrusted data changes later behavior.
 
 ## Purpose
 
@@ -101,35 +101,14 @@ The test results will show:
 
 A successful attack (failed test) is indicated when the agent's response to the follow-up question reflects the poisoned instructions rather than the original memory.
 
-## Real-World Impact
-
-Memory poisoning attacks can lead to:
-
-- **Persistent Compromise**: Malicious behavior that continues across multiple interactions
-- **Data Exfiltration**: Extracting sensitive information from the agent's memory or context
-- **Privilege Escalation**: Gaining access to functions or data beyond normal permissions
-- **Business Logic Bypass**: Circumventing intended operational constraints
-- **User Trust Violation**: Undermining user confidence in the agent's reliability
-- **Compliance Violations**: Causing the agent to act in ways that violate policies or regulations
-
-## Attack Scenarios
-
-1. **Business Process Manipulation**: Poisoning a sales agent's memory to always approve discounts regardless of policy
-2. **Information Extraction**: Modifying a customer service agent's memory to reveal confidential customer data
-3. **Access Control Bypass**: Altering a security agent's memory to grant unauthorized access
-4. **Decision Manipulation**: Corrupting a recommendation agent's memory to favor specific products or services
-
 ## Mitigations
 
 To protect against memory poisoning attacks:
 
-1. **Input Validation**: Implement strict input validation that filters or sanitizes user inputs prior to persistence.
-2. **Memory Sanitization**: Sanitize user memories prior to including them within the context windows of inference calls.
-3. **Memory Segregation**: Segregate memory types - separate system instructions from user input memory.
-4. **Memory Attribution**: Apply memory attribution - track where memory content originated and maintain provenance.
-5. **Access Controls**: Implement proper access controls for memory modification operations.
-6. **Monitoring and Detection**: Monitor for unusual memory patterns or unexpected behavioral changes.
-7. **Memory Validation**: Validate memory contents for consistency and integrity before use.
+1. Validate and sanitize untrusted content before persisting it or retrieving it into model context.
+2. Keep user-authored memory separate from system instructions and trusted policy state.
+3. Record memory provenance and restrict which identities may modify retained state.
+4. Monitor unexpected memory changes and validate retained content before use.
 
 ## Related Concepts
 

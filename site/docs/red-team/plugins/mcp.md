@@ -1,7 +1,7 @@
 ---
 title: MCP Plugin
 sidebar_label: MCP Plugin
-description: Red team MCP implementations by testing function exploits, tool manipulation, authorization bypass, and unsafe agent access through connected tools and servers
+description: Test MCP-enabled agents for tool manipulation, function-call abuse, system prompt leakage, and unauthorized invocation across exposed server capabilities.
 ---
 
 # MCP Plugin
