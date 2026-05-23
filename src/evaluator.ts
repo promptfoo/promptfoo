@@ -440,6 +440,12 @@ function shouldSkipRedteamInjectVar(
   return hasGeneratedRedteamMetadata(test) || Boolean(test.assert?.some(hasNestedRedteamAssertion));
 }
 
+function shouldPreserveStoredOutputVars(test: AtomicTestCase): boolean {
+  // Imported replay rows can contain arbitrary trace/dataset text. Keep those
+  // values literal when the provider output is already captured.
+  return test.providerOutput !== undefined && test.options?.disableVarExpansion === true;
+}
+
 function getRedteamInjectVar(test: AtomicTestCase, prompt: Prompt, testSuite?: TestSuite): string {
   if (testSuite?.redteam?.injectVar) {
     return testSuite.redteam.injectVar;
@@ -759,9 +765,16 @@ async function renderRunEvalPrompt({
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
-    : undefined;
+  const skipRenderVarSet = new Set<string>();
+  if (shouldSkipRedteamInjectVar(test, testSuite, isRedteam)) {
+    skipRenderVarSet.add(getRedteamInjectVar(test, promptForRender, testSuite));
+  }
+  if (shouldPreserveStoredOutputVars(test)) {
+    for (const key of Object.keys(vars)) {
+      skipRenderVarSet.add(key);
+    }
+  }
+  const skipRenderVars = skipRenderVarSet.size > 0 ? [...skipRenderVarSet] : undefined;
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
@@ -837,7 +850,7 @@ async function callProviderForRunEval({
         output: test.providerOutput,
         tokenUsage: createEmptyTokenUsage(),
         cost: 0,
-        cached: false,
+        cached: true,
       }
     : await callActiveProvider({
         abortSignal,

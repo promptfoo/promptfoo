@@ -72,7 +72,42 @@ describe('runEval', () => {
     });
 
     expect(results[0].response?.output).toBe('');
+    expect(results[0].response?.cached).toBe(true);
     expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should preserve stored-output vars as literal data when var expansion is disabled', async () => {
+    const callApi = vi.fn().mockResolvedValue({ output: 'should not be called' });
+    const providerWithDelay: ApiProvider = {
+      id: () => 'stored-output-provider',
+      callApi,
+      delay: 100,
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: providerWithDelay,
+      prompt: {
+        raw: 'Input: {{input}}\nSecret: {{secretTemplate}}',
+        label: 'test-label',
+      },
+      test: {
+        providerOutput: 'stored output',
+        vars: {
+          input: 'file:///tmp/promptfoo-should-not-read-this-file',
+          secretTemplate: '{{ env.PROMPTFOO_LANGFUSE_TRACE_SECRET }}',
+        },
+        options: { disableVarExpansion: true },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].prompt.raw).toContain('file:///tmp/promptfoo-should-not-read-this-file');
+    expect(results[0].prompt.raw).toContain('{{ env.PROMPTFOO_LANGFUSE_TRACE_SECRET }}');
+    expect(results[0].response?.output).toBe('stored output');
+    expect(results[0].response?.cached).toBe(true);
+    expect(callApi).not.toHaveBeenCalled();
   });
 
   it('should expose eval runtime vars to prompt and provider rendering', async () => {

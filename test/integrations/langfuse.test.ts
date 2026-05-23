@@ -4,6 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const mockGetPrompt = vi.fn();
   const constructorCalls: any[] = [];
+  const getDefaultEnvString = (key: string): string => {
+    switch (key) {
+      case 'LANGFUSE_PUBLIC_KEY':
+        return 'test-public-key';
+      case 'LANGFUSE_SECRET_KEY':
+        return 'test-secret-key';
+      case 'LANGFUSE_HOST':
+        return 'https://test.langfuse.com';
+      default:
+        return '';
+    }
+  };
 
   // Create a proper class mock for Langfuse
   class MockLangfuse {
@@ -15,23 +27,13 @@ const mocks = vi.hoisted(() => {
     }
   }
 
-  const mockGetEnvString = vi.fn((key: string) => {
-    switch (key) {
-      case 'LANGFUSE_PUBLIC_KEY':
-        return 'test-public-key';
-      case 'LANGFUSE_SECRET_KEY':
-        return 'test-secret-key';
-      case 'LANGFUSE_HOST':
-        return 'https://test.langfuse.com';
-      default:
-        return '';
-    }
-  });
+  const mockGetEnvString = vi.fn<(key: string) => string>().mockImplementation(getDefaultEnvString);
 
   return {
     mockGetPrompt,
     MockLangfuse,
     constructorCalls,
+    getDefaultEnvString,
     mockGetEnvString,
   };
 });
@@ -49,6 +51,9 @@ vi.mock('langfuse', () => ({
 describe('langfuse integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockGetPrompt.mockReset();
+    mocks.mockGetEnvString.mockReset();
+    mocks.mockGetEnvString.mockImplementation(mocks.getDefaultEnvString);
     // Clear the constructor calls array
     mocks.constructorCalls.length = 0;
     // Reset the module to clear the cached langfuse instance
