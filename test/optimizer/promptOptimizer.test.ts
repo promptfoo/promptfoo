@@ -562,7 +562,7 @@ describe('prompt optimizer', () => {
       tests: [{ prompts: ['Seed'] }],
       scenarios: [
         {
-          config: [{}],
+          config: [{ prompts: ['Seed'] }],
           tests: [{ prompts: ['Seed'] }],
         },
       ],
@@ -577,6 +577,7 @@ describe('prompt optimizer', () => {
         ? candidateSuite.defaultTest.prompts
         : undefined,
     ).toEqual(['Seed', 'Seed [optimized 1]']);
+    expect(candidateSuite.scenarios?.[0].config[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
     expect(candidateSuite.scenarios?.[0].tests[0].prompts).toEqual(['Seed', 'Seed [optimized 1]']);
   });
 
