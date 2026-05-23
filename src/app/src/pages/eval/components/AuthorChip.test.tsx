@@ -48,7 +48,11 @@ describe('AuthorChip', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Claim eval')).toBeInTheDocument();
-    expect(screen.getByText('This eval has no author assigned.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This eval has no author assigned. Cloud authorship cannot be changed after you claim it.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('email@example.com')).not.toBeInTheDocument();
   });
 
@@ -108,6 +112,25 @@ describe('AuthorChip', () => {
     expect(await screen.findAllByText('This eval belongs to owner@example.com')).not.toHaveLength(
       0,
     );
+  });
+
+  it('does not offer a cloud claim action for an assigned eval even if marked editable', async () => {
+    renderWithProviders(
+      <AuthorChip
+        {...defaultProps}
+        author="owner@example.com"
+        currentUserEmail="user@example.com"
+        editable
+        isCloudEnabled
+      />,
+    );
+
+    const chip = screen.getByRole('button', { name: /authorowner@example.com/i });
+    expect(chip).toHaveAttribute('aria-disabled', 'true');
+
+    await userEvent.click(chip);
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('opens inline edit mode on click', async () => {

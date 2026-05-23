@@ -643,5 +643,27 @@ describe('eval routes', () => {
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.author).toBe('existing@example.com');
     });
+
+    it('should reject clearing an existing cloud eval author', async () => {
+      mockedCloudConfig.isEnabled.mockReturnValue(true);
+      mockedGetUserEmail.mockReturnValue('cloud-user@example.com');
+
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.author = 'cloud-user@example.com';
+      await eval_.save();
+
+      const res = await api.patch(`/api/eval/${eval_.id}/author`).send({ author: '' });
+
+      expect(res.status).toBe(403);
+      expect(res.body).toHaveProperty(
+        'error',
+        'Cloud eval authors cannot be changed once assigned',
+      );
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('cloud-user@example.com');
+    });
   });
 });

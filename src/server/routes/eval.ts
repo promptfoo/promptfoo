@@ -289,14 +289,14 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     if (cloudConfig.isEnabled()) {
-      const currentUserEmail = getUserEmail();
-      if (!currentUserEmail || author !== currentUserEmail) {
-        res.status(403).json({ error: 'Cloud evals can only be claimed by the current user' });
+      if (eval_.author) {
+        res.status(403).json({ error: 'Cloud eval authors cannot be changed once assigned' });
         return;
       }
 
-      if (eval_.author) {
-        res.status(403).json({ error: 'Cloud eval authors cannot be changed once assigned' });
+      const currentUserEmail = getUserEmail();
+      if (!currentUserEmail || author !== currentUserEmail) {
+        res.status(403).json({ error: 'Cloud evals can only be claimed by the current user' });
         return;
       }
     }

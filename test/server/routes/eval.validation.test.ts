@@ -6,6 +6,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
+vi.mock('../../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: vi.fn().mockReturnValue(false),
+  },
+}));
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 // Import after mocking

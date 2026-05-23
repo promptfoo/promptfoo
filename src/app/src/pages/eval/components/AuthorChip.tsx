@@ -38,6 +38,7 @@ export const AuthorChip = ({
   const [email, setEmail] = useState(author || '');
   const inputRef = useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
+  const canStartAuthorAction = editable && (!isCloudEnabled || !author);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -47,7 +48,7 @@ export const AuthorChip = ({
   }, [isEditing]);
 
   const handleStartEdit = () => {
-    if (!editable) {
+    if (!canStartAuthorAction) {
       return;
     }
 
@@ -109,7 +110,7 @@ export const AuthorChip = ({
   };
 
   const tooltipContent = (() => {
-    if (!editable) {
+    if (!canStartAuthorAction) {
       if (isCloudEnabled && author && currentUserEmail && author !== currentUserEmail) {
         return `This eval belongs to ${author}`;
       }
@@ -170,11 +171,13 @@ export const AuthorChip = ({
         <TooltipTrigger asChild>
           <Chip
             label="AUTHOR"
-            onClick={editable ? handleStartEdit : undefined}
-            aria-disabled={!editable}
-            interactive={editable}
+            onClick={canStartAuthorAction ? handleStartEdit : undefined}
+            aria-disabled={!canStartAuthorAction}
+            interactive={canStartAuthorAction}
             trailingIcon={
-              editable ? <Pencil className="size-3.5 text-muted-foreground" /> : undefined
+              canStartAuthorAction ? (
+                <Pencil className="size-3.5 text-muted-foreground" />
+              ) : undefined
             }
           >
             {author || 'Unknown'}
@@ -187,9 +190,8 @@ export const AuthorChip = ({
           <DialogHeader>
             <DialogTitle>Claim eval</DialogTitle>
             <DialogDescription>
-              {author
-                ? `This eval is currently attributed to ${author}.`
-                : 'This eval has no author assigned.'}
+              This eval has no author assigned. Cloud authorship cannot be changed after you claim
+              it.
             </DialogDescription>
           </DialogHeader>
           {claimError && <p className="text-sm text-destructive">{claimError}</p>}
