@@ -677,6 +677,39 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it('should use v1beta API for Gemini 3 models', async () => {
+      // Regression: all Gemini 3.x models use v1beta, including dash-named
+      // gemini-3-* preview IDs that were previously forced onto v1alpha.
+      provider = new AIStudioChatProvider('gemini-3-flash-preview', {
+        config: { apiKey: 'test-key' },
+      });
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'gemini 3 response' }] } }],
+        },
+        cached: false,
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+
+      await provider.callGemini('test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('v1beta/models/gemini-3-flash-preview:generateContent'),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
     it('should handle API call errors', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
