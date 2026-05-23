@@ -496,13 +496,15 @@ Use `trajectory:tool-args-match` when the tool call is only correct with specifi
 
 `mode: partial` checks that the expected object is a subset of the captured arguments. `mode: exact` requires deep equality. Use `partial` unless the full payload is part of the contract. Use `not-trajectory:tool-args-match` to forbid a sensitive or unsafe argument pattern.
 
-When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason. That keeps them out of failure reasons in `output.json`; it does not redact the original span attributes already stored in traces:
+When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason. That keeps them out of failure reasons in `output.json`; it does not redact the original span attributes already stored in traces.
+
+Nested values under `args` are compared literally; they are not rendered as prompt templates. Provide concrete expected identifiers, or generate the config with those values before evaluation:
 
 ```yaml
 - type: trajectory:tool-args-match
   value:
     name: lookup_user
-    args: { tenant_id: '{{ user.tenant_id }}' }
+    args: { tenant_id: tenant-acme }
     mode: partial
     redactArgsInFailures: true # never echoes captured args into the failure reason
 ```
@@ -579,7 +581,7 @@ For any of these, pair the judge with deterministic `trace-*` and `trajectory:*`
 - type: trajectory:tool-args-match
   value:
     name: search_corpus
-    args: { tenant_id: '{{ user.tenant_id }}' }
+    args: { tenant_id: tenant-acme }
     mode: partial
 ```
 
@@ -643,7 +645,7 @@ tests:
       - type: trajectory:tool-args-match
         value:
           name: lookup_account
-          args: { tenant_id: '{{ user.tenant_id }}' }
+          args: { tenant_id: tenant-acme }
           mode: partial
 
       # Holistic judge over the conversation.
