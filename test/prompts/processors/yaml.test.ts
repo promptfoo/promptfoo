@@ -230,5 +230,45 @@ template: "{{ variable }}   "
       expect(mockMaybeLoadConfigFromExternalFile).toHaveBeenCalledWith(parsedYaml);
       expect(result[0].raw).toBe(JSON.stringify(parsedYaml));
     });
+
+    it('should handle empty string value in YAML', () => {
+      const filePath = 'empty-value.yaml';
+      const fileContent = dedent`
+        prompts:
+          - key: ""
+      `;
+
+      mockReadFileSync.mockReturnValue(fileContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(result[0].config.prompts[0].key).toBe('');
+    });
+
+    it('should handle null value in YAML', () => {
+      const filePath = 'null-value.yaml';
+      const fileContent = dedent`
+        prompts:
+          - key: null
+        options:
+          temperature: ~
+      `;
+
+      mockReadFileSync.mockReturnValue(fileContent);
+
+      const result = processYamlFile(filePath, {});
+
+      expect(result[0].config.prompts[0].key).toBeNull();
+      expect(result[0].config.options.temperature).toBeNull();
+    });
+
+    it('should handle empty YAML document', () => {
+      const filePath = 'empty.yaml';
+      const fileContent = '';
+
+      mockReadFileSync.mockReturnValue(fileContent);
+
+      expect(() => processYamlFile(filePath, {})).not.toThrow();
+    });
   });
 });
