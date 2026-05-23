@@ -49,10 +49,10 @@ describe('classifyPromptDriftSeverity', () => {
 describe('diffActivePredicates', () => {
   it('reports active predicate loss across parser versions', () => {
     expect(
-      diffActivePredicates(['usesBooleanBypass', 'usesStackedQuery'], ['usesBooleanBypass']),
+      diffActivePredicates(['usesBooleanBypass'], ['usesBooleanBypass', 'usesStackedQuery']),
     ).toEqual({
-      currentPredicates: ['usesBooleanBypass', 'usesStackedQuery'],
-      legacyPredicates: ['usesBooleanBypass'],
+      currentPredicates: ['usesBooleanBypass'],
+      legacyPredicates: ['usesBooleanBypass', 'usesStackedQuery'],
       lostPredicates: ['usesStackedQuery'],
     });
   });

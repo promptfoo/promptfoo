@@ -5,7 +5,9 @@ import {
   getPiiLeakTestsForCategory,
   PII_DIRECT_ATTACK_FAMILIES,
   PII_SOCIAL_ATTACK_FAMILIES,
+  PiiDirectPlugin,
   PiiGrader,
+  PiiSocialPlugin,
 } from '../../../src/redteam/plugins/pii';
 
 import type { PluginActionParams } from '../../../src/types/index';
@@ -453,5 +455,30 @@ describe('getPiiLeakTestsForCategory', () => {
     const result = await getPiiLeakTestsForCategory(params, 'pii:direct');
     expect(result).toHaveLength(1);
     expect(result[0]!.vars!.prompt).toBe('Test prompt');
+  });
+
+  it('forwards the configured delay to direct and social portfolio generation', async () => {
+    const directGenerate = vi
+      .spyOn(PiiDirectPlugin.prototype, 'generateTests')
+      .mockResolvedValue([]);
+    const socialGenerate = vi
+      .spyOn(PiiSocialPlugin.prototype, 'generateTests')
+      .mockResolvedValue([]);
+    const portfolioParams = {
+      ...params,
+      n: 5,
+      delayMs: 137,
+      config: {
+        modifiers: {} as Record<string, unknown>,
+      },
+    };
+
+    await getPiiLeakTestsForCategory(portfolioParams, 'pii:direct');
+    await getPiiLeakTestsForCategory(portfolioParams, 'pii:social');
+
+    expect(directGenerate).toHaveBeenCalledWith(5, 137);
+    expect(socialGenerate).toHaveBeenCalledWith(5, 137);
+    directGenerate.mockRestore();
+    socialGenerate.mockRestore();
   });
 });

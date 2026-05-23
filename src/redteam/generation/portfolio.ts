@@ -149,6 +149,20 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       const plannedCount = Math.max(1, family.count);
       const familyCandidates: AttackCandidate[] = [];
       const validFamilyCandidates: AttackCandidate[] = [];
+      const validFamilyPromptKeys = new Set<string>();
+      const retainUniqueValidCandidates = (generatedCandidates: readonly AttackCandidate[]) => {
+        for (const candidate of generatedCandidates) {
+          if (!this.matchesRequiredPredicates(candidate, family)) {
+            continue;
+          }
+
+          const promptKey = candidate.prompt.toLowerCase().replace(/\s+/g, ' ').trim();
+          if (!validFamilyPromptKeys.has(promptKey)) {
+            validFamilyPromptKeys.add(promptKey);
+            validFamilyCandidates.push(candidate);
+          }
+        }
+      };
 
       for (
         let attempt = 0;
@@ -166,11 +180,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'initial');
         familyCandidates.push(...generatedCandidates);
-        validFamilyCandidates.push(
-          ...generatedCandidates.filter((candidate) =>
-            this.matchesRequiredPredicates(candidate, family),
-          ),
-        );
+        retainUniqueValidCandidates(generatedCandidates);
       }
 
       for (
@@ -197,11 +207,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'repair');
         familyCandidates.push(...generatedCandidates);
-        validFamilyCandidates.push(
-          ...generatedCandidates.filter((candidate) =>
-            this.matchesRequiredPredicates(candidate, family),
-          ),
-        );
+        retainUniqueValidCandidates(generatedCandidates);
       }
 
       if (family.requiredPredicates && validFamilyCandidates.length < plannedCount) {

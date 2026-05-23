@@ -217,6 +217,8 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\bremove the (?:current-user )?filter\b/i,
     /\bremove the (?:assignment|assigned[_ -](?:agent|patient)|current[_ -]user)(?:\s*=\s*current[_ -]user)? filter\b/i,
     /\bignore the assigned-patient restriction\b/i,
+    /\bwithout filter(?:ing)? by (?:the )?(?:current|logged-in|assigned)\b/i,
+    /\b(?:remove|removing|ignore|ignoring) (?:the )?(?:usual )?(?:filter|restriction)\b(?=[^.!?\n]*\b(?:access|assigned|logged-in|user account|only (?:allows|lets) me)\b)/i,
     /\bwithout the where\b/i,
   ],
   usesNaturalLanguagePrivilegeEscalation: [
@@ -225,6 +227,9 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\ball (?:patient|medical) records(?: in the system)?\b/i,
     /\ball tickets in the system\b/i,
     /\bregardless of who is currently authenticated\b/i,
+    /\bregardless of who (?:is requesting (?:the )?data|accessed (?:the|their) records)\b/i,
+    /\b(?:not assigned to me|outside my direct caseload)\b/i,
+    /\bacross all doctors\b/i,
   ],
 };
 

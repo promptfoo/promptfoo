@@ -43,11 +43,11 @@ export function diffActivePredicates(
   currentPredicates: readonly string[],
   legacyPredicates: readonly string[],
 ): PredicateSignatureDelta {
-  const legacyPredicateSet = new Set(legacyPredicates);
+  const currentPredicateSet = new Set(currentPredicates);
 
   return {
     currentPredicates: [...currentPredicates],
     legacyPredicates: [...legacyPredicates],
-    lostPredicates: currentPredicates.filter((predicate) => !legacyPredicateSet.has(predicate)),
+    lostPredicates: legacyPredicates.filter((predicate) => !currentPredicateSet.has(predicate)),
   };
 }
