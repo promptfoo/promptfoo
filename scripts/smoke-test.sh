@@ -15,11 +15,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-BUNDLE_PATH="$ROOT_DIR/bundle/promptfoo.mjs"
+BUNDLE_MODULE_PATH="$ROOT_DIR/bundle/promptfoo.mjs"
+BUNDLE_BINARY_PATH=""
+TEST_ROOT=""
 TEST_DIR=""
 FAILED_TESTS=()
 PASSED_TESTS=()
 USE_INSTALLED=false
+
+if [[ -x "$ROOT_DIR/bundle/promptfoo" ]]; then
+  BUNDLE_BINARY_PATH="$ROOT_DIR/bundle/promptfoo"
+elif [[ -f "$ROOT_DIR/bundle/promptfoo.exe" ]]; then
+  BUNDLE_BINARY_PATH="$ROOT_DIR/bundle/promptfoo.exe"
+fi
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -63,22 +71,34 @@ log_info() {
 pf() {
   if [[ "$USE_INSTALLED" == "true" ]]; then
     promptfoo "$@"
+  elif [[ -n "$BUNDLE_BINARY_PATH" ]]; then
+    "$BUNDLE_BINARY_PATH" "$@"
   else
-    node "$BUNDLE_PATH" "$@"
+    node "$BUNDLE_MODULE_PATH" "$@"
   fi
 }
 
-# Create temporary test directory
+# Create isolated state and case directories for artifact tests.
+setup_test_environment() {
+  umask 077
+  TEST_ROOT=$(mktemp -d)
+  export PROMPTFOO_CONFIG_DIR="$TEST_ROOT/state"
+  export PROMPTFOO_CACHE_PATH="$TEST_ROOT/cache"
+  export PROMPTFOO_DISABLE_SHARING=true
+  export PROMPTFOO_DISABLE_UPDATE=true
+  mkdir -p "$PROMPTFOO_CONFIG_DIR" "$PROMPTFOO_CACHE_PATH"
+}
+
 setup_test_dir() {
-  TEST_DIR=$(mktemp -d)
+  TEST_DIR=$(mktemp -d "$TEST_ROOT/case.XXXXXXXX")
   log_info "Test directory: $TEST_DIR"
   cd "$TEST_DIR"
 }
 
 # Cleanup
 cleanup() {
-  if [[ -n "$TEST_DIR" && -d "$TEST_DIR" ]]; then
-    rm -rf "$TEST_DIR"
+  if [[ -n "$TEST_ROOT" && -d "$TEST_ROOT" ]]; then
+    rm -rf "$TEST_ROOT"
   fi
 }
 
@@ -381,6 +401,33 @@ EOF
   fi
 }
 
+test_typescript_config() {
+  log_test "TypeScript config parsing"
+
+  setup_test_dir
+
+  cat >promptfooconfig.ts <<'EOF'
+export default {
+  prompts: ['TypeScript {{value}}'],
+  providers: [{ id: 'echo' }],
+  tests: [
+    {
+      vars: { value: 'config' },
+      assert: [{ type: 'contains', value: 'config' }],
+    },
+  ],
+};
+EOF
+
+  if pf eval -c promptfooconfig.ts --no-cache -o results.json >/dev/null 2>&1; then
+    log_pass "TypeScript config parsing works"
+    return 0
+  else
+    log_fail "TypeScript config parsing failed"
+    return 1
+  fi
+}
+
 test_multiple_providers() {
   log_test "multiple providers"
 
@@ -662,6 +709,35 @@ test_install_ps1_syntax() {
   return 1
 }
 
+test_site_installer_mirrors() {
+  log_test "site installer copies match canonical scripts"
+
+  if cmp -s "$ROOT_DIR/scripts/install.sh" "$ROOT_DIR/site/static/install.sh" &&
+    cmp -s "$ROOT_DIR/scripts/install.ps1" "$ROOT_DIR/site/static/install.ps1"; then
+    log_pass "site installer copies match canonical scripts"
+    return 0
+  fi
+
+  log_fail "site installer copies differ from canonical scripts"
+  return 1
+}
+
+test_packaged_assets() {
+  log_test "bundle contains runtime-resolved assets"
+
+  if [[ -d "$ROOT_DIR/bundle/assets/drizzle" ]] &&
+    [[ -d "$ROOT_DIR/bundle/tracing/proto" ]] &&
+    [[ -f "$ROOT_DIR/bundle/app/index.html" ]] &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/@huggingface/transformers" ]] &&
+    [[ ! -e "$ROOT_DIR/bundle/node_modules/onnxruntime-node" ]]; then
+    log_pass "bundle contains runtime assets and omits npm-only Transformers dependencies"
+    return 0
+  fi
+
+  log_fail "bundle assets or npm-only dependency exclusions are incorrect"
+  return 1
+}
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 main() {
@@ -690,18 +766,22 @@ main() {
       exit 1
     fi
     log_info "Testing installed promptfoo: $(which promptfoo)"
+  elif [[ -n "$BUNDLE_BINARY_PATH" ]]; then
+    log_info "Testing SEA executable: $BUNDLE_BINARY_PATH"
   else
-    if [[ ! -f "$BUNDLE_PATH" ]]; then
-      echo -e "${RED}Error: Bundle not found at $BUNDLE_PATH${NC}"
+    if [[ ! -f "$BUNDLE_MODULE_PATH" ]]; then
+      echo -e "${RED}Error: Bundle not found at $BUNDLE_MODULE_PATH${NC}"
       echo "Run 'npm run bundle' first."
       exit 1
     fi
-    log_info "Testing bundle: $BUNDLE_PATH"
+    log_info "Testing JavaScript bundle: $BUNDLE_MODULE_PATH"
   fi
 
   echo ""
   echo -e "${BOLD}Running tests...${NC}"
   echo ""
+
+  setup_test_environment
 
   # Run all tests - continue even if individual tests fail
   set +e
@@ -716,6 +796,7 @@ main() {
   test_cache_functionality
   test_json_output
   test_yaml_config
+  test_typescript_config
   test_multiple_providers
   test_env_vars
   test_generate_dataset
@@ -734,6 +815,8 @@ main() {
   test_install_script_syntax
   test_install_script_help
   test_install_ps1_syntax
+  test_site_installer_mirrors
+  test_packaged_assets
 
   set -e
 

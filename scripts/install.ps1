@@ -9,6 +9,7 @@
 #   PROMPTFOO_INSTALL_DIR  - Installation directory (default: %LOCALAPPDATA%\promptfoo)
 #   PROMPTFOO_VERSION      - Version to install (default: latest)
 #   PROMPTFOO_NO_MODIFY_PATH - Skip PATH modification if set
+#   PROMPTFOO_DISABLE_TELEMETRY - Skip anonymous installation telemetry if set
 #
 # Requirements:
 #   - PowerShell 5.1+ or PowerShell Core 7+
@@ -88,11 +89,16 @@ function Resolve-Version {
     param([string]$Version)
 
     if ($Version -eq 'latest' -or [string]::IsNullOrEmpty($Version)) {
-        return Get-LatestVersion
+        $Version = Get-LatestVersion
     }
 
     # Strip 'v' prefix if present
-    return $Version -replace '^v', ''
+    $resolvedVersion = $Version -replace '^v', ''
+    if ($resolvedVersion -notmatch '^\d+\.\d+\.\d+(?:[.-][A-Za-z0-9.-]+)?$') {
+        throw "Invalid version: $resolvedVersion"
+    }
+
+    return $resolvedVersion
 }
 
 # ─── Installation ────────────────────────────────────────────────────────────
@@ -121,7 +127,7 @@ function Install-PromptfooNpm {
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
     # Install via npm
-    & npm install -g "promptfoo@$Version" --prefix $InstallDir 2>&1 | ForEach-Object { Write-Host $_ }
+    & npm install -g "promptfoo@$Version" --prefix $InstallDir --registry=https://registry.npmjs.org/ 2>&1 | ForEach-Object { Write-Host $_ }
 
     if ($LASTEXITCODE -ne 0) {
         throw "npm install failed"
@@ -150,9 +156,16 @@ function Install-PromptfooBinary {
         [string]$InstallDir
     )
 
+    if ($Platform -ne 'win32-x64') {
+        Write-Warn "No bundled binary is published for $Platform."
+        Write-Warn "Falling back to npm installation, which requires Node.js."
+        return Install-PromptfooNpm -Version $Version -InstallDir $InstallDir
+    }
+
     $archiveName = "promptfoo-$Version-$Platform.zip"
     $downloadUrl = "$script:GitHubReleases/download/v$Version/$archiveName"
-    $tempFile = Join-Path $env:TEMP $archiveName
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("promptfoo-" + [Guid]::NewGuid().ToString("N"))
+    $tempFile = Join-Path $tempDir $archiveName
     $binDir = Join-Path $InstallDir "bin"
 
     Write-Info "Installing promptfoo v$Version for $Platform..."
@@ -161,30 +174,31 @@ function Install-PromptfooBinary {
     # Create installation directory
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
     try {
-        # Download archive
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
-    } catch {
-        Write-Warn "Binary release not found for $Platform."
-        Write-Warn "Falling back to npm installation..."
-        Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
-        return Install-PromptfooNpm -Version $Version -InstallDir $InstallDir
+        try {
+            # Download archive
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -UseBasicParsing
+        } catch {
+            Write-Warn "Binary release not found for $Platform."
+            Write-Warn "Falling back to npm installation..."
+            return Install-PromptfooNpm -Version $Version -InstallDir $InstallDir
+        }
+
+        # Extract archive
+        Write-Info "Extracting to $binDir"
+        Expand-Archive -Path $tempFile -DestinationPath $binDir -Force
+
+        # Create pf alias
+        $promptfooExe = Join-Path $binDir "promptfoo.exe"
+        if (Test-Path $promptfooExe) {
+            Copy-Item -Path $promptfooExe -Destination (Join-Path $binDir "pf.exe") -Force
+        }
+
+        return $true
+    } finally {
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
-
-    # Extract archive
-    Write-Info "Extracting to $binDir"
-    Expand-Archive -Path $tempFile -DestinationPath $binDir -Force
-
-    # Create pf alias
-    $promptfooExe = Join-Path $binDir "promptfoo.exe"
-    if (Test-Path $promptfooExe) {
-        Copy-Item -Path $promptfooExe -Destination (Join-Path $binDir "pf.exe") -Force
-    }
-
-    # Cleanup
-    Remove-Item -Path $tempFile -Force
-
-    return $true
 }
 
 function Test-Installation {
@@ -193,19 +207,46 @@ function Test-Installation {
     $promptfooCmd = Join-Path $BinDir "promptfoo.cmd"
     $promptfooExe = Join-Path $BinDir "promptfoo.exe"
 
-    if ((Test-Path $promptfooCmd) -or (Test-Path $promptfooExe)) {
-        try {
-            if (Test-Path $promptfooExe) {
-                $output = & $promptfooExe --version 2>&1
-            } else {
-                $output = & cmd /c $promptfooCmd --version 2>&1
-            }
-            return $true
-        } catch {
-            return $false
-        }
+    if (-not ((Test-Path $promptfooCmd) -or (Test-Path $promptfooExe))) {
+        return $false
     }
-    return $false
+
+    $verifyDir = Join-Path ([System.IO.Path]::GetTempPath()) ("promptfoo-verify-" + [Guid]::NewGuid().ToString("N"))
+    $verifyEnvironment = @(
+        'PROMPTFOO_CONFIG_DIR',
+        'PROMPTFOO_CACHE_PATH',
+        'PROMPTFOO_DISABLE_SHARING',
+        'PROMPTFOO_DISABLE_TELEMETRY',
+        'PROMPTFOO_DISABLE_UPDATE'
+    )
+    $previousEnvironment = @{}
+
+    foreach ($name in $verifyEnvironment) {
+        $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+    }
+
+    try {
+        New-Item -ItemType Directory -Path $verifyDir -Force | Out-Null
+        $env:PROMPTFOO_CONFIG_DIR = Join-Path $verifyDir 'state'
+        $env:PROMPTFOO_CACHE_PATH = Join-Path $verifyDir 'cache'
+        $env:PROMPTFOO_DISABLE_SHARING = 'true'
+        $env:PROMPTFOO_DISABLE_TELEMETRY = 'true'
+        $env:PROMPTFOO_DISABLE_UPDATE = 'true'
+
+        if (Test-Path $promptfooExe) {
+            $output = & $promptfooExe --version 2>&1
+        } else {
+            $output = & cmd /c $promptfooCmd --version 2>&1
+        }
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    } finally {
+        foreach ($name in $verifyEnvironment) {
+            [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], 'Process')
+        }
+        Remove-Item -Path $verifyDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # ─── PATH Setup ──────────────────────────────────────────────────────────────
@@ -245,6 +286,10 @@ function Send-InstallTelemetry {
         [string]$Platform,
         [string]$Version
     )
+
+    if ($env:PROMPTFOO_DISABLE_TELEMETRY) {
+        return
+    }
 
     # Fire-and-forget telemetry
     try {
@@ -300,6 +345,7 @@ ENVIRONMENT VARIABLES
     PROMPTFOO_INSTALL_DIR     Installation directory
     PROMPTFOO_VERSION         Version to install
     PROMPTFOO_NO_MODIFY_PATH  Skip PATH modification if set
+    PROMPTFOO_DISABLE_TELEMETRY  Skip anonymous installation telemetry if set
 
 EXAMPLES
     # Install latest version

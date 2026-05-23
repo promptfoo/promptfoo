@@ -1,10 +1,11 @@
 /**
  * Bundle script for creating a self-contained promptfoo CLI.
  *
- * This script creates a single bundled JavaScript file with all dependencies
- * included, suitable for distribution via pip install or standalone binary.
+ * This script creates a bundled CLI with the core runtime dependencies needed
+ * for distribution via pip install or a standalone installer. Providers that
+ * require optional packages remain available through the npm distribution.
  *
- * Native modules (better-sqlite3) are kept external and must be shipped alongside.
+ * Runtime modules (better-sqlite3 and tsx) are kept external and shipped alongside.
  *
  * Usage:
  *   npx tsx scripts/bundle.ts
@@ -18,6 +19,7 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,12 +44,16 @@ const NATIVE_EXTERNALS = [
   'playwright-core',
   '@playwright/browser-chromium',
   '@swc/core',
-  'onnxruntime-node',
   'fsevents',
   // These have native bindings on some platforms
   'cpu-features',
   'ssh2',
 ];
+
+/**
+ * Runtime modules that use on-disk relative imports and cannot be flattened by esbuild.
+ */
+const BUNDLED_RUNTIME_EXTERNALS = ['tsx'];
 
 /**
  * Modules that should remain external because they're optional
@@ -65,6 +71,7 @@ const OPTIONAL_EXTERNALS = [
   '@fal-ai/client',
   '@ibm-cloud/watsonx-ai',
   '@ibm-generative-ai/node-sdk',
+  '@huggingface/transformers',
   'langfuse',
   'google-auth-library',
   // Heavy optional deps
@@ -140,12 +147,12 @@ function copyAssets(): void {
     // Proto files for OTLP
     {
       src: path.join(ROOT, 'src', 'tracing', 'proto'),
-      dest: path.join(BUNDLE_DIR, 'assets', 'proto'),
+      dest: path.join(BUNDLE_DIR, 'tracing', 'proto'),
     },
-    // HTML templates (built app)
+    // Web UI files resolved by findStaticDir() relative to the CLI module directory.
     {
       src: path.join(ROOT, 'dist', 'src', 'app'),
-      dest: path.join(BUNDLE_DIR, 'assets', 'app'),
+      dest: path.join(BUNDLE_DIR, 'app'),
     },
   ];
 
@@ -170,14 +177,14 @@ function copyAssets(): void {
 }
 
 /**
- * Copy native node modules that can't be bundled.
- * These are platform-specific and include prebuilt binaries.
+ * Copy runtime node modules that can't be flattened into the bundle.
+ * This includes native binaries and modules with on-disk relative imports.
  */
-function copyNativeModules(): void {
-  console.log('\n[bundle] Copying native modules...');
+function copyRuntimeModules(): void {
+  console.log('\n[bundle] Copying runtime modules...');
 
-  // Native modules that must be shipped alongside the bundle
-  const nativeModules = ['better-sqlite3', 'onnxruntime-node'];
+  // Modules that must be shipped alongside the bundle.
+  const runtimeModules = ['better-sqlite3', 'tsx'];
 
   const nodeModulesDir = path.join(ROOT, 'node_modules');
   const bundleNodeModulesDir = path.join(BUNDLE_DIR, 'node_modules');
@@ -196,7 +203,7 @@ function copyNativeModules(): void {
 
     if (!fs.existsSync(srcDir)) {
       if (isRoot) {
-        console.warn(`[bundle] Warning: Native module not found: ${moduleName}`);
+        console.warn(`[bundle] Warning: Runtime module not found: ${moduleName}`);
       }
       return;
     }
@@ -218,7 +225,7 @@ function copyNativeModules(): void {
       },
     });
 
-    const label = isRoot ? 'native module' : 'dependency';
+    const label = isRoot ? 'runtime module' : 'dependency';
     console.log(`[bundle] Copied ${label}: ${moduleName}`);
 
     // Recursively copy dependencies
@@ -233,8 +240,8 @@ function copyNativeModules(): void {
     }
   }
 
-  // Copy all native modules with their dependency trees
-  for (const moduleName of nativeModules) {
+  // Copy all runtime modules with their dependency trees.
+  for (const moduleName of runtimeModules) {
     copyModuleWithDeps(moduleName, true);
   }
 
@@ -347,7 +354,7 @@ function createStubModules(nodeModulesDir: string): void {
 
     // Helper function for error message
     const errorMsg = (name: string) =>
-      `The optional module '${name}' is not installed. Install it with: npm install ${name}`;
+      `The standalone distribution does not include optional module '${name}'. Install promptfoo with npm to use this feature.`;
 
     // Create ESM stub with named exports
     const namedExportsCode = namedExports
@@ -369,7 +376,7 @@ export const ${exp} = new Proxy(function ${exp}() {}, {
       .join('\n');
 
     const esmStubCode = `
-// Stub module for ${moduleName} - install with: npm install ${moduleName}
+// Stub module for ${moduleName} - use the npm distribution for this feature.
 const createStub = (name) => new Proxy(function() {}, {
   get(target, prop) {
     if (prop === 'then' || prop === Symbol.toStringTag) return undefined;
@@ -530,6 +537,7 @@ if (isSEA) {
       // Keep native, optional, and Node built-in modules external
       external: [
         ...NATIVE_EXTERNALS,
+        ...BUNDLED_RUNTIME_EXTERNALS,
         ...OPTIONAL_EXTERNALS,
         ...NODE_BUILTINS,
         ...NODE_BUILTINS.map((m) => `node:${m}`),
@@ -759,22 +767,38 @@ import(pathToFileURL(entrypoint).href).catch((error) => {
     }
   }
 
-  // Verify the binary works
+  // Verify the binary works. A produced executable that cannot start is not a release artifact.
   console.log('[bundle] Verifying SEA binary...');
+  const verificationDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-sea-verify-'));
   try {
     const versionResult = spawnSync(seaBinary, ['--version'], {
       encoding: 'utf8',
       timeout: 10000,
+      env: {
+        ...process.env,
+        PROMPTFOO_CACHE_PATH: path.join(verificationDir, 'cache'),
+        PROMPTFOO_CONFIG_DIR: path.join(verificationDir, 'state'),
+        PROMPTFOO_DISABLE_SHARING: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: 'true',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+      },
     });
     if (versionResult.status === 0) {
       console.log(`[bundle] SEA binary verified: ${versionResult.stdout.trim()}`);
     } else {
-      console.error('[bundle] Warning: SEA binary verification returned non-zero exit code');
+      console.error('[bundle] SEA binary verification returned non-zero exit code');
+      if (versionResult.error) {
+        console.error('error:', versionResult.error);
+      }
       console.error('stdout:', versionResult.stdout);
       console.error('stderr:', versionResult.stderr);
+      return false;
     }
   } catch (error) {
-    console.error('[bundle] Warning: Failed to verify SEA binary:', error);
+    console.error('[bundle] Failed to verify SEA binary:', error);
+    return false;
+  } finally {
+    fs.rmSync(verificationDir, { recursive: true, force: true });
   }
 
   // Report final size
@@ -811,8 +835,8 @@ async function main(): Promise<void> {
   console.log('\n[bundle] Copying assets...');
   copyAssets();
 
-  // Copy native modules (better-sqlite3, etc.)
-  copyNativeModules();
+  // Copy runtime modules (better-sqlite3, tsx, and their dependencies).
+  copyRuntimeModules();
 
   // Create ESM bundle (default)
   console.log('\n[bundle] Creating ESM bundle...');
@@ -847,12 +871,16 @@ async function main(): Promise<void> {
   }
 
   // List external dependencies
-  console.log('\n[bundle] External dependencies (must be available at runtime):');
-  console.log('  Native modules:');
+  console.log('\n[bundle] External dependency handling:');
+  console.log('  Native modules excluded from the JavaScript bundle:');
   for (const dep of NATIVE_EXTERNALS) {
     console.log(`    - ${dep}`);
   }
-  console.log('  Optional modules (install if needed):');
+  console.log('  JavaScript runtime modules shipped with standalone distributions:');
+  for (const dep of BUNDLED_RUNTIME_EXTERNALS) {
+    console.log(`    - ${dep}`);
+  }
+  console.log('  Optional modules unavailable in standalone distributions (use npm instead):');
   for (const dep of OPTIONAL_EXTERNALS.slice(0, 5)) {
     console.log(`    - ${dep}`);
   }

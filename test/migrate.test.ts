@@ -11,6 +11,7 @@ const mockMigrate = vi.fn();
 const mockGetDb = vi.fn().mockReturnValue(mockDb);
 const mockCloseDbIfOpen = vi.fn();
 const mockGetDirectory = vi.fn();
+const mockExistsSync = vi.fn().mockReturnValue(false);
 const mockLogger = {
   debug: vi.fn(),
   error: vi.fn(),
@@ -31,6 +32,10 @@ vi.mock('../src/logger', () => ({
   default: mockLogger,
 }));
 
+vi.mock('node:fs', () => ({
+  existsSync: mockExistsSync,
+}));
+
 vi.mock('drizzle-orm/better-sqlite3/migrator', () => ({
   migrate: mockMigrate,
 }));
@@ -43,6 +48,7 @@ describe('migrate', () => {
     mockGetDb.mockReturnValue(mockDb);
     mockMigrate.mockReset();
     mockGetDirectory.mockReset();
+    mockExistsSync.mockReset().mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -66,6 +72,20 @@ describe('migrate', () => {
         expect.stringContaining('Running database migrations from:'),
       );
       expect(mockLogger.debug).toHaveBeenCalledWith('Database migrations completed');
+    });
+
+    it('should run migrations from standalone distribution assets', async () => {
+      const standaloneDir = '/opt/promptfoo';
+      mockGetDirectory.mockReturnValue(standaloneDir);
+      mockExistsSync.mockReturnValue(true);
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await runDbMigrations();
+
+      expect(mockExistsSync).toHaveBeenCalledWith(path.join(standaloneDir, 'assets', 'drizzle'));
+      expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
+        migrationsFolder: path.join(standaloneDir, 'assets', 'drizzle'),
+      });
     });
 
     it('should run migrations from bundled dist/src directory', async () => {

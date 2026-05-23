@@ -32,9 +32,10 @@ Full documentation is available at [promptfoo.dev/docs](https://www.promptfoo.de
 ## Requirements
 
 - Python 3.8+
-- Supported platforms: Linux (x64, arm64), macOS (x64, arm64), Windows (x64)
+- Supported platforms: Linux with glibc 2.28+ (x64, arm64), macOS (x64, arm64), Windows (x64)
 
 The package includes a standalone binary with the Node.js runtime bundled, so no separate Node.js installation is required.
+Providers that rely on optional Node.js packages, such as local Transformers models, browser automation, or some cloud-provider SDKs, require the npm installation instead.
 
 ## Alternative Installation Methods
 
