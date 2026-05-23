@@ -70,7 +70,7 @@ describe('EvaluationPanel', () => {
           value: { name: '{{name}}' },
         },
         metadata: {
-          renderedAssertionValue: { name: 'hello world' } as unknown as string,
+          renderedAssertionValue: { name: 'hello world' },
         },
       },
     ];
@@ -94,7 +94,7 @@ describe('EvaluationPanel', () => {
           value: 'Hello world',
         },
         metadata: {
-          renderedAssertionValue: null as unknown as string,
+          renderedAssertionValue: null,
         },
       },
     ];
@@ -431,6 +431,25 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('1 difference found')).toBeInTheDocument();
     expect(screen.getByText('expected: "Jane"')).toBeInTheDocument();
     expect(screen.getByText('actual: "John"')).toBeInTheDocument();
+  });
+
+  it('uses rendered JSON assertion values in the diff instead of raw templates', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Objects do not match',
+        assertion: { type: 'equals', value: { name: '{{expectedName}}' } },
+        metadata: {
+          renderedAssertionValue: { name: 'Jane' },
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} actualOutput='{"name":"John"}' />);
+
+    expect(screen.getByText('expected: "Jane"')).toBeInTheDocument();
+    expect(screen.queryByText('expected: "{{expectedName}}"')).not.toBeInTheDocument();
   });
 
   it('does not show a misleading JSON diff for output with surrounding text', () => {

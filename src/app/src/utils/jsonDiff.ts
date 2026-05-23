@@ -67,9 +67,12 @@ function computeObjectDiff(
 
   for (const key of allKeys) {
     const keyPath = appendObjectPath(path, key);
-    if (!(key in expected)) {
+    const hasExpectedKey = Object.prototype.hasOwnProperty.call(expected, key);
+    const hasActualKey = Object.prototype.hasOwnProperty.call(actual, key);
+
+    if (!hasExpectedKey) {
       diffs.push(createDiff(keyPath, undefined, actual[key], 'added'));
-    } else if (key in actual) {
+    } else if (hasActualKey) {
       diffs.push(...computeJsonDiff(expected[key], actual[key], keyPath));
     } else {
       diffs.push(createDiff(keyPath, expected[key], undefined, 'removed'));
@@ -80,7 +83,12 @@ function computeObjectDiff(
 }
 
 function isRecordValue(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /**
@@ -129,15 +137,26 @@ export function computeJsonDiff(expected: unknown, actual: unknown, path: string
  * - Comparing a schema to actual output would produce nonsensical diffs
  */
 export function isJsonAssertion(result: GradingResult): boolean {
-  const type = result.assertion?.type;
-  const value = result.assertion?.value;
+  return getJsonDiffExpectedValue(result) !== undefined;
+}
 
-  // Only equals with object or array values benefits from JSON diff view
-  if (type === 'equals' && typeof value === 'object' && value !== null) {
-    return true;
+export function getJsonDiffExpectedValue(result: GradingResult): unknown | undefined {
+  const type = result.assertion?.type;
+  if (type !== 'equals') {
+    return undefined;
   }
 
-  return false;
+  const value =
+    result.metadata?.renderedAssertionValue == null
+      ? result.assertion?.value
+      : result.metadata.renderedAssertionValue;
+
+  // Only equals with object or array values benefits from JSON diff view
+  if (typeof value === 'object' && value !== null) {
+    return value;
+  }
+
+  return undefined;
 }
 
 /**

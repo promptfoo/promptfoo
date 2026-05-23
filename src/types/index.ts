@@ -545,7 +545,7 @@ export interface GradingResult {
     // Raw textual responses returned by one or more LLM grader phases
     graderOutputs?: Record<string, string>;
     // Rendered assertion value with substituted variables (for display in UI)
-    renderedAssertionValue?: string;
+    renderedAssertionValue?: unknown;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real

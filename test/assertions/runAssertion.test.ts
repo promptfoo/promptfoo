@@ -3593,6 +3593,31 @@ describe('runAssertion', () => {
       expect(result.metadata?.renderedAssertionValue).toBe('apple, banana, cherry');
     });
 
+    it('should store rendered array assertion values', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: ['{{ expected_name }}'],
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          expected_name: 'Jane',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: '["John"]' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.renderedAssertionValue).toEqual(['Jane']);
+      expect(result.assertion?.value).toEqual(['{{ expected_name }}']);
+    });
+
     it('should not store rendered value when template equals original', async () => {
       const assertion: Assertion = {
         type: 'contains',

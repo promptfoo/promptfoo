@@ -8,7 +8,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { cn } from '@app/lib/utils';
-import { isJsonAssertion, tryParseJson } from '@app/utils/jsonDiff';
+import { getJsonDiffExpectedValue, tryParseJson } from '@app/utils/jsonDiff';
 import { Check, ChevronDown, CircleCheck, CircleX, Copy, CornerDownRight } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 import type { Assertion, GradingResult } from '@promptfoo/types';
@@ -273,7 +273,7 @@ function AssertionResults({
     [gradingResults],
   );
   const shouldParseActualOutput = assertionRows.some(
-    ({ result }) => !result.pass && isJsonAssertion(result),
+    ({ result }) => !result.pass && getJsonDiffExpectedValue(result) !== undefined,
   );
   const parsedActualOutput = useMemo(
     () => (shouldParseActualOutput ? tryParseJson(actualOutput) : undefined),
@@ -330,6 +330,7 @@ function AssertionResults({
             const metric = getMetric(result);
             const graderOutputs = getGraderOutputs(result);
             const indentationStyle = { paddingLeft: depth * ASSERTION_ROW_INDENT_PX };
+            const jsonDiffExpectedValue = getJsonDiffExpectedValue(result);
 
             return (
               <tr
@@ -439,11 +440,10 @@ function AssertionResults({
                     )}
                   {/* JSON diff view for failed JSON assertions */}
                   {!result.pass &&
-                    isJsonAssertion(result) &&
-                    parsedActualOutput !== undefined &&
-                    result.assertion?.value !== undefined && (
+                    jsonDiffExpectedValue !== undefined &&
+                    parsedActualOutput !== undefined && (
                       <JsonDiffView
-                        expected={result.assertion.value}
+                        expected={jsonDiffExpectedValue}
                         actual={parsedActualOutput}
                         className="mt-2"
                       />

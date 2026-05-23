@@ -76,11 +76,12 @@ describe('JsonDiffView', () => {
 
     expect(screen.getByRole('button', { name: /hide full diff/i })).toBeInTheDocument();
 
-    const pre = screen.getByText('"age": 30,').closest('pre');
-    expect(pre).toBeInTheDocument();
-    expect(within(pre!).getByText('"age": 30,')).toBeInTheDocument();
-    expect(within(pre!).getByText('"age": 31,')).toBeInTheDocument();
-    expect(within(pre!).getByText('"name": "Jane"')).toBeInTheDocument();
+    const fullDiff = screen.getByTestId('json-unified-diff');
+    expect(fullDiff.tagName).toBe('DIV');
+    expect(fullDiff.querySelector('pre')).not.toBeInTheDocument();
+    expect(within(fullDiff).getByText('"age": 30,')).toBeInTheDocument();
+    expect(within(fullDiff).getByText('"age": 31,')).toBeInTheDocument();
+    expect(within(fullDiff).getByText('"name": "Jane"')).toBeInTheDocument();
   });
 
   it('shows a fallback for objects that are too large to diff', () => {

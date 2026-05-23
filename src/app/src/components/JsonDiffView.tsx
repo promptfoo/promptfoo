@@ -141,12 +141,15 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="mt-2 rounded border border-border bg-muted/30 p-3 overflow-auto max-h-80">
-                <pre className="text-xs font-mono whitespace-pre-wrap break-words m-0">
+                <div
+                  className="text-xs font-mono whitespace-pre-wrap break-words"
+                  data-testid="json-unified-diff"
+                >
                   <UnifiedDiff
                     expectedJson={diffResult.expectedJson}
                     actualJson={diffResult.actualJson}
                   />
-                </pre>
+                </div>
               </div>
             </CollapsibleContent>
           </Collapsible>

@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { isDeepStrictEqual } from 'util';
 
 import async from 'async';
 import yaml from 'js-yaml';
@@ -313,6 +314,18 @@ const ASSERTION_HANDLERS: Record<
 };
 
 const nunjucks = getNunjucksEngine();
+
+function canStoreRenderedAssertionValue(value: unknown): boolean {
+  if (value === undefined || typeof value === 'function') {
+    return false;
+  }
+
+  try {
+    return JSON.stringify(value) !== undefined;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Renders a metric name template with test variables.
@@ -646,9 +659,8 @@ export async function runAssertion({
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
     if (
-      renderedValue !== undefined &&
-      renderedValue !== assertion.value &&
-      typeof renderedValue === 'string'
+      canStoreRenderedAssertionValue(renderedValue) &&
+      !isDeepStrictEqual(renderedValue, assertion.value)
     ) {
       result.metadata = result.metadata || {};
       result.metadata.renderedAssertionValue = renderedValue;

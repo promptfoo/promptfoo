@@ -150,6 +150,46 @@ describe('computeJsonDiff', () => {
     expect(diffs[0].type).toBe('changed');
   });
 
+  it('classifies object keys that shadow prototype properties using own properties', () => {
+    expect(computeJsonDiff({}, { constructor: 'custom', toString: 'custom' })).toEqual([
+      {
+        path: 'constructor',
+        expected: undefined,
+        actual: 'custom',
+        type: 'added',
+      },
+      {
+        path: 'toString',
+        expected: undefined,
+        actual: 'custom',
+        type: 'added',
+      },
+    ]);
+
+    expect(computeJsonDiff({ constructor: 'custom' }, {})).toEqual([
+      {
+        path: 'constructor',
+        expected: 'custom',
+        actual: undefined,
+        type: 'removed',
+      },
+    ]);
+  });
+
+  it('treats non-plain objects as changed values instead of empty records', () => {
+    const expected = new Date('2026-01-01T00:00:00.000Z');
+    const actual = {};
+
+    expect(computeJsonDiff(expected, actual)).toEqual([
+      {
+        path: '(root)',
+        expected,
+        actual,
+        type: 'changed',
+      },
+    ]);
+  });
+
   it('handles deeply nested structures', () => {
     const expected = {
       level1: {
