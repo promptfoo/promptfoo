@@ -1195,6 +1195,32 @@ Functions can use variables from test cases:
 }
 ```
 
+Structured tool schemas can also be supplied from test variables. Use a direct template
+value to preserve the schema object rather than converting it to text:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-5.4-mini
+    config:
+      tools:
+        - type: function
+          function:
+            name: extract_order
+            parameters: '{{ schema }}'
+
+tests:
+  - vars:
+      schema:
+        type: object
+        properties:
+          order_id:
+            type: string
+        required: [order_id]
+```
+
+Existing configs that use `{{ schema | dump | safe }}` for structured schema injection
+remain supported. Use `{{ schema | dump }}` when the intended value is serialized JSON text.
+
 They can also include functions that dynamically reference vars:
 
 ```js
