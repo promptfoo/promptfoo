@@ -1,7 +1,7 @@
 ---
 title: Red Team Plugins
 sidebar_label: Overview
-description: Red team LLM plugins by deploying trained adversarial models to detect vulnerabilities, prevent prompt injection attacks, and protect AI systems from malicious payloads
+description: Red team LLM plugins by deploying adversarial models to detect vulnerabilities, prevent prompt injection attacks, and protect AI systems from malicious payloads
 ---
 
 import React from 'react';
