@@ -5,6 +5,7 @@ import type {
   FourthwallCart,
   FourthwallCollection,
   FourthwallProduct,
+  FourthwallStock,
   PaginatedResponse,
 } from './types';
 
@@ -425,17 +426,11 @@ export function stripHtml(html: string): string {
 }
 
 // Check if variant is in stock
-export function isInStock(stock: { type: string; inStock?: boolean; quantity?: number }): boolean {
+export function isInStock(stock: FourthwallStock): boolean {
   if (stock.type === 'UNLIMITED') {
     return true;
   }
-  if (stock.type === 'LIMITED') {
-    if (typeof stock.inStock === 'boolean') {
-      return stock.inStock;
-    }
-    return typeof stock.quantity === 'number' && stock.quantity > 0;
-  }
-  return false;
+  return stock.inStock > 0;
 }
 
 // Check if a product is completely sold out (all variants out of stock)

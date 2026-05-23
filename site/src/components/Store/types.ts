@@ -19,11 +19,14 @@ export interface FourthwallAttribute {
 
 export type FourthwallAttributeValue = string | FourthwallAttribute;
 
-export interface FourthwallStock {
-  type: 'LIMITED' | 'UNLIMITED';
-  inStock?: boolean;
-  quantity?: number;
-}
+export type FourthwallStock =
+  | {
+      type: 'LIMITED';
+      inStock: number;
+    }
+  | {
+      type: 'UNLIMITED';
+    };
 
 export interface FourthwallVariant {
   id: string;
@@ -52,10 +55,10 @@ export interface FourthwallProduct {
   slug: string;
   description: string;
   state: {
-    type: 'AVAILABLE' | 'UNAVAILABLE';
+    type: 'AVAILABLE' | 'SOLD_OUT';
   };
   access: {
-    type: 'PUBLIC' | 'PRIVATE';
+    type: 'PUBLIC' | 'HIDDEN' | 'PRIVATE' | 'ARCHIVED';
   };
   images: FourthwallImage[];
   variants: FourthwallVariant[];

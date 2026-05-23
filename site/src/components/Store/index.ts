@@ -33,6 +33,7 @@ export type {
   FourthwallImage,
   FourthwallMoney,
   FourthwallProduct,
+  FourthwallStock,
   FourthwallVariant,
   PaginatedResponse,
 } from './types';

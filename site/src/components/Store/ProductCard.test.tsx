@@ -50,12 +50,7 @@ describe('ProductCard', () => {
   it('marks sold-out products in the accessible label and image overlay', () => {
     const soldOutProduct: FourthwallProduct = {
       ...mockProduct,
-      variants: [
-        {
-          ...mockProduct.variants[0],
-          stock: { type: 'LIMITED', inStock: false },
-        },
-      ],
+      state: { type: 'SOLD_OUT' },
     };
 
     render(<ProductCard product={soldOutProduct} onClick={vi.fn()} />);
