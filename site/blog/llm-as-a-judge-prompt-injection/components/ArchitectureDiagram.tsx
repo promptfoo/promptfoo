@@ -408,7 +408,7 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
               clean content
             </text>
             <text x="50" y="85" textAnchor="middle" fontSize="12" fontWeight="700" fill="#22c55e">
-              ✓ Correct
+              ✓ Rejects
             </text>
           </g>
 

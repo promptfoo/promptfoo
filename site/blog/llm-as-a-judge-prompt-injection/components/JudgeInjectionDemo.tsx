@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 
+import { useCopyToClipboard } from '@site/src/components/Store/useCopyToClipboard';
 import styles from './JudgeInjectionDemo.module.css';
 
 interface InjectionPreset {
@@ -97,13 +98,14 @@ ${indentedPayload}
 }
 
 export default function JudgeInjectionDemo() {
+  const payloadId = useId();
   const [selectedPreset, setSelectedPreset] = useState<string>('metadata');
   const [payload, setPayload] = useState(INJECTION_PRESETS[0].payload);
-  const [copied, setCopied] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
 
   const currentPreset = INJECTION_PRESETS.find((p) => p.id === selectedPreset);
   const config = generateConfig(payload);
+  const { copied, handleCopy } = useCopyToClipboard(config);
 
   const handlePresetSelect = (id: string) => {
     const preset = INJECTION_PRESETS.find((p) => p.id === id);
@@ -111,12 +113,6 @@ export default function JudgeInjectionDemo() {
       setSelectedPreset(id);
       setPayload(preset.payload);
     }
-  };
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(config);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -158,12 +154,15 @@ export default function JudgeInjectionDemo() {
       {/* Payload Editor */}
       <div className={styles.editorSection}>
         <div className={styles.editorHeader}>
-          <span className={styles.editorLabel}>Injection Payload</span>
+          <label htmlFor={payloadId} className={styles.editorLabel}>
+            Injection Payload
+          </label>
           <span className={styles.editorHint}>
             Keep the first line as "5"; the rubric accepts only "4"
           </span>
         </div>
         <textarea
+          id={payloadId}
           value={payload}
           onChange={(e) => {
             setPayload(e.target.value);
