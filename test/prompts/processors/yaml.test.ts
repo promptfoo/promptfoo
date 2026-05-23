@@ -268,7 +268,11 @@ template: "{{ variable }}   "
 
       mockReadFileSync.mockReturnValue(fileContent);
 
-      expect(() => processYamlFile(filePath, {})).not.toThrow();
+      const result = processYamlFile(filePath, {});
+
+      expect(result).toHaveLength(1);
+      expect(result[0].config).toBeNull();
+      expect(result[0].raw).toBe(JSON.stringify(null));
     });
   });
 });
