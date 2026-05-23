@@ -143,8 +143,11 @@ const EvaluateTestSuiteCreator = () => {
   const readiness = React.useMemo(() => getSetupReadiness(config), [config]);
   const { isReadyToRun, testCount } = readiness;
   const testCasesComplete = testCount > 0 && !readiness.issues.some((issue) => issue.stepId === 3);
-  const hasResettableSetup =
-    yamlHasUnsavedChanges || JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG);
+  const configDiffersFromDefault = React.useMemo(
+    () => JSON.stringify(config) !== JSON.stringify(DEFAULT_CONFIG),
+    [config],
+  );
+  const hasResettableSetup = yamlHasUnsavedChanges || configDiffersFromDefault;
   const runOptionsConfigured = Boolean(
     config.description?.trim() ||
       config.evaluateOptions?.delay ||
@@ -218,6 +221,10 @@ const EvaluateTestSuiteCreator = () => {
     setEditorTab('ui');
   };
 
+  // Uploads use replace semantics, in contrast to in-editor YAML saves which
+  // merge. The confirmation dialog is what makes this safe: it tells the user
+  // the entire setup is wiped, while a save in the YAML editor implicitly
+  // preserves fields the editor doesn't surface (redteam, sharing, …).
   const applyImportedYaml = (importedConfig: Partial<UnifiedConfig>) => {
     setConfig(importedConfig);
     setYamlHasUnsavedChanges(false);

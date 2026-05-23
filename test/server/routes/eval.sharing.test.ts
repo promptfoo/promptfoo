@@ -133,6 +133,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     const inProgressResponse = await api.get(`/api/eval/job/${jobId}`);
     expect(inProgressResponse.body.status).toBe('in-progress');
+    expect(inProgressResponse.body.evalId).toBeUndefined();
 
     resolveSummary?.({ results: [] });
 
