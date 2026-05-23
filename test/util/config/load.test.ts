@@ -1182,6 +1182,31 @@ describe('combineConfigs', () => {
     // When no defaultTest is provided, combineConfigs returns undefined
     expect(result.defaultTest).toBeUndefined();
   });
+
+  it('preserves all CallApiFunction providers without deduping them', async () => {
+    // Regression test for https://github.com/promptfoo/promptfoo/issues/9383.
+    // JSON.stringify(fn) returns undefined, so the dedupe used to collapse every
+    // function provider into a single entry.
+    const makeProvider = (label: string) => {
+      const fn = async (prompt: string) => ({ output: `${label}: ${prompt}` });
+      (fn as any).label = label;
+      return fn;
+    };
+    const providerA = makeProvider('a');
+    const providerB = makeProvider('b');
+    const providerC = makeProvider('c');
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [providerA, providerB, providerC],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toHaveLength(3);
+    expect(result.providers).toEqual([providerA, providerB, providerC]);
+  });
 });
 
 describe('dereferenceConfig', () => {

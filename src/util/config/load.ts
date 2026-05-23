@@ -444,9 +444,16 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        if (!seenProviders.has(JSON.stringify(provider))) {
+        // Function providers can't be JSON.stringify'd (they serialize to undefined),
+        // so the dedupe would collapse them all into one. Always keep functions as-is.
+        if (typeof provider === 'function') {
           providers.push(provider);
-          seenProviders.add(JSON.stringify(provider));
+          return;
+        }
+        const key = JSON.stringify(provider);
+        if (!seenProviders.has(key)) {
+          providers.push(provider);
+          seenProviders.add(key);
         }
       });
     }
