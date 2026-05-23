@@ -1,3 +1,5 @@
+import fs from 'fs/promises';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
@@ -22,9 +24,7 @@ vi.mock('child_process', () => ({
 
 vi.mock('fs/promises', () => ({
   default: {
-    readFile: vi
-      .fn()
-      .mockResolvedValue(JSON.stringify({ type: 'final_result', data: 'secret-result' })),
+    readFile: vi.fn(),
   },
 }));
 
@@ -44,11 +44,9 @@ vi.mock('../../src/logger', () => ({
 }));
 
 vi.mock('../../src/util/secureTempFiles', () => ({
-  createSecureTempDirectory: vi.fn().mockResolvedValue('/tmp/promptfoo-ruby-test'),
-  removeSecureTempDirectory: vi.fn().mockResolvedValue(undefined),
-  writeSecureTempFile: vi.fn(
-    async (directory: string, filename: string) => `${directory}/${filename}`,
-  ),
+  createSecureTempDirectory: vi.fn(),
+  removeSecureTempDirectory: vi.fn(),
+  writeSecureTempFile: vi.fn(),
 }));
 
 describe('Ruby utilities', () => {
@@ -59,6 +57,14 @@ describe('Ruby utilities', () => {
     rubyUtils.state.validationPromise = null;
     rubyUtils.state.validatingPath = null;
     vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(fs.readFile).mockResolvedValue(
+      JSON.stringify({ type: 'final_result', data: 'secret-result' }),
+    );
+    vi.mocked(createSecureTempDirectory).mockResolvedValue('/tmp/promptfoo-ruby-test');
+    vi.mocked(removeSecureTempDirectory).mockResolvedValue(undefined);
+    vi.mocked(writeSecureTempFile).mockImplementation(
+      async (directory: string, filename: string) => `${directory}/${filename}`,
+    );
     mockExecFileAsync
       .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
       .mockResolvedValueOnce({ stdout: '', stderr: '' });

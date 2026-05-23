@@ -67,11 +67,9 @@ vi.mock('../../src/logger', () => ({
 }));
 
 vi.mock('../../src/util/secureTempFiles', () => ({
-  createSecureTempDirectory: vi.fn().mockResolvedValue('/tmp/promptfoo-python-test'),
-  removeSecureTempDirectory: vi.fn().mockResolvedValue(undefined),
-  writeSecureTempFile: vi.fn(
-    async (directory: string, filename: string) => `${directory}/${filename}`,
-  ),
+  createSecureTempDirectory: vi.fn(),
+  removeSecureTempDirectory: vi.fn(),
+  writeSecureTempFile: vi.fn(),
 }));
 
 // Must be hoisted for vi.mock factory
@@ -102,6 +100,11 @@ describe('Python Utils', () => {
     // Set default mock return values
     vi.mocked(getEnvString).mockReturnValue('');
     vi.mocked(getEnvBool).mockReturnValue(false);
+    vi.mocked(createSecureTempDirectory).mockResolvedValue('/tmp/promptfoo-python-test');
+    vi.mocked(removeSecureTempDirectory).mockResolvedValue(undefined);
+    vi.mocked(writeSecureTempFile).mockImplementation(
+      async (directory: string, filename: string) => `${directory}/${filename}`,
+    );
   });
 
   describe('getConfiguredPythonPath', () => {

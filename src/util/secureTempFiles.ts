@@ -8,7 +8,15 @@ const SECURE_FILE_OPTIONS = {
   mode: 0o600,
 } as const;
 
+function isSimpleLeafName(value: string): boolean {
+  return value.length > 0 && value !== '.' && value !== '..' && path.basename(value) === value;
+}
+
 export async function createSecureTempDirectory(prefix: string): Promise<string> {
+  if (!isSimpleLeafName(prefix)) {
+    throw new Error('Secure temporary directory prefixes must be simple leaf names');
+  }
+
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   if (process.platform !== 'win32') {
     await fs.chmod(directory, 0o700);
@@ -21,8 +29,8 @@ export async function writeSecureTempFile(
   filename: string,
   contents: string,
 ): Promise<string> {
-  if (path.basename(filename) !== filename) {
-    throw new Error('Secure temporary file names must not contain path separators');
+  if (!isSimpleLeafName(filename)) {
+    throw new Error('Secure temporary file names must be simple leaf names');
   }
 
   const filePath = path.join(directory, filename);

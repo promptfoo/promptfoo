@@ -301,7 +301,7 @@ export async function runRuby<T = unknown>(
       safeJsonStringify(args) as string,
     );
     const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
-    logger.debug(`Running Ruby script ${absPath} with method ${method}`);
+    logger.debug('[Ruby] Running script', { scriptPath: absPath, method });
 
     const { stdout, stderr } = await execFileAsync(rubyPath, [
       wrapperPath,
@@ -320,14 +320,16 @@ export async function runRuby<T = unknown>(
     }
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug(`Ruby script ${absPath} returned a result`);
+    logger.debug('[Ruby] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
-      logger.debug(
-        `Ruby script ${absPath} parsed output type: ${typeof result}, structure: ${result ? JSON.stringify(Object.keys(result)) : 'undefined'}`,
-      );
+      logger.debug('[Ruby] Parsed script result', {
+        scriptPath: absPath,
+        resultType: typeof result,
+        resultKeys: result ? Object.keys(result) : undefined,
+      });
     } catch (error) {
       throw new Error(
         `Invalid JSON returned by Ruby script: ${(error as Error).message}\nStack Trace: ${

@@ -1,4 +1,5 @@
 import fs from 'fs/promises';
+import path from 'path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -31,12 +32,22 @@ describe('secure temporary files', () => {
     ).rejects.toMatchObject({ code: 'EEXIST' });
   });
 
-  it('rejects filenames that escape the private directory', async () => {
+  it('rejects filenames that are not simple leaf names', async () => {
     tempDirectory = await createSecureTempDirectory('promptfoo-secure-temp-test-');
 
-    await expect(writeSecureTempFile(tempDirectory, '../payload.json', 'data')).rejects.toThrow(
-      'Secure temporary file names must not contain path separators',
-    );
+    for (const filename of ['../payload.json', path.resolve('payload.json'), '.', '..', '']) {
+      await expect(writeSecureTempFile(tempDirectory, filename, 'data')).rejects.toThrow(
+        'Secure temporary file names must be simple leaf names',
+      );
+    }
+  });
+
+  it('rejects directory prefixes that are not simple leaf names', async () => {
+    for (const prefix of ['../promptfoo-', path.resolve('promptfoo-'), '.', '..', '']) {
+      await expect(createSecureTempDirectory(prefix)).rejects.toThrow(
+        'Secure temporary directory prefixes must be simple leaf names',
+      );
+    }
   });
 
   it('removes the temporary directory recursively', async () => {

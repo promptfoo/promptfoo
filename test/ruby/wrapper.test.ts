@@ -12,16 +12,19 @@ vi.mock('../../src/ruby/rubyUtils', () => ({
 }));
 
 vi.mock('../../src/util/secureTempFiles', () => ({
-  createSecureTempDirectory: vi.fn().mockResolvedValue('/tmp/promptfoo-ruby-code-test'),
-  removeSecureTempDirectory: vi.fn().mockResolvedValue(undefined),
-  writeSecureTempFile: vi.fn(
-    async (directory: string, filename: string) => `${directory}/${filename}`,
-  ),
+  createSecureTempDirectory: vi.fn(),
+  removeSecureTempDirectory: vi.fn(),
+  writeSecureTempFile: vi.fn(),
 }));
 
 describe('Ruby wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createSecureTempDirectory).mockResolvedValue('/tmp/promptfoo-ruby-code-test');
+    vi.mocked(removeSecureTempDirectory).mockResolvedValue(undefined);
+    vi.mocked(writeSecureTempFile).mockImplementation(
+      async (directory: string, filename: string) => `${directory}/${filename}`,
+    );
   });
 
   it('executes generated Ruby code from a secure temporary file and removes its directory', async () => {

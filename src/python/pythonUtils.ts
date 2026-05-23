@@ -329,7 +329,7 @@ export async function runPython<T = unknown>(
       ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
     };
 
-    logger.debug(`Running Python script ${absPath} with method ${method}`);
+    logger.debug('[Python] Running script', { scriptPath: absPath, method });
 
     await new Promise<void>((resolve, reject) => {
       try {
@@ -356,14 +356,16 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug(`Python script ${absPath} returned a result`);
+    logger.debug('[Python] Script returned a result', { scriptPath: absPath });
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
-      logger.debug(
-        `Python script ${absPath} parsed output type: ${typeof result}, structure: ${result ? JSON.stringify(Object.keys(result)) : 'undefined'}`,
-      );
+      logger.debug('[Python] Parsed script result', {
+        scriptPath: absPath,
+        resultType: typeof result,
+        resultKeys: result ? Object.keys(result) : undefined,
+      });
     } catch (error) {
       throw new Error(
         `Invalid JSON returned by Python script: ${(error as Error).message}\nStack Trace: ${

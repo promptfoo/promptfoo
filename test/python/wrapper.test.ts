@@ -17,11 +17,9 @@ import { mockProcessEnv } from '../util/utils';
 vi.mock('../../src/esm');
 vi.mock('python-shell');
 vi.mock('../../src/util/secureTempFiles', () => ({
-  createSecureTempDirectory: vi.fn().mockResolvedValue('/tmp/promptfoo-python-code-test'),
-  removeSecureTempDirectory: vi.fn().mockResolvedValue(undefined),
-  writeSecureTempFile: vi.fn(
-    async (directory: string, filename: string) => `${directory}/${filename}`,
-  ),
+  createSecureTempDirectory: vi.fn(),
+  removeSecureTempDirectory: vi.fn(),
+  writeSecureTempFile: vi.fn(),
 }));
 vi.mock('../../src/python/pythonUtils', async () => {
   const originalModule = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
@@ -59,6 +57,11 @@ describe('wrapper', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createSecureTempDirectory).mockResolvedValue('/tmp/promptfoo-python-code-test');
+    vi.mocked(removeSecureTempDirectory).mockResolvedValue(undefined);
+    vi.mocked(writeSecureTempFile).mockImplementation(
+      async (directory: string, filename: string) => `${directory}/${filename}`,
+    );
     vi.mocked(validatePythonPath).mockImplementation(
       (pythonPath: string, _isExplicit: boolean): Promise<string> => {
         state.cachedPythonPath = pythonPath;
