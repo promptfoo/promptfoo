@@ -129,13 +129,13 @@ export class RunStatsAccumulator {
   private addResult(result: StatableResult): void {
     this.processedResultCount++;
 
-    if (result.latencyMs > 0) {
+    if (result.latencyMs >= 0) {
       this.latencies.push(result.latencyMs);
     }
 
     if (result.response?.cached === true) {
       this.cacheHits++;
-    } else if (result.response?.cached === false) {
+    } else if (result.response) {
       this.cacheMisses++;
     }
 

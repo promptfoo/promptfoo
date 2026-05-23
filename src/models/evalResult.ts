@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -505,8 +505,9 @@ export default class EvalResult {
     return ret;
   }
 
-  // This is a generator that yields batches of results from the database
-  // These are batched by test Id, not just results to ensure we get all results for a given test
+  // This is a generator that yields batches of results from the database.
+  // It batches by test index so every result for a test is yielded together,
+  // while still handling sparse test-index ranges from filtered/resumed evals.
   static async *findManyByEvalIdBatched(
     evalId: string,
     opts?: {
@@ -515,27 +516,38 @@ export default class EvalResult {
   ): AsyncGenerator<EvalResult[]> {
     const db = getDb();
     const batchSize = opts?.batchSize || 100;
-    let offset = 0;
+    let lastTestIdx: number | undefined;
 
     while (true) {
-      const results = await db
-        .select()
+      const testIndexRows = await db
+        .selectDistinct({ testIdx: evalResultsTable.testIdx })
         .from(evalResultsTable)
         .where(
           and(
             eq(evalResultsTable.evalId, evalId),
-            gte(evalResultsTable.testIdx, offset),
-            lt(evalResultsTable.testIdx, offset + batchSize),
+            lastTestIdx == null ? undefined : gt(evalResultsTable.testIdx, lastTestIdx),
           ),
         )
+        .orderBy(asc(evalResultsTable.testIdx))
+        .limit(batchSize)
         .all();
 
-      if (results.length === 0) {
+      if (testIndexRows.length === 0) {
         break;
       }
 
+      const testIndices = testIndexRows.map((row) => row.testIdx);
+      const results = await db
+        .select()
+        .from(evalResultsTable)
+        .where(
+          and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.testIdx, testIndices)),
+        )
+        .orderBy(asc(evalResultsTable.testIdx), asc(evalResultsTable.promptIdx))
+        .all();
+
       yield results.map((result) => new EvalResult({ ...result, persisted: true }));
-      offset += batchSize;
+      lastTestIdx = testIndices[testIndices.length - 1];
     }
   }
 

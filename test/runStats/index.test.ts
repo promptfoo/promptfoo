@@ -255,6 +255,39 @@ describe('computeRunStats', () => {
     });
   });
 
+  it('should count zero-millisecond and uncached default responses in aggregate stats', () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 0,
+        provider: { id: 'openai:gpt-4' },
+        response: {},
+      },
+      {
+        success: true,
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        response: { cached: true },
+      },
+    ];
+
+    const runStats = computeRunStats({
+      results,
+      stats: createStats(),
+      providers: [createProvider('openai:gpt-4')],
+    });
+
+    expect(runStats.latency).toMatchObject({
+      avgMs: 50,
+      p50Ms: 50,
+    });
+    expect(runStats.cache).toEqual({
+      hits: 1,
+      misses: 1,
+      hitRate: 0.5,
+    });
+  });
+
   it('should compute equivalent statistics from persisted result batches', async () => {
     const results: StatableResult[] = [
       {

@@ -4195,8 +4195,17 @@ class Evaluator {
   }
 
   private async *getTelemetryResultBatches(): AsyncGenerator<EvalResult[]> {
+    const retryErrorResultIds =
+      this.evalRecord.persisted && cliState.retryMode && cliState._retryErrorResultIds?.length
+        ? new Set(cliState._retryErrorResultIds)
+        : undefined;
+
     if (this.evalRecord.persisted) {
-      yield* this.evalRecord.fetchResultsBatched();
+      for await (const batch of this.evalRecord.fetchResultsBatched()) {
+        yield retryErrorResultIds
+          ? batch.filter((result) => !retryErrorResultIds.has(result.id))
+          : batch;
+      }
       return;
     }
 

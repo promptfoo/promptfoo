@@ -34,7 +34,7 @@ export function getPercentile(sortedArr: number[], p: number): number {
 export function computeLatencyStats(results: StatableResult[]): LatencyStats {
   const latencies = results
     .map((r) => r.latencyMs)
-    .filter((l): l is number => l !== undefined && l > 0)
+    .filter((l): l is number => l !== undefined && l >= 0)
     .sort((a, b) => a - b);
 
   const totalLatency = latencies.reduce((sum, l) => sum + l, 0);

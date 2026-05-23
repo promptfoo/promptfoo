@@ -20,6 +20,8 @@ export function describeEvaluator(name: string, defineTests: () => void) {
         async (_extensions, _hookName, context) => context,
       );
       cliState.resume = false;
+      cliState.retryMode = false;
+      delete cliState._retryErrorResultIds;
       cliState.basePath = '';
       cliState.webUI = false;
     });
@@ -29,6 +31,8 @@ export function describeEvaluator(name: string, defineTests: () => void) {
       resetMockProviders();
       vi.clearAllMocks();
       cliState.resume = false;
+      cliState.retryMode = false;
+      delete cliState._retryErrorResultIds;
       cliState.basePath = '';
       cliState.webUI = false;
       await clearCache();

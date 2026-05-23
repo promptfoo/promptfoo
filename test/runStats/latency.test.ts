@@ -63,7 +63,7 @@ describe('computeLatencyStats', () => {
     expect(stats.avgMs).toBe(200); // (100+200+300)/3
   });
 
-  it('should filter out zero and undefined latencies', () => {
+  it('should include zero-millisecond latencies and filter out undefined latencies', () => {
     const results: StatableResult[] = [
       { success: true, latencyMs: 100 },
       { success: true, latencyMs: 0 },
@@ -71,7 +71,8 @@ describe('computeLatencyStats', () => {
       { success: true, latencyMs: 200 },
     ];
     const stats = computeLatencyStats(results);
-    expect(stats.avgMs).toBe(150); // (100+200)/2
+    expect(stats.avgMs).toBe(100); // (0+100+200)/3
+    expect(stats.p50Ms).toBe(100);
   });
 
   it('should compute percentiles correctly', () => {

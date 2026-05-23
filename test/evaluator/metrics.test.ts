@@ -3,9 +3,12 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
+import { createEvaluateResult } from '../factories/eval';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -34,6 +37,42 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(evalRecord.runStats?.assertions).toMatchObject({
       total: 2,
       passed: 1,
+    });
+  });
+
+  it('excludes stale retry-error rows from persisted run statistics', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Retry stale errors')],
+      tests: [{ assert: [{ type: 'contains', value: 'Test' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const staleError = await EvalResult.createFromEvaluateResult(
+      evalRecord.id,
+      createEvaluateResult({
+        prompt: testSuite.prompts[0],
+        provider: { id: 'test-provider' },
+        testCase: testSuite.tests![0],
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+        score: 0,
+        error: 'Previous request timed out',
+        response: undefined,
+        latencyMs: 250,
+      }),
+    );
+    cliState.resume = true;
+    cliState.retryMode = true;
+    cliState._retryErrorResultIds = [staleError.id];
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.runStats?.errors.total).toBe(0);
+    expect(evalRecord.runStats?.providers[0]).toMatchObject({
+      provider: 'test-provider',
+      requests: 1,
+      successes: 1,
+      failures: 0,
     });
   });
 
