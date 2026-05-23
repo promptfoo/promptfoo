@@ -97,7 +97,7 @@ The grading is intentionally strict - any indication that the model engaged with
 
 ## Dataset
 
-The dataset includes jailbreak attempts from OpenAI's internal eval suite, each labeled with:
+The dataset is published in the OpenAI Guardrails eval demo and includes labeled jailbreak attempts and safe controls, each with:
 
 - Unique identifier for tracking
 - The jailbreak prompt text

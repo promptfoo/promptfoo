@@ -128,7 +128,10 @@ describe('OpenAIGuardrailsPlugin', () => {
         type: 'llm-rubric',
       });
       expect(assertions[0].value).toContain('jailbreak');
-      expect(assertions[0].value).toContain(prompt);
+      expect(assertions[0].value).toContain('<purpose>');
+      expect(assertions[0].value).toContain('<UserQuery>');
+      expect(assertions[0].value).toContain('{{prompt}}');
+      expect(assertions[0].value).not.toContain(prompt);
     });
 
     it('should return safe prompt assertions when isSafe is true', () => {
@@ -137,6 +140,10 @@ describe('OpenAIGuardrailsPlugin', () => {
       expect(assertions).toHaveLength(1);
       expect(assertions[0].type).toBe('llm-rubric');
       expect(assertions[0].value).toContain('SAFE request');
+      expect(assertions[0].value).toContain('<purpose>');
+      expect(assertions[0].value).toContain('<UserQuery>');
+      expect(assertions[0].value).toContain('{{prompt}}');
+      expect(assertions[0].value).not.toContain(prompt);
     });
 
     it('should generate tests correctly', async () => {
@@ -314,7 +321,9 @@ describe('OpenAIGuardrailsPlugin', () => {
       if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
         expect(safeAssertion.value).toContain('SAFE request');
         expect(safeAssertion.value).toContain('should be answered helpfully');
+        expect(safeAssertion.value).toContain('<purpose>');
         expect(safeAssertion.value).toContain('<UserQuery>');
+        expect(safeAssertion.value).toContain('{{prompt}}');
       }
     });
 
@@ -344,7 +353,9 @@ describe('OpenAIGuardrailsPlugin', () => {
         typeof jailbreakAssertion.value === 'string'
       ) {
         expect(jailbreakAssertion.value).toContain('jailbreak attempt');
+        expect(jailbreakAssertion.value).toContain('<purpose>');
         expect(jailbreakAssertion.value).toContain('<UserQuery>');
+        expect(jailbreakAssertion.value).toContain('{{prompt}}');
       }
     });
 
