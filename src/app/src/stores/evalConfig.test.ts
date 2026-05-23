@@ -212,6 +212,33 @@ describe('evalConfig store', () => {
         MAX_RETRIES: '3',
       });
     });
+
+    it('strips all-uppercase acronym credential names and plurals', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              SSHKey: 'a',
+              IDToken: 'b',
+              JWTToken: 'c',
+              XAPIKey: 'd',
+              JSONWebToken: 'e',
+              accessTokens: 'f',
+              cookies: 'g',
+              secrets: 'h',
+              passwords: 'i',
+              endpoint: 'https://example.com',
+            } as any,
+          },
+        ],
+      });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        endpoint: 'https://example.com',
+      });
+    });
   });
 
   describe('defaultTest handling', () => {

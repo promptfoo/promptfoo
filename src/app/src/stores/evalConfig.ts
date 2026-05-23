@@ -31,14 +31,23 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
 // Names that look like credentials in any casing convention — camelCase
 // (apiKey, bearerToken, privateKey, pfxPassword), snake_case (api_key,
 // refresh_token, keystore_passphrase), kebab-case / SCREAMING_SNAKE
-// (x-api-key, OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY). Used for both
-// provider config fields and env-var keys.
+// (x-api-key, OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY), and all-uppercase
+// acronyms that lose their casing boundary on normalization (SSHKey,
+// IDToken, JWTToken, XAPIKey). The trailing `s?` matches plural names
+// (secrets, passwords, accessTokens, cookies). Used for both provider
+// config fields and env-var keys; over-redaction (e.g. passphraseStrength,
+// tokenCount) is acceptable here — false positives only suppress non-secret
+// config; false negatives leak credentials.
 const CREDENTIAL_TOKEN_PATTERN =
-  /(?:^|_)(api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)(?:_|$)/;
+  /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
 
 const looksLikeCredential = (name: string): boolean => {
   const normalized = name
+    // Split camelCase boundaries (`abcDef` → `abc_Def`).
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    // Split adjacent-uppercase → trailing-mixed (`SSHKey` → `SSH_Key`,
+    // `JSONWebToken` → after first pass: `JSONWeb_Token`; here: `JSON_Web_Token`).
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .replace(/-/g, '_')
     .toLowerCase();
   return CREDENTIAL_TOKEN_PATTERN.test(normalized);
