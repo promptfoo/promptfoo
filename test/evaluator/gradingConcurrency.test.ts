@@ -134,7 +134,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(2);
@@ -184,7 +184,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(2);
@@ -227,7 +227,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     const failedResult = summary.results.find((result) => result.vars.topic === 'alpha');
@@ -275,7 +275,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(provider.callApi).toHaveBeenCalledTimes(1);
@@ -345,7 +345,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(2);
@@ -400,7 +400,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(2);
@@ -468,12 +468,22 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const firstEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, firstEval, { maxConcurrency: 1, repeat: 2 });
+    await evaluate(testSuite, firstEval, {
+      maxConcurrency: 1,
+      maxEvalTimeMs: 0,
+      repeat: 2,
+      timeoutMs: 0,
+    });
 
     expect(gradingCacheMissCount).toBe(2);
 
     const secondEval = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, secondEval, { maxConcurrency: 1, repeat: 2 });
+    await evaluate(testSuite, secondEval, {
+      maxConcurrency: 1,
+      maxEvalTimeMs: 0,
+      repeat: 2,
+      timeoutMs: 0,
+    });
 
     expect(gradingCacheMissCount).toBe(2);
     expect(gradingProvider.callApi).toHaveBeenCalledTimes(4);
@@ -553,7 +563,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
     const summary = await evalRecord.toEvaluateSummary();
 
     expect(summary.stats.successes).toBe(3);
@@ -602,6 +612,8 @@ describeEvaluator('evaluator grading concurrency', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {
       maxConcurrency: 1,
+      maxEvalTimeMs: 0,
+      timeoutMs: 0,
       abortSignal: abortController.signal,
     });
 
@@ -653,6 +665,8 @@ describeEvaluator('evaluator grading concurrency', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {
       maxConcurrency: 1,
+      maxEvalTimeMs: 0,
+      timeoutMs: 0,
       abortSignal: abortController.signal,
     });
 
@@ -698,7 +712,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
 
     const gradingErrorLogs = errorSpy.mock.calls.filter(
       ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
@@ -748,6 +762,8 @@ describeEvaluator('evaluator grading concurrency', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {
       maxConcurrency: 1,
+      maxEvalTimeMs: 0,
+      timeoutMs: 0,
       abortSignal: abortController.signal,
     });
 
@@ -789,7 +805,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
 
     const groupingLogs = infoSpy.mock.calls.filter(
       ([message]) =>
@@ -798,6 +814,38 @@ describeEvaluator('evaluator grading concurrency', () => {
     );
     expect(groupingLogs).toHaveLength(1);
 
+    infoSpy.mockRestore();
+  });
+
+  it('disables grouped grading when the implicit per-test timeout is active', async () => {
+    const { default: logger } = await import('../../src/logger');
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ assert: [{ type: 'llm-rubric', value: 'Judge output', provider: judge }] }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, maxEvalTimeMs: 0 });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      expect.stringContaining('per-eval-step timeout is configured'),
+    );
     infoSpy.mockRestore();
   });
 
@@ -824,7 +872,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1, timeoutMs: 0, maxEvalTimeMs: 0 });
 
     const groupingLogs = infoSpy.mock.calls.filter(
       ([message]) =>

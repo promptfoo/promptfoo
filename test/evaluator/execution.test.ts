@@ -808,7 +808,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('uses redteam max eval timeout defaults for direct redteam suite evaluation', async () => {
+  it('uses longer redteam timeout defaults for direct redteam suite evaluation', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
@@ -855,11 +855,38 @@ describeEvaluator('evaluator execution control', () => {
     try {
       await evaluate(testSuite, mockEval as unknown as Eval, {
         maxConcurrency: 1,
-        timeoutMs: 1_500_000,
       });
 
       expect(debugSpy).toHaveBeenCalledWith(
-        expect.stringContaining('per-test=1500000ms, max=660000ms, steps=1, concurrency=1'),
+        expect.stringContaining(
+          'per-test=4500000ms, max=4560000ms, steps=1, serialSteps=0, concurrency=1',
+        ),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
+  it('counts runSerially steps in automatically calculated max eval duration', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ options: { runSerially: true } }, { options: { runSerially: true } }, {}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 4, timeoutMs: 0 });
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('per-test=0ms, max=600000ms, steps=3, serialSteps=2'),
       );
     } finally {
       debugSpy.mockRestore();
@@ -1102,6 +1129,19 @@ describeEvaluator('evaluator execution control', () => {
       expect(observedComparisonAbortSignal?.aborted).toBe(true);
 
       await evalPromise;
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 2, failures: 0, successes: 0 }),
+      );
+      expect(
+        summary.results.every(
+          (result) =>
+            result.error?.includes('during comparison grading') &&
+            result.failureReason === ResultFailureReason.ERROR &&
+            !result.success,
+        ),
+      ).toBe(true);
     } finally {
       await vi.runOnlyPendingTimersAsync();
       await evalPromise?.catch(() => undefined);
@@ -1182,6 +1222,7 @@ describeEvaluator('evaluator execution control', () => {
       const evalPromise = evaluate(testSuite, evalRecord as unknown as Eval, {
         maxConcurrency: 1,
         maxEvalTimeMs: 55,
+        timeoutMs: 0,
       });
       await vi.advanceTimersByTimeAsync(40);
       await vi.advanceTimersByTimeAsync(15);

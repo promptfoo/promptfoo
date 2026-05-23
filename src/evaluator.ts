@@ -2664,6 +2664,7 @@ interface EvalProcessingContext {
   targetErrorAbortController: AbortController;
   targetErrorStatus?: number;
   targetUnavailable: boolean;
+  testCaseTimeoutMs: number;
   testSuite: TestSuite;
   vars: Set<string>;
 }
@@ -2850,13 +2851,25 @@ function configureEvaluationTimeout({
   isEvalTimedOut: () => boolean;
   maxEvalTimeMs: number;
   providerAbortSignal?: AbortSignal;
+  testCaseTimeoutMs: number;
 } {
-  const testCaseTimeoutMs =
-    options.timeoutMs === undefined ? getEvalTimeoutMs() : options.timeoutMs;
   const isRedteamEval = options.isRedteam ?? Boolean(testSuite.redteam);
+  const testCaseTimeoutMs =
+    options.timeoutMs === undefined
+      ? getEvalTimeoutMs(undefined, isRedteamEval)
+      : options.timeoutMs;
+  const serialEvalSteps = runEvalOptions.filter(
+    (evalOption) => evalOption.test.options?.runSerially,
+  ).length;
   const maxEvalTimeMs =
     options.maxEvalTimeMs ??
-    getDefaultMaxEvalTimeMs(runEvalOptions.length, concurrency, testCaseTimeoutMs, isRedteamEval);
+    getDefaultMaxEvalTimeMs(
+      runEvalOptions.length,
+      concurrency,
+      testCaseTimeoutMs,
+      isRedteamEval,
+      serialEvalSteps,
+    );
 
   let evalTimedOut = false;
   let globalTimeout: NodeJS.Timeout | undefined;
@@ -2881,7 +2894,7 @@ function configureEvaluationTimeout({
   }
 
   logger.debug(
-    `Evaluation timeout settings: per-test=${testCaseTimeoutMs}ms, max=${maxEvalTimeMs}ms, steps=${runEvalOptions.length}, concurrency=${concurrency}`,
+    `Evaluation timeout settings: per-test=${testCaseTimeoutMs}ms, max=${maxEvalTimeMs}ms, steps=${runEvalOptions.length}, serialSteps=${serialEvalSteps}, concurrency=${concurrency}`,
   );
 
   return {
@@ -2890,6 +2903,7 @@ function configureEvaluationTimeout({
     isEvalTimedOut: () => evalTimedOut,
     maxEvalTimeMs,
     providerAbortSignal: configuredProviderAbortSignal,
+    testCaseTimeoutMs,
   };
 }
 
@@ -3384,8 +3398,7 @@ class Evaluator {
     context: EvalProcessingContext,
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
-    const timeoutMs =
-      context.options.timeoutMs === undefined ? getEvalTimeoutMs() : context.options.timeoutMs;
+    const timeoutMs = context.testCaseTimeoutMs;
 
     if (timeoutMs <= 0) {
       return this.processEvalStep(evalStep, index, { deferGrading, providerCallQueue }, context);
@@ -3910,6 +3923,7 @@ class Evaluator {
         runEvalOptions,
         testIdx,
       });
+      rowsWithSelectBestAssertion.delete(testIdx);
     }
     return compareCount;
   }
@@ -4028,6 +4042,7 @@ class Evaluator {
         runEvalOptions,
         testIdx,
       });
+      rowsWithMaxScoreAssertion.delete(testIdx);
     }
   }
 
@@ -4162,6 +4177,57 @@ class Evaluator {
     );
     if (this.evalRecord.persisted) {
       await result.save();
+    }
+  }
+
+  private async addComparisonTimeoutResults({
+    maxEvalTimeMs,
+    prompts,
+    rowsWithMaxScoreAssertion,
+    rowsWithSelectBestAssertion,
+  }: {
+    maxEvalTimeMs: number;
+    prompts: CompletedPrompt[];
+    rowsWithMaxScoreAssertion: Set<number>;
+    rowsWithSelectBestAssertion: Set<number>;
+  }) {
+    const pendingTestIndices = new Set([
+      ...rowsWithSelectBestAssertion,
+      ...rowsWithMaxScoreAssertion,
+    ]);
+    const error = `Evaluation exceeded max duration of ${maxEvalTimeMs}ms during comparison grading`;
+
+    for (const testIdx of pendingTestIndices) {
+      const resultsToCompare = await this.getResultsToCompare(testIdx);
+      for (const result of resultsToCompare) {
+        if (result.failureReason === ResultFailureReason.ERROR) {
+          continue;
+        }
+
+        const metrics = prompts[result.promptIdx]?.metrics;
+        if (result.success) {
+          this.stats.successes--;
+          if (metrics) {
+            metrics.testPassCount--;
+          }
+        } else {
+          this.stats.failures--;
+          if (metrics) {
+            metrics.testFailCount--;
+          }
+        }
+
+        result.success = false;
+        result.failureReason = ResultFailureReason.ERROR;
+        result.error = error;
+        this.stats.errors++;
+        if (metrics) {
+          metrics.testErrorCount++;
+        }
+        if (this.evalRecord.persisted) {
+          await result.save();
+        }
+      }
     }
   }
 
@@ -4472,6 +4538,7 @@ class Evaluator {
       targetErrorAbortController,
       targetErrorStatus: undefined,
       targetUnavailable: false,
+      testCaseTimeoutMs: timeoutConfig.testCaseTimeoutMs,
       testSuite,
       vars,
     };
@@ -4534,9 +4601,7 @@ class Evaluator {
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const explicitTestCaseTimeoutMs = options.timeoutMs ?? getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS');
-    const hasEvalStepTimeout =
-      explicitTestCaseTimeoutMs !== undefined && explicitTestCaseTimeoutMs > 0;
+    const hasEvalStepTimeout = timeoutConfig.testCaseTimeoutMs > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
@@ -4607,6 +4672,14 @@ class Evaluator {
         throw err;
       }
       logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+    }
+    if (timeoutConfig.isEvalTimedOut()) {
+      await this.addComparisonTimeoutResults({
+        maxEvalTimeMs,
+        prompts,
+        rowsWithMaxScoreAssertion,
+        rowsWithSelectBestAssertion,
+      });
     }
 
     await this.finalizeEvaluation({

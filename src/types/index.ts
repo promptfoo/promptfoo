@@ -283,7 +283,8 @@ export const EvaluateOptionsSchema = z.object({
   /**
    * Timeout in milliseconds for each individual test case/provider API call.
    * When reached, that specific test is marked as an error.
-   * Defaults to PROMPTFOO_EVAL_TIMEOUT_MS or 5x REQUEST_TIMEOUT_MS.
+   * Defaults to PROMPTFOO_EVAL_TIMEOUT_MS, or 5x REQUEST_TIMEOUT_MS for standard
+   * evaluations and 15x REQUEST_TIMEOUT_MS for redteam evaluations.
    * Set to 0 to disable.
    */
   timeoutMs: z.number().optional(),

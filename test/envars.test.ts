@@ -16,6 +16,7 @@ import {
   MAX_EVAL_TIME_BUFFER_MS,
   MAX_EVAL_TIME_REDTEAM_SAFETY_MULTIPLIER,
   MAX_EVAL_TIME_SAFETY_MULTIPLIER,
+  REDTEAM_EVAL_TIMEOUT_MULTIPLIER,
 } from '../src/envars';
 import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
@@ -499,9 +500,18 @@ describe('envars', () => {
       expect(getEvalTimeoutMs()).toBe(300_000);
     });
 
+    it('should use a longer calculated default for redteam evals', () => {
+      expect(getEvalTimeoutMs(undefined, true)).toBe(4_500_000);
+    });
+
     it('should return explicit PROMPTFOO_EVAL_TIMEOUT_MS value when set', () => {
       mockProcessEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '120000' });
       expect(getEvalTimeoutMs()).toBe(120000);
+    });
+
+    it('should use the calculated default when PROMPTFOO_EVAL_TIMEOUT_MS is empty', () => {
+      mockProcessEnv({ PROMPTFOO_EVAL_TIMEOUT_MS: '' });
+      expect(getEvalTimeoutMs()).toBe(1_500_000);
     });
 
     it('should return 0 when PROMPTFOO_EVAL_TIMEOUT_MS is explicitly set to 0', () => {
@@ -531,6 +541,10 @@ describe('envars', () => {
     it('should verify EVAL_TIMEOUT_MULTIPLIER is 5', () => {
       expect(EVAL_TIMEOUT_MULTIPLIER).toBe(5);
     });
+
+    it('should verify REDTEAM_EVAL_TIMEOUT_MULTIPLIER is 15', () => {
+      expect(REDTEAM_EVAL_TIMEOUT_MULTIPLIER).toBe(15);
+    });
   });
 
   describe('calculateDefaultMaxEvalTimeMs', () => {
@@ -540,9 +554,9 @@ describe('envars', () => {
       // expectedTime = 3 * 60,000 = 180,000
       // safeMaxTime = 180,000 * 3 + 60,000 = 600,000
       // worstCase = 3 * 1,500,000 = 4,500,000
-      // min(600,000, 4,500,000) = 600,000
+      // Minimum active batch = 1,560,000, to avoid preempting one allowed test timeout.
       const result = calculateDefaultMaxEvalTimeMs(10, 4, 1_500_000, false);
-      expect(result).toBe(600_000);
+      expect(result).toBe(1_560_000);
     });
 
     it('should calculate correct time for large regular eval', () => {
@@ -589,14 +603,20 @@ describe('envars', () => {
       // expectedTime = 5 * 60,000 = 300,000
       // safeMaxTime = 300,000 * 3 + 60,000 = 960,000
       const result = calculateDefaultMaxEvalTimeMs(5, 1, 1_500_000, false);
-      expect(result).toBe(960_000);
+      expect(result).toBe(1_560_000);
     });
 
     it('should handle concurrency of 0 (treated as 1)', () => {
       // 5 tests, concurrency 0 (should be treated as 1)
       const result = calculateDefaultMaxEvalTimeMs(5, 0, 1_500_000, false);
       // Same as concurrency 1
-      expect(result).toBe(960_000);
+      expect(result).toBe(1_560_000);
+    });
+
+    it('should count runSerially steps outside concurrent batches', () => {
+      // 3 serial steps plus one concurrent batch of 2 steps = 4 batches.
+      const result = calculateDefaultMaxEvalTimeMs(5, 4, 0, false, 3);
+      expect(result).toBe(780_000);
     });
 
     it('should cap at worst case plus buffer when calculated time exceeds it', () => {
@@ -638,6 +658,11 @@ describe('envars', () => {
       expect(result).toBe(expected);
     });
 
+    it('should calculate default when PROMPTFOO_MAX_EVAL_TIME_MS is empty', () => {
+      mockProcessEnv({ PROMPTFOO_MAX_EVAL_TIME_MS: '' });
+      expect(getDefaultMaxEvalTimeMs(2, 2, 0, false)).toBe(240_000);
+    });
+
     it('should prioritize cliState.config.env over process.env', () => {
       mockProcessEnv({ PROMPTFOO_MAX_EVAL_TIME_MS: '100000' });
       cliState.config = {
@@ -653,6 +678,10 @@ describe('envars', () => {
       const redteamResult = getDefaultMaxEvalTimeMs(10, 4, 1_500_000, true);
       // Redteam should have longer timeout due to different expected time
       expect(redteamResult).toBeGreaterThan(regularResult);
+    });
+
+    it('should pass serial step count to calculateDefaultMaxEvalTimeMs', () => {
+      expect(getDefaultMaxEvalTimeMs(5, 4, 0, false, 3)).toBe(780_000);
     });
   });
 });

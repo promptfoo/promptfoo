@@ -357,15 +357,20 @@ Promptfoo provides layered timeout protection by default:
 
 **Per-test timeout (`PROMPTFOO_EVAL_TIMEOUT_MS`):**
 
-- Defaults to 5× the HTTP request timeout (25 minutes with default settings)
-- Allows for multiple retry cycles and multi-turn strategies (e.g., redteam iterative, GOAT, Crescendo)
+- Defaults to 5× the HTTP request timeout for standard evals (25 minutes with default settings)
+- Defaults to 15× the HTTP request timeout for redteam evals (75 minutes by default) so multi-turn strategies such as iterative, GOAT, and Crescendo can complete
 - Set to `0` to disable per-test timeouts
 
 **Total evaluation timeout (`PROMPTFOO_MAX_EVAL_TIME_MS`):**
 
 - Automatically calculated based on your eval's size, concurrency, and whether it's a redteam eval
+- Allows at least one active batch to run for the configured per-test timeout, and accounts for tests marked `runSerially`
 - Acts as a safety net to prevent evaluations from running indefinitely
 - Set to `0` to disable the total evaluation timeout
+
+Per-test timeout enforcement disables grouped local-judge grading, since queued grading work cannot
+honor an end-to-end timeout per row. Set `PROMPTFOO_EVAL_TIMEOUT_MS=0` only when you intentionally
+prefer grouped grading and have another bound on runtime.
 
 ### Customizing timeouts
 
