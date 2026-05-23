@@ -548,6 +548,7 @@ export async function getPiiLeakTestsForCategory(
   const shouldUseDirectPortfolio =
     categoryKey === 'pii:direct' &&
     n >= 5 &&
+    !config?.name &&
     !(config?.examples && config.examples.length > 0) &&
     !(config?.inputs && Object.keys(config.inputs).length > 0);
   if (shouldUseDirectPortfolio) {

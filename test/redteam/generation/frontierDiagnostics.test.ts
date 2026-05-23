@@ -60,4 +60,17 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
       },
     ]);
   });
+
+  it('does not report frontiers that are inactive for the requested batch size', () => {
+    const inactiveSummary = { ...createSummary(false), active: false };
+
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: { pluginId: 'prompt-extraction', semanticFrontier: inactiveSummary },
+          vars: { prompt: 'small ordinary batch' },
+        },
+      ]),
+    ).toEqual([]);
+  });
 });

@@ -801,11 +801,11 @@ async function doGenerateRedteamInternal(
         (generationTokenUsage.cached ?? 0) > 0;
       logger.info(
         hasReportedGenerationTokens
-          ? `Generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
+          ? `Observed generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
               `(${(generationTokenUsage.prompt ?? 0).toLocaleString()} input, ` +
               `${(generationTokenUsage.completion ?? 0).toLocaleString()} output) across ` +
               `${generationRequestCount.toLocaleString()} request(s)`
-          : `Generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
+          : `Observed generation requests: ${generationRequestCount.toLocaleString()} (provider did not report token usage)`,
       );
     }
 

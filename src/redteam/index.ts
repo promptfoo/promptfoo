@@ -654,6 +654,7 @@ async function applyStrategies(
   purpose: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
+  wrapGenerationProvider?: (provider: ApiProvider) => ApiProvider,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -732,6 +733,8 @@ async function applyStrategies(
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
+        // Generation-time strategies that load a specialized local provider must remain in usage totals.
+        __wrapGenerationProvider: wrapGenerationProvider,
         excludeTargetOutputFromAgenticAttackGeneration,
       },
       strategy.id,
@@ -1717,6 +1720,7 @@ export async function synthesize({
       purpose,
       undefined,
       maxCharsPerMessage,
+      (provider) => trackGenerationTokenUsage(provider, generationTokenUsage),
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1741,6 +1745,7 @@ export async function synthesize({
       purpose,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
+      (provider) => trackGenerationTokenUsage(provider, generationTokenUsage),
     );
 
   Object.assign(strategyResults, otherStrategyResults);

@@ -33,7 +33,11 @@ export function summarizeSemanticFrontierDiagnosticsFromTests(
     const pluginId = testCase.metadata?.pluginId;
     const semanticFrontier = testCase.metadata?.semanticFrontier;
 
-    if (typeof pluginId !== 'string' || !isSemanticFrontierSummary(semanticFrontier)) {
+    if (
+      typeof pluginId !== 'string' ||
+      !isSemanticFrontierSummary(semanticFrontier) ||
+      !semanticFrontier.active
+    ) {
       continue;
     }
 
