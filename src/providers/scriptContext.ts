@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { isSecretField, looksLikeSecret, normalizeFieldName } from '../util/sanitizer';
 
 import type { CallApiContextParams } from '../types/index';
 
@@ -27,11 +28,6 @@ const NON_SERIALIZABLE_CONTEXT_KEYS = [
  * - `evaluationId`, `testCaseId`: fresh UUID-like identifiers generated per
  *   eval run (see `evaluator.ts`).
  * - `traceparent`, `tracestate`: W3C trace headers regenerated per request.
- * - `testIdx`, `promptIdx`: positional identifiers that are stable within a
- *   run but carry no semantic meaning for the script's deterministic output.
- *   Two semantically identical invocations at different table positions
- *   should still hit the same cache entry.
- *
  * These fields are still forwarded to the subprocess (they're useful for
  * distributed tracing, correlation, and debugging) — they are only stripped
  * when building the cache-key hash.
@@ -41,8 +37,6 @@ const NON_CACHEABLE_CONTEXT_KEYS = [
   'testCaseId',
   'traceparent',
   'tracestate',
-  'testIdx',
-  'promptIdx',
 ] as const satisfies readonly (keyof CallApiContextParams)[];
 
 /**
@@ -107,4 +101,45 @@ export function buildCacheableScriptContext(
     delete cacheable[key];
   }
   return cacheable;
+}
+
+/**
+ * Returns true when invocation data contains credential-like fields or values.
+ *
+ * Secret-bearing script inputs cannot safely share the persistent cache: storing
+ * them verbatim leaks them, while hashing or redacting them either persists
+ * secret-derived material or collapses distinct credentials into one entry.
+ */
+export function containsSensitiveScriptInput(value: unknown): boolean {
+  const seen = new WeakSet<object>();
+
+  const visit = (entry: unknown): boolean => {
+    if (typeof entry === 'string') {
+      return looksLikeSecret(entry);
+    }
+    if (entry === null || typeof entry !== 'object') {
+      return false;
+    }
+    if (seen.has(entry)) {
+      return false;
+    }
+    seen.add(entry);
+
+    if (Array.isArray(entry)) {
+      return entry.some(visit);
+    }
+
+    return Object.entries(entry).some(([key, nested]) => {
+      const normalizedKey = normalizeFieldName(key);
+      const hasSensitiveName =
+        isSecretField(key) ||
+        /(?:token|secret|password|passphrase|credentials?|signature|signedmetadata)$/.test(
+          normalizedKey,
+        ) ||
+        normalizedKey.endsWith('headers');
+      return hasSensitiveName || visit(nested);
+    });
+  };
+
+  return visit(value);
 }

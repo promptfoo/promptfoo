@@ -289,12 +289,12 @@ describe('ScriptCompletionProvider', () => {
   });
 
   it('should use cache when available', async () => {
-    const cachedResult = { output: 'cached sk-test-cached-output-secret result' };
-    const options = { config: { basePath: '/base', apiKey: 'sk-test-script-secret' } } as any;
+    const cachedResult = { output: 'cached result' };
+    const options = { config: { basePath: '/base', temperature: 0.2 } } as any;
     const provider = new ScriptCompletionProvider('node script.js', options);
     const context = {
-      vars: { promptSecret: 'sk-test-context-secret' },
-      prompt: { label: 'sk-test-context-label-secret' },
+      vars: { name: 'Alice' },
+      prompt: { label: 'Hello {{name}}' },
     } as any;
     const mockCache = {
       get: vi.fn().mockResolvedValue(JSON.stringify(cachedResult)),
@@ -330,18 +330,13 @@ describe('ScriptCompletionProvider', () => {
     expect(result).toEqual({ ...cachedResult, cached: true });
     expect(mockCache.get).toHaveBeenCalledWith(expectedCacheKey);
     expect(expectedCacheKey).not.toContain('test prompt');
-    expect(expectedCacheKey).not.toContain('sk-test-script-secret');
-    expect(expectedCacheKey).not.toContain('sk-test-context-secret');
-    expect(expectedCacheKey).not.toContain('sk-test-context-label-secret');
-    const debugLogs = vi.mocked(logger.debug).mock.calls.map((call) => JSON.stringify(call));
-    expect(debugLogs.join('\n')).not.toContain('sk-test-cached-output-secret');
     expect(logger.debug).toHaveBeenCalledWith('Returning cached result for script', {
       scriptPath: 'node script.js',
     });
     expect(execFile).not.toHaveBeenCalled();
   });
 
-  it('should hash cache keys when storing fresh results', async () => {
+  it('should bypass caching when invocation inputs contain secrets', async () => {
     const options = { config: { basePath: '/base', apiKey: 'sk-test-script-secret' } } as any;
     const provider = new ScriptCompletionProvider('node script.js', options);
     const context = {
@@ -379,20 +374,13 @@ describe('ScriptCompletionProvider', () => {
     });
 
     const result = await provider.callApi('test prompt', context);
-    const fileHash = realSha256('file content');
-    const expectedCacheKey = `exec:node script.js:${fileHash}:${fileHash}:${realSha256('test prompt')}:${realSha256(
-      stableJsonStringify(options) ?? 'undefined',
-    )}:${realSha256(stableJsonStringify(context) ?? 'undefined')}`;
 
     expect(result.output).toBe('fresh result');
-    expect(mockCache.set).toHaveBeenCalledWith(
-      expectedCacheKey,
-      JSON.stringify({ output: 'fresh result' }),
+    expect(mockCache.get).not.toHaveBeenCalled();
+    expect(mockCache.set).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      'ScriptCompletionProvider cache disabled for sensitive invocation input',
     );
-    expect(expectedCacheKey).not.toContain('test prompt');
-    expect(expectedCacheKey).not.toContain('sk-test-script-secret');
-    expect(expectedCacheKey).not.toContain('sk-test-context-secret');
-    expect(expectedCacheKey).not.toContain('sk-test-context-label-secret');
   });
 
   it('produces the same cache key for two runs that differ only by per-run identifiers', async () => {
@@ -449,8 +437,8 @@ describe('ScriptCompletionProvider', () => {
       testCaseId: 'case-second',
       traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
       tracestate: 'vendor=second',
-      testIdx: 3,
-      promptIdx: 2,
+      testIdx: 0,
+      promptIdx: 0,
     } as any);
 
     const firstCacheKey = mockCache.get.mock.calls[0][0] as string;

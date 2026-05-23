@@ -11,7 +11,11 @@ import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { stableJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
-import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
@@ -359,19 +363,19 @@ export class PythonProvider implements ApiProvider {
       buildCacheableScriptContext(context),
     );
 
-    // Create cache key including the resolved function and exact worker args to ensure
-    // different invocation payloads don't share caches.
-    const cacheKey = `python:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
-      stableJsonStringify(cacheKeyArgs) ?? 'undefined',
-    )}`;
-    logger.debug(`PythonProvider cache key: ${cacheKey}`);
-
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
+    const containsSensitiveInput = containsSensitiveScriptInput(cacheKeyArgs);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `python:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
+          stableJsonStringify(cacheKeyArgs) ?? 'undefined',
+        )}`
+      : undefined;
+    logger.debug(`PythonProvider cache key: ${cacheKey ?? '[disabled for sensitive input]'}`);
     logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
 
-    if (cacheEnabled) {
+    if (cacheEnabled && cacheKey) {
       cachedResult = await cache.get(cacheKey);
       logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
     }
@@ -404,12 +408,12 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasPythonResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheEnabled && cacheKey && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `PythonProvider not caching result: ${hasError ? 'has error' : 'cache disabled'}`,
         );
       }
 

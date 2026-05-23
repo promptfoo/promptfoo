@@ -233,7 +233,7 @@ describe('PythonProvider', () => {
       ]);
     });
 
-    it('should hash cache keys when reading and storing results', async () => {
+    it('should bypass caching when invocation inputs contain secrets', async () => {
       const options = {
         config: { basePath: '/base', apiKey: 'sk-test-python-secret' },
       } as any;
@@ -252,24 +252,13 @@ describe('PythonProvider', () => {
       mockReadFileSync.mockReturnValue('mock file content');
 
       const result = await provider.callApi('test prompt', context);
-      const expectedCacheKey = mockCache.get.mock.calls[0][0] as string;
-      const expectedOptions = { ...options, config: { ...options.config } };
-      const expectedArgsHash = sha256(
-        stableJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
-      );
 
-      expect(expectedCacheKey).toContain('python:');
-      expect(expectedCacheKey).toContain(':call_api:call_api:');
-      expect(expectedCacheKey).toContain(sha256('mock file content'));
-      expect(expectedCacheKey).toContain(expectedArgsHash);
-      expect(mockCache.set).toHaveBeenCalledWith(
-        expectedCacheKey,
-        JSON.stringify({ output: 'fresh result' }),
+      expect(mockCache.get).not.toHaveBeenCalled();
+      expect(mockCache.set).not.toHaveBeenCalled();
+      expect(mockPoolInstance.execute).toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        'PythonProvider cache key: [disabled for sensitive input]',
       );
-      expect(expectedCacheKey).not.toContain('test prompt');
-      expect(expectedCacheKey).not.toContain('sk-test-python-secret');
-      expect(expectedCacheKey).not.toContain('sk-test-context-secret');
-      expect(expectedCacheKey).not.toContain('sk-test-context-label-secret');
       expect(result).toEqual({ output: 'fresh result', cached: false });
     });
 
@@ -690,8 +679,8 @@ describe('PythonProvider', () => {
         testCaseId: 'case-second',
         traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
         tracestate: 'vendor=second',
-        testIdx: 3,
-        promptIdx: 2,
+        testIdx: 0,
+        promptIdx: 0,
       } as any);
 
       const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
@@ -700,6 +689,22 @@ describe('PythonProvider', () => {
       expect(firstCacheKey).toBe(secondCacheKey);
       expect(firstCacheKey).not.toContain('eval-first-run');
       expect(secondCacheKey).not.toContain('eval-second-run');
+    });
+
+    it('separates cache keys when script-visible indices differ', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockPoolInstance.execute.mockResolvedValue({ output: 'fresh' });
+
+      await provider.callApi('test prompt', { vars: { name: 'Alice' }, testIdx: 0 } as any);
+      await provider.callApi('test prompt', { vars: { name: 'Alice' }, testIdx: 1 } as any);
+
+      expect(mockCache.get.mock.calls[0][0]).not.toBe(mockCache.get.mock.calls[1][0]);
     });
   });
 

@@ -7,7 +7,11 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import invariant from '../util/invariant';
 import { safeJsonStringify, stableJsonStringify } from '../util/json';
-import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
@@ -85,12 +89,23 @@ export class ScriptCompletionProvider implements ApiProvider {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
     }
 
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${sha256(prompt)}:${sha256(
-      stableOptions,
-    )}:${sha256(stableCacheableContext)}`;
+    const containsSensitiveInput = containsSensitiveScriptInput([
+      prompt,
+      this.options ?? {},
+      buildCacheableScriptContext(context),
+    ]);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `exec:${this.scriptPath}:${fileHashes.join(':')}:${sha256(prompt)}:${sha256(
+          stableOptions,
+        )}:${sha256(stableCacheableContext)}`
+      : undefined;
+    if (containsSensitiveInput) {
+      logger.debug('ScriptCompletionProvider cache disabled for sensitive invocation input');
+    }
 
     let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
+    if (fileHashes.length > 0 && cacheEnabled && cacheKey) {
       const cache = await getCache();
       cachedResult = await cache.get(cacheKey);
 
@@ -98,7 +113,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         logger.debug('Returning cached result for script', { scriptPath: this.scriptPath });
         return { ...JSON.parse(cachedResult as string), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
+    } else if (fileHashes.length === 0 && cacheEnabled) {
       logger.warn(
         `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
       );
@@ -136,7 +151,7 @@ export class ScriptCompletionProvider implements ApiProvider {
           stdout: standardOutput,
         });
         const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
+        if (fileHashes.length > 0 && cacheEnabled && cacheKey) {
           const cache = await getCache();
           await cache.set(cacheKey, JSON.stringify(result));
         }

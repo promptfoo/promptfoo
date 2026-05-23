@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import {
   buildCacheableScriptContext,
+  containsSensitiveScriptInput,
   sanitizeScriptContext,
 } from '../../src/providers/scriptContext';
 import { createMockProvider } from '../factories/provider';
@@ -153,7 +154,7 @@ describe('buildCacheableScriptContext', () => {
     expect(cacheable).toEqual({ vars: { foo: 'bar' } });
   });
 
-  it('strips per-run non-deterministic keys so cache keys stay stable across runs', () => {
+  it('strips tracing identifiers while retaining script-visible indices', () => {
     const context = {
       vars: { foo: 'bar' },
       prompt: { raw: 'Hi', label: 'Hi' },
@@ -170,13 +171,13 @@ describe('buildCacheableScriptContext', () => {
     expect(cacheable).toEqual({
       vars: { foo: 'bar' },
       prompt: { raw: 'Hi', label: 'Hi' },
+      testIdx: 3,
+      promptIdx: 1,
     });
     expect(cacheable).not.toHaveProperty('evaluationId');
     expect(cacheable).not.toHaveProperty('testCaseId');
     expect(cacheable).not.toHaveProperty('traceparent');
     expect(cacheable).not.toHaveProperty('tracestate');
-    expect(cacheable).not.toHaveProperty('testIdx');
-    expect(cacheable).not.toHaveProperty('promptIdx');
   });
 
   it('produces an identical shape when only per-run identifiers differ', () => {
@@ -218,5 +219,26 @@ describe('buildCacheableScriptContext', () => {
 
     expect(context.evaluationId).toBe('eval-abc');
     expect(context.getCache).toBeDefined();
+  });
+});
+
+describe('containsSensitiveScriptInput', () => {
+  it('detects secret fields and credential-shaped values', () => {
+    expect(containsSensitiveScriptInput({ config: { apiKey: 'test-value' } })).toBe(true);
+    expect(containsSensitiveScriptInput({ config: { tenantToken: 'opaque-value' } })).toBe(true);
+    expect(
+      containsSensitiveScriptInput({ config: { customHeaders: { 'X-Access': 'opaque-value' } } }),
+    ).toBe(true);
+    expect(containsSensitiveScriptInput({ vars: { value: 'sk-test-secret-material' } })).toBe(true);
+  });
+
+  it('permits ordinary script inputs', () => {
+    expect(
+      containsSensitiveScriptInput({
+        vars: { name: 'Alice' },
+        prompt: { label: 'Hello {{name}}' },
+        testIdx: 0,
+      }),
+    ).toBe(false);
   });
 });

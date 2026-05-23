@@ -11,7 +11,11 @@ import { sha256 } from '../util/createHash';
 import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify, stableJsonStringify } from '../util/json';
-import { buildCacheableScriptContext, sanitizeScriptContext } from './scriptContext';
+import {
+  buildCacheableScriptContext,
+  containsSensitiveScriptInput,
+  sanitizeScriptContext,
+} from './scriptContext';
 
 import type {
   ApiProvider,
@@ -88,13 +92,20 @@ export class GolangProvider implements ApiProvider {
     const cacheableContext = buildCacheableScriptContext(context);
     const cacheKeyArgs =
       apiType === 'call_api' ? [prompt, this.options, cacheableContext] : [prompt, this.options];
-    const cacheKey = `golang:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
-      stableJsonStringify(cacheKeyArgs) || '[]',
-    )}`;
     const cache = await getCache();
     let cachedResult;
+    const containsSensitiveInput = containsSensitiveScriptInput(cacheKeyArgs);
+    const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
+    const cacheKey = cacheEnabled
+      ? `golang:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
+          stableJsonStringify(cacheKeyArgs) || '[]',
+        )}`
+      : undefined;
+    if (containsSensitiveInput) {
+      logger.debug('GolangProvider cache disabled for sensitive invocation input');
+    }
 
-    if (isCacheEnabled()) {
+    if (cacheEnabled && cacheKey) {
       cachedResult = (await cache.get(cacheKey)) as string;
     }
 
@@ -167,7 +178,7 @@ export class GolangProvider implements ApiProvider {
 
         const result = JSON.parse(stdout);
 
-        if (isCacheEnabled() && !('error' in result)) {
+        if (cacheEnabled && cacheKey && !('error' in result)) {
           await cache.set(cacheKey, JSON.stringify(result));
         }
         return result;

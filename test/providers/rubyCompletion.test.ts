@@ -330,12 +330,12 @@ describe('RubyProvider', () => {
   describe('caching', () => {
     it('should use cached result when available', async () => {
       const options = {
-        config: { basePath: '/base', apiKey: 'sk-test-ruby-secret' },
+        config: { basePath: '/base', temperature: 0.2 },
       } as any;
       const provider = new RubyProvider('script.rb', options);
       const context = {
-        vars: { promptSecret: 'sk-test-context-secret' },
-        prompt: { label: 'sk-test-context-label-secret' },
+        vars: { name: 'Alice' },
+        prompt: { label: 'Hello {{name}}' },
       } as any;
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -356,14 +356,11 @@ describe('RubyProvider', () => {
       expect(expectedCacheKey).toContain(sha256('mock file content'));
       expect(expectedCacheKey).toContain(expectedArgsHash);
       expect(expectedCacheKey).not.toContain('test prompt');
-      expect(expectedCacheKey).not.toContain('sk-test-ruby-secret');
-      expect(expectedCacheKey).not.toContain('sk-test-context-secret');
-      expect(expectedCacheKey).not.toContain('sk-test-context-label-secret');
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
-    it('should cache result when cache is enabled', async () => {
+    it('should bypass caching when invocation inputs contain secrets', async () => {
       const options = {
         config: { basePath: '/base', apiKey: 'sk-test-ruby-secret' },
       } as any;
@@ -381,21 +378,10 @@ describe('RubyProvider', () => {
       mockRunRuby.mockResolvedValue({ output: 'new result' });
 
       await provider.callApi('test prompt', context);
-      const expectedCacheKey = mockCache.set.mock.calls[0][0] as string;
-      const expectedOptions = { ...options, config: { ...options.config } };
-      const expectedArgsHash = sha256(
-        stableJsonStringify(['test prompt', expectedOptions, context]) ?? 'undefined',
-      );
 
-      expect(expectedCacheKey).toContain('ruby:');
-      expect(expectedCacheKey).toContain(':call_api:call_api:');
-      expect(expectedCacheKey).toContain(sha256('mock file content'));
-      expect(expectedCacheKey).toContain(expectedArgsHash);
-      expect(mockCache.set).toHaveBeenCalledWith(expectedCacheKey, '{"output":"new result"}');
-      expect(expectedCacheKey).not.toContain('test prompt');
-      expect(expectedCacheKey).not.toContain('sk-test-ruby-secret');
-      expect(expectedCacheKey).not.toContain('sk-test-context-secret');
-      expect(expectedCacheKey).not.toContain('sk-test-context-label-secret');
+      expect(mockCache.get).not.toHaveBeenCalled();
+      expect(mockCache.set).not.toHaveBeenCalled();
+      expect(mockRunRuby).toHaveBeenCalled();
     });
 
     it('should properly transform token usage in cached results', async () => {
@@ -648,8 +634,8 @@ describe('RubyProvider', () => {
         testCaseId: 'case-second',
         traceparent: '00-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-bbbbbbbbbbbbbbbb-01',
         tracestate: 'vendor=second',
-        testIdx: 3,
-        promptIdx: 2,
+        testIdx: 0,
+        promptIdx: 0,
       } as any);
 
       const firstCacheKey = mockCache.get.mock.calls[0][0] as string;
