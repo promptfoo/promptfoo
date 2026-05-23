@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import chokidar from 'chokidar';
+import { InvalidArgumentError } from 'commander';
 import dedent from 'dedent';
 import ora from 'ora';
 import { z } from 'zod';
@@ -85,7 +86,7 @@ function collectKeyValueOption(
   const val = separatorIndex === -1 ? undefined : value.slice(separatorIndex + 1);
 
   if (!key || val === undefined) {
-    throw new Error(`${optionName} must be specified in key=value format.`);
+    throw new InvalidArgumentError(`${optionName} must be specified in key=value format.`);
   }
 
   return { ...previous, [key]: val };
@@ -661,11 +662,9 @@ export async function doEval(
     }
     const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
     if (runtimeTags) {
+      // config.tags is the persisted sink (Eval.create reads it); cliState.config
+      // is the same object reference, and nothing reads testSuite.tags.
       config.tags = { ...(config.tags || {}), ...runtimeTags };
-      testSuite.tags = { ...(testSuite.tags || {}), ...runtimeTags };
-      if (cliState.config) {
-        cliState.config.tags = { ...(cliState.config.tags || {}), ...runtimeTags };
-      }
     }
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));

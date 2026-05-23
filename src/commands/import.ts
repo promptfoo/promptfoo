@@ -26,17 +26,29 @@ function extractEvalId(evalData: any): string | undefined {
   return evalData.evalId || evalData.id;
 }
 
+function parseImportedDate(value: unknown, field: string): Date | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  const parsed = new Date(value as string | number);
+  if (Number.isNaN(parsed.getTime())) {
+    logger.warn(
+      `Imported eval has an unparseable ${field} (${JSON.stringify(value)}); falling back.`,
+    );
+    return undefined;
+  }
+  return parsed;
+}
+
 function extractCreatedAt(evalData: any): Date {
-  if (evalData.metadata?.evaluationCreatedAt) {
-    return new Date(evalData.metadata.evaluationCreatedAt);
-  }
-  if (evalData.results?.timestamp) {
-    return new Date(evalData.results.timestamp);
-  }
-  if (evalData.createdAt) {
-    return new Date(evalData.createdAt);
-  }
-  return new Date();
+  // A present-but-corrupt timestamp must not reach createEvalId().toISOString(),
+  // which would throw an opaque "Invalid time value" mid-import.
+  return (
+    parseImportedDate(evalData.metadata?.evaluationCreatedAt, 'metadata.evaluationCreatedAt') ??
+    parseImportedDate(evalData.results?.timestamp, 'results.timestamp') ??
+    parseImportedDate(evalData.createdAt, 'createdAt') ??
+    new Date()
+  );
 }
 
 function extractAuthor(evalData: any): string | undefined {
@@ -411,7 +423,12 @@ export function importCommand(program: Command) {
           importV3 && Array.isArray(evalData.blobAssets) && evalData.blobAssets.length > 0
             ? prepareBlobAssets(
                 evalData.blobAssets,
-                collectBlobHashes({ results: evalData.results, traces }),
+                // Bound the scan: imported files are untrusted, and deeply
+                // nested JSON would otherwise overflow the stack here.
+                collectBlobHashes(
+                  { results: evalData.results, traces },
+                  { maxDepth: 64, maxStringLength: 100_000 },
+                ),
               )
             : [];
 
