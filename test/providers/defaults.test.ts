@@ -85,6 +85,7 @@ describe('Provider override tests', () => {
     mockProcessEnv({ AWS_SECRET_ACCESS_KEY: undefined });
     mockProcessEnv({ AWS_PROFILE: undefined });
     mockProcessEnv({ AWS_SESSION_TOKEN: undefined });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     mockProcessEnv({ XAI_API_KEY: undefined });
     mockProcessEnv({ DEEPSEEK_API_KEY: undefined });
     mockProcessEnv({ GITHUB_TOKEN: undefined });
@@ -97,6 +98,7 @@ describe('Provider override tests', () => {
     mockProcessEnv({ AZURE_TENANT_ID: undefined });
     mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: undefined });
     mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: undefined });
+    mockProcessEnv({ AZURE_EMBEDDING_DEPLOYMENT_NAME: undefined });
     mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: undefined });
   });
 
@@ -161,6 +163,7 @@ describe('Provider override tests', () => {
     expect((providers.moderationProvider as AzureModerationProvider).modelName).toBe(
       'text-content-safety',
     );
+    await (providers.moderationProvider as AzureModerationProvider).ensureInitialized();
   });
 
   it('should use DefaultModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is not set', async () => {
@@ -460,6 +463,24 @@ describe('Provider override tests', () => {
       expect(providers.gradingProvider.id()).toBe('bedrock:converse:amazon.nova-pro-v1:0');
     });
 
+    it('should use Bedrock providers when AWS bearer token authentication is set', async () => {
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-bedrock-bearer' });
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toBe('bedrock:converse:amazon.nova-pro-v1:0');
+    });
+
+    it('should prefer Bedrock bearer tokens over ambient credentials', async () => {
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-bedrock-bearer' });
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
+      vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toBe('bedrock:converse:amazon.nova-pro-v1:0');
+    });
+
     it('should pass temporary AWS credentials supplied through env overrides to Bedrock', async () => {
       const providers = await getDefaultProviders({
         AWS_ACCESS_KEY_ID: 'override-access',
@@ -475,6 +496,26 @@ describe('Provider override tests', () => {
         secretAccessKey: 'override-secret',
         sessionToken: 'override-session',
       });
+    });
+
+    it('should pass AWS bearer tokens supplied through env overrides to Bedrock', async () => {
+      const providers = await getDefaultProviders({
+        AWS_BEARER_TOKEN_BEDROCK: 'override-bedrock-bearer',
+      });
+
+      expect((providers.gradingProvider as AwsBedrockConverseProvider).config.apiKey).toBe(
+        'override-bedrock-bearer',
+      );
+    });
+
+    it('should pass AWS profiles supplied through env overrides to Bedrock', async () => {
+      const providers = await getDefaultProviders({
+        AWS_PROFILE: 'override-profile',
+      });
+
+      expect((providers.gradingProvider as AwsBedrockConverseProvider).config.profile).toBe(
+        'override-profile',
+      );
     });
 
     it('should not select Bedrock for an incomplete static AWS credential pair', async () => {
@@ -808,6 +849,28 @@ describe('Provider override tests', () => {
       expect(providers.embeddingProvider.id()).toContain('embedding-deployment');
     });
 
+    it('should use Azure embeddings when only an embedding deployment is configured', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-azure' });
+      mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'embedding-deployment' });
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toContain('claude');
+      expect(providers.embeddingProvider.id()).toContain('embedding-deployment');
+    });
+
+    it('should use legacy Azure embedding deployment env var without a chat deployment', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-azure' });
+      mockProcessEnv({ AZURE_EMBEDDING_DEPLOYMENT_NAME: 'legacy-embedding-deployment' });
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toContain('claude');
+      expect(providers.embeddingProvider.id()).toContain('legacy-embedding-deployment');
+    });
+
     it('should fallback embedding to chat deployment when not specified', async () => {
       mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-key' });
       mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
@@ -910,19 +973,29 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      // Bedrock (priority 10) beats GitHub (priority 11)
+      // Bedrock static credentials (ambient priority 11) beat GitHub (priority 12)
       expect(providers.gradingProvider.id()).toContain('bedrock');
     });
 
     it('should skip ambient credentials when explicit credentials exist', async () => {
       mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' }); // explicit, priority 7
-      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' }); // ambient, priority 10
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' }); // ambient, priority 11
       mockProcessEnv({ AWS_SECRET_ACCESS_KEY: 'test-secret' });
-      mockProcessEnv({ GITHUB_TOKEN: 'test-github' }); // ambient, priority 11
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' }); // ambient, priority 12
 
       const providers = await getDefaultProviders();
 
       expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    });
+
+    it('should prefer Codex over ambient static Bedrock credentials', async () => {
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+      mockProcessEnv({ AWS_SECRET_ACCESS_KEY: 'test-secret' });
+      vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+      const providers = await getDefaultProviders();
+
+      expect(providers.gradingProvider.id()).toBe('openai:codex-sdk');
     });
   });
 

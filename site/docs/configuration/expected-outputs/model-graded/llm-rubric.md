@@ -35,10 +35,11 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 | 5        | xAI              | `grok-4.3`               | `XAI_API_KEY`                                                                                         |
 | 6        | DeepSeek         | `deepseek-chat`          | `DEEPSEEK_API_KEY`                                                                                    |
 | 7        | Mistral          | `mistral-large-latest`   | `MISTRAL_API_KEY`                                                                                     |
-| 8        | Codex SDK        | `openai:codex-sdk`       | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set       |
-| 9        | Google Vertex    | `gemini-3.1-pro-preview` | Google ADC (ambient credentials)                                                                      |
-| 10       | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (optionally `AWS_SESSION_TOKEN`), or `AWS_PROFILE`      |
-| 11       | GitHub Models    | `openai/gpt-5`           | `GITHUB_TOKEN` (ambient)                                                                              |
+| 8        | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_BEARER_TOKEN_BEDROCK`                                                                            |
+| 9        | Codex SDK        | `openai:codex-sdk`       | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set       |
+| 10       | Google Vertex    | `gemini-3.1-pro-preview` | Google ADC (ambient credentials)                                                                      |
+| 11       | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` (optionally `AWS_SESSION_TOKEN`), or `AWS_PROFILE`      |
+| 12       | GitHub Models    | `openai/gpt-5`           | `GITHUB_TOKEN` (ambient)                                                                              |
 
 You can override this by setting the `provider` option (see below).
 

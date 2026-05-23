@@ -121,6 +121,7 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_BEARER_TOKEN_BEDROCK: z.string().optional(),
   AWS_REGION: z.string().optional(),
   AWS_DEFAULT_REGION: z.string().optional(),
   AWS_PROFILE: z.string().optional(),

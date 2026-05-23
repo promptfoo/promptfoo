@@ -128,25 +128,46 @@ function hasAnyCredential(envKeys: (keyof EnvOverrides)[], env?: EnvOverrides): 
   return envKeys.some((key) => hasCredential(key, env));
 }
 
-/**
- * Check for Azure OpenAI credentials (API key OR client credentials) AND deployment name.
- * Accepts either AZURE_OPENAI_DEPLOYMENT_NAME or AZURE_DEPLOYMENT_NAME per documentation.
- */
-function hasAzureCredentials(env?: EnvOverrides): boolean {
+function hasAzureApiCredential(env?: EnvOverrides): boolean {
   const hasApiKey = hasAnyCredential(['AZURE_OPENAI_API_KEY', 'AZURE_API_KEY'], env);
   const hasClientCreds =
     hasCredential('AZURE_CLIENT_ID', env) &&
     hasCredential('AZURE_CLIENT_SECRET', env) &&
     hasCredential('AZURE_TENANT_ID', env);
-  const hasDeployment = hasAnyCredential(
-    ['AZURE_OPENAI_DEPLOYMENT_NAME', 'AZURE_DEPLOYMENT_NAME'],
-    env,
-  );
 
-  return (hasApiKey || hasClientCreds) && hasDeployment;
+  return hasApiKey || hasClientCreds;
 }
 
-function hasBedrockCredentials(env?: EnvOverrides): boolean {
+function hasAzureChatDeployment(env?: EnvOverrides): boolean {
+  return hasAnyCredential(['AZURE_OPENAI_DEPLOYMENT_NAME', 'AZURE_DEPLOYMENT_NAME'], env);
+}
+
+function hasAzureEmbeddingDeployment(env?: EnvOverrides): boolean {
+  return hasAnyCredential(
+    ['AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME', 'AZURE_EMBEDDING_DEPLOYMENT_NAME'],
+    env,
+  );
+}
+
+/**
+ * Check for Azure OpenAI credentials (API key OR client credentials) AND deployment name.
+ * Accepts either AZURE_OPENAI_DEPLOYMENT_NAME or AZURE_DEPLOYMENT_NAME per documentation.
+ */
+function hasAzureCredentials(env?: EnvOverrides): boolean {
+  return hasAzureApiCredential(env) && hasAzureChatDeployment(env);
+}
+
+function hasAzureEmbeddingCredentials(env?: EnvOverrides): boolean {
+  return (
+    hasAzureApiCredential(env) && (hasAzureEmbeddingDeployment(env) || hasAzureChatDeployment(env))
+  );
+}
+
+function hasBedrockBearerToken(env?: EnvOverrides): boolean {
+  return hasCredential('AWS_BEARER_TOKEN_BEDROCK', env);
+}
+
+function hasBedrockAmbientCredentials(env?: EnvOverrides): boolean {
   const hasStaticCredentials =
     hasCredential('AWS_ACCESS_KEY_ID', env) && hasCredential('AWS_SECRET_ACCESS_KEY', env);
   return hasStaticCredentials || hasCredential('AWS_PROFILE', env);
@@ -236,6 +257,8 @@ function createAzureEmbeddingProvider(env?: EnvOverrides): ApiProvider {
   const embeddingDeploymentName =
     getEnvString('AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME') ||
     env?.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME ||
+    getEnvString('AZURE_EMBEDDING_DEPLOYMENT_NAME') ||
+    env?.AZURE_EMBEDDING_DEPLOYMENT_NAME ||
     deploymentName;
 
   return new AzureEmbeddingProvider(embeddingDeploymentName!, { env });
@@ -249,8 +272,8 @@ function createAzureEmbeddingProvider(env?: EnvOverrides): ApiProvider {
  * Completion provider selection priority chain.
  *
  * Order rationale:
- *   1-7: Explicit API keys (user intentionally set these)
- *   8-11: Ambient credentials (may exist for other purposes)
+ *   1-8: Explicit API keys (user intentionally set these)
+ *   9-12: Ambient credentials (may exist for other purposes)
  *
  * Within explicit keys, ordered by popularity/capability.
  * Ambient credentials are last because they may be set for other tools
@@ -335,8 +358,21 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
         synthesize: MistralSynthesizeProvider,
       }),
   },
+  {
+    name: 'AWS Bedrock API key',
+    check: (env) => hasBedrockBearerToken(env),
+    create: (env) => {
+      const bedrock = getBedrockProviders(env);
+      return createCompletionProviderSet({
+        grading: bedrock.gradingProvider,
+        gradingJson: bedrock.gradingJsonProvider,
+        suggestions: bedrock.suggestionsProvider,
+        synthesize: bedrock.synthesizeProvider,
+      });
+    },
+  },
 
-  // --- Ambient Credentials (Priority 8-11) ---
+  // --- Ambient Credentials (Priority 9-12) ---
   {
     name: 'Codex SDK',
     check: (env) => hasCodexDefaultCredentials(env),
@@ -360,7 +396,7 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   },
   {
     name: 'AWS Bedrock',
-    check: (env) => hasBedrockCredentials(env),
+    check: (env) => hasBedrockAmbientCredentials(env),
     create: (env) => {
       const bedrock = getBedrockProviders(env);
       return createCompletionProviderSet({
@@ -402,7 +438,7 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   },
   {
     name: 'Azure OpenAI',
-    check: (env) => hasAzureCredentials(env),
+    check: (env) => hasAzureEmbeddingCredentials(env),
     create: (env) => createAzureEmbeddingProvider(env),
   },
   {
@@ -462,11 +498,12 @@ export function setDefaultEmbeddingProviders(provider: ApiProvider | undefined):
  *  5. xAI         - XAI_API_KEY
  *  6. DeepSeek    - DEEPSEEK_API_KEY
  *  7. Mistral     - MISTRAL_API_KEY
- *  8. Codex SDK   - Codex/ChatGPT auth + installed Codex SDK (ambient)
- *  9. Vertex      - Google ADC (ambient)
- * 10. Bedrock     - AWS credentials (ambient)
- * 11. GitHub      - GITHUB_TOKEN (ambient)
- * 12. OpenAI      - Fallback (may fail without key)
+ *  8. Bedrock     - AWS_BEARER_TOKEN_BEDROCK
+ *  9. Codex SDK   - Codex/ChatGPT auth + installed Codex SDK (ambient)
+ * 10. Vertex      - Google ADC (ambient)
+ * 11. Bedrock     - AWS static credentials or profile (ambient)
+ * 12. GitHub      - GITHUB_TOKEN (ambient)
+ * 13. OpenAI      - Fallback (may fail without key)
  *
  * Embedding Priority (only providers with embedding support):
  *  1. OpenAI      - OPENAI_API_KEY

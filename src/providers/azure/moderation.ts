@@ -186,6 +186,13 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     }
   }
 
+  async initialize(): Promise<void> {
+    // Content Safety moderation uses its own API key and endpoint in
+    // callModerationApi; avoid the Azure OpenAI auth initialization inherited
+    // from AzureGenericProvider.
+    this.authHeaders = {};
+  }
+
   getContentSafetyApiKey(): string | undefined {
     const extendedEnv = this.env as EnvOverrides & { AZURE_CONTENT_SAFETY_API_KEY?: string };
 

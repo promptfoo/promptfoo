@@ -527,6 +527,9 @@
         "AWS_ACCESS_KEY_ID": {
           "type": "string"
         },
+        "AWS_BEARER_TOKEN_BEDROCK": {
+          "type": "string"
+        },
         "AWS_REGION": {
           "type": "string"
         },
@@ -1962,6 +1965,9 @@
                       "type": "string"
                     },
                     "AWS_ACCESS_KEY_ID": {
+                      "type": "string"
+                    },
+                    "AWS_BEARER_TOKEN_BEDROCK": {
                       "type": "string"
                     },
                     "AWS_REGION": {
