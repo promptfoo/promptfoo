@@ -138,6 +138,47 @@ describe('agentic run observations', () => {
     expect(findingsFromObservations(observations)).toEqual([]);
   });
 
+  it('normalizes singular and plural guardrail decision attributes as control evidence', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-guardrail-decisions',
+          testCaseId: 'case-guardrail-decisions',
+          traceId: 'trace-guardrail-decisions',
+          spans: [
+            {
+              attributes: { 'guardrails.decision': 'blocked' },
+              name: 'tool update_seat',
+              spanId: 'span-plural',
+              startTime: 1,
+            },
+            {
+              attributes: { 'guardrail.decision': 'allowed' },
+              name: 'tool read_customer',
+              spanId: 'span-singular',
+              startTime: 2,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'blocked',
+          spanId: 'span-plural',
+        }),
+        expect.objectContaining({
+          kind: 'guardrail',
+          outcome: 'allowed',
+          spanId: 'span-singular',
+        }),
+      ]),
+    );
+  });
+
   it('continues scanning embedded trace evidence blobs until it finds findings', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {

@@ -362,6 +362,18 @@ function observationsShareSpan(a: AgentObservation, b: AgentObservation): boolea
   return Boolean(a.spanName && a.spanName === b.spanName);
 }
 
+function namedControlObservationMentionsTool(
+  observation: AgentObservation,
+  toolName: string,
+): boolean {
+  const spanName = observation.spanName?.toLowerCase();
+  return Boolean(
+    spanName &&
+      (spanName.includes('guardrail') || spanName.includes('approval')) &&
+      observationMentionsTool(observation, toolName),
+  );
+}
+
 function hasGuardrailOrApprovalForTool(
   observations: AgentObservation[],
   toolName: string,
@@ -385,8 +397,11 @@ function hasGuardrailOrApprovalForTool(
       }
 
       const hasSpanIdentity = Boolean(observation.spanId || observation.spanName);
+      if (observationsShareSpan(observation, toolObservation)) {
+        return true;
+      }
       return hasSpanIdentity
-        ? observationsShareSpan(observation, toolObservation)
+        ? namedControlObservationMentionsTool(observation, toolName)
         : observationMentionsTool(observation, toolName);
     }),
   );

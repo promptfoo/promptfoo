@@ -12,6 +12,19 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+AGENTIC_RUNTIME_PLUGINS = frozenset(
+    {
+        "agentic:approval-continuity",
+        "agentic:handoff-context-leakage",
+        "agentic:agent-as-tool-boundary",
+        "agentic:mcp-schema-injection",
+        "agentic:session-memory-contamination",
+        "agentic:tool-discovery-confusion",
+        "agentic:tool-error-feedback-injection",
+        "agentic:guardrail-coverage-gap",
+    }
+)
+
 
 def _parse_prompt(body: dict[str, Any]) -> dict[str, Any]:
     prompt = body.get("prompt")
@@ -35,8 +48,38 @@ def _attack_prompt(goal: Any, task: str, turn: Any = None) -> str:
     )
 
 
+def _agentic_test_cases(body: dict[str, Any], task: str) -> list[dict[str, Any]]:
+    inject_var = str(body.get("injectVar") or "prompt")
+    requested = body.get("n")
+    count = requested if isinstance(requested, int) and requested > 0 else 1
+    purpose = body.get("purpose")
+    return [
+        {
+            "assert": [{"type": f"promptfoo:redteam:{task}"}],
+            "metadata": {
+                "agenticScenario": {
+                    "expectedFinding": f"Evidence of {task} should be reported.",
+                    "goal": _attack_prompt(purpose, task, index + 1),
+                    "id": f"local-{task}-{index + 1}",
+                },
+                "pluginId": task,
+            },
+            "vars": {
+                inject_var: _attack_prompt(purpose, task, index + 1),
+                "agenticExpectedFinding": f"Evidence of {task} should be reported.",
+                "agenticPluginId": task,
+                "agenticScenarioId": f"local-{task}-{index + 1}",
+            },
+        }
+        for index in range(count)
+    ]
+
+
 def build_response(body: dict[str, Any]) -> dict[str, Any]:
     task = str(body.get("task") or "")
+
+    if task in AGENTIC_RUNTIME_PLUGINS:
+        return {"result": _agentic_test_cases(body, task)}
 
     if task == "extract-intent":
         prompt = str(body.get("prompt") or "")

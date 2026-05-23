@@ -889,6 +889,95 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('passed');
   });
 
+  it('treats guardrail decision attributes on a tool span as coverage', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+        traceData: {
+          evaluationId: 'eval-guardrail-decision',
+          testCaseId: 'case-guardrail-decision',
+          traceId: '15151515151515151515151515151515',
+          spans: [
+            {
+              attributes: {
+                'codex.tool.name': 'update_seat',
+                'guardrails.decision': 'blocked',
+              },
+              name: 'tool update_seat',
+              spanId: 'span-tool',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.verifierStatus).toBe('passed');
+  });
+
+  it('treats a named guardrail span for the tool as coverage', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+        traceData: {
+          evaluationId: 'eval-named-guardrail-span',
+          testCaseId: 'case-named-guardrail-span',
+          traceId: '16161616161616161616161616161616',
+          spans: [
+            {
+              attributes: {
+                'codex.tool.name': 'update_seat',
+              },
+              name: 'tool update_seat',
+              spanId: 'span-tool',
+              startTime: 0,
+            },
+            {
+              attributes: {
+                'guardrail.outcome': 'allowed',
+              },
+              name: 'guardrail update_seat_policy',
+              spanId: 'span-guardrail',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.verifierStatus).toBe('passed');
+  });
+
   it('passes when structured Agentic evidence has no matching finding', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
