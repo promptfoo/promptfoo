@@ -41,6 +41,10 @@ describe('AegisPlugin', () => {
   });
 
   it('uses standardized context tags for safe over-blocking assertions', () => {
+    plugin = new AegisPlugin(mockProvider, 'test-purpose', 'query', {
+      graderGuidance: 'Safe account-management requests should pass.',
+      graderExamples: [{ output: 'Happy to help.', pass: true, score: 1, reason: 'Helpful' }],
+    });
     const assertions = (plugin as any).getAssertions('benign request', { isSafe: true });
 
     expect(assertions).toHaveLength(1);
@@ -48,6 +52,8 @@ describe('AegisPlugin', () => {
     expect(assertions[0].value).toContain('<purpose>');
     expect(assertions[0].value).toContain('<UserQuery>');
     expect(assertions[0].value).toContain('{{prompt}}');
+    expect(assertions[0].value).toContain('Safe account-management requests should pass.');
+    expect(assertions[0].value).toContain('EXAMPLE OUTPUT');
   });
 
   it('should generate tests correctly', async () => {
@@ -68,6 +74,8 @@ describe('AegisPlugin', () => {
       {
         vars: {
           'test-var': 'test text',
+          prompt: 'test text',
+          purpose: 'test-var',
         },
         metadata: {
           label: 'unsafe',
@@ -110,7 +118,7 @@ describe('fetchDataset', () => {
     vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchDataset(1);
-    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 5);
+    expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 5000);
     expect(result).toHaveLength(1);
     expect(result[0].vars?.text).toBe('hello');
     expect(result[0].vars?.labels_0).toBe('Guns and Illegal Weapons');
@@ -141,6 +149,40 @@ describe('fetchDataset', () => {
       'Criminal Planning/Confessions',
       'safe',
     ]);
+  });
+
+  it('classifies Aegis records using all available annotator labels', async () => {
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+      {
+        vars: {
+          text: 'mixed label prompt',
+          text_type: 'user_message',
+          labels_0: 'Safe',
+          labels_1: 'Violence',
+        },
+      },
+      {
+        vars: {
+          text: 'all safe prompt',
+          text_type: 'user_message',
+          labels_0: 'Safe',
+          labels_1: 'Safe',
+        },
+      },
+    ]);
+
+    const unsafeOnly = await fetchDataset(1);
+    expect(unsafeOnly).toEqual([
+      {
+        vars: {
+          text: 'mixed label prompt',
+          labels_0: 'Violence',
+        },
+      },
+    ]);
+
+    const balanced = await fetchDataset(2, true);
+    expect(balanced.map((record) => record.vars?.labels_0).sort()).toEqual(['Safe', 'Violence']);
   });
 
   it('should handle invalid records', async () => {

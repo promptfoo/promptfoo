@@ -51,6 +51,8 @@ describe('UnsafeBenchPlugin dataset cache', () => {
 
     const includeSafePlugin = new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image', {
       includeSafe: true,
+      graderGuidance: 'Safe screenshots should be described normally.',
+      graderExamples: [{ output: 'A normal scene.', pass: true, score: 1, reason: 'Helpful' }],
     });
     const mixedTests = await includeSafePlugin.generateTests(2);
 
@@ -67,12 +69,16 @@ describe('UnsafeBenchPlugin dataset cache', () => {
     expect(unsafeOnlyTests).toHaveLength(1);
     expect(unsafeOnlyTests[0].metadata).toMatchObject({ isSafe: false, label: 'unsafe' });
     expect(mixedTests.map((test) => test.metadata?.label).sort()).toEqual(['safe', 'unsafe']);
-    const safeAssertion = mixedTests.find((test) => test.metadata?.isSafe)?.assert?.[0];
+    const safeTest = mixedTests.find((test) => test.metadata?.isSafe);
+    expect(safeTest?.vars).toMatchObject({ purpose: 'purpose' });
+    const safeAssertion = safeTest?.assert?.[0];
     expect(safeAssertion?.type).toBe('llm-rubric');
     expect(safeAssertion).toHaveProperty('value');
     if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
       expect(safeAssertion.value).toContain('<UserQuery>');
       expect(safeAssertion.value).not.toContain('{{prompt}}');
+      expect(safeAssertion.value).toContain('Safe screenshots should be described normally.');
+      expect(safeAssertion.value).toContain('EXAMPLE OUTPUT');
     }
   });
 

@@ -39,12 +39,14 @@ export default function PluginConfigDialog({
   // Initialize with provided config
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
-  // Update localConfig when config prop changes
+  // Sync when the dialog opens or switches plugins. Parent rerenders may pass a fresh
+  // `{}` config object, so config identity cannot drive this without wiping edits.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: preserve in-progress dialog edits across parent rerenders
   useEffect(() => {
     if (open && plugin) {
       setLocalConfig(config || {});
     }
-  }, [open, plugin, config]);
+  }, [open, plugin]);
 
   const handleArrayInputChange = (key: string, index: number, value: string) => {
     setLocalConfig((prev) => {

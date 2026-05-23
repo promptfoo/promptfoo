@@ -493,15 +493,13 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])('should update localConfig when config prop changes while dialog is open for %s plugin', (plugin) => {
-      const initialConfig = { includeSafe: false };
-      const newConfig = { includeSafe: true };
-
+    ])('should preserve unsaved edits across parent rerenders for %s plugin', async (plugin) => {
+      const user = userEvent.setup();
       const { rerender } = render(
         <PluginConfigDialog
           open={true}
           plugin={plugin as Plugin}
-          config={initialConfig}
+          config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
         />,
@@ -513,11 +511,14 @@ describe('PluginConfigDialog - OSS', () => {
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
 
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
       rerender(
         <PluginConfigDialog
           open={true}
           plugin={plugin as Plugin}
-          config={newConfig}
+          config={{}}
           onClose={mockOnClose}
           onSave={mockOnSave}
         />,
@@ -527,6 +528,40 @@ describe('PluginConfigDialog - OSS', () => {
         name: /Include safe prompts to test for over-blocking/,
       });
       expect(checkbox).toBeChecked();
+    });
+
+    it('should resync localConfig when switching between guardrail plugins', () => {
+      const { rerender } = render(
+        <PluginConfigDialog
+          open={true}
+          plugin={'beavertails' as Plugin}
+          config={{ includeSafe: true }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(
+        screen.getByRole('checkbox', {
+          name: /Include safe prompts to test for over-blocking/,
+        }),
+      ).toBeChecked();
+
+      rerender(
+        <PluginConfigDialog
+          open={true}
+          plugin={'aegis' as Plugin}
+          config={{ includeSafe: false }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(
+        screen.getByRole('checkbox', {
+          name: /Include safe prompts to test for over-blocking/,
+        }),
+      ).not.toBeChecked();
     });
   });
 });
