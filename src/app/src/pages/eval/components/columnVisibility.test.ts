@@ -76,6 +76,32 @@ describe('columnVisibility', () => {
       expect(result.columnVisibility['Variable 2']).toBe(true);
     });
 
+    it('prioritizes explicit shows over hides for non-variable columns', () => {
+      const result = resolveColumnVisibility({
+        ...defaultParams,
+        configDefaults: {
+          hideColumns: ['description', 'Prompt 1'],
+          showColumns: ['description', 'Prompt 1'],
+        },
+      });
+
+      expect(result.columnVisibility.description).toBe(true);
+      expect(result.columnVisibility['Prompt 1']).toBe(true);
+    });
+
+    it('defaults omitted visibility groups to visible', () => {
+      const result = resolveColumnVisibility({
+        ...defaultParams,
+        configDefaults: {
+          hideColumns: ['context'],
+        },
+      });
+
+      expect(result.columnVisibility['Variable 1']).toBe(true);
+      expect(result.columnVisibility['Variable 2']).toBe(false);
+      expect(result.columnVisibility['Prompt 1']).toBe(true);
+    });
+
     it('uses schema-scoped hidden variable names over config defaults', () => {
       const result = resolveColumnVisibility({
         ...defaultParams,
@@ -138,20 +164,24 @@ describe('columnVisibility', () => {
   });
 
   describe('getConfigColumnVisibility', () => {
-    it('returns defaultColumnVisibility from config', () => {
+    it('returns valid partial defaultColumnVisibility from config', () => {
       expect(
         getConfigColumnVisibility({
           defaultColumnVisibility: {
-            variables: 'hidden',
-            prompts: 'visible',
             hideColumns: ['context'],
           },
         }),
       ).toEqual({
-        variables: 'hidden',
-        prompts: 'visible',
         hideColumns: ['context'],
       });
+    });
+
+    it('rejects malformed persisted defaultColumnVisibility values', () => {
+      const malformedConfig = {
+        defaultColumnVisibility: { variables: 'sometimes' },
+      } as unknown as Parameters<typeof getConfigColumnVisibility>[0];
+
+      expect(getConfigColumnVisibility(malformedConfig)).toBeUndefined();
     });
 
     it('returns undefined when config has no defaults', () => {

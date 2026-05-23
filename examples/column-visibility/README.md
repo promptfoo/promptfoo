@@ -19,6 +19,7 @@ This example shows how to hide verbose columns by default:
 ```yaml
 defaultColumnVisibility:
   variables: visible
+  prompts: visible
   hideColumns:
     - context
     - system_prompt
@@ -28,12 +29,12 @@ When you run `promptfoo view`, the `context` and `system_prompt` columns will be
 
 ## Configuration Options
 
-| Property      | Type                    | Description                                 |
-| ------------- | ----------------------- | ------------------------------------------- |
-| `variables`   | `'visible' \| 'hidden'` | Default visibility for all variable columns |
-| `prompts`     | `'visible' \| 'hidden'` | Default visibility for all prompt columns   |
-| `hideColumns` | `string[]`              | Column names to hide by default             |
-| `showColumns` | `string[]`              | Column names to always show                 |
+| Property      | Type                    | Default   | Description                                 |
+| ------------- | ----------------------- | --------- | ------------------------------------------- |
+| `variables`   | `'visible' \| 'hidden'` | `visible` | Default visibility for all variable columns |
+| `prompts`     | `'visible' \| 'hidden'` | `visible` | Default visibility for all prompt columns   |
+| `hideColumns` | `string[]`              | `[]`      | Column names to hide by default             |
+| `showColumns` | `string[]`              | `[]`      | Column names to always show                 |
 
 ## User Preferences
 

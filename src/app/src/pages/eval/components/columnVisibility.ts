@@ -1,4 +1,8 @@
-import type { DefaultColumnVisibility, UnifiedConfig } from '@promptfoo/types';
+import {
+  type DefaultColumnVisibility,
+  DefaultColumnVisibilitySchema,
+  type UnifiedConfig,
+} from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
 
 export interface ResolveColumnVisibilityParams {
@@ -31,18 +35,18 @@ function isNamed(set: Set<string>, semanticName: string, columnId: string): bool
 function getConfigVisibility(
   columnId: string,
   semanticName: string,
+  shownColumns: Set<string>,
+  hiddenColumns: Set<string>,
   configDefaults?: DefaultColumnVisibility,
 ): boolean {
   if (!configDefaults) {
     return true;
   }
 
-  const shownColumns = new Set(configDefaults.showColumns ?? []);
   if (isNamed(shownColumns, semanticName, columnId)) {
     return true;
   }
 
-  const hiddenColumns = new Set(configDefaults.hideColumns ?? []);
   if (isNamed(hiddenColumns, semanticName, columnId)) {
     return false;
   }
@@ -68,16 +72,18 @@ export function resolveColumnVisibility({
 }: ResolveColumnVisibilityParams): ResolveColumnVisibilityResult {
   const columnVisibility: VisibilityState = {};
   const selectedColumns: string[] = [];
+  const shownColumns = new Set(configDefaults?.showColumns ?? []);
+  const hiddenColumns = new Set(configDefaults?.hideColumns ?? []);
 
   for (const columnId of allColumns) {
     const varName = getVariableNameFromColumnId(columnId, varNames);
     const isVisible =
       varName === null
         ? (perEvalColumnState?.[columnId] ??
-          getConfigVisibility(columnId, columnId, configDefaults))
+          getConfigVisibility(columnId, columnId, shownColumns, hiddenColumns, configDefaults))
         : hasSchemaPreference
           ? !hiddenVarNames.includes(varName)
-          : getConfigVisibility(columnId, varName, configDefaults);
+          : getConfigVisibility(columnId, varName, shownColumns, hiddenColumns, configDefaults);
 
     columnVisibility[columnId] = isVisible;
     if (isVisible) {
@@ -91,5 +97,6 @@ export function resolveColumnVisibility({
 export function getConfigColumnVisibility(
   config?: Partial<UnifiedConfig> | null,
 ): DefaultColumnVisibility | undefined {
-  return config?.defaultColumnVisibility as DefaultColumnVisibility | undefined;
+  const result = DefaultColumnVisibilitySchema.safeParse(config?.defaultColumnVisibility);
+  return result.success ? result.data : undefined;
 }

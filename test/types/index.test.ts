@@ -10,6 +10,7 @@ import {
   AssertionSchema,
   BaseAssertionTypesSchema,
   CommandLineOptionsSchema,
+  DefaultColumnVisibilitySchema,
   GradingConfigSchema,
   isGradingResult,
   MAX_SUGGESTIONS_COUNT,
@@ -933,6 +934,35 @@ describe('TestSuiteConfigSchema', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('defaultColumnVisibility field', () => {
+    const minimalConfig = {
+      providers: ['provider1'],
+      prompts: ['prompt1'],
+    };
+
+    it('accepts partial defaults without requiring visible groups', () => {
+      expect(DefaultColumnVisibilitySchema.parse({ hideColumns: ['context'] })).toEqual({
+        hideColumns: ['context'],
+      });
+
+      const result = TestSuiteConfigSchema.parse({
+        ...minimalConfig,
+        defaultColumnVisibility: { hideColumns: ['context'] },
+      });
+
+      expect(result.defaultColumnVisibility).toEqual({ hideColumns: ['context'] });
+    });
+
+    it('rejects invalid visibility values', () => {
+      expect(
+        TestSuiteConfigSchema.safeParse({
+          ...minimalConfig,
+          defaultColumnVisibility: { variables: 'sometimes' },
+        }).success,
+      ).toBe(false);
     });
   });
 

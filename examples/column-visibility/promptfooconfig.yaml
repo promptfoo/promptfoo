@@ -15,6 +15,7 @@ providers:
 # Hide verbose columns by default in the web viewer
 defaultColumnVisibility:
   variables: visible
+  prompts: visible
   hideColumns:
     - context
     - system_prompt

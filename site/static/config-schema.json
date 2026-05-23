@@ -3001,12 +3001,10 @@
       "type": "object",
       "properties": {
         "variables": {
-          "default": "visible",
           "type": "string",
           "enum": ["visible", "hidden"]
         },
         "prompts": {
-          "default": "visible",
           "type": "string",
           "enum": ["visible", "hidden"]
         },
@@ -3023,7 +3021,6 @@
           }
         }
       },
-      "required": ["variables", "prompts"],
       "additionalProperties": false
     },
     "__schema41": {

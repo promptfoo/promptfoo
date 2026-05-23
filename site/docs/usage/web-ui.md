@@ -149,7 +149,7 @@ defaultColumnVisibility:
     - system_prompt
 ```
 
-Saved browser preferences take priority over config defaults. Use **Show All** to make every column visible for the current variable schema.
+Omitted `variables` or `prompts` settings default to visible; `showColumns` overrides `hideColumns` for a specifically named column. Saved browser preferences take priority over config defaults. Use **Show All** to make every column visible for the current variable schema.
 
 ## URL Parameters
 
