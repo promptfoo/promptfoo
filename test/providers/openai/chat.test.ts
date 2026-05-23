@@ -207,7 +207,6 @@ describe('OpenAI Provider', () => {
       // Closes the regression where the chat catch block stringified
       // HttpRateLimitError into "API call error: HttpRateLimitError: ..."
       // and dropped `kind`, causing the scheduler to retry quota errors.
-      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
       const quota = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
       mockFetchWithCache.mockRejectedValueOnce(quota);
 
@@ -3593,8 +3592,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(result.output).toBe('Cached response');
       expect(result.cached).toBe(true);
-      // tokenUsage.cached should equal total to indicate all tokens came from cache
-      expect(result.tokenUsage).toEqual({ total: 15, cached: 15 });
+      // tokenUsage.cached should equal total while preserving the original usage breakdown.
+      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 5, total: 15, cached: 15 });
       expect(result.cost).toBe(0);
       expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });

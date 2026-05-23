@@ -338,11 +338,15 @@ async function getCachedOpenAiStreamingResponse(
   logger.debug(`Returning cached streaming response for ${modelName}`);
   try {
     const parsed = JSON.parse(cachedResponse) as ProviderResponse;
-    const totalTokens = parsed.tokenUsage?.total;
+    const tokenUsage = parsed.tokenUsage
+      ? {
+          ...parsed.tokenUsage,
+          ...(parsed.tokenUsage.total === undefined ? {} : { cached: parsed.tokenUsage.total }),
+        }
+      : undefined;
     return {
       ...parsed,
-      tokenUsage:
-        totalTokens === undefined ? parsed.tokenUsage : { total: totalTokens, cached: totalTokens },
+      ...(tokenUsage === undefined ? {} : { tokenUsage }),
       cached: true,
       ...(parsed.cost === undefined ? {} : { cost: 0 }),
     };
