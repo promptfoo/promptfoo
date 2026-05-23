@@ -43,10 +43,10 @@ export default function CloudStatusIndicator() {
 
   const statusLabel = (() => {
     if (isLoading) {
-      return 'Checking cloud status';
+      return 'Checking cloud configuration';
     }
     if (error) {
-      return 'Unable to check cloud status';
+      return 'Unable to check cloud configuration';
     }
     if (hasInvalidAppUrl) {
       return `${serviceName} configuration has an invalid application URL.`;
@@ -124,13 +124,13 @@ export default function CloudStatusIndicator() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CloudCog className="size-5 text-primary" />
-              Connect to {serviceName}
+              Configure {serviceName}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Connect to unlock {isEnterprise ? 'enterprise' : 'team'} workflows.
+              Configure {serviceName} to unlock {isEnterprise ? 'enterprise' : 'team'} workflows.
             </p>
 
             <div className="space-y-3 rounded-md border border-border p-3">
@@ -169,7 +169,7 @@ export default function CloudStatusIndicator() {
                 <AlertCircle className="size-4" />
                 <AlertContent>
                   <AlertDescription>
-                    Unable to connect to cloud service. Please check your connection and try again.
+                    Unable to check cloud configuration. Please check your connection and try again.
                   </AlertDescription>
                 </AlertContent>
               </Alert>
@@ -201,7 +201,7 @@ export default function CloudStatusIndicator() {
                 ) : (
                   <RefreshCw className="mr-2 size-4" />
                 )}
-                {isLoading ? 'Checking...' : 'Refresh Status'}
+                {isLoading ? 'Checking...' : 'Refresh Configuration'}
               </Button>
               <Button onClick={() => setShowDialog(false)}>Close</Button>
             </div>

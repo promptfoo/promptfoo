@@ -131,6 +131,10 @@ function getHttpAppUrl(url: string | null): string | null {
   }
 }
 
+/**
+ * Determines if a URL represents an enterprise deployment by checking
+ * if it's a custom domain (not the standard promptfoo.app domain).
+ */
 function isEnterpriseUrl(url: string | null): boolean {
   if (!url) {
     return false;
@@ -228,12 +232,13 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
  */
 userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
+    const isEnabled = cloudConfig.isEnabled();
     const appUrl = getHttpAppUrl(cloudConfig.getAppUrl());
 
     res.json(
       UserSchemas.CloudConfig.Response.parse({
         appUrl,
-        isEnabled: cloudConfig.isEnabled(),
+        isEnabled,
         isEnterprise: isEnterpriseUrl(appUrl),
       }),
     );

@@ -51,7 +51,9 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    expect(screen.getByRole('button', { name: /checking cloud status/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /checking cloud configuration/i }),
+    ).toBeInTheDocument();
   });
 
   it('shows configured cloud state', () => {
@@ -125,7 +127,7 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     expect(
-      screen.getByRole('button', { name: /unable to check cloud status/i }),
+      screen.getByRole('button', { name: /unable to check cloud configuration/i }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
@@ -152,7 +154,7 @@ describe('CloudStatusIndicator', () => {
     );
 
     expect(mockWindowOpen).not.toHaveBeenCalled();
-    expect(screen.getByText(/unable to connect to cloud service/i)).toBeInTheDocument();
+    expect(screen.getByText(/unable to check cloud configuration/i)).toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
@@ -201,7 +203,7 @@ describe('CloudStatusIndicator', () => {
 
     await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
 
-    expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.getByText('Configure Promptfoo Cloud')).toBeInTheDocument();
     expect(screen.getByText(/share evaluation results with your team/i)).toBeInTheDocument();
     expect(screen.getByText(/open centralized dashboards and reports/i)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -229,7 +231,7 @@ describe('CloudStatusIndicator', () => {
       screen.getByRole('button', { name: /promptfoo enterprise is not configured/i }),
     );
 
-    expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
+    expect(screen.getByText('Configure Promptfoo Enterprise')).toBeInTheDocument();
     expect(
       screen.getByText(/share evaluation results with your organization/i),
     ).toBeInTheDocument();
@@ -251,12 +253,12 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
-    expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
+    expect(screen.getByText('Configure Promptfoo Cloud')).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('button', { name: 'Close' })[0]);
 
     await waitFor(() => {
-      expect(screen.queryByText('Connect to Promptfoo Cloud')).not.toBeInTheDocument();
+      expect(screen.queryByText('Configure Promptfoo Cloud')).not.toBeInTheDocument();
     });
   });
 
@@ -271,11 +273,11 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /unable to check cloud status/i }));
+    await user.click(screen.getByRole('button', { name: /unable to check cloud configuration/i }));
 
     expect(
       screen.getByText(
-        'Unable to connect to cloud service. Please check your connection and try again.',
+        'Unable to check cloud configuration. Please check your connection and try again.',
       ),
     ).toBeInTheDocument();
   });
@@ -333,7 +335,7 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
-  it('calls refetch when refresh status button is clicked', async () => {
+  it('calls refetch when refresh configuration button is clicked', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
@@ -349,7 +351,7 @@ describe('CloudStatusIndicator', () => {
     renderCloudStatusIndicator();
 
     await user.click(screen.getByRole('button', { name: /promptfoo cloud is not configured/i }));
-    await user.click(screen.getByRole('button', { name: 'Refresh Status' }));
+    await user.click(screen.getByRole('button', { name: 'Refresh Configuration' }));
 
     expect(mockRefetch).toHaveBeenCalled();
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
@@ -373,7 +375,7 @@ describe('CloudStatusIndicator', () => {
 
     renderCloudStatusIndicator();
 
-    await user.click(screen.getByRole('button', { name: /checking cloud status/i }));
+    await user.click(screen.getByRole('button', { name: /checking cloud configuration/i }));
 
     expect(screen.getByRole('button', { name: 'Checking...' })).toBeDisabled();
   });
