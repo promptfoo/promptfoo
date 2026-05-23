@@ -35,6 +35,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
+import { getDefaultRedteamTemperature } from './redteamDefaults';
 import { getXAIProviders } from './xai/defaults';
 
 import type { EnvOverrides } from '../types/env';
@@ -168,6 +169,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     useMistralDefaults,
     useXAIDefaults,
   } = await getDefaultProviderPreferences(env);
+  const redteamTemperature = getDefaultRedteamTemperature();
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
@@ -191,11 +193,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
 
     const azureRedteamProvider = new AzureChatCompletionProvider(deploymentName, {
       env,
-      config: { temperature: 0.7 },
+      config: { temperature: redteamTemperature },
     });
     const azureRedteamJsonProvider = new AzureChatCompletionProvider(deploymentName, {
       env,
-      config: { temperature: 0.7, response_format: { type: 'json_object' } },
+      config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
     });
 
     providers = {
@@ -229,12 +231,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Google AI Studio default providers');
     const googleAiStudioRedteamProvider = new AIStudioChatProvider('gemini-2.5-pro', {
       env,
-      config: { temperature: 0.7 },
+      config: { temperature: redteamTemperature },
     });
     const googleAiStudioRedteamJsonProvider = new AIStudioChatProvider('gemini-2.5-pro', {
       env,
       config: {
-        temperature: 0.7,
+        temperature: redteamTemperature,
         generationConfig: { response_mime_type: 'application/json' },
       },
     });
@@ -250,12 +252,12 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Google Vertex default providers');
     const vertexRedteamProvider = new VertexChatProvider('gemini-2.5-pro', {
       env,
-      config: { temperature: 0.7 },
+      config: { temperature: redteamTemperature },
     });
     const vertexRedteamJsonProvider = new VertexChatProvider('gemini-2.5-pro', {
       env,
       config: {
-        temperature: 0.7,
+        temperature: redteamTemperature,
         generationConfig: { response_mime_type: 'application/json' },
       },
     });
@@ -270,11 +272,11 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     logger.debug('Using Mistral default providers');
     const mistralRedteamProvider = new MistralChatCompletionProvider('mistral-large-latest', {
       env,
-      config: { temperature: 0.7 },
+      config: { temperature: redteamTemperature },
     });
     const mistralRedteamJsonProvider = new MistralChatCompletionProvider('mistral-large-latest', {
       env,
-      config: { temperature: 0.7, response_format: { type: 'json_object' } },
+      config: { temperature: redteamTemperature, response_format: { type: 'json_object' } },
     });
 
     providers = {

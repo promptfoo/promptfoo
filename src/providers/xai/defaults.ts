@@ -1,3 +1,4 @@
+import { getDefaultRedteamTemperature } from '../redteamDefaults';
 import { createXAIProvider } from './chat';
 import { XAIResponsesProvider } from './responses';
 
@@ -19,9 +20,10 @@ export function getXAIProviders(
   | 'webSearchProvider'
 > {
   const gradingProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, { env });
+  const redteamTemperature = getDefaultRedteamTemperature();
   const redteamProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
     env,
-    config: { config: { temperature: 0.7 } },
+    config: { config: { temperature: redteamTemperature } },
   });
 
   // The outer `config` is `ProviderOptions.config`; the xAI chat provider then reads
@@ -39,7 +41,7 @@ export function getXAIProviders(
     env,
     config: {
       config: {
-        temperature: 0.7,
+        temperature: redteamTemperature,
         response_format: { type: 'json_object' },
       },
     },

@@ -1,3 +1,4 @@
+import { getDefaultRedteamTemperature } from '../redteamDefaults';
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
@@ -129,7 +130,7 @@ const redteamProviderFactory = createLazyProvider(
   (env?: EnvOverrides) =>
     new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
       env,
-      config: { temperature: 0.7 },
+      config: { temperature: getDefaultRedteamTemperature() },
     }),
 );
 

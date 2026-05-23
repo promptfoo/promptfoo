@@ -1,4 +1,5 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { getDefaultRedteamTemperature } from '../redteamDefaults';
 
 // GitHub Models default providers
 // Using OpenAI-compatible API with GitHub's endpoint
@@ -25,14 +26,14 @@ export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider
 export const DefaultGitHubRedteamProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
   config: {
     ...githubConfig,
-    temperature: 0.7,
+    temperature: getDefaultRedteamTemperature(),
   },
 });
 
 export const DefaultGitHubRedteamJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
   config: {
     ...githubConfig,
-    temperature: 0.7,
+    temperature: getDefaultRedteamTemperature(),
     response_format: { type: 'json_object' },
   },
 });

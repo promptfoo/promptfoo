@@ -191,6 +191,18 @@ describe('Provider override tests', () => {
     });
   });
 
+  it('should use the configured redteam temperature for provider defaults', async () => {
+    mockProcessEnv({
+      MISTRAL_API_KEY: 'test-key',
+      PROMPTFOO_JAILBREAK_TEMPERATURE: '0.42',
+    });
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.redteamProvider?.config?.temperature).toBe(0.42);
+    expect(providers.redteamJsonProvider?.config?.temperature).toBe(0.42);
+  });
+
   it('should include JSON-capable redteam providers for Azure defaults', async () => {
     mockProcessEnv({
       AZURE_OPENAI_API_KEY: 'test-key',
