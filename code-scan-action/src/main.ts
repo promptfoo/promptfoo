@@ -350,6 +350,23 @@ function buildCommentBody(comment: Comment): string {
   return body;
 }
 
+function buildIssueCommentBody(comment: Comment): string {
+  const body = buildCommentBody(comment);
+
+  if (!comment.file) {
+    return body;
+  }
+
+  const lineRange =
+    comment.startLine != null && comment.line != null && comment.startLine !== comment.line
+      ? `${comment.file}:${comment.startLine}-${comment.line}`
+      : comment.line == null
+        ? comment.file
+        : `${comment.file}:${comment.line}`;
+
+  return `**${lineRange}**\n\n${body}`;
+}
+
 function toReviewComment(comment: Comment) {
   return {
     path: comment.file!,
@@ -403,7 +420,7 @@ async function postGeneralComments(
       owner: context.owner,
       repo: context.repo,
       issue_number: context.number,
-      body: buildCommentBody(comment),
+      body: buildIssueCommentBody(comment),
     });
   }
 

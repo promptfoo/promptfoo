@@ -67,9 +67,9 @@ export function prepareComments(
 
   // Separate line-specific comments from general PR comments
   // Filter out severity='none' comments - they shouldn't be posted separately
-  const lineComments = sortedComments.filter((c) => c.file && c.finding);
+  const lineComments = sortedComments.filter((c) => c.file && c.line != null && c.finding);
   const generalComments = sortedComments.filter(
-    (c) => !c.file && c.finding && c.severity !== CodeScanSeverity.NONE,
+    (c) => (!c.file || c.line == null) && c.finding && c.severity !== CodeScanSeverity.NONE,
   );
 
   // Check if we only have "none" severity comments (i.e., no real vulnerabilities)

@@ -543,6 +543,76 @@ describe('code-scan-action main', () => {
     });
   });
 
+  describe('fallback comment posting', () => {
+    it('posts file-scoped findings without a line as general comments with file context', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+
+      const mockCreateReview = vi.fn().mockResolvedValue({});
+      const mockCreateComment = vi.fn().mockResolvedValue({});
+      mocks.github.getOctokit.mockReturnValue({
+        rest: {
+          pulls: {
+            createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({
+              data: { base: { ref: 'main' } },
+            }),
+          },
+          issues: {
+            createComment: mockCreateComment,
+          },
+        },
+      });
+
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            const response = JSON.stringify({
+              success: true,
+              review: 'Found issues',
+              commentsPosted: false,
+              comments: [
+                {
+                  file: 'src/example.ts',
+                  line: null,
+                  finding: 'File-scoped issue',
+                  severity: 'high',
+                },
+              ],
+            });
+            options.listeners.stdout(Buffer.from(response));
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mockCreateComment).toHaveBeenCalledWith({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          issue_number: 123,
+          body: expect.stringContaining('**src/example.ts**'),
+        });
+      });
+
+      expect(mockCreateReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comments: undefined,
+        }),
+      );
+      expect(mockCreateComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.stringContaining('File-scoped issue'),
+        }),
+      );
+    });
+  });
+
   describe('SARIF output', () => {
     async function triggerSarifAction(rawPath: string) {
       mocks.core.getInput.mockImplementation((name: string) => {
