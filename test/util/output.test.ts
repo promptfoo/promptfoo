@@ -1130,6 +1130,7 @@ describe('writeOutput', () => {
     expect(templateContent).toContain('{{ cell.text | escape }}');
     expect(templateContent).toContain('{{ cell.reason | escape }}');
     expect(templateContent).toContain('{{ cell.error | escape }}');
+    expect(templateContent).toContain('{{ cell.description | escape }}');
 
     // Ensure structured output content and derived search fields are escaped.
     expect(templateContent).toContain('data-search="{{ cell.statusLabel | escape }}');
@@ -1170,7 +1171,7 @@ describe('writeOutput', () => {
       vars: { input: 'one' },
       promptIdx: 0,
       testIdx: 0,
-      testCase: { vars: { input: 'one' }, description: 'Passing test description' },
+      testCase: { vars: { input: 'one' }, description: 'Passing <test> description' },
       promptId: 'prompt',
       gradingResult: {
         pass: true,
@@ -1212,7 +1213,8 @@ describe('writeOutput', () => {
     expect(html).toContain('Score 0.00');
     expect(html).toContain('Passing output');
     expect(html).toContain('Failing output');
-    expect(html).toContain('Passing test description');
+    expect(html).toContain('Passing &lt;test&gt; description');
+    expect(html).not.toContain('Passing <test> description');
     expect(html).toContain('Passing reason');
     expect(html).toContain('Failing reason');
     expect(html).toContain('View detail');
