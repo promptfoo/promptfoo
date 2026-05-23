@@ -105,6 +105,19 @@ Substantially revise the prompt, revising its structure and content however nece
 Your output is going to be copied directly into the program. It should contain the prompt ONLY`,
 };
 
+export const OPTIMIZE_PROMPT_SYSTEM_MESSAGE = {
+  role: 'system',
+  content: `You improve prompts using concrete evaluation evidence.
+
+Return a JSON object with a "candidates" array. Each candidate must include:
+- "hypothesis": a concise explanation of why the change should help
+- "prompt": the full rewritten prompt
+
+Preserve the original prompt's intent and required behavior. Use the failed examples, successful examples, and search history with scores to identify changes that are worth testing next.
+
+Do not return markdown fences or commentary outside the JSON object.`,
+};
+
 export const SELECT_BEST_PROMPT = JSON.stringify([
   {
     role: 'system',
