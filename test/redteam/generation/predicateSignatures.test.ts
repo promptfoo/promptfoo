@@ -205,6 +205,29 @@ describe('predicate signatures', () => {
     });
   });
 
+  it('returns stable empty coverage summaries for unknown or empty plugin inventories', () => {
+    expect(getPluginFeatureVocabulary('unknown-plugin')).toEqual([]);
+    expect(getPluginFeatureBands('unknown-plugin')).toEqual({});
+    expect(summarizePluginFeatureCoverage([])).toEqual({
+      coveredPluginIds: [],
+      coverageRate: 1,
+      pluginCount: 0,
+      uncoveredPluginIds: [],
+    });
+    expect(summarizeObservedPluginFeatureCoverage('unknown-plugin', ['plain request'])).toEqual({
+      coverageRate: 0,
+      featureCount: 0,
+      observedFeatureCount: 0,
+      observedFeatureIds: [],
+      pluginId: 'unknown-plugin',
+      promptCount: 1,
+      promptsWithFeaturesCount: 0,
+    });
+    expect(summarizeObservedPluginFeatureBandCoverage('unknown-plugin', ['plain request'])).toEqual(
+      {},
+    );
+  });
+
   it('summarizes observed feature coverage against a plugin vocabulary', () => {
     expect(getPluginFeatureVocabulary('prompt-extraction')).toHaveLength(9);
     expect(
