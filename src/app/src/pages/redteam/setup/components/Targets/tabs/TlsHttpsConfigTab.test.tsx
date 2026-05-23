@@ -645,6 +645,45 @@ describe('TlsHttpsConfigTab', () => {
       );
     });
 
+    it('should remove uploaded JKS credentials when no client certificate is selected', async () => {
+      const user = userEvent.setup();
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            certificateType: 'jks',
+            jksContent: 'encoded-keystore',
+            jksFileName: 'client.jks',
+            jksExtractConfigured: true,
+            keyAlias: 'client',
+            passphrase: 'secret',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      await user.click(screen.getByRole('combobox'));
+      await user.click(screen.getByRole('option', { name: 'No Client Certificate' }));
+
+      expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+        'tls',
+        expect.objectContaining({
+          certificateType: undefined,
+          jksContent: undefined,
+          jksFileName: undefined,
+          jksExtractConfigured: undefined,
+          keyAlias: undefined,
+          passphrase: undefined,
+        }),
+      );
+    });
+
     it('should show PEM configuration fields when PEM certificate type is selected', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',

@@ -36,6 +36,8 @@ interface TlsHttpsConfigTabProps {
   updateCustomTarget: (field: string, value: unknown) => void;
 }
 
+type TlsConfig = NonNullable<NonNullable<HttpProviderOptions['config']>['tls']>;
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -45,6 +47,32 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   }
 
   return btoa(binary);
+}
+
+function setCertificateType(tls: TlsConfig | undefined, value: string): TlsConfig {
+  // `none` is a UI-only sentinel; clear credentials when their type is deselected.
+  const certificateType =
+    value === 'none' ? undefined : (value as NonNullable<TlsConfig['certificateType']>);
+  const isPemOrJks = certificateType === 'pem' || certificateType === 'jks';
+  const isJks = certificateType === 'jks';
+  const isPfx = certificateType === 'pfx';
+
+  return {
+    ...tls,
+    certificateType,
+    cert: isPemOrJks ? tls?.cert : undefined,
+    certPath: isPemOrJks ? tls?.certPath : undefined,
+    key: isPemOrJks ? tls?.key : undefined,
+    keyPath: isPemOrJks ? tls?.keyPath : undefined,
+    pfx: isPfx ? tls?.pfx : undefined,
+    pfxPath: isPfx ? tls?.pfxPath : undefined,
+    passphrase: isPemOrJks || isPfx ? tls?.passphrase : undefined,
+    jksPath: isJks ? tls?.jksPath : undefined,
+    jksContent: isJks ? tls?.jksContent : undefined,
+    jksFileName: isJks ? tls?.jksFileName : undefined,
+    jksExtractConfigured: isJks ? tls?.jksExtractConfigured : undefined,
+    keyAlias: isJks ? tls?.keyAlias : undefined,
+  };
 }
 
 const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
@@ -286,28 +314,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <Label>Certificate Type</Label>
               <Select
                 value={certificateType || 'none'}
-                onValueChange={(value) => {
-                  // 'none' is a UI-only sentinel — store undefined so it doesn't
-                  // leak into the config or cause hasClientCert to be truthy.
-                  const certType = value === 'none' ? undefined : value;
-                  updateCustomTarget('tls', {
-                    ...tls,
-                    certificateType: certType,
-                    // Clear type-specific fields when changing
-                    cert: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.cert,
-                    certPath: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.certPath,
-                    key: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.key,
-                    keyPath: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.keyPath,
-                    pfx: certType === 'pfx' ? tls?.pfx : undefined,
-                    pfxPath: certType === 'pfx' ? tls?.pfxPath : undefined,
-                    passphrase:
-                      certType !== 'pfx' && certType !== 'jks' && certType !== 'pem'
-                        ? undefined
-                        : tls?.passphrase,
-                    jksPath: certType === 'jks' ? tls?.jksPath : undefined,
-                    keyAlias: certType === 'jks' ? tls?.keyAlias : undefined,
-                  });
-                }}
+                onValueChange={(value) => updateCustomTarget('tls', setCertificateType(tls, value))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select certificate type" />
