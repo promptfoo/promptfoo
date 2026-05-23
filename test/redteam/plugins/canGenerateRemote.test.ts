@@ -8,6 +8,7 @@ import { HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
+import { RoleConfusionPlugin } from '../../../src/redteam/plugins/roleConfusion';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
@@ -80,6 +81,7 @@ describe('canGenerateRemote property and behavior', () => {
       expect(HarmbenchPlugin.canGenerateRemote).toBe(false);
       expect(IntentPlugin.canGenerateRemote).toBe(false);
       expect(PlinyPlugin.canGenerateRemote).toBe(false);
+      expect(RoleConfusionPlugin.canGenerateRemote).toBe(false);
       expect(UnsafeBenchPlugin.canGenerateRemote).toBe(false);
     });
   });

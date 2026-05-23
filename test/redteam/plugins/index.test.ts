@@ -74,6 +74,10 @@ describe('Plugins', () => {
     // Reset all mocks
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    vi.mocked(shouldGenerateRemote).mockReset();
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
   });
 
   describe('plugin registration', () => {
@@ -694,6 +698,9 @@ describe('Plugins', () => {
     });
 
     it('should not modify assertions for non-harmful remote plugins', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
       vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;
       });
