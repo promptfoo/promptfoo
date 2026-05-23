@@ -201,12 +201,43 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
       return JSON.stringify(sanitized);
     }
   } catch {
+    const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+    if (sanitizedUrlEncoded !== str) {
+      return sanitizedUrlEncoded;
+    }
+
     // Not JSON - check if it looks like a secret
     if (looksLikeSecret(str)) {
       return REDACTED;
     }
   }
   return str;
+}
+
+export function sanitizeUrlEncodedString(value: string): string {
+  if (!value.includes('=')) {
+    return value;
+  }
+
+  try {
+    const params = new URLSearchParams(value);
+    const entries = Array.from(params.entries());
+    if (entries.length === 0) {
+      return value;
+    }
+
+    let changed = false;
+    for (const [key, paramValue] of entries) {
+      if (isSecretField(key) || looksLikeSecret(paramValue)) {
+        params.set(key, REDACTED);
+        changed = true;
+      }
+    }
+
+    return changed ? params.toString() : value;
+  } catch {
+    return value;
+  }
 }
 
 /**
@@ -390,9 +421,9 @@ export function sanitizeUrl(url: string): string {
         }
       }
     } catch (paramError) {
-      // If search params handling fails, continue without sanitizing them
-      // using console since logger would create a circular dependency
-      console.warn(`Failed to sanitize URL parameters ${url}: ${paramError}`);
+      // Can't use logger here as it would create a circular dependency.
+      console.warn(`Failed to sanitize URL parameters: ${paramError}`);
+      return REDACTED;
     }
 
     // For path-only URLs, return just the path (+ search + hash), not the dummy base
@@ -402,7 +433,8 @@ export function sanitizeUrl(url: string): string {
 
     return sanitizedUrl.toString();
   } catch (error) {
-    console.warn(`Failed to sanitize URL ${url}: ${error}`);
-    return url;
+    // Can't use logger here as it would create a circular dependency.
+    console.warn(`Failed to sanitize URL: ${error}`);
+    return REDACTED;
   }
 }

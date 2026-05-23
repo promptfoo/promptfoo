@@ -30,6 +30,7 @@ import {
   REDACTED,
   sanitizeObject,
   sanitizeUrl,
+  sanitizeUrlEncodedString,
 } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -1371,32 +1372,6 @@ function getHeaderValue(
   return entry?.[1];
 }
 
-function sanitizeUrlEncodedBody(body: string): string {
-  if (!body.includes('=')) {
-    return body;
-  }
-
-  try {
-    const params = new URLSearchParams(body);
-    const entries = Array.from(params.entries());
-    if (entries.length === 0) {
-      return body;
-    }
-
-    let changed = false;
-    for (const [key, value] of entries) {
-      if (isSecretField(key) || looksLikeSecret(value)) {
-        params.set(key, REDACTED);
-        changed = true;
-      }
-    }
-
-    return changed ? params.toString() : body;
-  } catch {
-    return body;
-  }
-}
-
 function getMultipartBoundary(contentType: string): string | undefined {
   const boundaryMatch = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
   return boundaryMatch?.[1] ?? boundaryMatch?.[2]?.trim();
@@ -1408,7 +1383,7 @@ function sanitizeMultipartFallbackBody(body: string): string {
     return body;
   }
 
-  const sanitizedTrimmedBody = sanitizeUrlEncodedBody(trimmedBody);
+  const sanitizedTrimmedBody = sanitizeUrlEncodedString(trimmedBody);
   return sanitizedTrimmedBody === trimmedBody
     ? body
     : body.replace(trimmedBody, sanitizedTrimmedBody);
@@ -1468,7 +1443,7 @@ function sanitizeRequestBodyForMetadata(body: unknown, headers?: Record<string, 
     return sanitizeMultipartBody(sanitizedBody, contentType);
   }
   if (normalizedContentType?.includes('application/x-www-form-urlencoded')) {
-    return sanitizeUrlEncodedBody(sanitizedBody);
+    return sanitizeUrlEncodedString(sanitizedBody);
   }
 
   return sanitizedBody;
@@ -1569,7 +1544,7 @@ function formatRawRequestForDebugMetadata(
     requestLines.push(`${key}: ${value}`);
   }
 
-  const sanitizedBody = sanitizeRequestBodyForMetadata(bodyContent, parsedRequest.headers);
+  const sanitizedBody = sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers);
   if (sanitizedBody !== undefined) {
     requestLines.push('', String(sanitizedBody));
   }
@@ -2811,7 +2786,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
-      config: renderedConfig,
+      config: sanitizeObject(renderedConfig, { context: 'request config' }),
     });
 
     const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
@@ -2972,10 +2947,6 @@ export class HttpProvider implements ApiProvider {
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
     const transformedPrompt = await transformFn(prompt, vars, context);
-    const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(transformedPrompt);
-    logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
-    );
 
     // JSON-escape all string variables for safe substitution in raw request body
     // This prevents control characters and quotes from breaking JSON strings
@@ -2986,6 +2957,13 @@ export class HttpProvider implements ApiProvider {
 
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
+    const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
+      transformedPrompt,
+      parsedRequest.headers,
+    );
+    logger.debug(
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+    );
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
@@ -3058,16 +3036,6 @@ export class HttpProvider implements ApiProvider {
       }
     }
 
-    logger.debug(
-      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
-      {
-        request: parsedRequest,
-      },
-    );
-
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
-
     // Determine body content:
     // - For JSON/text bodies, http-z provides body.text
     // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
@@ -3078,6 +3046,22 @@ export class HttpProvider implements ApiProvider {
     } else if (parsedRequest.body?.params) {
       bodyContent = extractBodyFromRawRequest(renderedRequest);
     }
+
+    logger.debug(
+      `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
+      {
+        request: {
+          method: parsedRequest.method,
+          url: sanitizeUrl(parsedRequest.url),
+          httpVersion: parsedRequest.httpVersion,
+          headers: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+          body: sanitizeTransformedRequestForMetadata(bodyContent, parsedRequest.headers),
+        },
+      },
+    );
+
+    // Prepare fetch options with dispatcher if HTTPS agent is configured
+    const httpsAgent = await this.getHttpsAgent();
 
     const fetchOptions: any = {
       method: parsedRequest.method,

@@ -930,6 +930,26 @@ describe('sanitizeObject', () => {
       expect(parsedBody.email).toBe('user@example.com');
       expect(parsedBody.conversationId).toBe('12345');
     });
+
+    it('should sanitize URL-encoded string request bodies', () => {
+      const logContext = {
+        message: 'API request',
+        url: 'https://example.com/api',
+        method: 'POST',
+        requestBody:
+          'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890',
+        status: 200,
+        statusText: 'OK',
+      };
+
+      const result = sanitizeObject(logContext);
+
+      expect(result.requestBody).toContain('username=alice');
+      expect(result.requestBody).toContain('password=%5BREDACTED%5D');
+      expect(result.requestBody).toContain('api_key=%5BREDACTED%5D');
+      expect(result.requestBody).not.toContain('plain-secret');
+      expect(result.requestBody).not.toContain('sk-123456789012345678901234567890');
+    });
   });
 });
 
@@ -960,12 +980,12 @@ describe('sanitizeUrl', () => {
 
     it('should handle malformed URLs gracefully', () => {
       const malformedUrl = 'not-a-valid-url';
-      expect(sanitizeUrl(malformedUrl)).toBe(malformedUrl);
+      expect(sanitizeUrl(malformedUrl)).toBe('[REDACTED]');
     });
 
     it('should handle protocol-relative URLs', () => {
       const url = '//example.com/api?api_key=secret123';
-      expect(sanitizeUrl(url)).toBe(url);
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
     it('should handle URLs with invalid protocols', () => {
@@ -1348,8 +1368,8 @@ describe('sanitizeUrl', () => {
 
     it('should not treat protocol-relative URLs as path-only', () => {
       const url = '//example.com/api?api_key=secret123';
-      // Protocol-relative URLs fail new URL() and fall through to the catch
-      expect(sanitizeUrl(url)).toBe(url);
+      // Protocol-relative URLs fail new URL() and fall through to the fail-closed catch.
+      expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
   });
 
@@ -1357,7 +1377,7 @@ describe('sanitizeUrl', () => {
     it('should handle URL parsing errors gracefully', () => {
       const invalidUrl = 'ht!tp://invalid';
       const result = sanitizeUrl(invalidUrl);
-      expect(result).toBe(invalidUrl);
+      expect(result).toBe('[REDACTED]');
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
