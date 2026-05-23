@@ -10,6 +10,33 @@ import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator metrics and scoring', () => {
+  it('computes run statistics from persisted evaluation results', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test persisted statistics')],
+      tests: [
+        { assert: [{ type: 'contains', value: 'Test' }] },
+        { assert: [{ type: 'contains', value: 'missing' }] },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.persisted).toBe(true);
+    expect(evalRecord.results).toHaveLength(0);
+    expect(evalRecord.runStats?.providers[0]).toMatchObject({
+      provider: 'test-provider',
+      requests: 2,
+      successes: 1,
+      failures: 1,
+    });
+    expect(evalRecord.runStats?.assertions).toMatchObject({
+      total: 2,
+      passed: 1,
+    });
+  });
+
   it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

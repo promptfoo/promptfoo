@@ -26,6 +26,7 @@ vi.mock('../../src/commands/eval', async (importOriginal) => {
     ...(await importOriginal()),
 
     doEval: vi.fn().mockResolvedValue({
+      getStats: vi.fn().mockReturnValue({ successes: 0, failures: 0, errors: 0 }),
       table: [],
       version: 3,
       createdAt: new Date().toISOString(),
@@ -192,7 +193,14 @@ describe('doRedteamRun', () => {
     );
   });
 
-  it('should separate assertion failures from operational errors in completion telemetry', async () => {
+  it('should record effective local redteam config and evaluator counts in completion telemetry', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
+      redteam: {
+        plugins: [{ id: 'pii', numTests: 1 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+      targets: [{ id: 'promptfoo:sample-target' }],
+    });
     vi.mocked(doEval).mockResolvedValueOnce({
       persisted: false,
       results: [
@@ -210,19 +218,13 @@ describe('doRedteamRun', () => {
       ],
       durationMs: 0,
       evaluationDurationMs: 0,
+      getStats: vi.fn().mockReturnValue({ successes: 1, failures: 1, errors: 1 }),
       setGenerationDurationMs: vi.fn(),
       findTargetErrorStatus: vi.fn().mockResolvedValue(null),
       shared: false,
     } as any);
 
-    await doRedteamRun({
-      liveRedteamConfig: {
-        plugins: ['pii'],
-        strategies: ['jailbreak'],
-        targets: [{ id: 'promptfoo:sample-target' }],
-      },
-      loadedFromCloud: true,
-    });
+    await doRedteamRun({});
 
     expect(telemetry.record).toHaveBeenCalledWith(
       'redteam run',
@@ -232,7 +234,63 @@ describe('doRedteamRun', () => {
         numPasses: 1,
         numFails: 1,
         numErrors: 1,
-        loadedFromCloud: true,
+        numPlugins: 1,
+        numStrategies: 1,
+        plugins: ['pii'],
+        strategies: ['jailbreak'],
+        isPromptfooSampleTarget: true,
+        loadedFromCloud: false,
+      }),
+    );
+  });
+
+  it('should read persisted completion telemetry from aggregate stats without loading results', async () => {
+    const getResults = vi.fn();
+    const fetchResultsBatched = vi.fn();
+    const getStats = vi.fn().mockReturnValue({ successes: 1, failures: 1, errors: 1 });
+    vi.mocked(doGenerateRedteam).mockResolvedValueOnce({
+      redteam: {
+        plugins: [{ id: 'pii', numTests: 1 }],
+        strategies: [{ id: 'jailbreak' }],
+      },
+      targets: [{ id: 'promptfoo:sample-target' }],
+    });
+
+    vi.mocked(doEval).mockResolvedValueOnce({
+      persisted: true,
+      results: [],
+      fetchResultsBatched,
+      getResults,
+      getStats,
+      save: vi.fn().mockResolvedValue(undefined),
+      durationMs: 0,
+      evaluationDurationMs: 0,
+      setGenerationDurationMs: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
+      shared: false,
+    } as any);
+
+    await doRedteamRun({
+      liveRedteamConfig: {
+        redteam: {
+          plugins: ['pii'],
+          strategies: ['jailbreak'],
+        },
+        targets: [{ id: 'promptfoo:sample-target' }],
+      },
+    });
+
+    expect(getStats).toHaveBeenCalledOnce();
+    expect(fetchResultsBatched).not.toHaveBeenCalled();
+    expect(getResults).not.toHaveBeenCalled();
+    expect(telemetry.record).toHaveBeenCalledWith(
+      'redteam run',
+      expect.objectContaining({
+        phase: 'completed',
+        numTests: 3,
+        numPasses: 1,
+        numFails: 1,
+        numErrors: 1,
       }),
     );
   });

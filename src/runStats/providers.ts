@@ -1,5 +1,3 @@
-import { TokenUsageTracker } from '../util/tokenUsage';
-
 import type { ApiProvider } from '../types/index';
 import type { ProviderStats, StatableResult } from './types';
 
@@ -11,12 +9,16 @@ interface ProviderAccumulator {
   successes: number;
   failures: number;
   totalLatencyMs: number;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens: number;
 }
 
 /**
  * Computes per-provider performance statistics from evaluation results.
  *
- * Includes request counts, success rates, latency, and token usage from TokenUsageTracker.
+ * Includes request counts, success rates, latency, and result-scoped token usage.
  *
  * @param results - Array of evaluation results
  * @param maxProviders - Maximum number of providers to return (default 10)
@@ -38,6 +40,10 @@ export function computeProviderStats(
         successes: 0,
         failures: 0,
         totalLatencyMs: 0,
+        totalTokens: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        cachedTokens: 0,
       });
     }
 
@@ -51,19 +57,14 @@ export function computeProviderStats(
     }
 
     acc.totalLatencyMs += result.latencyMs || 0;
+    acc.totalTokens += result.response?.tokenUsage?.total || 0;
+    acc.promptTokens += result.response?.tokenUsage?.prompt || 0;
+    acc.completionTokens += result.response?.tokenUsage?.completion || 0;
+    acc.cachedTokens += result.response?.tokenUsage?.cached || 0;
   }
-
-  // Convert to ProviderStats array with token usage
-  const tracker = TokenUsageTracker.getInstance();
 
   return Array.from(accumulators.entries())
     .map(([provider, acc]): ProviderStats => {
-      const usage = tracker.getProviderUsage(provider);
-      const totalTokens = usage?.total || 0;
-      const promptTokens = usage?.prompt || 0;
-      const completionTokens = usage?.completion || 0;
-      const cachedTokens = usage?.cached || 0;
-
       return {
         provider,
         requests: acc.requests,
@@ -71,12 +72,12 @@ export function computeProviderStats(
         failures: acc.failures,
         successRate: acc.requests > 0 ? acc.successes / acc.requests : 0,
         avgLatencyMs: acc.requests > 0 ? Math.round(acc.totalLatencyMs / acc.requests) : 0,
-        totalTokens,
-        promptTokens,
-        completionTokens,
-        cachedTokens,
-        tokensPerRequest: acc.requests > 0 ? Math.round(totalTokens / acc.requests) : 0,
-        cacheRate: totalTokens > 0 ? cachedTokens / totalTokens : 0,
+        totalTokens: acc.totalTokens,
+        promptTokens: acc.promptTokens,
+        completionTokens: acc.completionTokens,
+        cachedTokens: acc.cachedTokens,
+        tokensPerRequest: acc.requests > 0 ? Math.round(acc.totalTokens / acc.requests) : 0,
+        cacheRate: acc.totalTokens > 0 ? acc.cachedTokens / acc.totalTokens : 0,
       };
     })
     .sort((a, b) => b.requests - a.requests)

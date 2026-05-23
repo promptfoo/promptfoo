@@ -1,28 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { computeModelInfo, computeProviderStats } from '../../src/runStats/providers';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { StatableResult } from '../../src/runStats/types';
 import type { ApiProvider } from '../../src/types/index';
 
-// Mock TokenUsageTracker
-vi.mock('../../src/util/tokenUsage', () => ({
-  TokenUsageTracker: {
-    getInstance: vi.fn(),
-  },
-}));
-
 describe('computeProviderStats', () => {
-  const mockTracker = {
-    getProviderUsage: vi.fn(),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTracker as any);
-    mockTracker.getProviderUsage.mockReturnValue(null);
-  });
-
   it('should return empty array for empty results', () => {
     const stats = computeProviderStats([]);
     expect(stats).toEqual([]);
@@ -89,17 +71,20 @@ describe('computeProviderStats', () => {
     expect(stats[0].requests).toBe(2);
   });
 
-  it('should include token usage from TokenUsageTracker', () => {
-    mockTracker.getProviderUsage.mockReturnValue({
-      total: 1000,
-      prompt: 800,
-      completion: 200,
-      cached: 100,
-    });
-
+  it('should include token usage from result responses', () => {
     const results: StatableResult[] = [
-      { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
-      { success: true, latencyMs: 200, provider: { id: 'openai:gpt-4' } },
+      {
+        success: true,
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        response: { tokenUsage: { total: 400, prompt: 300, completion: 100, cached: 20 } },
+      },
+      {
+        success: true,
+        latencyMs: 200,
+        provider: { id: 'openai:gpt-4' },
+        response: { tokenUsage: { total: 600, prompt: 500, completion: 100, cached: 80 } },
+      },
     ];
 
     const stats = computeProviderStats(results);
@@ -125,13 +110,6 @@ describe('computeProviderStats', () => {
   });
 
   it('should handle zero tokens gracefully', () => {
-    mockTracker.getProviderUsage.mockReturnValue({
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      cached: 0,
-    });
-
     const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
     ];

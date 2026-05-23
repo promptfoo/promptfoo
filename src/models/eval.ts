@@ -51,7 +51,7 @@ import {
 } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalRunStats } from '../runStats/index';
+import type { EvalRunStats } from '../runStats/types';
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**

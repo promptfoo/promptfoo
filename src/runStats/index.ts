@@ -6,11 +6,7 @@
  * cache effectiveness, error breakdowns, and per-provider performance.
  */
 
-import { computeAssertionStats } from './assertions';
-import { computeCacheStats } from './cache';
-import { computeErrorStats } from './errors';
-import { computeLatencyStats } from './latency';
-import { computeModelInfo, computeProviderStats } from './providers';
+import { RunStatsAccumulator } from './accumulator';
 
 import type { ApiProvider, EvaluateStats } from '../types/index';
 import type { EvalRunStats, StatableResult } from './types';
@@ -34,6 +30,21 @@ export interface ComputeRunStatsInput {
   stats: EvaluateStats;
   /** Array of providers used in the evaluation */
   providers: ApiProvider[];
+}
+
+export interface ComputeRunStatsBatchedInput {
+  /** Result batches read from a persisted evaluation. */
+  resultBatches: AsyncIterable<StatableResult[]>;
+  /** Evaluation statistics (contains token usage). */
+  stats: EvaluateStats;
+  /** Array of providers used in the evaluation. */
+  providers: ApiProvider[];
+}
+
+export interface ComputeRunStatsBatchedResult {
+  runStats: EvalRunStats;
+  resultCount: number;
+  hasTimedOutResult: boolean;
 }
 
 /**
@@ -64,13 +75,31 @@ export interface ComputeRunStatsInput {
  */
 export function computeRunStats(input: ComputeRunStatsInput): EvalRunStats {
   const { results, stats, providers } = input;
+  const accumulator = new RunStatsAccumulator();
+  accumulator.addResults(results);
+
+  return accumulator.toRunStats(stats, providers);
+}
+
+/**
+ * Computes run statistics without materializing persisted result rows in memory.
+ *
+ * The accumulator retains latency values for exact percentiles while folding
+ * cache, error, assertion, and provider metrics into bounded counters.
+ */
+export async function computeRunStatsBatched(
+  input: ComputeRunStatsBatchedInput,
+): Promise<ComputeRunStatsBatchedResult> {
+  const { resultBatches, stats, providers } = input;
+  const accumulator = new RunStatsAccumulator();
+
+  for await (const batch of resultBatches) {
+    accumulator.addResults(batch);
+  }
 
   return {
-    latency: computeLatencyStats(results),
-    cache: computeCacheStats(results),
-    errors: computeErrorStats(results),
-    providers: computeProviderStats(results),
-    assertions: computeAssertionStats(results, stats),
-    models: computeModelInfo(providers),
+    runStats: accumulator.toRunStats(stats, providers),
+    resultCount: accumulator.resultCount,
+    hasTimedOutResult: accumulator.hasTimedOutResult,
   };
 }

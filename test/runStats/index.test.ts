@@ -1,28 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { computeRunStats } from '../../src/runStats/index';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { describe, expect, it } from 'vitest';
+import { computeRunStats, computeRunStatsBatched } from '../../src/runStats/index';
+import { type ApiProvider, type EvaluateStats, ResultFailureReason } from '../../src/types/index';
 
 import type { StatableResult } from '../../src/runStats/types';
-import type { ApiProvider, EvaluateStats } from '../../src/types/index';
-
-// Mock TokenUsageTracker
-vi.mock('../../src/util/tokenUsage', () => ({
-  TokenUsageTracker: {
-    getInstance: vi.fn(),
-  },
-}));
 
 describe('computeRunStats', () => {
-  const mockTracker = {
-    getProviderUsage: vi.fn(),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTracker as any);
-    mockTracker.getProviderUsage.mockReturnValue(null);
-  });
-
   const createStats = (overrides?: Partial<EvaluateStats>): EvaluateStats =>
     ({
       successes: 0,
@@ -192,15 +174,15 @@ describe('computeRunStats', () => {
   });
 
   it('should compute provider stats with token usage', () => {
-    mockTracker.getProviderUsage.mockReturnValue({
-      total: 500,
-      prompt: 400,
-      completion: 100,
-      cached: 50,
-    });
-
     const results: StatableResult[] = [
-      { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
+      {
+        success: true,
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        response: {
+          tokenUsage: { total: 500, prompt: 400, completion: 100, cached: 50 },
+        },
+      },
     ];
 
     const providers = [createProvider('openai:gpt-4')];
@@ -271,5 +253,49 @@ describe('computeRunStats', () => {
       numRequests: 2,
       reasoningTokens: 10,
     });
+  });
+
+  it('should compute equivalent statistics from persisted result batches', async () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        response: { cached: true },
+        gradingResult: {
+          componentResults: [{ pass: true, score: 1, reason: '', assertion: { type: 'equals' } }],
+        },
+      },
+      {
+        success: false,
+        latencyMs: 300,
+        provider: { id: 'openai:gpt-4' },
+        response: { cached: false },
+        error: 'Request timed out',
+        failureReason: ResultFailureReason.ERROR,
+        gradingResult: {
+          componentResults: [
+            { pass: false, score: 0, reason: '', assertion: { type: 'contains' } },
+          ],
+        },
+      },
+    ];
+    const stats = createStats();
+    const providers = [createProvider('openai:gpt-4')];
+
+    async function* resultBatches() {
+      yield results.slice(0, 1);
+      yield results.slice(1);
+    }
+
+    const batched = await computeRunStatsBatched({
+      resultBatches: resultBatches(),
+      stats,
+      providers,
+    });
+
+    expect(batched.runStats).toEqual(computeRunStats({ results, stats, providers }));
+    expect(batched.resultCount).toBe(2);
+    expect(batched.hasTimedOutResult).toBe(true);
   });
 });

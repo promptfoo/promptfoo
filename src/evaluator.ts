@@ -30,7 +30,7 @@ import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
-import { computeRunStats } from './runStats/index';
+import { computeRunStatsBatched } from './runStats/index';
 import {
   createProviderRateLimitOptions,
   createRateLimitRegistry,
@@ -1067,7 +1067,11 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   if (!response.tokenUsage) {
     return;
   }
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), response.tokenUsage);
+  const providerId = provider.id();
+  const trackingId = provider.constructor?.name
+    ? `${providerId} (${provider.constructor.name})`
+    : providerId;
+  TokenUsageTracker.getInstance().trackUsage(trackingId, response.tokenUsage);
 }
 
 async function applyRunEvalResponseOutcome({
@@ -4122,7 +4126,7 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
     await this.runAfterAllExtensions(testSuite);
-    this.recordEvalTelemetry({
+    await this.recordEvalTelemetry({
       assertionTypes,
       concurrency,
       evalTimedOut,
@@ -4190,7 +4194,16 @@ class Evaluator {
     });
   }
 
-  private recordEvalTelemetry({
+  private async *getTelemetryResultBatches(): AsyncGenerator<EvalResult[]> {
+    if (this.evalRecord.persisted) {
+      yield* this.evalRecord.fetchResultsBatched();
+      return;
+    }
+
+    yield this.evalRecord.results;
+  }
+
+  private async recordEvalTelemetry({
     assertionTypes,
     concurrency,
     evalTimedOut,
@@ -4216,24 +4229,20 @@ class Evaluator {
     const totalEvalTimeMs = Date.now() - startTime;
     this.evalRecord.setDurationMs(totalEvalTimeMs);
 
-    const runStats = computeRunStats({
-      results: this.evalRecord.results,
+    const { runStats, resultCount, hasTimedOutResult } = await computeRunStatsBatched({
+      resultBatches: this.getTelemetryResultBatches(),
       stats: this.stats,
       providers: testSuite.providers,
     });
     this.evalRecord.runStats = runStats;
 
-    const timeoutOccurred =
-      evalTimedOut ||
-      this.evalRecord.results.some(
-        (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
-      );
+    const timeoutOccurred = evalTimedOut || hasTimedOutResult;
 
     telemetry.record('eval_ran', {
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
       numRequests: this.stats.tokenUsage.numRequests || 0,
-      numResults: this.evalRecord.results.length,
+      numResults: resultCount,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,

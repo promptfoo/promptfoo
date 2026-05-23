@@ -19,7 +19,7 @@ export interface StatableResult {
   latencyMs: number;
   error?: string | null;
   failureReason?: ResultFailureReason;
-  response?: Pick<ProviderResponse, 'cached'>;
+  response?: Pick<ProviderResponse, 'cached' | 'tokenUsage'>;
   provider?: { id?: string };
   gradingResult?: Pick<GradingResult, 'componentResults'> | null;
 }

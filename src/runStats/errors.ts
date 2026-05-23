@@ -85,7 +85,9 @@ export function categorizeError(errorMessage: string): ErrorCategory {
   return 'other';
 }
 
-export function isOperationalError(result: StatableResult): boolean {
+export function isOperationalError(
+  result: Pick<StatableResult, 'error' | 'failureReason'>,
+): boolean {
   if (!result.error) {
     return false;
   }

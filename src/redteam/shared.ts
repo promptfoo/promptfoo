@@ -6,7 +6,6 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
-import { isOperationalError } from '../runStats/errors';
 import telemetry from '../telemetry';
 import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
@@ -20,6 +19,7 @@ import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
+import type { UnifiedConfig } from '../types/index';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
@@ -179,7 +179,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     }
 
     if (evalResult) {
-      await recordRedteamCompletionTelemetry(evalResult, options);
+      await recordRedteamCompletionTelemetry(evalResult, options, redteamConfig);
     }
 
     if (!evalResult?.shared) {
@@ -236,17 +236,16 @@ function isSampleTarget(target: unknown): boolean {
   );
 }
 
-async function recordRedteamCompletionTelemetry(evalResult: Eval, options: RedteamRunOptions) {
-  const results = evalResult.persisted ? await evalResult.getResults() : evalResult.results;
-  const numPasses = results.filter((result) => result.success).length;
-  const numErrors = results.filter(isOperationalError).length;
-  const numFails = results.filter(
-    (result) => !result.success && !isOperationalError(result),
-  ).length;
-  const config = options.liveRedteamConfig;
-  const plugins = getConfigIds(config?.plugins);
-  const strategies = getConfigIds(config?.strategies);
-  const targets = config?.targets;
+async function recordRedteamCompletionTelemetry(
+  evalResult: Eval,
+  options: RedteamRunOptions,
+  config: Partial<UnifiedConfig>,
+) {
+  const { successes: numPasses, failures: numFails, errors: numErrors } = evalResult.getStats();
+  const numTests = numPasses + numFails + numErrors;
+  const plugins = getConfigIds(config.redteam?.plugins);
+  const strategies = getConfigIds(config.redteam?.strategies);
+  const targets = config.targets;
   const isPromptfooSampleTarget =
     typeof targets === 'string'
       ? isSampleTarget(targets)
@@ -260,11 +259,11 @@ async function recordRedteamCompletionTelemetry(evalResult: Eval, options: Redte
     numStrategies: strategies.length,
     plugins: plugins.slice(0, 50),
     strategies: strategies.slice(0, 20),
-    numTests: results.length,
+    numTests,
     numPasses,
     numFails,
     numErrors,
-    passRate: results.length > 0 ? numPasses / results.length : 0,
+    passRate: numTests > 0 ? numPasses / numTests : 0,
     isPromptfooSampleTarget,
     loadedFromCloud: Boolean(options.loadedFromCloud),
   });
