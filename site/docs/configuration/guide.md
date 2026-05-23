@@ -620,7 +620,7 @@ Promptfoo has several scripting extension points. They do not all support the sa
 | Custom assertion type                        | [`javascript`](/docs/configuration/expected-outputs/javascript) | [`python`](/docs/configuration/expected-outputs/python) | [`ruby`](/docs/configuration/expected-outputs/ruby) | Not supported                             |
 | `options.transform` and `transformVars` file | Supported (`.js`, `.cjs`, `.mjs`, `.ts`, `.cts`, `.mts`)        | Supported (`.py`)                                       | Not supported                                       | Not supported                             |
 
-For provider execution in any language, use an [`exec:` custom script provider](/docs/providers/custom-script) that accepts promptfoo's command-line arguments. This is separate from built-in assertion and transform support.
+For provider execution in any language, use an [`exec:` custom script provider](/docs/providers/custom-script) that reads the prompt, provider options JSON, and context JSON from positional arguments. This is separate from built-in assertion and transform support.
 
 ## Transforming outputs
 
