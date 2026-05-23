@@ -41,6 +41,7 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
+import { sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import {
@@ -73,36 +74,6 @@ interface MetadataKeyResult {
   key: string;
 }
 
-/**
- * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
- * Removes non-serializable fields like AbortSignal, functions, and symbols.
- */
-function sanitizeRuntimeOptions(
-  options?: Partial<import('../types').EvaluateOptions>,
-): Partial<import('../types').EvaluateOptions> | undefined {
-  if (!options) {
-    return undefined;
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const sanitized = { ...options };
-
-  // Remove known non-serializable fields
-  delete sanitized.abortSignal;
-
-  // Remove any function or symbol values
-  for (const key in sanitized) {
-    // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-    const value = (sanitized as any)[key];
-    if (typeof value === 'function' || typeof value === 'symbol') {
-      // biome-ignore lint/suspicious/noExplicitAny: FIXME this should use Object.keys or something to keep it type safe
-      delete (sanitized as any)[key];
-    }
-  }
-
-  return sanitized;
-}
-
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
@@ -127,25 +98,14 @@ export function escapeJsonPathKey(key: string): string {
 }
 
 /**
- * Builds a safe JSON path for use in SQLite json_extract() queries.
+ * Builds a JSON path for use as a bound SQLite json_extract() parameter.
  *
- * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
- * because SQLite's json_extract() function only accepts JSON paths as string literals,
- * not as parameterized values.
- *
- * Safety is ensured through double escaping:
- * 1. JSON path characters are escaped (backslashes and double quotes)
- * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
- *
- * @param field - The JSON field name from user input
- * @returns A sql.raw() fragment containing the safely escaped JSON path
+ * The field name still needs JSON-path escaping so special characters remain
+ * inside the quoted key. SQL safety comes from passing the returned path through
+ * Drizzle's `sql` templates as a value, never as raw SQL.
  */
-export function buildSafeJsonPath(field: string): ReturnType<typeof sql.raw> {
-  const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
-  // Escape single quotes for SQL string literal (standard SQL escaping)
-  const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-  // sql.raw() is safe here because we've fully escaped the content
-  return sql.raw(`'${sqlSafeJsonPath}'`);
+export function buildSafeJsonPath(field: string): string {
+  return `$."${escapeJsonPathKey(field)}"`;
 }
 
 /**
@@ -286,8 +246,7 @@ export class EvalQueries {
     }
 
     try {
-      const escapedKey = escapeJsonPathKey(trimmedKey);
-      const jsonPath = `$."${escapedKey}"`;
+      const jsonPath = buildSafeJsonPath(trimmedKey);
 
       const query = sql`
         SELECT DISTINCT
@@ -470,6 +429,9 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
       completedPrompts?: CompletedPrompt[];
+      durationMs?: number;
+      generationDurationMs?: number;
+      evaluationDurationMs?: number;
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -482,6 +444,16 @@ export default class Eval {
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
+    const durationResults = {
+      ...(opts?.durationMs !== undefined && { durationMs: opts.durationMs }),
+      ...(opts?.generationDurationMs !== undefined && {
+        generationDurationMs: opts.generationDurationMs,
+      }),
+      ...(opts?.evaluationDurationMs !== undefined && {
+        evaluationDurationMs: opts.evaluationDurationMs,
+      }),
+    };
+
     db.transaction(() => {
       db.insert(evalsTable)
         .values({
@@ -490,7 +462,7 @@ export default class Eval {
           author,
           description: config.description,
           config,
-          results: {},
+          results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
@@ -579,6 +551,9 @@ export default class Eval {
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+      durationMs: opts?.durationMs,
+      generationDurationMs: opts?.generationDurationMs,
+      evaluationDurationMs: opts?.evaluationDurationMs,
     });
   }
 
