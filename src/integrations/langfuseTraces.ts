@@ -27,6 +27,7 @@ import cliProgress from 'cli-progress';
 import cliState from '../cliState';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
+import { getLangfuseBaseUrl, LANGFUSE_AUTH_ENV_VARS } from './langfuseShared';
 import type { ApiTraceListParams, ApiTraces } from 'langfuse';
 
 import type { TestCase, VarValue } from '../types';
@@ -96,19 +97,22 @@ function setVar(vars: Record<string, VarValue>, key: string, value: unknown): vo
   }
 }
 
-function findTextBlock(content: unknown[]): unknown {
-  const textBlock = content.find(
-    (item): item is { text: unknown } => isRecord(item) && item.type === 'text' && 'text' in item,
-  );
-  return textBlock?.text ?? JSON.stringify(content);
-}
+function extractTextBlocks(content: unknown[]): unknown {
+  const textValues = content
+    .filter(
+      (item): item is { text: unknown } => isRecord(item) && item.type === 'text' && 'text' in item,
+    )
+    .map((item) => item.text);
 
-function getLangfuseBaseUrl(): string {
-  return (
-    getEnvString('LANGFUSE_BASE_URL') ||
-    getEnvString('LANGFUSE_HOST') ||
-    'https://cloud.langfuse.com'
-  ).replace(/\/+$/, '');
+  if (textValues.length === 0) {
+    return JSON.stringify(content);
+  }
+  if (textValues.length === 1) {
+    return textValues[0];
+  }
+  return textValues
+    .map((text) => (typeof text === 'string' ? text : JSON.stringify(text)))
+    .join('\n');
 }
 
 function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
@@ -123,6 +127,11 @@ function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
 
 export function isLangfuseTracesUrl(url: string): boolean {
   return url === LANGFUSE_TRACES_PREFIX || url.startsWith(`${LANGFUSE_TRACES_PREFIX}?`);
+}
+
+function redactTracesUrl(url: string): string {
+  const [prefix, queryString] = url.split('?', 2);
+  return queryString === undefined ? prefix : `${prefix}?<redacted>`;
 }
 
 /**
@@ -165,7 +174,7 @@ async function getLangfuseClient(): Promise<LangfuseTracesClient> {
  */
 export function parseTracesUrl(url: string): FetchTracesQuery {
   if (!isLangfuseTracesUrl(url)) {
-    throw new Error(`Invalid Langfuse traces URL: ${url}`);
+    throw new Error(`Invalid Langfuse traces URL: ${redactTracesUrl(url)}`);
   }
 
   const queryString = url.slice(LANGFUSE_TRACES_PREFIX.length).replace(/^\?/, '');
@@ -240,7 +249,7 @@ function extractInputText(input: unknown): unknown {
       const content = lastMessage.content;
       // Handle Anthropic-style content array
       if (Array.isArray(content)) {
-        return findTextBlock(content);
+        return extractTextBlocks(content);
       }
       return content;
     }
@@ -280,7 +289,7 @@ function extractOutputText(output: unknown): unknown {
   // Anthropic format: { content: [{type: 'text', text: '...'}] } or { content: '...' }
   if (obj.content !== undefined) {
     if (Array.isArray(obj.content)) {
-      return findTextBlock(obj.content);
+      return extractTextBlocks(obj.content);
     }
     return obj.content;
   }
@@ -403,7 +412,7 @@ async function fetchTracePage(
     }
     if (message.includes('401') || message.includes('Unauthorized')) {
       throw new Error(
-        'Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.',
+        `Langfuse authentication failed. Check your ${LANGFUSE_AUTH_ENV_VARS} environment variables.`,
       );
     }
     if (message.includes('403') || message.includes('Forbidden')) {
@@ -445,12 +454,11 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
   const tests: TestCase[] = [];
   let page = 1;
   let hasMore = true;
+  const pageLimit = Math.min(PAGE_SIZE, limit);
   const progressBar = createProgressBar(limit);
 
   try {
     while (hasMore && tests.length < limit) {
-      const pageLimit = Math.min(PAGE_SIZE, limit - tests.length);
-
       // Build the query for this page
       const fetchQuery: FetchTracesQuery = {
         ...query,

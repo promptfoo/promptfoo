@@ -7,7 +7,7 @@
  * Environment variables required:
  *   LANGFUSE_PUBLIC_KEY - Your Langfuse public key
  *   LANGFUSE_SECRET_KEY - Your Langfuse secret key
- *   LANGFUSE_HOST - Langfuse host (default: https://cloud.langfuse.com)
+ *   LANGFUSE_BASE_URL or LANGFUSE_HOST - Langfuse host (default: https://cloud.langfuse.com)
  */
 
 import { Langfuse } from 'langfuse';
@@ -114,7 +114,7 @@ async function seedLangfuse(): Promise<void> {
     console.error('4. Export the environment variables:');
     console.error('   export LANGFUSE_PUBLIC_KEY="pk-..."');
     console.error('   export LANGFUSE_SECRET_KEY="sk-..."');
-    console.error('   export LANGFUSE_HOST="https://cloud.langfuse.com"');
+    console.error('   export LANGFUSE_BASE_URL="https://cloud.langfuse.com"');
     process.exit(1);
   }
 

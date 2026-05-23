@@ -22,15 +22,17 @@ Langfuse Cloud is free for development and the easiest way to get started.
    ```bash
    export LANGFUSE_PUBLIC_KEY="pk-lf-..."
    export LANGFUSE_SECRET_KEY="sk-lf-..."
-   export LANGFUSE_HOST="https://cloud.langfuse.com"
+   export LANGFUSE_BASE_URL="https://cloud.langfuse.com"
    ```
+
+   `LANGFUSE_HOST` is also supported as a backwards-compatible alias.
 
    Or add to your `.env` file:
 
    ```
    LANGFUSE_PUBLIC_KEY=pk-lf-...
    LANGFUSE_SECRET_KEY=sk-lf-...
-   LANGFUSE_HOST=https://cloud.langfuse.com
+   LANGFUSE_BASE_URL=https://cloud.langfuse.com
    ```
 
 5. **Run the seed script**:
@@ -88,8 +90,10 @@ Run Langfuse locally using Docker Compose for fully offline development.
    ```bash
    export LANGFUSE_PUBLIC_KEY="pk-lf-..."
    export LANGFUSE_SECRET_KEY="sk-lf-..."
-   export LANGFUSE_HOST="http://localhost:3000"
+   export LANGFUSE_BASE_URL="http://localhost:3000"
    ```
+
+   `LANGFUSE_HOST` is also supported as a backwards-compatible alias.
 
 6. **Run the seed script**:
    ```bash

@@ -1,15 +1,18 @@
 import { getEnvString } from '../envars';
+import { getLangfuseBaseUrl } from './langfuseShared';
 import type Langfuse from 'langfuse';
 
 import type { VarValue } from '../types';
 
-const langfuseParams = {
-  publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
-  secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
-  baseUrl: getEnvString('LANGFUSE_HOST'),
-};
-
 let langfuse: Langfuse;
+
+function getLangfuseParams() {
+  return {
+    publicKey: getEnvString('LANGFUSE_PUBLIC_KEY'),
+    secretKey: getEnvString('LANGFUSE_SECRET_KEY'),
+    baseUrl: getLangfuseBaseUrl(),
+  };
+}
 
 export async function getPrompt(
   id: string,
@@ -23,7 +26,7 @@ export async function getPrompt(
   if (!langfuse) {
     try {
       const { Langfuse } = await import('langfuse');
-      langfuse = new Langfuse(langfuseParams);
+      langfuse = new Langfuse(getLangfuseParams());
     } catch (_err) {
       throw new Error(
         'The langfuse package is required for Langfuse integration. Please install it with: npm install langfuse',

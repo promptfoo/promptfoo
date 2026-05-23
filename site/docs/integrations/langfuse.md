@@ -357,7 +357,7 @@ The `input` and `output` variables are automatically extracted from these common
 | **String**            | Used directly                                          | Used directly                                                 |
 | **OpenAI chat**       | Last user message content from `messages[]`            | `choices[0].message.content`                                  |
 | **OpenAI completion** | -                                                      | `choices[0].text`                                             |
-| **Anthropic**         | Text from content blocks                               | `content[0].text` or `content` string                         |
+| **Anthropic**         | Joined text content blocks                             | Joined `content[].text` blocks or `content` string            |
 | **Simple objects**    | `query`, `prompt`, `message`, `input`, or `text` field | `response`, `output`, `result`, `completion`, or `text` field |
 
 For formats not listed above, the full object is used. Access raw data via `__langfuse_input` and `__langfuse_output`.
@@ -367,7 +367,7 @@ For formats not listed above, the full object is used. Access raw data via `__la
 #### Authentication failed (401)
 
 ```text
-Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.
+Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL or LANGFUSE_HOST environment variables.
 ```
 
 Verify your credentials:

@@ -1714,26 +1714,26 @@ describe('readTests', () => {
   });
 
   it('should handle xlsx files with sheet specifier in array format', async () => {
-    // Mock parseXlsxFile to return processed CsvRow[] data
-    const mockData = [{ name: 'test1', value: 'result1' }];
-
-    vi.doMock('../../src/util/xlsx', () => ({
-      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
-    }));
-
-    vi.resetModules();
+    const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
 
     try {
-      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
-
-      const result = await freshReadTests(['test.xlsx#DataSheet']);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
-    } finally {
-      vi.doUnmock('../../src/util/xlsx');
-      vi.resetModules();
+      await import('read-excel-file/node');
+    } catch {
+      return;
     }
+
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    if (!actualFs.existsSync(exampleFile)) {
+      return;
+    }
+
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
+
+    const result = await readTests([`${exampleFile}#1`]);
+
+    expect(result).toHaveLength(4);
+    const frenchTest = result.find((test) => test.vars?.language === 'French');
+    expect(frenchTest?.vars?.body).toBe('Hello world');
   });
 
   it('should handle xls files in array format', async () => {

@@ -63,6 +63,20 @@ describe('langfuseTraces', () => {
       );
     });
 
+    it('should redact query parameters when rejecting lookalike trace URLs', () => {
+      expect(() =>
+        parseTracesUrl('langfuse://traces-archive?userId=secret-user&sessionId=secret-session'),
+      ).toThrow('Invalid Langfuse traces URL: langfuse://traces-archive?<redacted>');
+
+      try {
+        parseTracesUrl('langfuse://traces-archive?userId=secret-user&sessionId=secret-session');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).not.toContain('secret-user');
+        expect((error as Error).message).not.toContain('secret-session');
+      }
+    });
+
     it('should parse URL with no parameters', () => {
       const result = parseTracesUrl('langfuse://traces');
       expect(result).toEqual({});
@@ -319,6 +333,14 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces?limit=150');
 
       expect(mockTraceList).toHaveBeenCalledTimes(2);
+      expect(mockTraceList).toHaveBeenNthCalledWith(1, {
+        limit: 100,
+        page: 1,
+      });
+      expect(mockTraceList).toHaveBeenNthCalledWith(2, {
+        limit: 100,
+        page: 2,
+      });
       expect(tests).toHaveLength(150);
     });
 
@@ -438,9 +460,22 @@ describe('langfuseTraces', () => {
             id: 'trace-anthropic',
             timestamp: '2024-01-15T10:00:00Z',
             input: {
-              messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello Claude' }] }],
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: 'Hello Claude' },
+                    { type: 'text', text: 'Second question' },
+                  ],
+                },
+              ],
             },
-            output: { content: [{ type: 'text', text: 'Hello! How can I help?' }] },
+            output: {
+              content: [
+                { type: 'text', text: 'Hello!' },
+                { type: 'text', text: 'How can I help?' },
+              ],
+            },
           },
         ],
       });
@@ -448,8 +483,9 @@ describe('langfuseTraces', () => {
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
       // Should extract text from Anthropic format
-      expect(tests[0].vars?.input).toBe('Hello Claude');
-      expect(tests[0].vars?.output).toBe('Hello! How can I help?');
+      expect(tests[0].vars?.input).toBe('Hello Claude\nSecond question');
+      expect(tests[0].vars?.output).toBe('Hello!\nHow can I help?');
+      expect(tests[0].providerOutput).toBe('Hello!\nHow can I help?');
     });
 
     it('should handle traces with unrecognized complex format', async () => {
@@ -542,7 +578,7 @@ describe('langfuseTraces', () => {
       mockTraceList.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
-        'Langfuse authentication failed',
+        'Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL or LANGFUSE_HOST environment variables.',
       );
     });
 

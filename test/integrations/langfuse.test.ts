@@ -243,6 +243,36 @@ describe('langfuse integration', () => {
       });
     });
 
+    it('should prefer LANGFUSE_BASE_URL over LANGFUSE_HOST', async () => {
+      mocks.mockGetEnvString.mockImplementation((key: string) => {
+        switch (key) {
+          case 'LANGFUSE_PUBLIC_KEY':
+            return 'test-public-key';
+          case 'LANGFUSE_SECRET_KEY':
+            return 'test-secret-key';
+          case 'LANGFUSE_BASE_URL':
+            return 'https://eu.cloud.langfuse.com/';
+          case 'LANGFUSE_HOST':
+            return 'https://legacy.langfuse.com';
+          default:
+            return '';
+        }
+      });
+      const mockPrompt = {
+        compile: vi.fn().mockReturnValue('Test'),
+      };
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+      await getPrompt('test-prompt', {}, 'text', 1);
+
+      expect(mocks.constructorCalls[0]).toMatchObject({
+        publicKey: 'test-public-key',
+        secretKey: 'test-secret-key',
+        baseUrl: 'https://eu.cloud.langfuse.com',
+      });
+    });
+
     it('should handle label with latest version', async () => {
       const mockPrompt = {
         compile: vi.fn().mockReturnValue('Latest version content'),
