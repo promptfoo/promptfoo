@@ -384,6 +384,79 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('should persist semantic frontier diagnostics in generated output metadata', async () => {
+    const semanticFrontier = {
+      active: true,
+      complete: false,
+      minimumPortfolioSize: 3,
+      bands: {
+        'sensitive-field': {
+          featureCount: 2,
+          observedFeatureCount: 1,
+          observedFeatureIds: ['requestsPrescriptionDetails'],
+          reachableFeatureCount: 1,
+          reachableFeatureIds: ['requestsPrescriptionDetails'],
+          unreachableFeatureIds: ['requestsRefillDates'],
+        },
+      },
+    };
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
+        prompts: [{ raw: 'Test prompt' }],
+        providers: [],
+        tests: [],
+      });
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input one' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'pii:social', semanticFrontier },
+        },
+        {
+          vars: { input: 'Test input two' },
+          assert: [{ type: 'equals', value: 'Test output' }],
+          metadata: { pluginId: 'pii:social', semanticFrontier },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          semanticFrontierDiagnostics: [
+            {
+              completeFrontierCount: 0,
+              frontierCount: 1,
+              pluginId: 'pii:social',
+              structurallyDegraded: true,
+              unreachableFeatureIds: ['requestsRefillDates'],
+            },
+          ],
+        }),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
   it('should write to config file when write option is true', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',

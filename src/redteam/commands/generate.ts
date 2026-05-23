@@ -54,13 +54,14 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { summarizeSemanticFrontierDiagnosticsFromTests } from '../generation/frontierDiagnostics';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
+import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
 import type {
   FailedPluginInfo,
   PolicyObject,
@@ -801,6 +802,8 @@ async function doGenerateRedteamInternal(
       // No need to return anything, Burp outputs are only invoked via command line.
       return {};
     } else if (options.output) {
+      const semanticFrontierDiagnostics =
+        summarizeSemanticFrontierDiagnosticsFromTests(redteamTests);
       const existingYaml = configPath
         ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
@@ -824,6 +827,7 @@ async function doGenerateRedteamInternal(
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath) }
             : { configHash: 'force-regenerate' }),
+          ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
       };
@@ -884,10 +888,14 @@ async function doGenerateRedteamInternal(
       }
       existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
+      const semanticFrontierDiagnostics = summarizeSemanticFrontierDiagnosticsFromTests(
+        existingConfig.tests as TestCase[],
+      );
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...(existingConfig.metadata || {}),
         configHash: await getConfigHash(configPath),
+        ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -912,6 +920,8 @@ async function doGenerateRedteamInternal(
         : promptfooCommand(`eval -c ${path.relative(process.cwd(), configPath)}`);
       logger.info('\n' + chalk.green(`Run ${chalk.bold(`${command}`)} to run the red team!`));
     } else {
+      const semanticFrontierDiagnostics =
+        summarizeSemanticFrontierDiagnosticsFromTests(redteamTests);
       const author = getAuthor();
       const userEmail = getUserEmail();
       const cloudHost = userEmail ? cloudConfig.getApiHost() : null;
@@ -928,6 +938,9 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
+          ...(semanticFrontierDiagnostics.length > 0 && {
+            metadata: { semanticFrontierDiagnostics },
+          }),
           tests: redteamTests,
         },
         'redteam.yaml',
