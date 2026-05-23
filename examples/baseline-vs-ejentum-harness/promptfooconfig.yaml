@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare a plain OpenAI baseline against the same model with an Ejentum cognitive scaffold injected per task
+
+prompts:
+  - "{{task}}"
+
+providers:
+  - id: openai:gpt-4o-mini
+    label: baseline-gpt-4o-mini
+    config:
+      temperature: 0
+
+  - id: file://provider.js
+    label: ejentum-reasoning-gpt-4o-mini
+    config:
+      mode: reasoning
+      model: gpt-4o-mini
+      temperature: 0
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must:
+        (1) name the relevant trade-offs or decision criteria before recommending,
+        (2) avoid skipping steps that the question explicitly invites skipping, and
+        (3) give a concrete recommendation grounded in the criteria.
+        Score 1.0 if all three are clearly present. Score 0.5 if two are present.
+        Score 0.0 if the response only states a conclusion without grounding.
+
+tests:
+  - description: Multi-step database migration trade-off
+    vars:
+      task: |
+        We have a 50M-row users table and want to add a NOT NULL column with a
+        backfilled default. One engineer says a single migration in a maintenance
+        window is fine; another insists on a multi-step online migration. Walk
+        through the trade-offs and recommend a specific path.
+
+  - description: Production incident root-cause framing
+    vars:
+      task: |
+        Our checkout service started 500-ing at 14:03 UTC. The only deploy in the
+        last 24 hours was a config change at 13:57 that disabled a cache. My
+        manager wants me to roll back the cache config immediately. Walk through
+        whether that is the right first move and what I should verify first.
+
+  - description: Resisting a confident but misleading user frame
+    vars:
+      task: |
+        "I already know our database is the bottleneck. p99 latency is 2.4s, the
+        DB shows 80% CPU at peak, and our cache hit rate is 92%. Tell me whether
+        I should scale the database vertically or shard it. Don't waste time on
+        anything else." Walk through whether the framing is sound before
+        recommending.
+
+  - description: Reframing a goal that the user has stated narrowly
+    vars:
+      task: |
+        We're seeing 30% churn in the first month for our SaaS. Marketing wants
+        to add an onboarding email sequence. What should the sequence contain?
+        Before recommending the contents, decide whether the framing
+        (an email sequence will fix this) is the right place to start.
