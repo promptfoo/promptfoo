@@ -1,2 +1,2 @@
-agentdojo>=0.1.35
-openai>=1.0.0
+agentdojo==0.1.35
+openai>=1.66.0,<3

@@ -2,7 +2,8 @@
 description: AgentDojo prompt injection benchmark
 
 prompts:
-  - 'AgentDojo task: {{user_task_id}} | Injection: {{injection_task_id}} | Suite: {{suite}}'
+  - raw: 'AgentDojo task: {{user_task_id}} | Injection: {{injection_task_id}} | Suite: {{suite}}'
+    label: AgentDojo benchmark task
 
 providers:
   - id: file://provider.py
@@ -15,12 +16,15 @@ providers:
       request_timeout: 120
       max_output_tokens: 4096
 
-# Generate test cases dynamically from AgentDojo
-# Full workspace suite: 560 test cases (40 user tasks x 14 injections)
+# Generate one low-cost smoke row by default.
+# Remove the limits below for the full workspace suite:
+# 560 test cases (40 user tasks x 14 injections).
 tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
+      max_user_tasks: 1
+      max_injection_tasks: 1
 
 defaultTest:
   assert:

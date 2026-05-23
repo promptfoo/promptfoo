@@ -238,12 +238,12 @@ export PROMPTFOO_PYTHON="$PWD/.venv/bin/python"
 export OPENAI_API_KEY="your-api-key"
 ```
 
-Run one row first:
+The checked-in config intentionally runs one user task against one injection
+task. Run that smoke row first:
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml \
-  --no-cache \
-  --filter-first-n 1
+  --no-cache
 ```
 
 Then open the local UI:
@@ -268,7 +268,9 @@ AgentDojo rows are not cheap: each row can involve many model calls and tool obs
 
 ## Run The Full Workspace Suite
 
-The default config runs the AgentDojo `workspace` suite: 40 user tasks crossed with 14 injection tasks, for 560 rows.
+Once the smoke row has a useful trace, remove `max_user_tasks` and
+`max_injection_tasks` from `promptfooconfig.yaml`. The full AgentDojo
+`workspace` suite crosses 40 user tasks with 14 injection tasks, for 560 rows.
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml \
@@ -303,17 +305,20 @@ tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
+      max_user_tasks: 1
+      max_injection_tasks: 1
 ```
 
-Use `max_user_tasks` and `max_injection_tasks` for smoke tests:
+The two limits above keep the initial run to one row. Increase them for a
+larger slice, or remove them for the full workspace suite:
 
 ```yaml
 tests:
   - path: file://dataset.py:generate_tests
     config:
       suite: workspace
-      max_user_tasks: 1
-      max_injection_tasks: 1
+      max_user_tasks: 5
+      max_injection_tasks: 3
 ```
 
 Useful provider options:

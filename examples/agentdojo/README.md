@@ -13,14 +13,19 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run evaluation
-npx promptfoo@latest eval
+# Run the checked-in one-row smoke evaluation
+npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
 ```
 
 ## Environment Variables
 
 - `OPENAI_API_KEY` - Required for default GPT-5.4 configuration
+
+The checked-in config runs one user task against one injection task so that
+you can inspect a trace before spending on a benchmark run. Remove
+`max_user_tasks` and `max_injection_tasks` from `promptfooconfig.yaml` when
+you are ready to run the full 560-row workspace suite.
 
 ## Configuration
 
@@ -53,7 +58,7 @@ The `transformers_pi_detector` defense requires AgentDojo's transformers extra:
 pip install "agentdojo[transformers]"
 ```
 
-Limit test cases for faster iteration:
+Choose a larger slice for a controlled comparison:
 
 ```yaml
 tests:
@@ -62,6 +67,12 @@ tests:
       suite: workspace
       max_user_tasks: 5
       max_injection_tasks: 3
+```
+
+Run the focused Python helper tests after changing the integration:
+
+```bash
+python -m unittest discover -p '*_test.py'
 ```
 
 ## Understanding Results
