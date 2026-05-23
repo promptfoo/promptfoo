@@ -50,6 +50,49 @@ type GaxiosError = any;
 
 const DEFAULT_AI_STUDIO_HOST = 'generativelanguage.googleapis.com';
 
+interface SafetyRelevantAssertion {
+  type?: string;
+  assert?: SafetyRelevantAssertion[];
+}
+
+type SafetyRelevantContext = CallApiContextParams & {
+  test?: NonNullable<CallApiContextParams['test']> & {
+    assert?: SafetyRelevantAssertion[];
+  };
+};
+
+function hasScorableSafetyAssertion(assertion: SafetyRelevantAssertion): boolean {
+  if (
+    assertion.type === 'guardrails' ||
+    assertion.type === 'not-guardrails' ||
+    assertion.type?.startsWith('promptfoo:redteam:')
+  ) {
+    return true;
+  }
+
+  return (
+    assertion.type === 'assert-set' &&
+    Array.isArray(assertion.assert) &&
+    assertion.assert.some(hasScorableSafetyAssertion)
+  );
+}
+
+function shouldExposeSafetyBlockAsOutput(context?: CallApiContextParams): boolean {
+  if (cliState.config?.redteam) {
+    return true;
+  }
+
+  const test = (context as SafetyRelevantContext | undefined)?.test;
+  if (
+    typeof test?.metadata?.pluginId === 'string' &&
+    (Boolean(test.metadata.pluginConfig) || Boolean(test.metadata.goal))
+  ) {
+    return true;
+  }
+
+  return test?.assert?.some(hasScorableSafetyAssertion) ?? false;
+}
+
 /**
  * Unified Google provider for Gemini models.
  *
@@ -439,7 +482,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
@@ -518,11 +561,17 @@ export class GoogleProvider extends GoogleGenericProvider {
             flaggedOutput: true,
             reason: finishReason,
           };
-          if (cliState.config?.redteam) {
-            // Refusals are successful outcomes during redteam evaluations.
-            return { output: finishReason, tokenUsage, guardrails };
+          const safetyResponse = {
+            tokenUsage,
+            guardrails,
+            raw: data,
+            cached,
+          };
+          if (shouldExposeSafetyBlockAsOutput(context)) {
+            // Assertions must receive safety refusals as scorable provider outputs.
+            return { output: finishReason, ...safetyResponse };
           }
-          return { error: finishReason, tokenUsage, guardrails };
+          return { error: finishReason, ...safetyResponse };
         } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
           // MAX_TOKENS is treated as a successful completion
           if (candidate.content?.parts) {
