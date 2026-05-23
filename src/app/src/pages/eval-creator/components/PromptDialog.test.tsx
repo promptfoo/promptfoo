@@ -20,13 +20,16 @@ describe('PromptDialog', () => {
     render(<PromptDialog {...mockProps} />);
 
     expect(screen.getByText('Add Prompt')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add Prompt' })).toHaveAccessibleDescription(
+      'By default, each prompt runs once for every test case and provider; YAML routing can narrow that set. Use variables when the input should change between test cases.',
+    );
 
     const textField = screen.getByRole('textbox');
     expect(textField).toBeInTheDocument();
     expect(textField).toHaveValue(mockProps.prompt);
 
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add Another' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add and create another' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
@@ -53,7 +56,7 @@ describe('PromptDialog', () => {
     expect(mockProps.onCancel).toHaveBeenCalled();
   });
 
-  it('should call onAdd, clear the text field, and focus the text field when the Add Another button is clicked', async () => {
+  it('acknowledges a saved prompt and focuses the field when adding another', async () => {
     const user = userEvent.setup();
     render(<PromptDialog {...mockProps} />);
 
@@ -62,12 +65,23 @@ describe('PromptDialog', () => {
     await user.keyboard('{Control>}a{/Control}');
     await user.paste('New prompt text');
 
-    const addButton = screen.getByRole('button', { name: 'Add Another' });
+    const addButton = screen.getByRole('button', { name: 'Add and create another' });
     await user.click(addButton);
 
     expect(mockProps.onAdd).toHaveBeenCalledWith('New prompt text');
     expect(textField).toHaveValue('');
     expect(textField).toHaveFocus();
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
+      'Prompt added. By default it runs across every test case and provider; YAML routing can narrow that set. Enter the next prompt.',
+    );
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Discard prompt changes?')).toBeNull();
+    expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
   });
 
   it('should call onCancel when the "Cancel" button is clicked', async () => {
@@ -78,14 +92,74 @@ describe('PromptDialog', () => {
     expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("should disable the 'Add' and 'Add Another' buttons when the text field is empty", () => {
+  it('confirms before discarding unsaved prompt changes', async () => {
+    const user = userEvent.setup();
     render(<PromptDialog {...mockProps} prompt="" />);
 
-    const addButton = screen.getByRole('button', { name: 'Add' });
-    const addAnotherButton = screen.getByRole('button', { name: 'Add Another' });
+    await user.type(screen.getByRole('textbox'), 'Draft prompt');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
+    expect(
+      screen.getByRole('dialog', { name: 'Discard prompt changes?' }),
+    ).toHaveAccessibleDescription('Your unsaved prompt text will be lost.');
+    expect(mockProps.onCancel).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.queryByText('Discard prompt changes?')).toBeNull();
+    expect(screen.getByRole('textbox')).toHaveValue('Draft prompt');
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }));
+
+    expect(mockProps.onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets an abandoned add draft when the dialog is reopened', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<PromptDialog {...mockProps} prompt="" />);
+
+    await user.type(screen.getByRole('textbox'), 'Discard this');
+    rerender(<PromptDialog {...mockProps} prompt="" open={false} />);
+    rerender(<PromptDialog {...mockProps} prompt="" open={true} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
+  it("should disable the 'Add' and 'Add and create another' buttons when the text field is empty", () => {
+    render(<PromptDialog {...mockProps} prompt="" />);
+
+    expect(
+      screen.getByText(/By default, each prompt runs once for every test case and provider/i),
+    ).toBeInTheDocument();
+    const textField = screen.getByRole('textbox');
+    const addButton = screen.getByRole('button', { name: 'Add' });
+    const addAnotherButton = screen.getByRole('button', { name: 'Add and create another' });
+
+    expect(textField).toBeRequired();
+    expect(textField).toHaveAccessibleDescription(/Required.*varname/);
     expect(addButton).toBeDisabled();
+    expect(addButton).toHaveAccessibleDescription(/Required.*varname/);
     expect(addAnotherButton).toBeDisabled();
+    expect(addAnotherButton).toHaveAccessibleDescription(/Required.*varname/);
+  });
+
+  it('should reject whitespace-only prompt text with an accessible explanation', async () => {
+    const user = userEvent.setup();
+    render(<PromptDialog {...mockProps} prompt="" />);
+
+    const textField = screen.getByRole('textbox');
+    await user.type(textField, '   ');
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Prompt must include text, not only spaces.',
+    );
+    expect(textField).toHaveAttribute('aria-invalid', 'true');
+    expect(textField).toHaveAccessibleDescription('Prompt must include text, not only spaces.');
+    expect(screen.getByRole('button', { name: 'Add' })).toHaveAccessibleDescription(
+      'Prompt must include text, not only spaces.',
+    );
+    expect(screen.getByRole('button', { name: 'Add and create another' })).toBeDisabled();
+    expect(mockProps.onAdd).not.toHaveBeenCalled();
   });
 
   it('should update the text field value when the prompt prop changes', () => {

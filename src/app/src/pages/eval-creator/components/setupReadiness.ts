@@ -1,6 +1,6 @@
 import { getMissingAssertionVariables } from './assertionPrerequisites';
 import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
-import type { AssertionOrSet, ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+import type { AssertionOrSet, ProviderOptions, TestCase, UnifiedConfig } from '@promptfoo/types';
 
 export type SetupStepId = 1 | 2 | 3 | 4;
 
@@ -181,6 +181,27 @@ function getRunnablePromptsForTest(
   );
 }
 
+function getRequiredVariablesForRunnablePrompts(
+  testCase: Record<string, unknown>,
+  providers: ProviderOptions[],
+  prompts: NormalizedPrompt[],
+): string[] {
+  return extractVariablesFromPrompts(
+    getRunnablePromptsForTest(testCase, providers, prompts).map((prompt) => prompt.raw),
+  );
+}
+
+export function getRequiredVariablesForTest(
+  testCase: TestCase,
+  config: Pick<Partial<UnifiedConfig>, 'providers' | 'prompts'>,
+): string[] {
+  return getRequiredVariablesForRunnablePrompts(
+    testCase as Record<string, unknown>,
+    normalizeProviders(config.providers),
+    normalizePromptCandidates(config.prompts),
+  );
+}
+
 function countOutputsForTest(
   testCase: Record<string, unknown>,
   providers: ProviderOptions[],
@@ -200,6 +221,22 @@ function countOutputsForTest(
         ).length,
       0,
     );
+}
+
+function countPlannedBaseRequests(
+  tests: UnifiedConfig['tests'] | undefined,
+  providers: ProviderOptions[],
+  prompts: NormalizedPrompt[],
+): number | undefined {
+  if (!Array.isArray(tests) || !tests.every(isRecord)) {
+    return undefined;
+  }
+
+  return tests.reduce(
+    (count, testCase) =>
+      count + (isRecord(testCase) ? countOutputsForTest(testCase, providers, prompts) : 0),
+    0,
+  );
 }
 
 function hasMaxScoreWithoutScoringAssertion(
@@ -480,10 +517,10 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
           }
 
           const testVars = getVars(testCase);
-          const testRequiredVariables = extractVariablesFromPrompts(
-            getRunnablePromptsForTest(testCase, providers, promptCandidates).map(
-              (prompt) => prompt.raw,
-            ),
+          const testRequiredVariables = getRequiredVariablesForRunnablePrompts(
+            testCase,
+            providers,
+            promptCandidates,
           );
           const hasMissingVariables = testRequiredVariables.some(
             (variable) => !(variable in testVars) && !(variable in defaultVars),
@@ -581,8 +618,6 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     testCasesMissingAssertionVariables,
     testCasesWithInvalidAssertions,
     defaultTestHasInvalidAssertions,
-    plannedBaseRequestCount: Array.isArray(config.tests)
-      ? providerCount * promptCount * testCount
-      : undefined,
+    plannedBaseRequestCount: countPlannedBaseRequests(config.tests, providers, promptCandidates),
   };
 }

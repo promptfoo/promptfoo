@@ -4,13 +4,17 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
 
+let providerValidationError: string | null = null;
+
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
   default: ({
     setProvider,
+    mode,
   }: {
     setProvider: (provider: { id: string; config: Record<string, never> }, type: string) => void;
+    mode?: 'eval' | 'redteam';
   }) => (
-    <div>
+    <div data-testid="provider-type-selector" data-mode={mode}>
       provider type selector
       <button
         type="button"
@@ -23,10 +27,35 @@ vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () =
 }));
 
 vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () => ({
-  default: () => <div>provider config editor</div>,
+  default: ({
+    onValidationRequest,
+    setError,
+    setProvider,
+  }: {
+    onValidationRequest?: (validator: () => boolean) => void;
+    setError?: (error: string | null) => void;
+    setProvider?: (provider: { id: string; config: { temperature: number } }) => void;
+  }) => {
+    onValidationRequest?.(() => {
+      setError?.(providerValidationError);
+      return providerValidationError === null;
+    });
+    return (
+      <div>
+        provider config editor
+        <button
+          type="button"
+          onClick={() => setProvider?.({ id: 'openai:gpt-5.5', config: { temperature: 0.4 } })}
+        >
+          Change Provider Settings
+        </button>
+      </div>
+    );
+  },
 }));
 
 afterEach(() => {
+  providerValidationError = null;
   vi.resetAllMocks();
 });
 
@@ -114,6 +143,12 @@ describe('AddProviderDialog layout', () => {
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
     expect(footer).toHaveClass('shrink-0');
+    expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText(/a provider is a model, agent, or endpoint/i)).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription(
+      'A provider is a model, agent, or endpoint. Choose what each prompt and test case will run against.',
+    );
+    expect(screen.getByTestId('provider-type-selector')).toHaveAttribute('data-mode', 'eval');
   });
 
   it('resets the scroll position when moving into provider configuration', async () => {
@@ -136,5 +171,143 @@ describe('AddProviderDialog layout', () => {
     expect(nextScrollBody).toBeDefined();
     expect(nextScrollBody).not.toBe(scrollBody);
     expect(nextScrollBody).toHaveProperty('scrollTop', 0);
+    expect(screen.getByText('Step 2 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Configure Provider' })).toHaveAccessibleDescription(
+      /By default, it receives every prompt and test case; YAML routing can narrow that set/i,
+    );
+    expect(screen.getByText(/add more providers later to compare outputs/i)).toBeInTheDocument();
+  });
+
+  it('uses focused copy without add-flow steps when editing a provider', () => {
+    render(
+      <AddProviderDialog
+        open
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+        initialProvider={{ id: 'openai:gpt-5.5' }}
+      />,
+    );
+
+    expect(screen.getByText('Edit Provider')).toBeInTheDocument();
+    expect(
+      screen.getByText(/update the connection and model settings used for this evaluation/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Step \d of 2/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('closes an untouched add flow without a discard warning', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(<AddProviderDialog open onClose={onClose} onSave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Discard provider changes?')).toBeNull();
+  });
+
+  it('confirms before returning to type selection with a selected provider', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={onClose} onSave={vi.fn()} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    const discardDialog = screen.getByRole('dialog', { name: 'Discard provider changes?' });
+    expect(discardDialog).toHaveAccessibleDescription(
+      'Your provider selection and configuration changes will be lost.',
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Continue editing' }));
+    expect(screen.getByText('Configure Provider')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    await user.click(screen.getByRole('button', { name: 'Discard and choose type' }));
+    expect(screen.getByText('Select Provider Type')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms before discarding edits to an existing provider', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+
+    render(
+      <AddProviderDialog
+        open
+        onClose={onClose}
+        onSave={vi.fn()}
+        initialProvider={{ id: 'openai:gpt-5.5', config: {} }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Change Provider Settings' }));
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.getByText('Discard provider changes?')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('announces pending edits and enables saving an updated provider', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <AddProviderDialog
+        open
+        onClose={vi.fn()}
+        onSave={onSave}
+        initialProvider={{ id: 'openai:gpt-5.5', config: {} }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Change Provider Settings' }));
+
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent('Unsaved provider changes');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveAttribute('aria-atomic', 'true');
+
+    const saveButton = screen.getByRole('button', { name: 'Save Changes' });
+    expect(saveButton).toBeEnabled();
+    await user.click(saveButton);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires valid provider configuration before saving and keeps recovery available', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    providerValidationError = 'Valid URL is required';
+
+    render(
+      <TooltipProvider>
+        <AddProviderDialog open onClose={vi.fn()} onSave={onSave} />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('Valid URL is required');
+    expect(screen.getByRole('button', { name: 'Add Provider' })).not.toBeDisabled();
+
+    providerValidationError = null;
+    await user.click(screen.getByRole('button', { name: 'Add Provider' }));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });

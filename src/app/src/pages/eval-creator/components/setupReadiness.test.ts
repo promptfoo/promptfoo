@@ -171,6 +171,20 @@ describe('setupReadiness', () => {
       expect(readiness.testCasesMissingVariables).toEqual([]);
     });
 
+    it('counts only provider and prompt routes each test case will execute', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        prompts: ['Prompt A', 'Prompt B'],
+        tests: [
+          { providers: ['openai:gpt-4.1'], prompts: ['Prompt A'] },
+          { providers: ['anthropic:messages:claude-sonnet-4'], prompts: ['Prompt B'] },
+        ],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.plannedBaseRequestCount).toBe(2);
+    });
+
     it('blocks context assertions until required query and context values are supplied', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

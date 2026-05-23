@@ -22,6 +22,10 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { TestCaseSchema } from '@promptfoo/types';
+import { getMissingAssertionVariables } from './assertionPrerequisites';
+import { getFirstRunnableAssertionValueError } from './assertionValueValidation';
+import { getRequiredVariablesForTest } from './setupReadiness';
 import TestCaseDialog from './TestCaseDialog';
 import type { CsvRow, TestCase, TestGeneratorConfig } from '@promptfoo/types';
 
@@ -30,30 +34,29 @@ interface TestCasesSectionProps {
   onOpenYamlEditor?: () => void;
 }
 
-// Validation function for TestCase structure
+interface ParsedTestCaseImport {
+  isYaml: boolean;
+  skippedCount: number;
+  testCases: TestCase[];
+}
+
+interface PendingTestCaseImport {
+  fileName: string;
+  skippedCount: number;
+  testCases: TestCase[];
+}
+
+const TEST_CASE_FIELDS = new Set(Object.keys(TestCaseSchema.shape));
+
 function isValidTestCase(obj: unknown): obj is TestCase {
-  if (!obj || typeof obj !== 'object') {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
     return false;
   }
 
-  const testCase = obj as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  const hasRecognizedField = keys.length === 0 || keys.some((field) => TEST_CASE_FIELDS.has(field));
 
-  // Check required structure - vars should be an object if present
-  if (testCase.vars && typeof testCase.vars !== 'object') {
-    return false;
-  }
-
-  // Check assert array if present
-  if (testCase.assert && !Array.isArray(testCase.assert)) {
-    return false;
-  }
-
-  // Check options if present
-  if (testCase.options && typeof testCase.options !== 'object') {
-    return false;
-  }
-
-  return true;
+  return hasRecognizedField && TestCaseSchema.safeParse(obj).success;
 }
 
 function isTestGeneratorConfig(obj: unknown): obj is TestGeneratorConfig {
@@ -62,6 +65,16 @@ function isTestGeneratorConfig(obj: unknown): obj is TestGeneratorConfig {
 
 function isInlineTestCase(obj: unknown): obj is TestCase {
   return isValidTestCase(obj) && !isTestGeneratorConfig(obj);
+}
+
+// Route assert-set to YAML — the form's assertion editor cannot render it. Schema-recognized
+// fields the dialog does not edit (options, metadata, threshold, …) round-trip via spread.
+function isFormEditableTestCase(obj: unknown): obj is TestCase {
+  return (
+    isInlineTestCase(obj) &&
+    Object.keys(obj).every((field) => TEST_CASE_FIELDS.has(field)) &&
+    (obj.assert || []).every((assertion) => assertion.type !== 'assert-set')
+  );
 }
 
 const getManagedTestsLabel = (tests: unknown): string => {
@@ -80,17 +93,221 @@ const getManagedTestsLabel = (tests: unknown): string => {
   return 'YAML test configuration';
 };
 
+async function parseImportedTestCases(
+  fileName: string,
+  text: string,
+): Promise<ParsedTestCaseImport> {
+  if (fileName.endsWith('.csv')) {
+    const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
+    const rows: CsvRow[] = parseCsv(text, { columns: true });
+    return {
+      isYaml: false,
+      skippedCount: 0,
+      testCases: rows.map((row) => testCaseFromCsvRow(row) as TestCase),
+    };
+  }
+
+  const yaml = await import('js-yaml');
+  const parsedYaml = yaml.load(text);
+
+  if (Array.isArray(parsedYaml)) {
+    const validTestCases = parsedYaml.filter(isValidTestCase);
+    if (validTestCases.length === 0) {
+      throw new Error(
+        'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
+      );
+    }
+    return {
+      isYaml: true,
+      skippedCount: parsedYaml.length - validTestCases.length,
+      testCases: validTestCases,
+    };
+  }
+
+  if (parsedYaml && isValidTestCase(parsedYaml)) {
+    return { isYaml: true, skippedCount: 0, testCases: [parsedYaml] };
+  }
+
+  throw new Error(
+    'Invalid YAML format. Expected an array of test cases or a single test case object with valid structure.',
+  );
+}
+
+function getImportErrorMessage(fileName: string, error: unknown): string {
+  if (fileName.endsWith('.csv')) {
+    return 'Failed to parse CSV file. Please ensure it has valid CSV format with headers.';
+  }
+
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+  if (errorMessage.includes('Invalid YAML') || errorMessage.includes('No valid test cases')) {
+    return errorMessage;
+  }
+
+  return 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.';
+}
+
+const DEFAULT_STARTER_VALUES: Record<string, string> = {
+  animal: 'penguin',
+  location: 'tropical island',
+};
+
+function getStarterExample(varsList: string[]): TestCase {
+  const starterVars = varsList.length > 0 ? varsList : ['animal', 'location'];
+  const vars = Object.fromEntries(
+    starterVars.map((variable) => [
+      variable,
+      DEFAULT_STARTER_VALUES[variable] ?? `example ${variable.replace(/_/g, ' ')}`,
+    ]),
+  );
+  const isStoryStarter =
+    starterVars.length === 2 && starterVars.includes('animal') && starterVars.includes('location');
+
+  return {
+    description: isStoryStarter ? 'Fun animal adventure story' : 'Starter example',
+    vars,
+    assert: [
+      {
+        type: 'contains-any',
+        value: isStoryStarter
+          ? ['penguin', 'adventure', 'tropical', 'island']
+          : Object.values(vars),
+      },
+    ],
+  };
+}
+
+interface TestCaseIssues {
+  missingPromptVariables: string[];
+  assertionError?: string;
+  missingAssertionVariables: string[];
+}
+
+function getTestCaseIssues(
+  testCase: TestCase,
+  requiredPromptVariables: string[],
+  defaultTest: TestCase | undefined,
+): TestCaseIssues {
+  const testCaseVars = Object.keys(testCase.vars || {});
+  const defaultTestVars = Object.keys(defaultTest?.vars || {});
+  const inheritedAssertions =
+    testCase.options?.disableDefaultAsserts === true ? [] : defaultTest?.assert || [];
+
+  return {
+    missingPromptVariables: requiredPromptVariables.filter(
+      (variable) => !testCaseVars.includes(variable) && !defaultTestVars.includes(variable),
+    ),
+    assertionError: getFirstRunnableAssertionValueError(testCase.assert),
+    missingAssertionVariables: getMissingAssertionVariables(
+      [...inheritedAssertions, ...(testCase.assert || [])],
+      { ...(defaultTest?.vars || {}), ...(testCase.vars || {}) },
+    ),
+  };
+}
+
+function TestCaseIssueIndicator({ issues }: { issues: TestCaseIssues }) {
+  const warningMessages = [
+    issues.missingPromptVariables.length > 0
+      ? `Missing variables: ${issues.missingPromptVariables.join(', ')}`
+      : undefined,
+    issues.assertionError,
+    issues.missingAssertionVariables.length > 0
+      ? `Context assertions need values for: ${issues.missingAssertionVariables.join(', ')}`
+      : undefined,
+  ].filter((message): message is string => Boolean(message));
+
+  if (warningMessages.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent>
+          {warningMessages.map((message, index) => (
+            <React.Fragment key={message}>
+              {index > 0 && <br />}
+              {message}
+            </React.Fragment>
+          ))}
+        </TooltipContent>
+      </Tooltip>
+      {issues.missingPromptVariables.length > 0 && (
+        <span className="sr-only">
+          Missing variables: {issues.missingPromptVariables.join(', ')}.
+        </span>
+      )}
+      {issues.assertionError && (
+        <span className="sr-only">Assertion issue: {issues.assertionError}</span>
+      )}
+      {issues.missingAssertionVariables.length > 0 && (
+        <span className="sr-only">
+          Context assertions need values for: {issues.missingAssertionVariables.join(', ')}.
+        </span>
+      )}
+    </>
+  );
+}
+
+function ManagedTestsDescription({
+  includesAdvancedTestEntries,
+  rawTests,
+}: {
+  includesAdvancedTestEntries: boolean;
+  rawTests: unknown;
+}) {
+  if (includesAdvancedTestEntries) {
+    return (
+      <>
+        These test entries include advanced YAML settings or assertion groups. Use the YAML editor
+        to update them without losing configuration.
+      </>
+    );
+  }
+
+  return (
+    <>
+      This test configuration is loaded from{' '}
+      <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
+        {getManagedTestsLabel(rawTests)}
+      </code>
+      . Use the YAML editor to update it.
+    </>
+  );
+}
+
+function getManagedTestTableMessage(includesAdvancedTestEntries: boolean): string {
+  return includesAdvancedTestEntries
+    ? 'Advanced test entries are edited in YAML to preserve their settings.'
+    : 'Test entries from YAML are not editable in the UI editor.';
+}
+
 const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
+  const defaultTest =
+    config.defaultTest &&
+    typeof config.defaultTest === 'object' &&
+    !Array.isArray(config.defaultTest)
+      ? (config.defaultTest as TestCase)
+      : undefined;
   const canEditInlineTests =
-    rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isInlineTestCase));
+    rawTests === undefined || (Array.isArray(rawTests) && rawTests.every(isFormEditableTestCase));
+  const includesAdvancedTestEntries = Array.isArray(rawTests) && !canEditInlineTests;
   const testCases = canEditInlineTests ? ((rawTests || []) as TestCase[]) : [];
   const setTestCases = (cases: TestCase[]) => updateConfig({ tests: cases });
   const [editingTestCaseIndex, setEditingTestCaseIndex] = React.useState<number | null>(null);
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const testCaseNumberToDelete = testCaseToDelete === null ? null : testCaseToDelete + 1;
+  const testCaseLabelToDelete = testCaseNumberToDelete
+    ? `test case ${testCaseNumberToDelete}`
+    : 'this test case';
+  const [pendingImport, setPendingImport] = React.useState<PendingTestCaseImport | null>(null);
+  const testCaseFileInputRef = React.useRef<HTMLInputElement>(null);
   const { showToast } = useToast();
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
@@ -123,103 +340,79 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
       }
 
       const fileName = file.name.toLowerCase();
+      const isYamlFile = fileName.endsWith('.yaml') || fileName.endsWith('.yml');
+      if (!fileName.endsWith('.csv') && !isYamlFile) {
+        showToast(
+          'Unsupported file type. Please upload a CSV (.csv) or YAML (.yaml, .yml) file.',
+          'error',
+        );
+        event.target.value = '';
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
         const text = e.target?.result?.toString();
         if (!text || text.trim() === '') {
           showToast('The file appears to be empty. Please select a file with content.', 'error');
-          event.target.value = ''; // Reset file input
+          event.target.value = '';
           return;
         }
 
         try {
-          let newTestCases: TestCase[] = [];
-
-          if (fileName.endsWith('.csv')) {
-            // Handle CSV files
-            const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
-            const rows: CsvRow[] = parseCsv(text, { columns: true });
-            newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
-          } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            // Handle YAML files
-            const yaml = await import('js-yaml');
-            const parsedYaml = yaml.load(text);
-
-            if (Array.isArray(parsedYaml)) {
-              // Validate array of test cases
-              const validTestCases = parsedYaml.filter(isValidTestCase);
-              if (validTestCases.length === 0) {
-                throw new Error(
-                  'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
-                );
-              }
-              if (validTestCases.length < parsedYaml.length) {
-                showToast(
-                  `Warning: ${parsedYaml.length - validTestCases.length} invalid test cases were skipped.`,
-                  'warning',
-                );
-              }
-              newTestCases = validTestCases;
-            } else if (parsedYaml && isValidTestCase(parsedYaml)) {
-              // Single test case
-              newTestCases = [parsedYaml];
-            } else {
-              throw new Error(
-                'Invalid YAML format. Expected an array of test cases or a single test case object with valid structure.',
-              );
-            }
-          } else {
-            showToast(
-              'Unsupported file type. Please upload a CSV (.csv) or YAML (.yaml, .yml) file.',
-              'error',
-            );
-            event.target.value = ''; // Reset file input
-            return;
-          }
+          const parsedImport = await parseImportedTestCases(fileName, text);
+          let newTestCases = parsedImport.testCases;
 
           if (newTestCases.length === 0) {
             showToast('No test cases found in the file.', 'warning');
-            event.target.value = ''; // Reset file input
+            event.target.value = '';
             return;
           }
 
-          // Add description only for YAML files if missing
-          if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
+          if (parsedImport.isYaml) {
             newTestCases = newTestCases.map((tc, idx) => ({
               ...tc,
               description: tc.description || `Test Case #${testCases.length + idx + 1}`,
             }));
           }
 
-          setTestCases([...testCases, ...newTestCases]);
-          showToast(
-            `Successfully imported ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}`,
-            'success',
-          );
+          setPendingImport({
+            fileName: file.name,
+            skippedCount: parsedImport.skippedCount,
+            testCases: newTestCases,
+          });
         } catch (error) {
           console.error('Error parsing file:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (fileName.endsWith('.csv')) {
-            showToast(
-              'Failed to parse CSV file. Please ensure it has valid CSV format with headers.',
-              'error',
-            );
-          } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            showToast(
-              errorMessage.includes('Invalid YAML') || errorMessage.includes('No valid test cases')
-                ? errorMessage
-                : 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.',
-              'error',
-            );
-          }
+          showToast(getImportErrorMessage(fileName, error), 'error');
         }
 
-        // Reset file input
+        event.target.value = '';
+      };
+      reader.onerror = () => {
+        showToast('Unable to read this file. Please try again or choose another file.', 'error');
         event.target.value = '';
       };
       reader.readAsText(file);
     }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) {
+      return;
+    }
+
+    setTestCases([...testCases, ...pendingImport.testCases]);
+    if (pendingImport.skippedCount > 0) {
+      showToast(
+        `Warning: ${pendingImport.skippedCount} invalid test cases were skipped.`,
+        'warning',
+      );
+    }
+    showToast(
+      `Successfully imported ${pendingImport.testCases.length} test case${pendingImport.testCases.length === 1 ? '' : 's'}`,
+      'success',
+    );
+    setPendingImport(null);
   };
 
   const handleRemoveTestCase = (event: React.MouseEvent, index: number) => {
@@ -231,6 +424,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
   const confirmDeleteTestCase = () => {
     if (testCaseToDelete !== null) {
       setTestCases(testCases.filter((_, i) => i !== testCaseToDelete));
+      showToast(
+        `Test case ${testCaseToDelete + 1} deleted. Future runs no longer include it.`,
+        'success',
+      );
       setTestCaseToDelete(null);
     }
     setDeleteDialogOpen(false);
@@ -245,20 +442,24 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     event.stopPropagation();
     const duplicatedTestCase = JSON.parse(JSON.stringify(testCases[index]));
     setTestCases([...testCases, duplicatedTestCase]);
+    showToast('Test case duplicated with its prompt and provider routing.', 'success');
   };
 
   return (
     <div className="space-y-4">
       {!canEditInlineTests && (
-        <Alert variant="info" className="flex-col items-start sm:flex-row sm:items-center">
+        <Alert
+          variant="info"
+          role="note"
+          className="flex-col items-start sm:flex-row sm:items-center"
+        >
           <AlertContent>
             <AlertTitle>Managed in YAML</AlertTitle>
             <AlertDescription>
-              This test configuration is loaded from{' '}
-              <code className="rounded bg-background/80 px-1 py-0.5 text-xs">
-                {getManagedTestsLabel(rawTests)}
-              </code>
-              . Use the YAML editor to update it.
+              <ManagedTestsDescription
+                includesAdvancedTestEntries={includesAdvancedTestEntries}
+                rawTests={rawTests}
+              />
             </AlertDescription>
           </AlertContent>
           {onOpenYamlEditor && (
@@ -275,24 +476,25 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlineTests && (
             <>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
-                    <Button variant="ghost" size="icon" asChild>
-                      <span>
-                        <UploadIcon className="size-4" />
-                      </span>
-                    </Button>
-                    <input
-                      type="file"
-                      accept=".csv,.yaml,.yml"
-                      onChange={handleAddTestCaseFromFile}
-                      className="hidden"
-                    />
-                  </label>
-                </TooltipTrigger>
-                <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
-              </Tooltip>
+              <div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => testCaseFileInputRef.current?.click()}
+                >
+                  <UploadIcon className="mr-2 size-4" />
+                  Import CSV or YAML
+                </Button>
+                <input
+                  ref={testCaseFileInputRef}
+                  type="file"
+                  accept=".csv,.yaml,.yml"
+                  onChange={handleAddTestCaseFromFile}
+                  className="hidden"
+                  aria-label="Upload test cases from CSV or YAML"
+                />
+              </div>
 
               <Button
                 onClick={() => setTestCaseDialogOpen(true)}
@@ -305,34 +507,27 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    const exampleTestCase: TestCase = {
-                      description: 'Fun animal adventure story',
-                      vars: {
-                        animal: 'penguin',
-                        location: 'tropical island',
-                      },
-                      assert: [
-                        {
-                          type: 'contains-any',
-                          value: ['penguin', 'adventure', 'tropical', 'island'],
-                        },
-                        {
-                          type: 'llm-rubric',
-                          value:
-                            'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
-                        },
-                      ],
-                    };
-                    setTestCases([...testCases, exampleTestCase]);
+                    setTestCases([...testCases, getStarterExample(varsList)]);
+                    showToast(
+                      'Starter test case added. By default it runs across every prompt and provider; YAML routing can narrow that set.',
+                      'success',
+                    );
                   }}
                 >
-                  Add Example
+                  Add Starter Example
                 </Button>
               )}
             </>
           )}
         </div>
       </div>
+      {canEditInlineTests && testCases.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          The starter example uses your prompt variables when available and a deterministic text
+          check. Add model-graded assertions later for subjective quality checks; those may add
+          cost.
+        </p>
+      )}
 
       {/* Test Cases Table */}
       <div className="overflow-x-auto rounded-lg border border-border">
@@ -357,9 +552,15 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                 </tr>
               ) : (
                 testCases.map((testCase, index) => {
-                  const testCaseVars = Object.keys(testCase.vars || {});
-                  const missingVars = varsList.filter((v) => !testCaseVars.includes(v));
-                  const hasMissingVars = varsList.length > 0 && missingVars.length > 0;
+                  const issues = getTestCaseIssues(
+                    testCase,
+                    getRequiredVariablesForTest(testCase, config),
+                    defaultTest,
+                  );
+                  const hasTestCaseIssue =
+                    issues.missingPromptVariables.length > 0 ||
+                    Boolean(issues.assertionError) ||
+                    issues.missingAssertionVariables.length > 0;
 
                   return (
                     <tr
@@ -371,7 +572,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                       className={cn(
                         'border-b border-border cursor-pointer',
                         'hover:bg-muted/50 transition-colors',
-                        hasMissingVars && 'bg-amber-50/50 dark:bg-amber-950/20',
+                        hasTestCaseIssue && 'bg-amber-50/50 dark:bg-amber-950/20',
                       )}
                     >
                       <td className="px-4 py-3 text-sm">
@@ -385,21 +586,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                           aria-label={`Open test case ${index + 1} for editing`}
                           className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          {hasMissingVars && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                Missing variables: {missingVars.join(', ')}
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                          {hasMissingVars && (
-                            <span className="sr-only">
-                              Missing variables: {missingVars.join(', ')}.
-                            </span>
-                          )}
+                          <TestCaseIssueIndicator issues={issues} />
                           {testCase.description || (
                             <span className="text-muted-foreground italic">
                               Test Case #{index + 1}
@@ -479,7 +666,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
             ) : (
               <tr>
                 <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                  Test entries from YAML are not editable in the UI editor.
+                  {getManagedTestTableMessage(includesAdvancedTestEntries)}
                 </td>
               </tr>
             )}
@@ -493,6 +680,8 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
           open={testCaseDialogOpen}
           onAdd={handleAddTestCase}
           varsList={varsList}
+          inheritedAssertions={defaultTest?.assert}
+          inheritedVars={defaultTest?.vars}
           initialValues={
             editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]
           }
@@ -503,13 +692,59 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
         />
       )}
 
+      <Dialog
+        open={pendingImport !== null}
+        onOpenChange={(open) => !open && setPendingImport(null)}
+      >
+        <DialogContent hideDescription={false}>
+          <DialogHeader>
+            <DialogTitle>
+              Import {pendingImport?.testCases.length ?? 0} test case
+              {pendingImport?.testCases.length === 1 ? '' : 's'}?
+            </DialogTitle>
+            <DialogDescription>
+              {pendingImport?.fileName} will be added to your existing {testCases.length} test case
+              {testCases.length === 1 ? '' : 's'}. Imported cases may include YAML routing that
+              narrows which prompts and providers run. Review routing to understand request count
+              and potential cost.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingImport && pendingImport.skippedCount > 0 && (
+            <Alert variant="warning">
+              <AlertContent>
+                <AlertTitle>Some entries will not be imported</AlertTitle>
+                <AlertDescription>
+                  {pendingImport.skippedCount} invalid test case
+                  {pendingImport.skippedCount === 1 ? ' was' : 's were'} skipped while reading this
+                  file.
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingImport(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmImport}>
+              Import {pendingImport?.testCases.length ?? 0} test case
+              {pendingImport?.testCases.length === 1 ? '' : 's'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
-        <DialogContent>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
-            <DialogTitle>Delete test case?</DialogTitle>
+            <DialogTitle>
+              Delete test case{testCaseNumberToDelete ? ` ${testCaseNumberToDelete}` : ''}?
+            </DialogTitle>
             <DialogDescription>
-              This removes the test case from this evaluation. This action cannot be undone.
+              This removes {testCaseLabelToDelete} from this evaluation. This action cannot be
+              undone. Future runs will no longer include it.
+              {testCases.length === 1 &&
+                ' This is your only test case; add another test case before you can run the evaluation.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

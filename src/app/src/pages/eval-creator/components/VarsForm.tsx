@@ -25,6 +25,10 @@ const VarsForm = ({ onAdd, varsList, initialValues }: VarsFormProps) => {
       <h3 className="text-lg font-semibold">Variables</h3>
       {varsList.length > 0 ? (
         <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            These values fill prompt placeholders or supply inputs required by assertions. Leave a
+            field blank only when you intentionally want to test empty input.
+          </p>
           {Object.keys(vars).map((varName) => (
             <div
               key={varName}

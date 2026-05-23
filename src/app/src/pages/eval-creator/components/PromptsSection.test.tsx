@@ -98,6 +98,16 @@ describe('PromptsSection', () => {
     return readAsTextMock;
   };
 
+  const createFileReaderErrorMock = () => {
+    global.FileReader = class MockFileReader {
+      onerror: ((event: ProgressEvent<FileReader>) => unknown) | null = null;
+
+      readAsText() {
+        this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+      }
+    } as unknown as typeof FileReader;
+  };
+
   it('should display a message indicating no prompts are present when the prompts list is empty', () => {
     setupStore([]);
 
@@ -107,7 +117,11 @@ describe('PromptsSection', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'No prompts added yet. Variables in a prompt become inputs for each test case.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('shows a YAML-managed state for scalar prompt configs and opens the YAML editor', async () => {
@@ -122,6 +136,8 @@ describe('PromptsSection', () => {
     );
 
     expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByRole('note')).toHaveTextContent('Managed in YAML');
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('file://prompt.txt')).toBeInTheDocument();
     expect(
       screen.getByText('Prompt entries from YAML are not editable in the UI editor.'),
@@ -143,7 +159,7 @@ describe('PromptsSection', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
+    expect(screen.getByText(/No prompts added yet/)).toBeInTheDocument();
 
     await openPromptDialog(user);
 
@@ -163,7 +179,7 @@ describe('PromptsSection', () => {
     updateStoreAndRerender([newPromptText], rerender);
 
     expect(screen.getByText(/Write a story about a robot/)).toBeInTheDocument();
-    expect(screen.queryByText('No prompts added yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/No prompts added yet/)).not.toBeInTheDocument();
   });
 
   it('should update an existing prompt when a prompt row is clicked, the PromptDialog is edited, and the changes are submitted', async () => {
@@ -241,6 +257,10 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: [initialPrompt, initialPrompt],
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Prompt duplicated. By default it runs across every test case and provider; YAML routing can narrow that set.',
+      'success',
+    );
 
     updateStoreAndRerender([initialPrompt, initialPrompt], rerender);
 
@@ -265,7 +285,10 @@ describe('PromptsSection', () => {
     const deleteButton = screen.getByRole('button', { name: /delete prompt 2/i });
     await user.click(deleteButton);
 
-    expect(screen.getByRole('dialog', { name: /delete prompt/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Delete prompt 2?' })).toHaveAccessibleDescription(
+      /This removes prompt 2 from this evaluation. This action cannot be undone. Future runs will no longer send it to providers for any test case./,
+    );
+    expect(screen.getByText(/removes prompt 2 from this evaluation/i)).toBeInTheDocument();
 
     const confirmDeleteButton = screen.getByRole('button', { name: /delete/i });
     await user.click(confirmDeleteButton);
@@ -274,6 +297,10 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: ['Prompt 1', 'Prompt 3'],
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Prompt 2 deleted. Future runs no longer include it.',
+      'success',
+    );
 
     updateStoreAndRerender(['Prompt 1', 'Prompt 3'], rerender);
 
@@ -282,7 +309,23 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
   });
 
-  it("should add an example prompt to the list when the 'Add Example' button is clicked and the prompts list is empty", async () => {
+  it('warns when deleting the only prompt will prevent running', async () => {
+    const user = userEvent.setup();
+    setupStore(['Only prompt']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete prompt 1' }));
+
+    expect(screen.getByText(/this is your only prompt/i)).toBeInTheDocument();
+    expect(screen.getByText(/add another prompt before you can run/i)).toBeInTheDocument();
+  });
+
+  it("should add a starter prompt when the 'Add Starter Prompt' button is clicked and the prompts list is empty", async () => {
     const user = userEvent.setup();
     setupStore([]);
 
@@ -292,7 +335,7 @@ describe('PromptsSection', () => {
       </TooltipProvider>,
     );
 
-    const addExampleButton = screen.getByRole('button', { name: /add example/i });
+    const addExampleButton = screen.getByRole('button', { name: 'Add Starter Prompt' });
     await user.click(addExampleButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
@@ -301,6 +344,30 @@ describe('PromptsSection', () => {
         'Write a short, fun story about a {{animal}} going on an adventure in {{location}}. Make it entertaining and suitable for children.',
       ],
     });
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Starter prompt added. By default it runs across every test case and provider; YAML routing can narrow that set.',
+      'success',
+    );
+  });
+
+  it('opens prompt file selection from a keyboard-operable import button', async () => {
+    const user = userEvent.setup();
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const fileInput = screen.getByLabelText('Select a prompt file') as HTMLInputElement;
+    const openPicker = vi.spyOn(fileInput, 'click');
+    const importButton = screen.getByRole('button', { name: 'Import prompt' });
+
+    importButton.focus();
+    await user.keyboard('{Enter}');
+
+    expect(openPicker).toHaveBeenCalledOnce();
   });
 
   it('should handle a file with a very long line of text', async () => {
@@ -331,7 +398,10 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: [longLineText],
     });
-    expect(showToastMock).toHaveBeenCalledWith('Prompt imported successfully', 'success');
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Prompt imported. By default it runs across every test case and provider; YAML routing can narrow that set.',
+      'success',
+    );
     expect(fileInput.value).toBe('');
   });
 
@@ -362,6 +432,33 @@ describe('PromptsSection', () => {
     expect(fileInput.value).toBe('');
   });
 
+  it('guides recovery when an uploaded prompt file cannot be read', async () => {
+    const user = userEvent.setup();
+    createFileReaderErrorMock();
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error('File input element not found');
+    }
+
+    await user.upload(fileInput, new File(['prompt'], 'prompt.txt', { type: 'text/plain' }));
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Unable to read this file. Please try again or choose another file.',
+      'error',
+    );
+    expect(fileInput.value).toBe('');
+  });
+
   it('should handle malformed template variables in prompts without errors', () => {
     const malformedPrompt = 'This is a prompt with an unclosed variable: {{variable';
     setupStore([malformedPrompt]);
@@ -373,5 +470,18 @@ describe('PromptsSection', () => {
     );
 
     expect(screen.getByText(/This is a prompt with an unclosed variable/)).toBeInTheDocument();
+  });
+
+  it('highlights prompt variables that use supported whitespace syntax', () => {
+    setupStore(['Tell a story about {{ animal }} in {{location}}.']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('{{ animal }}')).toHaveClass('font-mono');
+    expect(screen.getByText('{{location}}')).toHaveClass('font-mono');
   });
 });

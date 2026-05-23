@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { useToast } from '@app/hooks/useToast';
 import { Plus, Settings, Trash2 } from 'lucide-react';
 import AddProviderDialog from './AddProviderDialog';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -71,13 +72,23 @@ function getProviderType(provider: ProviderOptions): string {
 }
 
 export function ProvidersListSection({ providers, onChange }: ProvidersListSectionProps) {
+  const { showToast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [providerToDelete, setProviderToDelete] = useState<number | null>(null);
+  const providerPendingDeletion =
+    providerToDelete === null ? undefined : providers[providerToDelete];
+  const providerLabelToDelete = providerPendingDeletion
+    ? getProviderLabel(providerPendingDeletion)
+    : null;
 
   const handleAddProvider = (provider: ProviderOptions) => {
     onChange([...providers, provider]);
     setIsAddDialogOpen(false);
+    showToast(
+      `${getProviderLabel(provider)} added. By default it receives every prompt and test case; YAML routing can narrow that set.`,
+      'success',
+    );
   };
 
   const handleEditProvider = (index: number, provider: ProviderOptions) => {
@@ -85,11 +96,19 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
     newProviders[index] = provider;
     onChange(newProviders);
     setEditingIndex(null);
+    showToast(
+      `Provider settings saved for ${getProviderLabel(provider)}. Future runs use these settings.`,
+      'success',
+    );
   };
 
   const confirmDeleteProvider = () => {
     if (providerToDelete !== null) {
       onChange(providers.filter((_, index) => index !== providerToDelete));
+      showToast(
+        `${providerLabelToDelete ?? 'Provider'} deleted. Future runs no longer send requests to it.`,
+        'success',
+      );
     }
     setProviderToDelete(null);
   };
@@ -159,7 +178,8 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
           <Card className="p-8 text-center bg-muted/30 border-dashed">
             <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
             <p className="text-xs text-muted-foreground">
-              Add AI models, HTTP endpoints, Python scripts, or other providers to evaluate.
+              Providers are the models, agents, or endpoints your prompts and test cases run
+              against. Add one to get started; add more later to compare outputs.
             </p>
           </Card>
         </div>
@@ -194,11 +214,14 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         open={providerToDelete !== null}
         onOpenChange={(open) => !open && cancelDeleteProvider()}
       >
-        <DialogContent>
+        <DialogContent hideDescription={false}>
           <DialogHeader>
-            <DialogTitle>Delete provider?</DialogTitle>
+            <DialogTitle>Delete {providerLabelToDelete ?? 'provider'}?</DialogTitle>
             <DialogDescription>
-              This removes the provider from this evaluation. This action cannot be undone.
+              This removes {providerLabelToDelete ?? 'this provider'} from this evaluation. Future
+              runs will no longer send prompts or test cases to it. This action cannot be undone.
+              {providers.length === 1 &&
+                ' This is your only provider; add another provider before you can run the evaluation.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

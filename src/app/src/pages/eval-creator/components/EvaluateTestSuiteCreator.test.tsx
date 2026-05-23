@@ -1,8 +1,9 @@
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
+import { mockBrowserProperty, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvaluateTestSuiteCreator from './EvaluateTestSuiteCreator';
 import type {
   DerivedMetric,
@@ -57,15 +58,20 @@ vi.mock('./TestCasesSection', () => ({
   )),
 }));
 vi.mock('./YamlEditor', () => ({
-  // YamlEditor expects initialConfig prop.
-  default: vi.fn(() => (
+  default: vi.fn(({ onDirtyChange }) => (
     <div data-testid="mock-yaml-editor">
       <pre>YAML Editor</pre>
+      <button onClick={() => onDirtyChange?.(true)}>Mock Change YAML</button>
     </div>
   )),
 }));
 vi.mock('./StepSection', () => ({
-  StepSection: vi.fn(({ children }) => <div data-testid="mock-step-section">{children}</div>),
+  StepSection: vi.fn(({ children, guidance }) => (
+    <div data-testid="mock-step-section">
+      {guidance}
+      {children}
+    </div>
+  )),
 }));
 vi.mock('./InfoBox', () => ({
   InfoBox: vi.fn(({ children }) => <div data-testid="mock-info-box">{children}</div>),
@@ -87,15 +93,28 @@ describe('EvaluateTestSuiteCreator', () => {
     useStore.getState().reset();
   });
 
-  it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
+  afterEach(() => {
+    restoreBrowserMocks();
+  });
+
+  it('disables Reset when a new evaluation has nothing to discard', () => {
     render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+  });
+
+  it('should open the reset confirmation dialog when the Reset button is clicked', async () => {
+    useStore.getState().updateConfig({ prompts: ['Prompt to clear'] });
+    render(<EvaluateTestSuiteCreator />);
+
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
     const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
-    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription(/This clears providers, prompts, test cases/);
   });
 
   it('should close the reset confirmation dialog when the Cancel button is clicked', async () => {
+    useStore.getState().updateConfig({ prompts: ['Prompt to keep'] });
     render(<EvaluateTestSuiteCreator />);
 
     const resetButton = screen.getByRole('button', { name: 'Reset' });
@@ -112,6 +131,7 @@ describe('EvaluateTestSuiteCreator', () => {
   });
 
   it('should close the reset confirmation dialog after the Reset button in the dialog is clicked', async () => {
+    useStore.getState().updateConfig({ prompts: ['Prompt to clear'] });
     render(<EvaluateTestSuiteCreator />);
 
     // Act: Click the main "Reset" button to open the dialog
@@ -233,25 +253,64 @@ describe('EvaluateTestSuiteCreator', () => {
   it('should summarize incomplete setup progress and recommend the next required step', () => {
     render(<EvaluateTestSuiteCreator />);
 
-    expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
-    expect(screen.getByText('Next up: Choose Providers.')).toBeInTheDocument();
+    expect(screen.getByText('How evaluations work')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'By default, Promptfoo sends each prompt with each test case to every provider. YAML routing can narrow those requests; assertions decide whether each response passes.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('1. Providers')).toBeInTheDocument();
+    expect(screen.getByText('2. Prompts')).toBeInTheDocument();
+    expect(screen.getByText('3. Test cases')).toBeInTheDocument();
+    const setupProgress = screen.getByRole('status', { name: 'Setup progress' });
+    expect(setupProgress).toHaveTextContent('0 of 3 required steps complete');
+    expect(setupProgress).toHaveAttribute('aria-live', 'polite');
+    expect(setupProgress).toHaveAttribute('aria-atomic', 'true');
+    expect(screen.getByText('Add at least one provider to evaluate.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Continue to Providers' })).toBeNull();
     expect(screen.getByRole('button', { name: /Choose Providers Required/i })).toHaveAttribute(
       'aria-current',
       'step',
     );
+    expect(
+      screen.getByRole('button', { name: 'What are providers? Learn what you can evaluate.' }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText(/Providers are the systems you want to test/i)).toBeNull();
   });
 
-  it('should advance the progress summary as required setup is completed', () => {
+  it('reveals detailed provider help only when requested', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const providerHelpButton = screen.getByRole('button', {
+      name: 'What are providers? Learn what you can evaluate.',
+    });
+    await user.click(providerHelpButton);
+
+    expect(providerHelpButton).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(/Providers are the systems you want to test/i)).toBeInTheDocument();
+    expect(screen.getByText(/Select at least one provider below/i)).toBeInTheDocument();
+  });
+
+  it('should advance the progress summary as required setup is completed', async () => {
     useStore.getState().updateConfig({
       providers: [{ id: 'openai:gpt-4.1' }],
     });
 
     render(<EvaluateTestSuiteCreator />);
 
-    expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
-    expect(screen.getByText('Next up: Write Prompts.')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Setup progress' })).toHaveTextContent(
+      '1 of 3 required steps complete',
+    );
+    expect(screen.getByText('Add at least one prompt or input.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Providers: 1 ready' }));
+
+    expect(
+      screen.getByText(/By default, each additional provider adds prompt and test case requests/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/more combinations can increase usage costs/)).toBeInTheDocument();
   });
 
   it('should count shorthand string providers from YAML as configured providers', () => {
@@ -301,12 +360,27 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByRole('button', { name: 'Test Cases: 1 ready' })).toBeInTheDocument();
   });
 
+  it('marks optional run settings configured when the evaluation has a name', () => {
+    useStore.getState().updateConfig({
+      description: 'Nightly support prompt comparison',
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(
+      screen.getAllByRole('button', { name: 'Run Options: Configured' }).length,
+    ).toBeGreaterThan(0);
+  });
+
   it('should let users jump between required steps from the progress summary', async () => {
     render(<EvaluateTestSuiteCreator />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
 
     expect(screen.getByTestId('mock-prompts-section')).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Current setup step' })).toHaveTextContent(
+      'Viewing step 2: Write Prompts.',
+    );
     expect(screen.getByRole('button', { name: 'Prompts: Missing' })).toHaveAttribute(
       'aria-current',
       'step',
@@ -320,6 +394,49 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Mock Edit Prompt YAML' }));
 
     expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
+  });
+
+  it('should require confirmation before leaving YAML with unsaved changes', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'UI Editor' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' });
+    expect(dialog).toHaveAccessibleDescription(/YAML edits have not been saved/);
+    expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Stay in YAML' }));
+    expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'UI Editor' }));
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Discard unsaved YAML changes?' })).getByRole(
+        'button',
+        { name: 'Discard and switch' },
+      ),
+    );
+
+    expect(screen.queryByTestId('mock-yaml-editor')).toBeNull();
+    expect(screen.getByText('Evaluation setup')).toBeInTheDocument();
+  });
+
+  it('discloses and clears unsaved YAML edits when resetting', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    await userEvent.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
+    const resetButton = screen.getByRole('button', { name: 'Reset' });
+    expect(resetButton).toBeEnabled();
+    await userEvent.click(resetButton);
+
+    const dialog = screen.getByRole('dialog', { name: 'Reset evaluation setup?' });
+    expect(dialog).toHaveTextContent('Your unsaved YAML edits will also be discarded.');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reset' }));
+
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
   });
 
   it('should show a ready state and jump to run options once required setup is complete', async () => {
@@ -339,21 +456,123 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.queryByRole('button', { name: 'Review run options' })).toBeNull();
   });
 
-  it('should successfully upload and parse a valid YAML file', async () => {
-    const user = userEvent.setup();
+  it('should direct users back to incomplete test case variables instead of showing ready', () => {
+    useStore.getState().updateConfig({
+      providers: [{ id: 'openai:gpt-4.1' }],
+      prompts: ['Hello {{name}}'],
+      tests: [{ vars: {} }],
+    });
+
     render(<EvaluateTestSuiteCreator />);
 
-    const mockYamlContent = 'description: Test Config\nproviders:\n  - id: test-provider';
+    expect(screen.queryByText('Ready to run')).toBeNull();
+    expect(
+      screen.getByText('Test case 1 is missing values required by your prompts.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue to Test Cases' })).toBeInTheDocument();
+  });
+
+  it('should require confirmation before uploaded YAML replaces an existing setup', async () => {
+    const user = userEvent.setup();
+    useStore.getState().updateConfig({
+      prompts: ['This should be replaced'],
+    });
+    render(<EvaluateTestSuiteCreator />);
+    act(() => {
+      useStore.getState().updateConfig({
+        env: { OPENAI_API_KEY: 'remove-with-old-config' },
+      });
+    });
+
+    const mockYamlContent =
+      'description: Test Config\nproviders:\n  - id: test-provider\ntests:\n  - vars: {}\n';
     const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
 
+    const dialog = await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' });
+    expect(dialog).toHaveAccessibleDescription(/replaces the entire setup/);
+    expect(dialog).toHaveTextContent('test.yaml');
+    expect(dialog).toHaveTextContent('API key values');
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
+    expect(useStore.getState().config.prompts).toEqual(['This should be replaced']);
+    expect(useStore.getState().config.env).toEqual({
+      OPENAI_API_KEY: 'remove-with-old-config',
+    });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Replace setup' }));
+
     await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+      expect(showToastMock).toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
     });
 
     expect(useStore.getState().config.description).toBe('Test Config');
+    expect(useStore.getState().config.prompts).toBeUndefined();
+    expect(useStore.getState().config.env).toBeUndefined();
+  });
+
+  it('should keep entered API keys when returning before the browser session reloads', async () => {
+    const { unmount } = render(<EvaluateTestSuiteCreator />);
+
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalled();
+    });
+
+    act(() => {
+      useStore.getState().updateConfig({ env: { OPENAI_API_KEY: 'current-session-key' } });
+    });
+    unmount();
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(useStore.getState().config.env).toEqual({ OPENAI_API_KEY: 'current-session-key' });
+  });
+
+  it('should preserve the current setup when YAML replacement is cancelled', async () => {
+    const user = userEvent.setup();
+    useStore.getState().updateConfig({ prompts: ['Keep this prompt'] });
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(
+      ['description: Replacement\ntests:\n  - vars: {}\n'],
+      'replacement.yaml',
+      {
+        type: 'application/yaml',
+      },
+    );
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Replace current setup with YAML?' })).toBeNull();
+    expect(useStore.getState().config.prompts).toEqual(['Keep this prompt']);
+    expect(useStore.getState().config.description).toBe('');
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
+  });
+
+  it('discloses unsaved YAML loss before importing replacement YAML', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    await user.click(screen.getByRole('tab', { name: 'YAML Editor' }));
+    await user.click(screen.getByRole('button', { name: 'Mock Change YAML' }));
+
+    const mockFile = new File(
+      ['description: Replacement\ntests:\n  - vars: {}\n'],
+      'replacement.yaml',
+      {
+        type: 'application/yaml',
+      },
+    );
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    expect(
+      await screen.findByRole('dialog', { name: 'Replace current setup with YAML?' }),
+    ).toHaveTextContent('Your unsaved YAML edits will also be discarded.');
   });
 
   it('should handle invalid YAML with error toast', async () => {
@@ -408,6 +627,34 @@ describe('EvaluateTestSuiteCreator', () => {
     });
   });
 
+  it('guides recovery when a YAML configuration file cannot be read', async () => {
+    const user = userEvent.setup();
+    mockBrowserProperty(
+      globalThis,
+      'FileReader',
+      class MockFileReader {
+        onerror: ((event: ProgressEvent<FileReader>) => unknown) | null = null;
+
+        readAsText() {
+          this.onerror?.(new ProgressEvent('error') as ProgressEvent<FileReader>);
+        }
+      } as unknown as typeof FileReader,
+    );
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(['description: Test'], 'unreadable.yaml', {
+      type: 'application/yaml',
+    });
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Unable to read this file. Please try again or choose another file.',
+      'error',
+    );
+    expect(fileInput.value).toBe('');
+  });
+
   it('should handle non-object YAML with error toast', async () => {
     const user = userEvent.setup();
     render(<EvaluateTestSuiteCreator />);
@@ -420,22 +667,69 @@ describe('EvaluateTestSuiteCreator', () => {
     await user.upload(fileInput, mockFile);
 
     await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Invalid YAML configuration', 'error');
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('Upload a full configuration with top-level fields'),
+        'error',
+      );
     });
+  });
+
+  it('should reject a test-case list uploaded as a full YAML configuration', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(['- vars:\n    topic: safety'], 'test-cases.yaml', {
+      type: 'application/yaml',
+    });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('To import individual test cases, use Import CSV or YAML'),
+        'error',
+      );
+    });
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
+  });
+
+  it('should reject a single test case uploaded as a full YAML configuration', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File(
+      ['vars:\n  topic: safety\nassert:\n  - type: contains'],
+      'test.yaml',
+      {
+        type: 'application/yaml',
+      },
+    );
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('To import individual test cases, use Import CSV or YAML'),
+        'error',
+      );
+    });
+    expect(showToastMock).not.toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
   });
 
   it('should reset file input after upload to allow re-uploading same file', async () => {
     const user = userEvent.setup();
     render(<EvaluateTestSuiteCreator />);
 
-    const mockYamlContent = 'description: Test';
+    const mockYamlContent = 'description: Test\ntests:\n  - vars: {}\n';
     const mockFile = new File([mockYamlContent], 'test.yaml', { type: 'application/yaml' });
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);
 
     await waitFor(() => {
-      expect(showToastMock).toHaveBeenCalledWith('Configuration loaded successfully', 'success');
+      expect(showToastMock).toHaveBeenCalledWith('Configuration replaced from YAML', 'success');
     });
 
     // File input should be reset to allow re-uploading
