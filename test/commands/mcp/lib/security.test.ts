@@ -6,8 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { ConfigurationError } from '../../../../src/commands/mcp/lib/errors';
 import {
   validateFilePath,
+  validateMcpConfigFile,
   validateMcpFilePath,
   validateProviderId,
+  validateProviderReference,
 } from '../../../../src/commands/mcp/lib/security';
 import { escapeRegExp } from '../../../../src/util/text';
 
@@ -252,6 +254,85 @@ describe('MCP Security', () => {
       }
     });
 
+    it('should apply outer env overrides while validating nested provider config files', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'inner.json'),
+        JSON.stringify({
+          id: 'file://{{ env.DIR }}/evil.py',
+          env: { DIR: workspace },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'outer.json'),
+        JSON.stringify({
+          id: 'file://inner.json',
+          env: { DIR: outside },
+        }),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateProviderId('file://outer.json')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should reject provider map keys and option file references outside the workspace', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      const outsideProvider = `file://${path.join(outside, 'evil.py')}`;
+      fs.writeFileSync(
+        path.join(workspace, 'provider-map.json'),
+        JSON.stringify({ [outsideProvider]: {} }),
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'provider-options.json'),
+        JSON.stringify({
+          id: 'http://localhost:8080',
+          config: { transformRequest: `file://${path.join(outside, 'evil.js')}` },
+        }),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateProviderId('file://provider-map.json')).toThrow(ConfigurationError);
+        expect(() => validateProviderId('file://provider-options.json')).toThrow(
+          ConfigurationError,
+        );
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should validate file references in direct provider options', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'http://localhost:8080',
+          config: {
+            transformResponse: `file://${path.join(path.dirname(process.cwd()), 'evil.js')}`,
+          },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('should allow exec providers with in-workspace script arguments', () => {
+      expect(() => validateProviderId('exec:node scripts/provider.js --format json')).not.toThrow();
+      expect(() =>
+        validateProviderId(`exec:node ${path.join(path.dirname(process.cwd()), 'evil.js')}`),
+      ).toThrow(ConfigurationError);
+    });
+
     it('should accept HTTP providers', () => {
       expect(() => validateProviderId('http://localhost:8080/api')).not.toThrow();
       expect(() => validateProviderId('https://api.example.com/v1')).not.toThrow();
@@ -270,6 +351,36 @@ describe('MCP Security', () => {
       expect(() =>
         validateProviderId(`file://${path.join(path.dirname(process.cwd()), 'evil.yaml')}`),
       ).toThrow(ConfigurationError);
+    });
+  });
+
+  describe('validateMcpConfigFile', () => {
+    it('should reject file references in static configuration before resolution', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.json'),
+        JSON.stringify({
+          prompts: ['hello'],
+          providers: [
+            {
+              id: 'http://localhost:8080',
+              config: { transformResponse: `file://${path.join(outside, 'evil.js')}` },
+            },
+          ],
+        }),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.json')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
     });
   });
 });

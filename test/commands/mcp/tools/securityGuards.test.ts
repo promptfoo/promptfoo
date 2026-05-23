@@ -1,8 +1,10 @@
+import fs from 'fs';
 import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const securityGuardMocks = vi.hoisted(() => ({
+  doEval: vi.fn(),
   doGenerateRedteam: vi.fn(),
   doRedteamRun: vi.fn(),
   loadApiProvider: vi.fn(),
@@ -10,6 +12,10 @@ const securityGuardMocks = vi.hoisted(() => ({
   loadDefaultConfig: vi.fn(),
   resolveConfigs: vi.fn(),
   synthesizeFromTestSuite: vi.fn(),
+}));
+
+vi.mock('../../../../src/commands/eval', () => ({
+  doEval: securityGuardMocks.doEval,
 }));
 
 vi.mock('../../../../src/testCase/synthesis', () => ({
@@ -86,6 +92,7 @@ function outsideWorkspacePath(filename: string) {
 describe('MCP tool security guards', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    securityGuardMocks.doEval.mockResolvedValue(undefined);
     securityGuardMocks.synthesizeFromTestSuite.mockResolvedValue([{ name: 'Ada' }]);
     securityGuardMocks.loadDefaultConfig.mockResolvedValue({
       defaultConfig: {},
@@ -243,6 +250,52 @@ describe('MCP tool security guards', () => {
     expect(parseToolResponse(result).error).toContain('Failed to test provider');
     expect(loadApiProvider).not.toHaveBeenCalled();
     expect(loadApiProviders).not.toHaveBeenCalled();
+  });
+
+  it('should reject test_provider option file references outside the workspace', async () => {
+    const { loadApiProviders } = await import('../../../../src/providers/index');
+    const { registerTestProviderTool } = await import(
+      '../../../../src/commands/mcp/tools/testProvider'
+    );
+    const handler = captureToolHandler(registerTestProviderTool);
+
+    const result = await handler({
+      provider: {
+        id: 'http://localhost:8080',
+        config: { transformResponse: `file://${outsideWorkspacePath('evil-transform.js')}` },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(parseToolResponse(result).error).toContain('Failed to test provider');
+    expect(loadApiProviders).not.toHaveBeenCalled();
+  });
+
+  it('should reject run_evaluation config contents before resolving providers', async () => {
+    const { resolveConfigs } = await import('../../../../src/util/config/load');
+    const { registerRunEvaluationTool } = await import(
+      '../../../../src/commands/mcp/tools/runEvaluation'
+    );
+    const handler = captureToolHandler(registerRunEvaluationTool);
+    const configPath = `.mcp-containment-${Date.now()}.json`;
+
+    fs.writeFileSync(
+      path.join(process.cwd(), configPath),
+      JSON.stringify({
+        prompts: ['hello'],
+        providers: [`file://${outsideWorkspacePath('evil-provider.js')}`],
+      }),
+    );
+
+    try {
+      const result = await handler({ configPath });
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).error).toContain('Path must be within base directory');
+      expect(resolveConfigs).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(path.join(process.cwd(), configPath), { force: true });
+    }
   });
 
   it('should reject compare_providers paths outside the workspace', async () => {

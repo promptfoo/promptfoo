@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import { isProviderConfigFileReference } from '../../../util/providerRef';
+import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
 import { renderEnvOnlyInObject } from '../../../util/render';
 import { ConfigurationError } from './errors';
 
@@ -14,6 +14,7 @@ import type { EnvOverrides } from '../../../types/env';
 
 const FILE_PROVIDER_PREFIX = 'file://';
 const LOCAL_PROVIDER_PREFIXES = ['exec:', 'golang:', 'python:', 'ruby:'] as const;
+const STATIC_CONFIG_EXTENSIONS = new Set(['.json', '.yaml', '.yml']);
 const PROVIDER_FILE_EXTENSIONS = new Set([
   'cjs',
   'cts',
@@ -84,12 +85,12 @@ export function validateFilePath(filePath: string, basePath?: string): void {
  * arbitrary host paths outside the project the user selected when starting the
  * MCP server.
  */
-export function validateMcpFilePath(filePath: string): void {
+export function validateMcpFilePath(filePath: string, resolutionBasePath = process.cwd()): void {
   const basePath = process.cwd();
   validateFilePath(filePath);
 
   const resolvedBase = fs.realpathSync(basePath);
-  const resolvedPath = path.resolve(basePath, filePath);
+  const resolvedPath = path.resolve(resolutionBasePath, filePath);
   let existingPath = resolvedPath;
 
   while (!fs.existsSync(existingPath)) {
@@ -151,15 +152,72 @@ function renderProviderIdForValidation(providerId: string, env?: EnvOverrides): 
 }
 
 interface ProviderValidationState {
+  basePath: string;
   env?: EnvOverrides;
   validatedConfigFiles: Set<string>;
 }
 
-function mergeProviderEnv(baseEnv: EnvOverrides | undefined, providerEnv: unknown): EnvOverrides {
-  return {
-    ...baseEnv,
-    ...(typeof providerEnv === 'object' && providerEnv !== null ? providerEnv : {}),
-  } as EnvOverrides;
+function asEnvOverrides(value: unknown): EnvOverrides | undefined {
+  return typeof value === 'object' && value !== null ? (value as EnvOverrides) : undefined;
+}
+
+function mergeProviderEnv(
+  lowerPrecedenceEnv: unknown,
+  higherPrecedenceEnv: unknown,
+): EnvOverrides | undefined {
+  const lower = asEnvOverrides(lowerPrecedenceEnv);
+  const higher = asEnvOverrides(higherPrecedenceEnv);
+  return lower || higher ? { ...lower, ...higher } : undefined;
+}
+
+function validateFileReferencesInValue(value: unknown, state: ProviderValidationState): void {
+  if (typeof value === 'string') {
+    if (!value.startsWith(FILE_PROVIDER_PREFIX)) {
+      return;
+    }
+
+    const renderedFileReference = renderProviderIdForValidation(value, state.env);
+    const referencedPath = stripProviderFileExport(
+      renderedFileReference.slice(FILE_PROVIDER_PREFIX.length),
+    );
+    validateMcpFilePath(referencedPath, state.basePath);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => validateFileReferencesInValue(entry, state));
+    return;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    Object.values(value).forEach((entry) => validateFileReferencesInValue(entry, state));
+  }
+}
+
+function validateProviderReferenceWithState(
+  provider: unknown,
+  state: ProviderValidationState,
+  nestedProviderFile = false,
+): void {
+  if (typeof provider === 'string') {
+    validateProviderIdWithState(provider, state);
+    return;
+  }
+
+  const descriptor = normalizeProviderRef(provider);
+  if (descriptor.kind !== 'options' && descriptor.kind !== 'map') {
+    return;
+  }
+
+  // For a nested file-backed provider, the outer context env overrides defaults
+  // from the loaded file, matching loadApiProvider's recursive merge behavior.
+  const env = nestedProviderFile
+    ? mergeProviderEnv(descriptor.loadOptions.env, state.env)
+    : mergeProviderEnv(state.env, descriptor.loadOptions.env);
+  const providerState = { ...state, env };
+
+  validateFileReferencesInValue(descriptor.loadOptions, providerState);
+  validateProviderIdWithState(descriptor.loadProviderPath, providerState);
 }
 
 function validateProviderConfigFile(providerPath: string, state: ProviderValidationState): void {
@@ -167,7 +225,7 @@ function validateProviderConfigFile(providerPath: string, state: ProviderValidat
     return;
   }
 
-  const resolvedProviderPath = path.resolve(process.cwd(), providerPath);
+  const resolvedProviderPath = path.resolve(state.basePath, providerPath);
   if (!fs.existsSync(resolvedProviderPath)) {
     return;
   }
@@ -181,21 +239,30 @@ function validateProviderConfigFile(providerPath: string, state: ProviderValidat
   const rawConfig = yaml.load(fs.readFileSync(realProviderPath, 'utf8'));
   const configs = Array.isArray(rawConfig) ? rawConfig : [rawConfig];
   for (const config of configs) {
-    if (typeof config === 'string' && config.startsWith(FILE_PROVIDER_PREFIX)) {
-      validateProviderIdWithState(config, state);
-      continue;
-    }
+    validateProviderReferenceWithState(config, state, true);
+  }
+}
 
+function parseCommandParts(command: string): string[] {
+  return [...command.matchAll(/[^\s"']+|"([^"]*)"|'([^']*)'/g)].map(
+    (match) => match[1] ?? match[2] ?? match[0],
+  );
+}
+
+function validateExecProviderId(providerId: string, state: ProviderValidationState): void {
+  const commandParts = parseCommandParts(providerId.slice('exec:'.length));
+  if (commandParts.length === 0) {
+    throw new ConfigurationError(`Invalid provider ID format: ${providerId}`);
+  }
+
+  for (const part of commandParts) {
     if (
-      typeof config === 'object' &&
-      config !== null &&
-      'id' in config &&
-      typeof config.id === 'string'
+      path.isAbsolute(part) ||
+      part.includes('/') ||
+      part.includes('\\') ||
+      hasProviderFileExtension(part)
     ) {
-      validateProviderIdWithState(config.id, {
-        env: mergeProviderEnv(state.env, 'env' in config ? config.env : undefined),
-        validatedConfigFiles: state.validatedConfigFiles,
-      });
+      validateMcpFilePath(stripProviderFileExport(part), state.basePath);
     }
   }
 }
@@ -210,6 +277,11 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
     throw new ConfigurationError(
       'Invalid provider ID format: provider IDs cannot contain ".." or "~"',
     );
+  }
+
+  if (renderedProviderId.startsWith('exec:')) {
+    validateExecProviderId(renderedProviderId, state);
+    return;
   }
 
   if (/\s/.test(renderedProviderId)) {
@@ -232,7 +304,7 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
     if (!providerPath) {
       throw new ConfigurationError(`Invalid provider ID format: ${renderedProviderId}`);
     }
-    validateMcpFilePath(providerPath);
+    validateMcpFilePath(providerPath, state.basePath);
     validateProviderConfigFile(providerPath, state);
     return;
   }
@@ -248,5 +320,55 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
  * Validates provider ID format
  */
 export function validateProviderId(providerId: string, env?: EnvOverrides): void {
-  validateProviderIdWithState(providerId, { env, validatedConfigFiles: new Set() });
+  validateProviderIdWithState(providerId, {
+    basePath: process.cwd(),
+    env,
+    validatedConfigFiles: new Set(),
+  });
+}
+
+/**
+ * Validates an MCP-supplied provider string or options object before provider loading.
+ */
+export function validateProviderReference(provider: unknown, env?: EnvOverrides): void {
+  validateProviderReferenceWithState(provider, {
+    basePath: process.cwd(),
+    env,
+    validatedConfigFiles: new Set(),
+  });
+}
+
+/**
+ * Validates static promptfoo configuration contents before resolution can read
+ * referenced prompt, test, transform, or provider files.
+ */
+export function validateMcpConfigFile(configPath: string): void {
+  validateMcpFilePath(configPath);
+
+  const resolvedConfigPath = path.resolve(process.cwd(), configPath);
+  if (
+    !STATIC_CONFIG_EXTENSIONS.has(path.extname(resolvedConfigPath).toLowerCase()) ||
+    !fs.existsSync(resolvedConfigPath)
+  ) {
+    return;
+  }
+
+  const rawConfig = yaml.load(fs.readFileSync(resolvedConfigPath, 'utf8'));
+  const rootConfig =
+    typeof rawConfig === 'object' && rawConfig !== null
+      ? (rawConfig as Record<string, unknown>)
+      : undefined;
+  const state: ProviderValidationState = {
+    basePath: path.dirname(resolvedConfigPath),
+    env: asEnvOverrides(rootConfig?.env),
+    validatedConfigFiles: new Set(),
+  };
+
+  validateFileReferencesInValue(rawConfig, state);
+  const providers = rootConfig?.providers ?? rootConfig?.targets;
+  if (Array.isArray(providers)) {
+    providers.forEach((provider) => validateProviderReferenceWithState(provider, state));
+  } else if (providers !== undefined) {
+    validateProviderReferenceWithState(providers, state);
+  }
 }
