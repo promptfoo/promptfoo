@@ -305,7 +305,9 @@ function getResultsLines({
 
   if (defaultProviderInfo) {
     lines.push(
-      chalk.gray(`Grading provider: ${defaultProviderInfo.selectedProvider} (auto-detected)`),
+      chalk.gray(
+        `Default provider config: ${defaultProviderInfo.selectedProvider} (auto-detected)`,
+      ),
     );
   }
 

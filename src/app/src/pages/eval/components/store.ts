@@ -308,7 +308,7 @@ interface TableState {
   stats: EvaluateStats | null;
 
   /**
-   * Information about which default provider was selected and why.
+   * Information about the current automatic default-provider selection.
    * Only populated when no explicit grading provider was configured.
    */
   defaultProviderInfo: DefaultProviderSelectionInfo | null;
@@ -742,7 +742,7 @@ export const useTableStore = create<TableState>()(
             filteredMetrics: data.filteredMetrics || null,
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
-            // Store default provider selection info (null when explicit grading provider configured)
+            // Store current automatic default selection (null with an explicit grading provider).
             defaultProviderInfo: data.defaultProviderInfo || null,
             filters: {
               ...prevState.filters,

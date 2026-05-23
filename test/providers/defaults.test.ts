@@ -11,7 +11,7 @@ import * as googleAiStudioDefaults from '../../src/providers/google/ai.studio';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
 import * as googleVertexDefaults from '../../src/providers/google/vertex';
-import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { DEFAULT_VERTEX_MODEL, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -714,7 +714,7 @@ describe('getDefaultProviderSelectionInfo', () => {
     const result = await getDefaultProviderSelectionInfo();
 
     expect(result.selectedProvider).toBe('Google Vertex');
-    expect(result.providerSlots.grading?.id).toBe('vertex:gemini-2.5-pro');
+    expect(result.providerSlots.grading?.id).toBe(`vertex:${DEFAULT_VERTEX_MODEL}`);
     expect(result.providerSlots.embedding?.id).toBe('vertex:gemini-embedding-001');
     expect(getGoogleVertexProvidersSpy).not.toHaveBeenCalled();
     expect(getGoogleVertexEmbeddingProviderSpy).not.toHaveBeenCalled();

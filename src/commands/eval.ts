@@ -69,8 +69,8 @@ import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from './eval/filterTests';
 
 /**
- * Formats and displays information about which default providers are being used.
- * This helps users understand which providers are being used for grading, embeddings, etc.
+ * Formats and displays automatic default-provider selection information.
+ * This helps users understand which providers will be used when a default is needed.
  */
 function displayDefaultProviderInfo(selectionInfo: DefaultProviderSelectionInfo): void {
   const { selectedProvider, reason, detectedCredentials, skippedProviders } = selectionInfo;
@@ -799,7 +799,7 @@ export async function doEval(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Display default provider info if using default providers (no explicit grading provider)
+    // Display automatic default-provider configuration when no explicit grading provider is set.
     const hasExplicitGradingProvider = Boolean(
       typeof testSuite.defaultTest === 'object' &&
         testSuite.defaultTest !== null &&

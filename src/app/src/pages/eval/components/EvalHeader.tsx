@@ -122,7 +122,7 @@ export function DefaultProvidersDisplay({ info }: DefaultProvidersDisplayProps) 
     <Tooltip>
       <TooltipTrigger asChild>
         <Chip
-          label="GRADING"
+          label="DEFAULTS"
           interactive={false}
           trailingIcon={<Cpu className="size-3.5 text-muted-foreground" />}
         >

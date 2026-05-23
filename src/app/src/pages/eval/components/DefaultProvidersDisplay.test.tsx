@@ -25,7 +25,7 @@ describe('DefaultProvidersDisplay', () => {
 
   it('renders with the selected provider name', () => {
     renderWithProviders(<DefaultProvidersDisplay info={baseInfo} />);
-    expect(screen.getByText('GRADING')).toBeInTheDocument();
+    expect(screen.getByText('DEFAULTS')).toBeInTheDocument();
     expect(screen.getByText('Anthropic')).toBeInTheDocument();
   });
 

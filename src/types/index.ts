@@ -496,7 +496,7 @@ export type EvalTableDTO = {
   version: number;
   id: string;
   stats?: EvaluateStats;
-  /** Information about which default provider was selected (if using defaults) */
+  /** Information about current automatic default-provider selection, when applicable */
   defaultProviderInfo?: DefaultProviderSelectionInfo;
 };
 
