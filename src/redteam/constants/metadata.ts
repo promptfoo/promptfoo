@@ -190,7 +190,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
   'resource-exhaustion':
-    'Tests for excessive token generation that could cause cost overruns or service degradation (OWASP LLM04)',
+    'Tests for excessive token generation that could cause cost overruns or service degradation (OWASP LLM10)',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
@@ -1255,7 +1255,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
   'resource-exhaustion':
-    'Tests for excessive token generation that could cause cost overruns or service degradation (OWASP LLM04)',
+    'Tests for excessive token generation that could cause cost overruns or service degradation (OWASP LLM10)',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',

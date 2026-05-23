@@ -116,6 +116,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   'rag-document-exfiltration': `${BASE_DOCS_URL}/rag-document-exfiltration/`,
   'rag-poisoning': `${BASE_DOCS_URL}/rag-poisoning/`,
   'reasoning-dos': `${BASE_DOCS_URL}/reasoning-dos/`,
+  'resource-exhaustion': `${BASE_DOCS_URL}/resource-exhaustion/`,
   'system-prompt-override': `${BASE_DOCS_URL}/system-prompt-override/`,
   financial: `${BASE_DOCS_URL}/financial/`,
 };

@@ -796,6 +796,19 @@ describe('redteamConfigSchema', () => {
       );
     });
 
+    it('should include resource exhaustion in the OWASP LLM10 alias', () => {
+      const result = RedteamConfigSchema.safeParse({
+        plugins: ['owasp:llm:10'],
+        numTests: 3,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data?.plugins).toContainEqual({
+        id: 'resource-exhaustion',
+        numTests: 3,
+      });
+    });
+
     it('should expand collections within aliased plugin names', () => {
       const input = {
         plugins: ['nist:ai:measure:2.1'],
