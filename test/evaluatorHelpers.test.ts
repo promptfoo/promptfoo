@@ -11,6 +11,7 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
+import logger from '../src/logger';
 import * as pythonUtils from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
@@ -356,6 +357,54 @@ describe('evaluatorHelpers', () => {
       );
     });
 
+    it('should allow empty string outputs from JavaScript file variables', async () => {
+      const prompt = toPrompt('Test prompt with [{{ var1 }}]');
+      const vars = {
+        var1: 'file:///path/to/empty.js',
+      };
+
+      mockDynamicModule('/path/to/empty.js', () => ({ output: '' }));
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Test prompt with []');
+    });
+
+    it('should allow empty string outputs from Python file variables', async () => {
+      const prompt = toPrompt('Test prompt with [{{ var1 }}]');
+      const vars = {
+        var1: 'file:///path/to/empty.py',
+      };
+
+      vi.mocked(pythonUtils.runPython).mockResolvedValueOnce({ output: '' });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(pythonUtils.runPython).toHaveBeenCalledWith(
+        expect.stringMatching(/[\\/]path[\\/]to[\\/]empty\.py$/),
+        'get_var',
+        ['var1', prompt.raw, vars],
+      );
+      expect(renderedPrompt).toBe('Test prompt with []');
+    });
+
+    it('should allow empty string outputs from package variables', async () => {
+      const prompt = toPrompt('Test prompt with [{{ var1 }}]');
+      const vars = {
+        var1: 'package:@promptfoo/fake:testFunction',
+      };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: () => ({ output: '' }),
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Test prompt with []');
+    });
+
     it('should load external json files in renderPrompt and parse the JSON content', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = { var1: 'file:///path/to/testData.json' };
@@ -472,6 +521,48 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Context: nested dynamic value');
     });
 
+    it('should expose previously resolved nested siblings to nested JavaScript file variables', async () => {
+      const prompt = toPrompt('Context: {{ payload.context }}');
+      const vars = {
+        payload: {
+          document: 'file://document.txt',
+          context: 'file:///path/to/context.js',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('loaded document');
+      mockDynamicModule('/path/to/context.js', (_varName: string, _rawPrompt: string, allVars) => {
+        expect((allVars as typeof vars).payload.document).toBe('loaded document');
+        return { output: `saw ${(allVars as typeof vars).payload.document}` };
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Context: saw loaded document');
+    });
+
+    it('should expose previously resolved deeply nested siblings to nested JavaScript file variables', async () => {
+      const prompt = toPrompt('Context: {{ payload.inner.context }}');
+      const vars = {
+        payload: {
+          inner: {
+            document: 'file://document.txt',
+            context: 'file:///path/to/context.js',
+          },
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('deep document');
+      mockDynamicModule('/path/to/context.js', (_varName: string, _rawPrompt: string, allVars) => {
+        expect((allVars as typeof vars).payload.inner.document).toBe('deep document');
+        return { output: `saw ${(allVars as typeof vars).payload.inner.document}` };
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Context: saw deep document');
+    });
+
     it('should pass variable context to nested Python file variables', async () => {
       const prompt = toPrompt('Context: {{ payload.context }}');
       const vars = {
@@ -484,12 +575,63 @@ describe('evaluatorHelpers', () => {
 
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
-      expect(pythonUtils.runPython).toHaveBeenCalledWith('/path/to/nested.py', 'get_var', [
-        'payload.context',
-        prompt.raw,
-        vars,
-      ]);
+      expect(pythonUtils.runPython).toHaveBeenCalledWith(
+        expect.stringMatching(/[\\/]path[\\/]to[\\/]nested\.py$/),
+        'get_var',
+        ['payload.context', prompt.raw, vars],
+      );
       expect(renderedPrompt).toBe('Context: nested python value');
+    });
+
+    it('should render templates inside nested file-backed text variables', async () => {
+      const prompt = toPrompt('{{ payload.report }}');
+      const vars = {
+        name: 'Alice',
+        payload: {
+          report: 'file://report.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('Hello {{ name }}');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Hello Alice');
+    });
+
+    it('should not render non-file sibling templates while rendering nested file-backed text variables', async () => {
+      const prompt = toPrompt('{{ payload.report }} / {{ payload.literal }}');
+      const vars = {
+        name: 'Alice',
+        payload: {
+          report: 'file://report.txt',
+          literal: '{{ name }}',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('Hello {{ name }}');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Hello Alice / {{ name }}');
+    });
+
+    it('should not render skipped variables inside nested file-backed text variables', async () => {
+      const prompt = toPrompt('{{ payload.report }}');
+      const vars = {
+        attack: {
+          payload: 'do not render',
+        },
+        payload: {
+          report: 'file://report.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('Attack: {{ attack.payload }}');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['attack']);
+
+      expect(renderedPrompt).toBe('Attack: {{ attack.payload }}');
     });
 
     it('should preserve non-plain nested variable values', async () => {
@@ -527,6 +669,71 @@ describe('evaluatorHelpers', () => {
 
       expect(Object.prototype.hasOwnProperty.call(vars.payload, '__proto__')).toBe(true);
       expect(vars.payload.__proto__).toBe('loaded value');
+    });
+
+    it('should preserve property descriptors and avoid getters while resolving nested file values', async () => {
+      const getter = vi.fn(() => {
+        throw new Error('getter should not be invoked');
+      });
+      const payload: Record<string, unknown> = {};
+      Object.defineProperty(payload, 'hidden', {
+        value: 'file://hidden.txt',
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+      Object.defineProperty(payload, 'danger', {
+        get: getter,
+        enumerable: true,
+        configurable: true,
+      });
+      const vars = { payload };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('hidden value');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ payload.hidden }}'), vars, {});
+
+      expect(renderedPrompt).toBe('hidden value');
+      expect(getter).not.toHaveBeenCalled();
+      expect(Object.getOwnPropertyDescriptor(vars.payload, 'hidden')).toMatchObject({
+        value: 'hidden value',
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+    });
+
+    it('should preserve array descriptors and custom properties while resolving nested file values', async () => {
+      const items = ['file://item.txt'] as unknown[];
+      Object.defineProperty(items, 'meta', {
+        value: 'file://meta.txt',
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+      const vars = {
+        payload: {
+          items,
+        },
+      };
+
+      vi.mocked(fs.promises.readFile)
+        .mockResolvedValueOnce('item value')
+        .mockResolvedValueOnce('meta value');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ payload.items[0] }} / {{ payload.items.meta }}'),
+        vars,
+        {},
+      );
+
+      expect(renderedPrompt).toBe('item value / meta value');
+      expect(Object.getOwnPropertyDescriptor(vars.payload.items, 'meta')).toMatchObject({
+        value: 'meta value',
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
     });
 
     it('should preserve cycles while resolving nested file values', async () => {
@@ -1744,6 +1951,21 @@ describe('evaluatorHelpers', () => {
 
       // Should detect PNG from magic number, not extension
       expect(renderedPrompt).toContain('data:image/png;base64,');
+    });
+
+    it('should not warn for known JPEG extensions when magic number detection is inconclusive', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+        return Buffer.from('not-enough-magic');
+      });
+
+      const prompt = toPrompt('Test prompt with image: {{image}}');
+      const renderedPrompt = await renderPrompt(prompt, {
+        image: 'file://known-extension.jpg',
+      });
+
+      expect(renderedPrompt).toContain('data:image/jpeg;base64,');
+      expect(warnSpy).not.toHaveBeenCalled();
     });
 
     it('should maintain existing behavior for video files (raw base64)', async () => {

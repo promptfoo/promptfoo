@@ -32,6 +32,22 @@ import { transform } from './util/transform';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  ico: 'image/x-icon',
+  avif: 'image/avif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
+
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
@@ -104,11 +120,30 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   return prompt;
 }
 
+function getRootVariableName(variableName: string): string | undefined {
+  return /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
+}
+
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
   return extractVariablesFromTemplate(template).some((variableName) => {
-    const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
+    const rootVariableName = getRootVariableName(variableName);
     return Boolean(
       rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+    );
+  });
+}
+
+function referencesSkippedVariables(
+  template: string,
+  skipRenderVars?: string[],
+  varsResolvedFromSkipped?: Set<string>,
+): boolean {
+  return extractVariablesFromTemplate(template).some((variableName) => {
+    const rootVariableName = getRootVariableName(variableName);
+    return Boolean(
+      rootVariableName &&
+        (skipRenderVars?.includes(rootVariableName) ||
+          varsResolvedFromSkipped?.has(rootVariableName)),
     );
   });
 }
@@ -171,22 +206,12 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
  */
 function getMimeTypeFromExtension(extension: string): string {
   const normalizedExt = extension.toLowerCase().replace(/^\./, '');
-  const mimeTypes: Record<string, string> = {
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    gif: 'image/gif',
-    bmp: 'image/bmp',
-    webp: 'image/webp',
-    svg: 'image/svg+xml',
-    tif: 'image/tiff',
-    tiff: 'image/tiff',
-    ico: 'image/x-icon',
-    avif: 'image/avif',
-    heic: 'image/heic',
-    heif: 'image/heif',
-  };
-  return mimeTypes[normalizedExt] || 'image/jpeg';
+  return IMAGE_MIME_TYPES[normalizedExt] || 'image/jpeg';
+}
+
+function isKnownImageExtension(extension: string): boolean {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, '');
+  return Object.prototype.hasOwnProperty.call(IMAGE_MIME_TYPES, normalizedExt);
 }
 
 /**
@@ -238,21 +263,21 @@ function containsFileReference(value: VarValue, seen: WeakSet<object> = new Weak
   if (typeof value === 'string') {
     return value.startsWith('file://');
   }
-  if (Array.isArray(value)) {
-    if (seen.has(value)) {
-      return false;
-    }
-    seen.add(value);
-    return value.some((item) => containsFileReference(item as VarValue, seen));
-  }
-  if (!isPlainObject(value)) {
+  if (!Array.isArray(value) && !isPlainObject(value)) {
     return false;
   }
   if (seen.has(value)) {
     return false;
   }
   seen.add(value);
-  return Object.values(value).some((item) => containsFileReference(item, seen));
+  return Reflect.ownKeys(value).some((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return Boolean(
+      descriptor &&
+        'value' in descriptor &&
+        containsFileReference(descriptor.value as VarValue, seen),
+    );
+  });
 }
 
 function assignVarValue(vars: Record<string, VarValue>, varName: string, value: VarValue): void {
@@ -281,11 +306,15 @@ async function loadScriptVariableFile(
     if (javascriptOutput.error) {
       throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
     }
-    if (!javascriptOutput.output) {
+    if (javascriptOutput.output === undefined) {
       throw new Error(
         `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
       );
     }
+    invariant(
+      typeof javascriptOutput.output === 'string',
+      `javascriptOutput.output must be a string. Received: ${typeof javascriptOutput.output}`,
+    );
     return javascriptOutput.output;
   }
 
@@ -297,7 +326,7 @@ async function loadScriptVariableFile(
   if (pythonScriptOutput.error) {
     throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
   }
-  if (!pythonScriptOutput.output) {
+  if (pythonScriptOutput.output === undefined) {
     throw new Error(`Python script ${filePath} did not return any output`);
   }
   invariant(
@@ -322,7 +351,7 @@ async function loadMediaVariableFile(filePath: string): Promise<string> {
     if (fileType === 'image') {
       let mimeType = getMimeTypeFromExtension(path.extname(filePath));
       const extension = path.extname(filePath);
-      const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+      const extensionWasUnknown = !isKnownImageExtension(extension);
       const detectedType = detectMimeFromBase64(base64Data);
       if (detectedType && detectedType !== mimeType) {
         logger.debug(
@@ -382,39 +411,96 @@ async function loadVariableFile(
   return (await fs.readFile(filePath, 'utf8')).trim();
 }
 
+function propertyPath(parentPath: string, key: PropertyKey, parentIsArray: boolean): string {
+  if (parentIsArray && typeof key === 'string' && /^\d+$/.test(key)) {
+    return `${parentPath}[${key}]`;
+  }
+  return `${parentPath}.${String(key)}`;
+}
+
+function createContainerShell(value: VarValue[] | Record<string, VarValue>): VarValue {
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const shell = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value));
+
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key as keyof typeof descriptors];
+    if (
+      descriptor &&
+      'value' in descriptor &&
+      containsFileReference(descriptor.value as VarValue)
+    ) {
+      continue;
+    }
+    Object.defineProperty(shell, key, descriptor);
+  }
+
+  return shell as VarValue;
+}
+
+function assignRootContainer(
+  vars: Record<string, VarValue>,
+  varPath: string,
+  originalValue: VarValue,
+  resolvedValue: VarValue,
+): void {
+  if (Object.prototype.hasOwnProperty.call(vars, varPath) && vars[varPath] === originalValue) {
+    assignVarValue(vars, varPath, resolvedValue);
+  }
+}
+
 async function loadNestedVariableFiles(
   value: VarValue,
   varPath: string,
   basePrompt: string,
   vars: Record<string, VarValue>,
   provider?: ApiProvider,
+  fileBackedStringPaths: Set<string> = new Set(),
   resolvedObjects: WeakMap<object, VarValue> = new WeakMap(),
+  publishResolvedValue?: (resolvedValue: VarValue) => void,
 ): Promise<VarValue> {
   if (typeof value === 'string' && value.startsWith('file://')) {
-    return loadVariableFile(varPath, value, basePrompt, vars, provider);
+    const resolved = await loadVariableFile(varPath, value, basePrompt, vars, provider);
+    fileBackedStringPaths.add(varPath);
+    publishResolvedValue?.(resolved);
+    return resolved;
   }
 
   if (Array.isArray(value)) {
     const existing = resolvedObjects.get(value);
     if (existing) {
+      publishResolvedValue?.(existing);
       return existing;
     }
 
-    const resolved = value.slice() as VarValue[];
+    const resolved = createContainerShell(value) as VarValue[];
     resolvedObjects.set(value, resolved);
-    for (const [index, item] of value.entries()) {
-      if (!containsFileReference(item as VarValue)) {
+    publishResolvedValue?.(resolved);
+    assignRootContainer(vars, varPath, value, resolved);
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      const descriptor = descriptors[key as keyof typeof descriptors];
+      if (
+        !descriptor ||
+        !('value' in descriptor) ||
+        !containsFileReference(descriptor.value as VarValue)
+      ) {
         continue;
       }
       const result = await loadNestedVariableFiles(
-        item as VarValue,
-        `${varPath}[${index}]`,
+        descriptor.value as VarValue,
+        propertyPath(varPath, key, true),
         basePrompt,
         vars,
         provider,
+        fileBackedStringPaths,
         resolvedObjects,
+        (result) => {
+          Object.defineProperty(resolved, key, { ...descriptor, value: result });
+        },
       );
-      resolved[index] = result;
+      if (Object.getOwnPropertyDescriptor(resolved, key)?.value !== result) {
+        Object.defineProperty(resolved, key, { ...descriptor, value: result });
+      }
     }
     return resolved;
   }
@@ -425,34 +511,105 @@ async function loadNestedVariableFiles(
 
   const existing = resolvedObjects.get(value);
   if (existing) {
+    publishResolvedValue?.(existing);
     return existing;
   }
 
-  const resolved = Object.create(
-    Object.getPrototypeOf(value),
-    Object.getOwnPropertyDescriptors(value),
-  ) as Record<string, VarValue>;
+  const resolved = createContainerShell(value) as Record<string, VarValue>;
   resolvedObjects.set(value, resolved);
-  for (const [key, item] of Object.entries(value)) {
-    if (!containsFileReference(item)) {
+  publishResolvedValue?.(resolved);
+  assignRootContainer(vars, varPath, value, resolved);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key as keyof typeof descriptors];
+    if (
+      !descriptor ||
+      !('value' in descriptor) ||
+      !containsFileReference(descriptor.value as VarValue)
+    ) {
       continue;
     }
     const result = await loadNestedVariableFiles(
-      item,
-      `${varPath}.${key}`,
+      descriptor.value as VarValue,
+      propertyPath(varPath, key, false),
       basePrompt,
       vars,
       provider,
+      fileBackedStringPaths,
       resolvedObjects,
+      (result) => {
+        Object.defineProperty(resolved, key, { ...descriptor, value: result });
+      },
     );
-    Object.defineProperty(resolved, key, {
-      value: result,
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
+    if (Object.getOwnPropertyDescriptor(resolved, key)?.value !== result) {
+      Object.defineProperty(resolved, key, { ...descriptor, value: result });
+    }
   }
   return resolved;
+}
+
+function renderNestedTemplates(
+  value: VarValue,
+  varPath: string,
+  vars: Record<string, VarValue>,
+  nunjucks: ReturnType<typeof getNunjucksEngine>,
+  fileBackedStringPaths: Set<string>,
+  skipRenderVars?: string[],
+  varsResolvedFromSkipped?: Set<string>,
+  seen: WeakMap<object, VarValue> = new WeakMap(),
+): VarValue {
+  if (typeof value === 'string') {
+    if (!fileBackedStringPaths.has(varPath)) {
+      return value;
+    }
+    if (
+      referencesUndefinedVariables(value, vars) ||
+      referencesSkippedVariables(value, skipRenderVars, varsResolvedFromSkipped)
+    ) {
+      return value;
+    }
+    return nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars);
+  }
+
+  if (!Array.isArray(value) && !isPlainObject(value)) {
+    return value;
+  }
+
+  const existing = seen.get(value);
+  if (existing) {
+    return existing;
+  }
+
+  const resolved = (Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value))) as
+    | VarValue[]
+    | Record<string, VarValue>;
+  seen.set(value, resolved as VarValue);
+
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key as keyof typeof descriptors];
+    if (!descriptor || !('value' in descriptor)) {
+      if (descriptor) {
+        Object.defineProperty(resolved, key, descriptor);
+      }
+      continue;
+    }
+    Object.defineProperty(resolved, key, {
+      ...descriptor,
+      value: renderNestedTemplates(
+        descriptor.value as VarValue,
+        propertyPath(varPath, key, Array.isArray(value)),
+        vars,
+        nunjucks,
+        fileBackedStringPaths,
+        skipRenderVars,
+        varsResolvedFromSkipped,
+        seen,
+      ),
+    });
+  }
+
+  return resolved as VarValue;
 }
 
 /**
@@ -478,6 +635,8 @@ export async function renderPrompt(
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
   let basePrompt = prompt.raw;
+  const nestedFileVarNames = new Set<string>();
+  const nestedFileValuePaths = new Set<string>();
 
   for (const [varName, value] of Object.entries(vars)) {
     if (
@@ -488,9 +647,17 @@ export async function renderPrompt(
       continue;
     }
 
-    const resolved = await loadNestedVariableFiles(value, varName, basePrompt, vars, provider);
+    const resolved = await loadNestedVariableFiles(
+      value,
+      varName,
+      basePrompt,
+      vars,
+      provider,
+      nestedFileValuePaths,
+    );
     if (resolved !== value) {
       assignVarValue(vars, varName, resolved);
+      nestedFileVarNames.add(varName);
     }
   }
 
@@ -522,11 +689,15 @@ export async function renderPrompt(
       if (javascriptOutput.error) {
         throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
       }
-      if (!javascriptOutput.output) {
+      if (javascriptOutput.output === undefined) {
         throw new Error(
           `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
         );
       }
+      invariant(
+        typeof javascriptOutput.output === 'string',
+        `javascriptOutput.output must be a string. Received: ${typeof javascriptOutput.output}`,
+      );
       assignVarValue(vars, varName, javascriptOutput.output);
     }
   }
@@ -567,6 +738,27 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+
+  if (!getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    for (const varName of nestedFileVarNames) {
+      if (skipRenderVars?.includes(varName)) {
+        continue;
+      }
+      assignVarValue(
+        vars,
+        varName,
+        renderNestedTemplates(
+          vars[varName],
+          varName,
+          vars,
+          nunjucks,
+          nestedFileValuePaths,
+          skipRenderVars,
+          varsResolvedFromSkipped,
+        ),
+      );
+    }
+  }
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
