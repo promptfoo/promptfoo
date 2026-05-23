@@ -43,6 +43,21 @@ describe('Dialog', () => {
     expect(screen.getByText('Dialog description')).toBeInTheDocument();
   });
 
+  it('associates an intentionally visible description with dialog content', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent hideDescription={false}>
+          <DialogTitle>Configured dialog</DialogTitle>
+          <DialogDescription>Explains what saving these settings changes.</DialogDescription>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Configured dialog' })).toHaveAccessibleDescription(
+      'Explains what saving these settings changes.',
+    );
+  });
+
   it('closes dialog on close button click', async () => {
     const user = userEvent.setup();
     render(

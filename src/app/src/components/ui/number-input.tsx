@@ -60,9 +60,12 @@ function NumberInput({
   readOnly,
   id,
   onKeyDown,
+  'aria-describedby': ariaDescribedBy,
+  'aria-invalid': ariaInvalid,
   ...props
 }: NumberInputProps) {
   const inputId = id || React.useId();
+  const feedbackId = React.useId();
   const inputMode = allowDecimals ? 'decimal' : 'numeric';
   const pattern = allowDecimals ? '[0-9]*\\.?[0-9]*' : '[0-9]*';
 
@@ -97,6 +100,9 @@ function NumberInput({
 
   const hasError = Boolean(error);
   const errorMessage = typeof error === 'string' ? error : undefined;
+  const hasFeedback = Boolean(helperText || errorMessage);
+  const describedBy =
+    [ariaDescribedBy, hasFeedback ? feedbackId : undefined].filter(Boolean).join(' ') || undefined;
   const displayValue = typeof value === 'number' && Number.isNaN(value) ? '' : (value ?? '');
 
   return (
@@ -124,7 +130,8 @@ function NumberInput({
           step={step}
           disabled={disabled}
           readOnly={readOnly}
-          aria-invalid={hasError}
+          aria-describedby={describedBy}
+          aria-invalid={hasError ? true : (ariaInvalid ?? false)}
           className={cn(
             'flex h-10 w-full rounded-md border bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-foreground ring-offset-background',
             'placeholder:text-muted-foreground',
@@ -143,8 +150,13 @@ function NumberInput({
           </div>
         )}
       </div>
-      {(helperText || errorMessage) && (
-        <HelperText error={hasError} className={cn(disabled && 'opacity-50')}>
+      {hasFeedback && (
+        <HelperText
+          id={feedbackId}
+          error={hasError}
+          role={hasError ? 'alert' : undefined}
+          className={cn(disabled && 'opacity-50')}
+        >
           {errorMessage || helperText}
         </HelperText>
       )}
