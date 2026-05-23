@@ -2094,6 +2094,7 @@ describe('HttpProvider', () => {
     });
 
     it('should redact transformed raw request strings in debug metadata', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug');
       const transformedRawRequest = dedent`
         GET /api/data?api_key=transform-query-secret HTTP/1.1
         Host: example.com
@@ -2149,9 +2150,15 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).not.toContain('raw-transform-token');
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).not.toContain('transform-query-secret');
+      expect(debugOutput).not.toContain('raw-transform-token');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
 
     it('should redact form-urlencoded transformed requests in debug metadata', async () => {
+      const debugSpy = vi.spyOn(logger, 'debug');
       const formBody =
         'username=alice&password=plain-secret&api_key=sk-123456789012345678901234567890';
       const provider = new HttpProvider('http://example.com/api', {
@@ -2190,6 +2197,9 @@ describe('HttpProvider', () => {
       expect(result.metadata?.finalRequestBody).toContain('api_key=%5BREDACTED%5D');
       expect(result.metadata?.finalRequestBody).not.toContain('plain-secret');
       expect(result.metadata?.finalRequestBody).not.toContain('sk-123456789012345678901234567890');
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).not.toContain('plain-secret');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
     });
 
     it('should handle case-insensitive header matching', async () => {

@@ -292,7 +292,11 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     throw new Error(`[Http Provider] HTTP request protocol is not valid. From: ${firstLine}`);
   }
 
-  logger.debug(`[Http Provider] Encoding URL: ${url} from first line of raw request: ${firstLine}`);
+  const sanitizedUrl = sanitizeUrl(url);
+  const sanitizedFirstLine = `${method} ${sanitizedUrl}${protocol ? ` ${protocol}` : ''}`;
+  logger.debug(
+    `[Http Provider] Encoding URL: ${sanitizedUrl} from first line of raw request: ${sanitizedFirstLine}`,
+  );
 
   try {
     // Use the built-in URL class to parse and encode the URL
@@ -2735,8 +2739,12 @@ export class HttpProvider implements ApiProvider {
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
+    const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(
+      transformedPrompt,
+      headers,
+    );
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     const renderedConfig: Partial<HttpProviderConfig> = {
@@ -2964,8 +2972,9 @@ export class HttpProvider implements ApiProvider {
     const prompt = vars.prompt;
     const transformFn = await this.transformRequest;
     const transformedPrompt = await transformFn(prompt, vars, context);
+    const sanitizedTransformedPrompt = sanitizeTransformedRequestForMetadata(transformedPrompt);
     logger.debug(
-      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
+      `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(sanitizedTransformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
     // JSON-escape all string variables for safe substitution in raw request body
