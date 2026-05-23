@@ -97,6 +97,17 @@ export function escapeJsonPathKey(key: string): string {
 }
 
 /**
+ * Builds a JSON path for use as a bound SQLite json_extract() parameter.
+ *
+ * The field name still needs JSON-path escaping so special characters remain
+ * inside the quoted key. SQL safety comes from passing the returned path through
+ * Drizzle's `sql` templates as a value, never as raw SQL.
+ */
+export function buildSafeJsonPath(field: string): string {
+  return `$."${escapeJsonPathKey(field)}"`;
+}
+
+/**
  * Represents a filter condition with its associated logic operator.
  */
 export interface FilterConditionWithOperator {
@@ -234,8 +245,7 @@ export class EvalQueries {
     }
 
     try {
-      const escapedKey = escapeJsonPathKey(trimmedKey);
-      const jsonPath = `$."${escapedKey}"`;
+      const jsonPath = buildSafeJsonPath(trimmedKey);
 
       const query = sql`
         SELECT DISTINCT

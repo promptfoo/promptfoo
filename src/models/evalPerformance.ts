@@ -151,9 +151,8 @@ export async function queryTestIndicesOptimized(
   // This is a compromise - we search less fields but query is faster
   let searchCondition = sql`1=1`;
   if (opts.searchQuery && opts.searchQuery.trim() !== '' && !opts.filters?.length) {
-    const sanitizedSearch = opts.searchQuery.replace(/'/g, "''");
     // Only search in response field for better performance
-    searchCondition = sql`response LIKE ${'%' + sanitizedSearch + '%'}`;
+    searchCondition = sql`response LIKE ${`%${opts.searchQuery}%`}`;
   }
 
   const whereClause = sql`${baseQuery} AND ${searchCondition}`;

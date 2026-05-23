@@ -8,7 +8,7 @@ This codebase uses Drizzle ORM with SQLite. All database queries must use parame
 - Use `sql.join()` for dynamic lists such as `IN (...)` clauses.
 - Pass `SQL<unknown>` fragments between functions, not strings.
 - Do not build queries with `sql.raw()` or string interpolation.
-- Prefer `json_each()` for user-selected JSON keys. If a SQLite JSON path must be constructed, build it as a parameterized string value and escape dynamic key segments with the vetted `escapeJsonPathKey` helper in `src/models/eval.ts`.
+- Prefer `json_each()` for user-selected JSON keys. When `json_extract()` is appropriate, bind a path built with the vetted `buildSafeJsonPath` helper in `src/models/eval.ts`.
 
 ## Required Pattern: Use `sql` Template Strings
 
@@ -57,9 +57,9 @@ const whereClause = `eval_id = '${evalId}'`;
 const query = sql.raw(`SELECT * FROM eval_results WHERE ${whereClause}`);
 ```
 
-## Special Case: JSON Paths in SQLite
+## JSON Paths in SQLite
 
-SQLite's `json_extract()` accepts the JSON path as a bound value. Do not use `sql.raw()` to splice user-controlled JSON paths into SQL. Prefer `json_each()` when filtering by dynamic keys, because the key can be compared as a normal parameter:
+SQLite's `json_extract()` accepts its JSON path as a bound value. Do not use `sql.raw()` to splice user-controlled JSON paths into SQL. Prefer `json_each()` when filtering by dynamic keys, because the key can be compared as a normal parameter:
 
 ```typescript
 import { sql } from 'drizzle-orm';
@@ -75,24 +75,20 @@ const query = sql`
 `;
 ```
 
-If you must construct a JSON path for `json_extract()`, escape dynamic key segments with `escapeJsonPathKey` from `src/models/eval.ts`, which escapes:
-
-- Backslashes and double quotes for JSON path syntax
-
-Reuse `escapeJsonPathKey` and bind the final path as a value:
+If you construct a JSON path for `json_extract()`, use `buildSafeJsonPath` from `src/models/eval.ts`, which escapes backslashes and double quotes for JSON path syntax and returns a value to bind:
 
 ```typescript
 import { sql } from 'drizzle-orm';
-import { escapeJsonPathKey } from '../../src/models/eval';
+import { buildSafeJsonPath } from '../../src/models/eval';
 
-const jsonPath = `$."${escapeJsonPathKey(userField)}"`;
+const jsonPath = buildSafeJsonPath(userField);
 const query = sql`
   SELECT * FROM eval_results
   WHERE json_extract(metadata, ${jsonPath}) = ${value}
 `;
 ```
 
-If you need a new JSON-path helper, match the guarantees in `escapeJsonPathKey` and keep the implementation audited in one shared utility.
+If you need a new JSON-path helper, match the guarantees in `buildSafeJsonPath` and keep the implementation audited in one shared utility.
 
 ## Passing SQL Fragments Between Functions
 

@@ -1,7 +1,21 @@
 import logger from './logger';
 import { fetchWithProxy } from './util/fetch/index';
+import { isMissingPackageImportError } from './util/packageImportErrors';
 
 import type { CsvRow } from './types/index';
+
+async function loadGoogleSheetsApi(): Promise<typeof import('@googleapis/sheets')> {
+  try {
+    return await import('@googleapis/sheets');
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@googleapis/sheets')) {
+      throw new Error(
+        'The @googleapis/sheets package is required for authenticated Google Sheets access. Install it with: npm install @googleapis/sheets',
+      );
+    }
+    throw error;
+  }
+}
 
 export async function checkGoogleSheetAccess(url: string) {
   try {
@@ -17,6 +31,19 @@ export async function checkGoogleSheetAccess(url: string) {
   }
 }
 
+function isHtmlExportResponse(
+  response: { headers?: { get(name: string): string | null } },
+  body: string,
+): boolean {
+  const contentType = response.headers?.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('text/html')) {
+    return true;
+  }
+
+  const prefix = body.trimStart().slice(0, 32).toLowerCase();
+  return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
+}
+
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
 
@@ -28,11 +55,14 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
     throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
   }
   const csvData = await response.text();
+  if (isHtmlExportResponse(response, csvData)) {
+    throw new Error(`Failed to fetch CSV from Google Sheets URL: ${url}`);
+  }
   return parseCsv(csvData, { columns: true });
 }
 
 export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise<CsvRow[]> {
-  const { sheets: googleSheets, auth: googleAuth } = await import('@googleapis/sheets');
+  const { sheets: googleSheets, auth: googleAuth } = await loadGoogleSheetsApi();
   const auth = new googleAuth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
@@ -88,16 +118,24 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
 }
 
 export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
-  const { public: isPublic } = await checkGoogleSheetAccess(url);
+  const access = await checkGoogleSheetAccess(url);
+  const { public: isPublic } = access;
   logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
   if (isPublic) {
     return fetchCsvFromGoogleSheetUnauthenticated(url);
+  }
+  if (!('status' in access)) {
+    try {
+      return await fetchCsvFromGoogleSheetUnauthenticated(url);
+    } catch {
+      return fetchCsvFromGoogleSheetAuthenticated(url);
+    }
   }
   return fetchCsvFromGoogleSheetAuthenticated(url);
 }
 
 export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promise<void> {
-  const { sheets: googleSheets, auth: googleAuth } = await import('@googleapis/sheets');
+  const { sheets: googleSheets, auth: googleAuth } = await loadGoogleSheetsApi();
   const auth = new googleAuth.GoogleAuth({
     scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });

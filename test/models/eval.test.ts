@@ -2,10 +2,11 @@ import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
-import { spansTable, tracesTable } from '../../src/database/tables';
+import { evalResultsTable, spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
+  buildSafeJsonPath,
   combineFilterConditions,
   EvalQueries,
   escapeJsonPathKey,
@@ -1419,6 +1420,12 @@ describe('evaluator', () => {
       await db.run(
         `UPDATE eval_results SET metadata = json('{"normal_field":"value3"}') WHERE eval_id = '${eval_.id}' AND test_idx = 2`,
       );
+      const attackField = `field"'; DROP TABLE eval_results; --`;
+      await db
+        .update(evalResultsTable)
+        .set({ metadata: { [attackField]: 'value4' } })
+        .where(sql`${evalResultsTable.evalId} = ${eval_.id} AND ${evalResultsTable.testIdx} = ${3}`)
+        .run();
 
       // Test equals filter with quotes in field name
       const quotesResult = await (eval_ as any).queryTestIndices({
@@ -1479,6 +1486,25 @@ describe('evaluator', () => {
       });
       expect(existsBackslashResult.filteredCount).toBe(1);
       expect(existsBackslashResult.testIndices).toEqual([1]);
+
+      // Field names stay bound JSON paths even when they look like SQL.
+      const attackResult = await (eval_ as any).queryTestIndices({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'metadata',
+            operator: 'equals',
+            field: attackField,
+            value: 'value4',
+          }),
+        ],
+      });
+      expect(attackResult.filteredCount).toBe(1);
+      expect(attackResult.testIndices).toEqual([3]);
+
+      // The eval results table remains queryable after the attack-shaped field is filtered.
+      const tableAfterAttack = await eval_.getTablePage({ filters: [] });
+      expect(tableAfterAttack.totalCount).toBe(5);
     });
 
     it('filters by metadata exists operator with empty arrays and objects', async () => {
@@ -1910,9 +1936,31 @@ describe('evaluator', () => {
 
       const injection2 = "field' OR 1=1; --";
       const escaped2 = escapeJsonPathKey(injection2);
-      // Single quotes pass through unchanged; downstream callers parameterize the
-      // path so SQL string-literal escaping is no longer this helper's job.
+      // Single quotes stay in the JSON path value and are bound as parameters.
       expect(escaped2).toBe("field' OR 1=1; --");
+    });
+  });
+
+  describe('buildSafeJsonPath', () => {
+    it('should build valid JSON paths for simple field names', () => {
+      expect(buildSafeJsonPath('field')).toBe('$."field"');
+    });
+
+    it('should properly escape double quotes in field names', () => {
+      expect(buildSafeJsonPath('field"with"quotes')).toBe(String.raw`$."field\"with\"quotes"`);
+    });
+
+    it('should leave single quotes in the bound JSON path value', () => {
+      expect(buildSafeJsonPath("field'with'single'quotes")).toBe("$.\"field'with'single'quotes\"");
+    });
+
+    it('should handle complex SQL injection attempts', () => {
+      const attack = `field"'; DROP TABLE users; --`;
+      expect(buildSafeJsonPath(attack)).toBe(String.raw`$."field\"'; DROP TABLE users; --"`);
+    });
+
+    it('should handle backslashes correctly', () => {
+      expect(buildSafeJsonPath('path\\to\\field')).toBe(String.raw`$."path\\to\\field"`);
     });
   });
 
