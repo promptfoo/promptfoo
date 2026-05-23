@@ -538,6 +538,15 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
         }
 
+        if (
+          Array.isArray(data) &&
+          !datum.candidates?.length &&
+          datum.usageMetadata &&
+          !datum.promptFeedback
+        ) {
+          continue;
+        }
+
         const candidate = getCandidate(datum);
         const safetyFinishReasons = [
           'SAFETY',
@@ -583,11 +592,13 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
         } else if (candidate.content?.parts) {
           output = formatCandidateContents(candidate);
-        } else {
-          return {
-            error: `No output found in response: ${JSON.stringify(data)}`,
-          };
         }
+      }
+
+      if (output === undefined) {
+        return {
+          error: `No output found in response: ${JSON.stringify(data)}`,
+        };
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
@@ -619,9 +630,11 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
 
       let guardrails: GuardrailResponse | undefined;
-      const candidate = getCandidate(lastData);
-      if (lastData.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastData.promptFeedback?.safetyRatings?.some(
+      const lastDataWithCandidate =
+        dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
+      const candidate = getCandidate(lastDataWithCandidate);
+      if (lastDataWithCandidate.promptFeedback?.safetyRatings || candidate.safetyRatings) {
+        const flaggedInput = lastDataWithCandidate.promptFeedback?.safetyRatings?.some(
           (r) => r.probability !== 'NEGLIGIBLE',
         );
         const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
@@ -631,6 +644,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       // Extract grounding metadata
       const candidateWithMetadata = dataWithResponse
+        .filter((datum) => datum.candidates?.length)
         .map((datum) => getCandidate(datum))
         .find(
           (c) =>

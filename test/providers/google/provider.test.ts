@@ -558,6 +558,50 @@ describe('GoogleProvider', () => {
       expect(result.output).toBe('truncated response');
     });
 
+    it('should ignore metadata-only chunks in streaming responses', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'streamed response' }] } }],
+          },
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('streamed response');
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        numRequests: 1,
+      });
+    });
+
+    it('should reject streaming responses that never provide output', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No output found in response');
+    });
+
     it('should return an error for safety finish reasons outside scorable evaluations', async () => {
       const responseData = {
         candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],

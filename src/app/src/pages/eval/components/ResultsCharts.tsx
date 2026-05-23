@@ -243,31 +243,36 @@ function ScatterChart({ table }: ChartProps) {
     const minScore = Math.min(...scores);
     const maxScore = Math.max(...scores);
 
-    const data = table.body
-      .map((row) => {
-        const prompt1Score = row.outputs[xAxisPrompt]?.score;
-        const prompt2Score = row.outputs[yAxisPrompt]?.score;
-        let backgroundColor;
-        if (prompt2Score > prompt1Score) {
-          backgroundColor = 'green';
-        } else if (prompt2Score < prompt1Score) {
-          backgroundColor = 'red';
-        } else {
-          backgroundColor = 'gray';
-        }
-        return {
+    const data = table.body.flatMap((row) => {
+      const prompt1Score = row.outputs[xAxisPrompt]?.score;
+      const prompt2Score = row.outputs[yAxisPrompt]?.score;
+
+      if (
+        typeof prompt1Score !== 'number' ||
+        Number.isNaN(prompt1Score) ||
+        typeof prompt2Score !== 'number' ||
+        Number.isNaN(prompt2Score)
+      ) {
+        return [];
+      }
+
+      let backgroundColor;
+      if (prompt2Score > prompt1Score) {
+        backgroundColor = 'green';
+      } else if (prompt2Score < prompt1Score) {
+        backgroundColor = 'red';
+      } else {
+        backgroundColor = 'gray';
+      }
+
+      return [
+        {
           x: prompt1Score,
           y: prompt2Score,
           backgroundColor,
-        };
-      })
-      .filter(
-        (point) =>
-          typeof point.x === 'number' &&
-          !Number.isNaN(point.x) &&
-          typeof point.y === 'number' &&
-          !Number.isNaN(point.y),
-      );
+        },
+      ];
+    });
 
     scatterChartInstance.current = new Chart(scatterCanvasRef.current, {
       type: 'scatter',
@@ -496,6 +501,11 @@ interface ProgressData {
   };
 }
 
+function getPassRate(metrics: ProgressData['metrics']): number {
+  const totalTests = metrics.testPassCount + metrics.testFailCount;
+  return totalTests === 0 ? 0 : (metrics.testPassCount / totalTests) * 100;
+}
+
 function PerformanceOverTimeChart({ evalId }: ChartProps) {
   const { config } = useTableStore();
   const lineCanvasRef = useRef(null);
@@ -510,8 +520,12 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
 
       try {
         const res = await callApi(`/history?description=${encodeURIComponent(config.description)}`);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch progress data: ${res.status} ${res.statusText}`);
+        }
+
         const data = await res.json();
-        setProgressData(data.data);
+        setProgressData(Array.isArray(data?.data) ? data.data : []);
       } catch (error) {
         console.error('Error fetching progress data:', error);
       }
@@ -552,10 +566,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
     const datasets = evaluations.reduce<
       Record<number, { x: number; y: number; evalData: ProgressData }[]>
     >((acc, eval_) => {
-      const passRate =
-        (eval_.metrics.testPassCount /
-          (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-        100;
+      const passRate = getPassRate(eval_.metrics);
 
       if (!acc[eval_.evaluationNumber]) {
         acc[eval_.evaluationNumber] = [];
@@ -611,10 +622,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
                 evalData: ProgressData;
               };
               const { evalData } = item;
-              const passRate =
-                (evalData.metrics.testPassCount /
-                  (evalData.metrics.testPassCount + evalData.metrics.testFailCount)) *
-                100;
+              const passRate = getPassRate(evalData.metrics);
               return [
                 `Label: ${evalData.label}`,
                 `Provider: ${evalData.provider}`,
