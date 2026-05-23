@@ -157,6 +157,49 @@ describe('evalConfig store', () => {
         temperature: 0.4,
       });
     });
+
+    it('strips credentials regardless of casing convention', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              bearerToken: 'a',
+              access_token: 'b',
+              refreshToken: 'c',
+              privateKey: 'd',
+              pfxPassword: 'e',
+              keystorePassphrase: 'f',
+              'x-api-key': 'g',
+              signature: 'h',
+              cookie: 'i',
+              endpoint: 'https://example.com',
+              timeoutMs: 5000,
+            } as any,
+          },
+        ],
+        env: {
+          BEARER_TOKEN: 'a',
+          ACCESS_TOKEN: 'b',
+          REFRESH_TOKEN: 'c',
+          AWS_SECRET_ACCESS_KEY: 'd',
+          GITHUB_TOKEN: 'e',
+          DATABASE_PASSWORD: 'f',
+          API_BASE_URL: 'https://api.example.com',
+          MAX_RETRIES: '3',
+        } as any,
+      });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        endpoint: 'https://example.com',
+        timeoutMs: 5000,
+      });
+      expect(persistedState.state.config.env).toEqual({
+        API_BASE_URL: 'https://api.example.com',
+        MAX_RETRIES: '3',
+      });
+    });
   });
 
   describe('defaultTest handling', () => {

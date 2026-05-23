@@ -32,4 +32,15 @@ describe('SensitiveTextField', () => {
     expect(input).toHaveAttribute('type', 'text');
     expect(screen.getByRole('button', { name: 'Hide PFX Passphrase' })).toBeInTheDocument();
   });
+
+  it('opts out of browser and password-manager autofill', () => {
+    render(<SensitiveTextField label="Keystore Passphrase" value="" onChange={vi.fn()} />);
+
+    const input = screen.getByLabelText('Keystore Passphrase');
+    expect(input).toHaveAttribute('autocomplete', 'new-password');
+    expect(input).toHaveAttribute('spellcheck', 'false');
+    expect(input).toHaveAttribute('data-1p-ignore');
+    expect(input).toHaveAttribute('data-lpignore', 'true');
+    expect(input).toHaveAttribute('data-form-type', 'other');
+  });
 });

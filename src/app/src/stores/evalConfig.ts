@@ -28,20 +28,21 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
-const CREDENTIAL_FIELD_NAMES = new Set([
-  'apikey',
-  'api_key',
-  'authorization',
-  'password',
-  'secret',
-  'clientsecret',
-  'client_secret',
-  'token',
-]);
+// Names that look like credentials in any casing convention — camelCase
+// (apiKey, bearerToken, privateKey, pfxPassword), snake_case (api_key,
+// refresh_token, keystore_passphrase), kebab-case / SCREAMING_SNAKE
+// (x-api-key, OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY). Used for both
+// provider config fields and env-var keys.
+const CREDENTIAL_TOKEN_PATTERN =
+  /(?:^|_)(api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)(?:_|$)/;
 
-// Matches credential-looking env keys across vendors (e.g. OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY).
-const SENSITIVE_ENV_KEY_PATTERN =
-  /(?:^|_)(api_key|key|secret|token|password|credential|auth)(?:_|$)/i;
+const looksLikeCredential = (name: string): boolean => {
+  const normalized = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/-/g, '_')
+    .toLowerCase();
+  return CREDENTIAL_TOKEN_PATTERN.test(normalized);
+};
 
 const omitProviderCredentials = (value: unknown): unknown => {
   if (Array.isArray(value)) {
@@ -54,9 +55,7 @@ const omitProviderCredentials = (value: unknown): unknown => {
 
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, nestedValue]) =>
-      CREDENTIAL_FIELD_NAMES.has(key.toLowerCase())
-        ? []
-        : [[key, omitProviderCredentials(nestedValue)]],
+      looksLikeCredential(key) ? [] : [[key, omitProviderCredentials(nestedValue)]],
     ),
   );
 };
@@ -66,7 +65,7 @@ const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedCo
     return env;
   }
   const filtered = Object.fromEntries(
-    Object.entries(env).filter(([key]) => !SENSITIVE_ENV_KEY_PATTERN.test(key)),
+    Object.entries(env).filter(([key]) => !looksLikeCredential(key)),
   );
   return filtered as Partial<UnifiedConfig>['env'];
 };

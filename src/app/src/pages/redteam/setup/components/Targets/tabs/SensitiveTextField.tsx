@@ -62,6 +62,14 @@ const SensitiveTextField: React.FC<SensitiveTextFieldProps> = ({
           disabled={disabled}
           required={required}
           aria-describedby={helperTextId}
+          // Block browser/password-manager autofill for TLS passphrases, API
+          // secrets, and similar. These are not login passwords; saving them
+          // as such leaks them outside the app.
+          autoComplete="new-password"
+          spellCheck={false}
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
         />
         <Button
           type="button"
