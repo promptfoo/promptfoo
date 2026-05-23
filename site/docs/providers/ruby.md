@@ -67,7 +67,7 @@ That's it! You've created your first custom Ruby provider.
 When Promptfoo evaluates a test case with a Ruby provider:
 
 1. **Promptfoo** prepares the prompt based on your configuration
-2. **Ruby Script** is called with three parameters:
+2. **Ruby Script** calls `call_api` with three parameters:
    - `prompt`: The final prompt string
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
@@ -97,14 +97,17 @@ def call_api(prompt, options, context)
   # Main function for text generation tasks
 end
 
-def call_embedding_api(prompt, options, context)
+def call_embedding_api(prompt, options)
   # For embedding generation tasks
 end
 
-def call_classification_api(prompt, options, context)
+def call_classification_api(prompt, options)
   # For classification tasks
 end
 ```
+
+`context` is passed to `call_api` only. Embedding and classification handlers receive `prompt` and
+`options`.
 
 ### Understanding Parameters
 
@@ -154,7 +157,7 @@ Contains your provider configuration and metadata:
 
 #### The `context` Parameter
 
-Provides information about the current test case:
+For `call_api`, this provides information about the current test case:
 
 ```ruby
 {
@@ -470,8 +473,8 @@ npx promptfoo@latest eval
 
 Promptfoo automatically detects your Ruby installation in this priority order:
 
-1. **Environment variable**: `PROMPTFOO_RUBY` (if set)
-2. **Provider config**: `rubyExecutable` in your config
+1. **Provider config**: `rubyExecutable` in your config
+2. **Environment variable**: `PROMPTFOO_RUBY` (if set)
 3. **Windows detection**: Uses `where ruby` (Windows only)
 4. **Smart detection**: Uses `ruby -e "puts RbConfig.ruby"` to find the actual Ruby path
 5. **Fallback commands**:
