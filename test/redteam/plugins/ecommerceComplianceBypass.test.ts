@@ -51,7 +51,8 @@ describe('EcommerceComplianceBypassPlugin', () => {
           ],
           metadata: {
             pluginId: 'ecommerce:compliance-bypass',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
         {
@@ -67,7 +68,8 @@ describe('EcommerceComplianceBypassPlugin', () => {
           ],
           metadata: {
             pluginId: 'ecommerce:compliance-bypass',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
       ]),

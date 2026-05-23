@@ -48,7 +48,8 @@ describe('EcommercePriceManipulationPlugin', () => {
           ],
           metadata: {
             pluginId: 'ecommerce:price-manipulation',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
         {
@@ -61,7 +62,8 @@ describe('EcommercePriceManipulationPlugin', () => {
           ],
           metadata: {
             pluginId: 'ecommerce:price-manipulation',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
       ]),

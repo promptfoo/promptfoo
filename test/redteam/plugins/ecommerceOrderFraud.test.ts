@@ -48,7 +48,8 @@ describe('EcommerceOrderFraudPlugin', () => {
           ],
           metadata: {
             pluginId: 'ecommerce:order-fraud',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
         {
@@ -61,7 +62,8 @@ describe('EcommerceOrderFraudPlugin', () => {
           ],
           metadata: {
             pluginId: 'ecommerce:order-fraud',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
       ]),

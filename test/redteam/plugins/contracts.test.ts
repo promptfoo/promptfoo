@@ -35,7 +35,8 @@ describe('ContractPlugin', () => {
           assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
           metadata: {
             pluginId: 'contracts',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
         {
@@ -43,7 +44,8 @@ describe('ContractPlugin', () => {
           assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
           metadata: {
             pluginId: 'contracts',
-            pluginConfig: { excludeStrategies: undefined },
+            injectVar: 'test_var',
+            pluginConfig: {},
           },
         },
       ]),
