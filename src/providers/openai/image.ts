@@ -666,6 +666,12 @@ function isUnsafeIpv6Address(address: string): boolean {
     return true;
   }
 
+  const isIpv4Mapped =
+    bytes.slice(0, 10).every((byte) => byte === 0) && bytes[10] === 0xff && bytes[11] === 0xff;
+  if (isIpv4Mapped) {
+    return isUnsafeIpv4Address(bytes.slice(12).join('.'));
+  }
+
   const isAllZeroes = bytes.every((byte) => byte === 0);
   const isLoopback = bytes.slice(0, 15).every((byte) => byte === 0) && bytes[15] === 1;
   const isUniqueLocal = (bytes[0] & 0xfe) === 0xfc;
