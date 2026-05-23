@@ -67,7 +67,7 @@ That's it! You've created your first custom Ruby provider.
 When Promptfoo evaluates a test case with a Ruby provider:
 
 1. **Promptfoo** prepares the prompt based on your configuration
-2. **Ruby Script** calls `call_api` with three parameters:
+2. **Promptfoo** invokes `call_api` in your Ruby script with three parameters:
    - `prompt`: The final prompt string
    - `options`: Provider configuration from your YAML
    - `context`: Variables and metadata for the current test
