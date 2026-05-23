@@ -354,11 +354,7 @@ function getExpectedValueError(assertion: Assertion): string | undefined {
   if (
     REQUIRED_TEXT_OR_NUMBER_ASSERTION_TYPES.has(assertion.type) &&
     !hasNonBlankString(assertion.value) &&
-    !(
-      typeof assertion.value === 'number' &&
-      Number.isFinite(assertion.value) &&
-      assertion.value !== 0
-    )
+    !(typeof assertion.value === 'number' && Number.isFinite(assertion.value))
   ) {
     return 'Enter an expected value before saving this check.';
   }

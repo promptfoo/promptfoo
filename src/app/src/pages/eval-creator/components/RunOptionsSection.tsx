@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Card } from '@app/components/ui/card';
 import {
@@ -75,12 +75,40 @@ export function RunOptionsSection({
     setShowOptionalSettings(open);
   };
 
+  // Sync the local drafts to parent props on actual prop changes — including
+  // changes the user initiated (committed via onChange) and changes from
+  // outside (reset, YAML import, cross-field reconciliation). Skip when the
+  // draft already represents the prop value to avoid redundant work, and
+  // preserve invalid in-progress drafts so a parent re-render mid-edit does
+  // not wipe what the user is typing.
+  const lastDelayPropRef = useRef(delay);
   useEffect(() => {
-    setDelayDraft(delay?.toString() || '');
+    if (delay === lastDelayPropRef.current) {
+      return;
+    }
+    lastDelayPropRef.current = delay;
+    setDelayDraft((current) => {
+      if (getDelayError(current)) {
+        return current;
+      }
+      const parsed = current === '' ? undefined : Number(current);
+      return parsed === delay ? current : delay?.toString() || '';
+    });
   }, [delay]);
 
+  const lastMaxConcurrencyPropRef = useRef(maxConcurrency);
   useEffect(() => {
-    setMaxConcurrencyDraft(maxConcurrency?.toString() || '');
+    if (maxConcurrency === lastMaxConcurrencyPropRef.current) {
+      return;
+    }
+    lastMaxConcurrencyPropRef.current = maxConcurrency;
+    setMaxConcurrencyDraft((current) => {
+      if (getMaxConcurrencyError(current)) {
+        return current;
+      }
+      const parsed = current === '' ? undefined : Number(current);
+      return parsed === maxConcurrency ? current : maxConcurrency?.toString() || '';
+    });
   }, [maxConcurrency]);
 
   const handleDelayChange = (value: string) => {

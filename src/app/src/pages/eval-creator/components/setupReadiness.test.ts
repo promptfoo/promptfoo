@@ -538,6 +538,28 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('routes select-best fixes to the axis the user can still grow', () => {
+      // One provider, no prompts → the comparisonOutputs fix is in step 2.
+      const oneProviderNoPrompts = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: [],
+        tests: [{ assert: [{ type: 'select-best' as const, value: 'Choose the clearer reply' }] }],
+      });
+      expect(oneProviderNoPrompts.issues).toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs', stepId: 2 }),
+      );
+
+      // No providers, one prompt → the comparisonOutputs fix is in step 1.
+      const noProvidersOnePrompt = getSetupReadiness({
+        providers: [],
+        prompts: ['Write a reply'],
+        tests: [{ assert: [{ type: 'select-best' as const, value: 'Choose the clearer reply' }] }],
+      });
+      expect(noProvidersOnePrompt.issues).toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs', stepId: 1 }),
+      );
+    });
+
     it('requires scored comparison candidates for max-score assertions', () => {
       const singleOutputConfig = {
         providers: ['openai:gpt-4.1'],

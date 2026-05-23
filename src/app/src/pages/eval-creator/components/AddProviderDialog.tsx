@@ -141,13 +141,16 @@ export default function AddProviderDialog({
 
   const handleBack = () => {
     setError(null);
-    validateProviderRef.current = null;
     if (step === 'configure') {
       if (hasUnsavedChanges) {
         setDiscardDestination('select');
         setDiscardDialogOpen(true);
         return;
       }
+      // Only clear the validator once we actually leave the configure step —
+      // clearing it before opening the discard dialog would silently disable
+      // Save if the user picked "Continue editing".
+      validateProviderRef.current = null;
       setStep('select');
     } else {
       requestClose();
@@ -157,6 +160,7 @@ export default function AddProviderDialog({
   const handleConfirmDiscard = () => {
     setDiscardDialogOpen(false);
     if (discardDestination === 'select') {
+      validateProviderRef.current = null;
       setProvider({ id: '__selecting__', config: {} } as ProviderOptions);
       setProviderType(undefined);
       setStep('select');

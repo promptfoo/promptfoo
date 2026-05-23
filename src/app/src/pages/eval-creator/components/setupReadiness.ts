@@ -150,27 +150,35 @@ function hasMaxScoreWithoutScoringAssertion(
 }
 
 function getComparisonSetupIssues(
-  outputCount: number,
+  providerCount: number,
+  promptCount: number,
   tests: UnifiedConfig['tests'] | undefined,
   defaultAssertions: AssertionOrSet[],
 ): SetupIssue[] {
   const issues: SetupIssue[] = [];
+  const outputCount = providerCount * promptCount;
   const hasSelectBest = hasConfiguredComparisonAssertion(tests, defaultAssertions, 'select-best');
   const hasMaxScore = hasConfiguredComparisonAssertion(tests, defaultAssertions, 'max-score');
+
+  // Route the user to whichever axis is shorter — adding another item on the
+  // longer axis would not increase outputs per test case. With zero of either,
+  // we send them to prompts (step 2), which is the more common starting point
+  // once a provider has been picked.
+  const targetStepId: SetupStepId = providerCount <= promptCount ? 1 : 2;
 
   if (outputCount < 2 && hasSelectBest) {
     issues.push({
       id: 'comparisonOutputs',
       message:
         'Choose best output needs at least two outputs per test case. Add another provider or prompt.',
-      stepId: 1,
+      stepId: targetStepId,
     });
   } else if (outputCount < 2 && hasMaxScore) {
     issues.push({
       id: 'comparisonOutputs',
       message:
         'Choose highest score needs at least two outputs per test case. Add another provider or prompt.',
-      stepId: 1,
+      stepId: targetStepId,
     });
   }
 
@@ -382,7 +390,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
 
   const defaultAssertions = getAssertions(config.defaultTest);
   issues.push(
-    ...getComparisonSetupIssues(providerCount * promptCount, config.tests, defaultAssertions),
+    ...getComparisonSetupIssues(providerCount, promptCount, config.tests, defaultAssertions),
   );
 
   const assertionVariableIssues = Array.isArray(config.tests)
