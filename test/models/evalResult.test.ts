@@ -208,6 +208,31 @@ describe('EvalResult', () => {
       expect(retrieved?.toEvaluateResult().metadata).toEqual({ userKey: 'kept' });
     });
 
+    it('warns before replacing an existing reserved traceLinkage property', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const result = await EvalResult.createFromEvaluateResult('test-eval-existing-linkage', {
+        ...mockEvaluateResult,
+        traceId: 'internal-trace',
+        evaluationId: 'internal-evaluation',
+        metadata: {
+          __promptfoo: {
+            traceLinkage: { traceId: 'user-trace', evaluationId: 'user-evaluation' },
+            retained: 'user-metadata',
+          },
+        },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('metadata.__promptfoo.traceLinkage'),
+      );
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'internal-trace',
+        evaluationId: 'internal-evaluation',
+        metadata: { __promptfoo: { retained: 'user-metadata' } },
+      });
+    });
+
     it('round-trips evaluationId without traceId (malformed traceparent path)', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-only-id', {
         ...mockEvaluateResult,

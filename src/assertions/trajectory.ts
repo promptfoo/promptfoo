@@ -83,9 +83,13 @@ function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
   ) {
     const objValue = value as TrajectoryGoalSuccessValue;
     const resolved: TrajectoryGoalSuccessValue = { goal: objValue.goal.trim() };
-    if (typeof objValue.timeoutMs === 'number' && Number.isFinite(objValue.timeoutMs)) {
-      if (objValue.timeoutMs <= 0) {
-        throw new Error('trajectory:goal-success timeoutMs must be a positive number');
+    if (Object.prototype.hasOwnProperty.call(objValue, 'timeoutMs')) {
+      if (
+        typeof objValue.timeoutMs !== 'number' ||
+        !Number.isFinite(objValue.timeoutMs) ||
+        objValue.timeoutMs <= 0
+      ) {
+        throw new Error('trajectory:goal-success timeoutMs must be a finite positive number');
       }
       resolved.timeoutMs = objValue.timeoutMs;
     }

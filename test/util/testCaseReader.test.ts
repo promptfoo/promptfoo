@@ -13,6 +13,7 @@ import logger from '../../src/logger';
 import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
+import { readAzureBlobText } from '../../src/util/azureBlob';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
 import {
   loadTestsFromGlob,
@@ -107,6 +108,13 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
   fetchHuggingFaceDataset: vi.fn(),
 }));
 
+vi.mock('../../src/util/azureBlob', async () => ({
+  ...(await vi.importActual<typeof import('../../src/util/azureBlob')>(
+    '../../src/util/azureBlob',
+  )),
+  readAzureBlobText: vi.fn(),
+}));
+
 vi.mock('../../src/telemetry', () => {
   const mockTelemetry = {
     record: vi.fn().mockResolvedValue(undefined),
@@ -174,6 +182,7 @@ const clearAllMocks = () => {
   vi.mocked(loadApiProvider).mockReset();
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
+  vi.mocked(readAzureBlobText).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(importModule).mockReset();
 };
@@ -360,6 +369,101 @@ describe('readStandaloneTestsFile', () => {
         description: 'Row #2',
         options: {},
         vars: { var1: 'value3', var2: 'value4' },
+      },
+    ]);
+  });
+
+  it('should read JSON test sets from hashed Azure Blob Storage URIs', async () => {
+    const blobUri =
+      'az://appliedciblobdata/data/ianw/cyber-evals/tests/cases.json.45856cafeef1d6df70c14f5b3c0cc353ecf3c22fa8653aa35ef0107b138f63fb';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ vars: { review_id: 'review-001' } }]),
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-001' },
+      },
+    ]);
+  });
+
+  it('should read JSON test sets from SAS-authenticated Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.json?sp=r&sig=abc';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ vars: { review_id: 'review-002' } }]),
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-002' },
+      },
+    ]);
+  });
+
+  it('should read CSV test sets from Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.csv';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      'review_id,__expected\nreview-004,ready',
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(result).toEqual([
+      {
+        assert: [{ metric: undefined, type: 'equals', value: 'ready' }],
+        description: 'Row #1',
+        options: {},
+        vars: { review_id: 'review-004' },
+      },
+    ]);
+  });
+
+  it('should read JSONL test sets from Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.jsonl';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      '{"vars":{"review_id":"review-005"}}\n{"vars":{"review_id":"review-006"}}',
+    );
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-005' },
+      },
+      {
+        description: 'Row #2',
+        vars: { review_id: 'review-006' },
+      },
+    ]);
+  });
+
+  it('should read YML test sets from Azure Blob Storage URIs', async () => {
+    const blobUri = 'az://account/container/tests.yml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure YML case
+        vars:
+          review_id: review-007
+        assert:
+          - type: equals
+            value: ready
+    `);
+
+    const result = await readStandaloneTestsFile(blobUri);
+
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'ready' }],
+        description: 'Azure YML case',
+        vars: { review_id: 'review-007' },
       },
     ]);
   });
@@ -1046,6 +1150,72 @@ describe('readTests', () => {
         options: {},
       },
     ]);
+  });
+
+  it('readTests with a hashed Azure Blob Storage JSON test set', async () => {
+    const blobUri =
+      'az://appliedciblobdata/data/ianw/cyber-evals/tests/cases.json.45856cafeef1d6df70c14f5b3c0cc353ecf3c22fa8653aa35ef0107b138f63fb';
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([{ vars: { review_id: 'review-001' } }]),
+    );
+
+    const result = await readTests(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        description: 'Row #1',
+        vars: { review_id: 'review-001' },
+      },
+    ]);
+  });
+
+  it('readTests with a scalar Azure Blob Storage YAML test set', async () => {
+    const blobUri = 'az://account/container/tests.yaml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure YAML case
+        vars:
+          review_id: review-003
+        assert:
+          - type: equals
+            value: ready
+    `);
+
+    const result = await readTests(blobUri);
+
+    expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'ready' }],
+        description: 'Azure YAML case',
+        vars: { review_id: 'review-003' },
+      },
+    ]);
+  });
+
+  it('readTests with Azure YAML keeps blob content as remote test data', async () => {
+    const blobUri = 'az://account/container/tests.yaml';
+    vi.mocked(readAzureBlobText).mockResolvedValue(dedent`
+      - description: Azure YAML remote data case
+        vars: vars1.yaml
+        provider: file://providers/local.js
+        assert:
+          - type: equals
+            value: ready
+    `);
+
+    const result = await readTests(blobUri);
+
+    expect(result).toEqual([
+      {
+        assert: [{ type: 'equals', value: 'ready' }],
+        description: 'Azure YAML remote data case',
+        provider: 'file://providers/local.js',
+        vars: 'vars1.yaml',
+      },
+    ]);
+    expect(globSync).not.toHaveBeenCalled();
+    expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
   it('readTests with multiple __expected in CSV', async () => {

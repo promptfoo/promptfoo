@@ -1,4 +1,4 @@
-import { asc, eq, lt } from 'drizzle-orm';
+import { asc, eq, lt, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
@@ -365,7 +365,7 @@ export class TraceStore {
         .where(eq(tracesTable.traceId, traceId))
         .limit(1);
 
-      return traces[0]?.metadata ?? undefined;
+      return traces.length > 0 ? (traces[0].metadata ?? {}) : undefined;
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace metadata: ${error}`);
       throw error;
@@ -378,8 +378,19 @@ export class TraceStore {
       const db = this.getDatabase();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
-      // Delete old traces (spans will be cascade deleted due to foreign key)
-      await db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime));
+      // `spans.trace_id` is FK-enforced without ON DELETE CASCADE.
+      db.transaction(() => {
+        db.delete(spansTable)
+          .where(
+            sql`${spansTable.traceId} in (
+              select ${tracesTable.traceId}
+              from ${tracesTable}
+              where ${lt(tracesTable.createdAt, cutoffTime)}
+            )`,
+          )
+          .run();
+        db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime)).run();
+      });
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
     } catch (error) {

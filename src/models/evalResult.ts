@@ -345,6 +345,11 @@ export function persistTraceMetadata(
       `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal trace linkage; the key is reserved for promptfoo internals.`,
     );
   }
+  if (promptfooMetadata && TRACE_LINKAGE_KEY in promptfooMetadata) {
+    logger.warn(
+      `[EvalResult] Overwriting metadata.${PROMPTFOO_METADATA_KEY}.${TRACE_LINKAGE_KEY} with internal trace linkage; the path is reserved for promptfoo internals.`,
+    );
+  }
 
   // `traceId`/`evaluationId` are only persisted when truthy — JSON.stringify strips
   // undefined values, and `surfaceTraceMetadata` requires `typeof === 'string'` on read.
