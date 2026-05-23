@@ -1,6 +1,10 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
+import {
+  getProviderCallExecutionContext,
+  withProviderCallExecutionContext,
+} from '../scheduler/providerCallExecutionContext';
 import { renderVarsInObject } from '../util/render';
 import {
   extractTrajectorySteps,
@@ -645,23 +649,40 @@ export const handleTrajectoryGoalSuccess = async (
       : assertionValue,
   );
   const trajectory = summarizeTrajectoryForJudge(trace);
-  const judgePromise = matchesTrajectoryGoalSuccess(
-    goal,
-    trajectory,
-    params.outputString,
-    params.test.options,
-    params.assertionValueContext.vars,
-    params.assertion,
-    params.providerCallContext,
-  );
+  const runJudge = () =>
+    matchesTrajectoryGoalSuccess(
+      goal,
+      trajectory,
+      params.outputString,
+      params.test.options,
+      params.assertionValueContext.vars,
+      params.assertion,
+      params.providerCallContext,
+    );
+  const timeoutController = timeoutMs === undefined ? undefined : new AbortController();
+  const outerExecutionContext = getProviderCallExecutionContext();
+  const judgePromise = timeoutController
+    ? withProviderCallExecutionContext(
+        {
+          ...outerExecutionContext,
+          abortSignal: outerExecutionContext?.abortSignal
+            ? AbortSignal.any([outerExecutionContext.abortSignal, timeoutController.signal])
+            : timeoutController.signal,
+        },
+        runJudge,
+      )
+    : runJudge();
 
-  const result = await withTimeout(judgePromise, timeoutMs, () => ({
-    pass: false,
-    score: 0,
-    reason: `trajectory:goal-success judge timed out after ${timeoutMs}ms`,
-    assertion: params.assertion,
-    metadata: { graderError: true as const },
-  }));
+  const result = await withTimeout(judgePromise, timeoutMs, () => {
+    timeoutController?.abort();
+    return {
+      pass: false,
+      score: 0,
+      reason: `trajectory:goal-success judge timed out after ${timeoutMs}ms`,
+      assertion: params.assertion,
+      metadata: { graderError: true as const },
+    };
+  });
 
   if (!params.inverse) {
     return result;
