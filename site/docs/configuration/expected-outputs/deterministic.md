@@ -987,7 +987,7 @@ Common patterns:
 
 ### Tokens-Used {#tokens-used}
 
-The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, it uses traced token attributes when trace data is available and falls back to provider response usage only when trace data is absent.
+The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, it uses traced token attributes when an unfiltered trace reports token usage, and otherwise falls back to provider response usage. Use `source: trace` when a trace without token attributes should intentionally count as zero.
 
 ```yaml
 assert:
@@ -1004,8 +1004,8 @@ assert:
 
 Configuration options:
 
-- `min`: Minimum required token count
-- `max`: Maximum allowed token count
+- `min`: Minimum required token count (finite, non-negative number)
+- `max`: Maximum allowed token count (finite, non-negative number)
 - `pattern`: Span-name filter when reading from traces. Defaults to `*`
 - `source`: `auto` (default), `trace`, or `response`
 

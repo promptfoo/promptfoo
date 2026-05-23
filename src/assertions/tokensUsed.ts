@@ -10,14 +10,41 @@ interface TokensUsedValue {
   source?: 'trace' | 'response' | 'auto';
 }
 
+interface TraceTokenUsage {
+  hasUsage: boolean;
+  total: number;
+}
+
+const TOKEN_USAGE_ATTRIBUTE_KEYS = [
+  'gen_ai.usage.total_tokens',
+  'llm.usage.total_tokens',
+  'tokens.used',
+  'gen_ai.usage.input_tokens',
+  'gen_ai.usage.output_tokens',
+  'llm.usage.prompt_tokens',
+  'llm.usage.completion_tokens',
+  'tokens.prompt',
+  'tokens.completion',
+] as const;
+
+function numericTokenValue(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    return Number(value);
+  }
+  return undefined;
+}
+
 function positiveTokenValue(value: unknown): number | undefined {
-  const num = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(num) && num > 0 ? num : undefined;
+  const num = numericTokenValue(value);
+  return num !== undefined && Number.isFinite(num) && num > 0 ? num : undefined;
 }
 
 function nonNegativeTokenValue(value: unknown): number | undefined {
-  const num = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(num) && num >= 0 ? num : undefined;
+  const num = numericTokenValue(value);
+  return num !== undefined && Number.isFinite(num) && num >= 0 ? num : undefined;
 }
 
 function sumTokenFamily(
@@ -51,10 +78,19 @@ function sumTokenAttributes(attributes: Record<string, unknown> | undefined): nu
   );
 }
 
-function tokensFromTrace(spans: TraceSpan[], pattern: string): number {
+function hasTokenUsageAttributes(attributes: Record<string, unknown> | undefined): boolean {
+  return (
+    attributes !== undefined &&
+    TOKEN_USAGE_ATTRIBUTE_KEYS.some(
+      (attributeName) => nonNegativeTokenValue(attributes[attributeName]) !== undefined,
+    )
+  );
+}
+
+function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
   const spansById = new Map(spans.map((span) => [span.spanId, span]));
-  const matchedTokenSpans = spans
-    .filter((span) => matchesPattern(span.name, pattern))
+  const matchedSpans = spans.filter((span) => matchesPattern(span.name, pattern));
+  const matchedTokenSpans = matchedSpans
     .map((span) => ({ span, total: sumTokenAttributes(span.attributes) }))
     .filter(({ total }) => total > 0);
   const matchedTokenSpansById = new Map(
@@ -104,7 +140,10 @@ function tokensFromTrace(spans: TraceSpan[], pattern: string): number {
     return Math.max(tokenSpan.total, descendantTotal);
   };
 
-  return rootTokenSpanIds.reduce((sum, spanId) => sum + coveredTokens(spanId, new Set()), 0);
+  return {
+    hasUsage: matchedSpans.some((span) => hasTokenUsageAttributes(span.attributes)),
+    total: rootTokenSpanIds.reduce((sum, spanId) => sum + coveredTokens(spanId, new Set()), 0),
+  };
 }
 
 function tokensFromProviderResponse(params: AssertionParams): number {
@@ -149,19 +188,29 @@ function resolveTokenUsage(
       throw new Error('No trace data available for tokens-used assertion (source: trace)');
     }
     return {
-      total: tokensFromTrace((trace.spans ?? []) as TraceSpan[], pattern),
+      total: tokensFromTrace((trace.spans ?? []) as TraceSpan[], pattern).total,
       usedSource: 'trace',
     };
   }
 
   if (trace?.spans && trace.spans.length > 0) {
-    return {
-      total: tokensFromTrace(trace.spans as TraceSpan[], pattern),
-      usedSource: 'trace',
-    };
+    const traceUsage = tokensFromTrace(trace.spans as TraceSpan[], pattern);
+    if (traceUsage.hasUsage || pattern !== '*') {
+      return { total: traceUsage.total, usedSource: 'trace' };
+    }
   }
 
   return { total: tokensFromProviderResponse(params), usedSource: 'response' };
+}
+
+function validateTokenBudgetBound(boundName: 'min' | 'max', value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error(`tokens-used ${boundName} must be a finite non-negative number`);
+  }
+  return value;
 }
 
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
@@ -175,7 +224,7 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
   }
 
   if (
-    value.source &&
+    value.source !== undefined &&
     value.source !== 'trace' &&
     value.source !== 'response' &&
     value.source !== 'auto'
@@ -183,12 +232,20 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
     throw new Error('tokens-used source must be "trace", "response", or "auto"');
   }
 
+  if (value.pattern !== undefined && typeof value.pattern !== 'string') {
+    throw new Error('tokens-used pattern must be a string');
+  }
+
+  const min = validateTokenBudgetBound('min', value.min);
+  const max = validateTokenBudgetBound('max', value.max);
+  if (min !== undefined && max !== undefined && min > max) {
+    throw new Error('tokens-used min must be less than or equal to max');
+  }
+
   const pattern = value.pattern ?? '*';
   const source = value.source ?? 'auto';
   const { total, usedSource } = resolveTokenUsage(params, source, pattern);
 
-  const min = value.min;
-  const max = value.max;
   const basePass = (min === undefined || total >= min) && (max === undefined || total <= max);
   const pass = params.inverse ? !basePass : basePass;
 

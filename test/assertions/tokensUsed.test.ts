@@ -285,6 +285,62 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('source=response');
   });
 
+  it('falls back to response usage when an unfiltered automatic trace has no token attributes', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 100 } },
+      renderedValue: { max: 100 },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'non-token-span',
+              name: 'provider.call',
+              startTime: 0,
+              endTime: 100,
+              attributes: { 'gen_ai.usage.total_tokens': null, 'provider.name': 'mock' },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Tokens used: 350');
+    expect(result.reason).toContain('source=response');
+  });
+
+  it('honors explicit zero token attributes in an automatic trace', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 0 } },
+      renderedValue: { max: 0 },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'zero-token-span',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 100,
+              attributes: { 'gen_ai.usage.total_tokens': 0 },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 0');
+    expect(result.reason).toContain('source=trace');
+  });
+
   it('throws when source: trace and no trace is available', () => {
     const params: AssertionParams = {
       ...baseParams,
@@ -335,6 +391,56 @@ describe('handleTokensUsed', () => {
       renderedValue: { pattern: '*' } as unknown as { max: number },
     };
     expect(() => handleTokensUsed(params)).toThrow(/must include min or max/);
+  });
+
+  it.each([
+    ['a negative maximum', { max: -1 }, 'tokens-used max must be a finite non-negative number'],
+    [
+      'a non-numeric maximum',
+      { max: '100' },
+      'tokens-used max must be a finite non-negative number',
+    ],
+    [
+      'an infinite minimum',
+      { min: Number.POSITIVE_INFINITY },
+      'tokens-used min must be a finite non-negative number',
+    ],
+    [
+      'an inverted range',
+      { min: 101, max: 100 },
+      'tokens-used min must be less than or equal to max',
+    ],
+  ])('rejects %s budget configuration', (_description, renderedValue, expectedMessage) => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: {
+        type: 'tokens-used',
+        value: renderedValue as unknown as { max: number },
+      },
+      renderedValue: renderedValue as unknown as { max: number },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(expectedMessage);
+  });
+
+  it('rejects invalid source and pattern configuration instead of defaulting behavior', () => {
+    const invalidSourceParams: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1000 } },
+      renderedValue: { max: 1000, source: '' } as unknown as { max: number },
+    };
+    const invalidPatternParams: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1000 } },
+      renderedValue: { max: 1000, pattern: 123 } as unknown as { max: number },
+    };
+
+    expect(() => handleTokensUsed(invalidSourceParams)).toThrow(
+      'tokens-used source must be "trace", "response", or "auto"',
+    );
+    expect(() => handleTokensUsed(invalidPatternParams)).toThrow(
+      'tokens-used pattern must be a string',
+    );
   });
 
   it('respects the pattern filter when computing tokens from trace', () => {
