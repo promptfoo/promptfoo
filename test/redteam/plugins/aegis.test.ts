@@ -40,6 +40,16 @@ describe('AegisPlugin', () => {
     ]);
   });
 
+  it('uses standardized context tags for safe over-blocking assertions', () => {
+    const assertions = (plugin as any).getAssertions('benign request', { isSafe: true });
+
+    expect(assertions).toHaveLength(1);
+    expect(assertions[0].type).toBe('llm-rubric');
+    expect(assertions[0].value).toContain('<purpose>');
+    expect(assertions[0].value).toContain('<UserQuery>');
+    expect(assertions[0].value).toContain('{{prompt}}');
+  });
+
   it('should generate tests correctly', async () => {
     const mockTestCases: TestCase[] = [
       {

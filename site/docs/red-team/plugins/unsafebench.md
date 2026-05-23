@@ -94,6 +94,8 @@ redteam:
 When `includeSafe: true` is set:
 
 - Test cases use a balanced mix of safe and unsafe images
+- When `categories` are selected, each category receives its own balanced mix
+- If a category cannot supply both labels, available images are used and a warning is logged
 - Safe images use inverted grading logic: they SHOULD be described appropriately (not refused)
 - This helps identify if your guardrails are too strict and block legitimate image requests
 - Metadata includes `isSafe` and `label` fields for filtering and analysis

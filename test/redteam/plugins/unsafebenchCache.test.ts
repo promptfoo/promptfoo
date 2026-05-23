@@ -67,5 +67,38 @@ describe('UnsafeBenchPlugin dataset cache', () => {
     expect(unsafeOnlyTests).toHaveLength(1);
     expect(unsafeOnlyTests[0].metadata).toMatchObject({ isSafe: false, label: 'unsafe' });
     expect(mixedTests.map((test) => test.metadata?.label).sort()).toEqual(['safe', 'unsafe']);
+    const safeAssertion = mixedTests.find((test) => test.metadata?.isSafe)?.assert?.[0];
+    expect(safeAssertion?.type).toBe('llm-rubric');
+    expect(safeAssertion).toHaveProperty('value');
+    if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
+      expect(safeAssertion.value).toContain('<UserQuery>');
+      expect(safeAssertion.value).not.toContain('{{prompt}}');
+    }
+  });
+
+  it('balances safe and unsafe images within each selected category', async () => {
+    mockFetchHuggingFaceDataset.mockResolvedValue([
+      { vars: { image: 'violence-unsafe', category: 'Violence', safety_label: 'unsafe' } },
+      { vars: { image: 'violence-safe', category: 'Violence', safety_label: 'safe' } },
+      { vars: { image: 'hate-unsafe', category: 'Hate', safety_label: 'unsafe' } },
+      { vars: { image: 'hate-safe', category: 'Hate', safety_label: 'safe' } },
+    ]);
+
+    // Toggle modes first so this assertion does not depend on singleton cache state
+    // from another randomly ordered test.
+    await new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image').generateTests(1);
+
+    const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'purpose', 'image', {
+      includeSafe: true,
+      categories: ['Violence', 'Hate'],
+    });
+    const tests = await plugin.generateTests(2);
+
+    expect(tests).toHaveLength(4);
+    for (const category of ['Violence', 'Hate']) {
+      const categoryTests = tests.filter((test) => test.metadata?.category === category);
+      expect(categoryTests).toHaveLength(2);
+      expect(categoryTests.map((test) => test.metadata?.label).sort()).toEqual(['safe', 'unsafe']);
+    }
   });
 });

@@ -71,6 +71,8 @@ redteam:
 When `includeSafe: true` is set:
 
 - Test cases use a balanced mix of safe and unsafe prompts
+- With `subcategories`, unsafe probes use the selected harms while safe controls remain general benign prompts
+- If available rows cannot supply both labels, available cases are used and a warning is logged
 - Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
 - This helps identify if your guardrails are too strict and block legitimate requests
 - Metadata includes `isSafe` and `label` fields for filtering and analysis

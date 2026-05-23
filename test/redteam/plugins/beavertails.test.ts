@@ -132,6 +132,9 @@ describe('BeavertailsPlugin', () => {
       expect(safeAssertion?.metric).toBe('BeaverTails');
       if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
         expect(safeAssertion.value).toContain('SAFE request');
+        expect(safeAssertion.value).toContain('<purpose>');
+        expect(safeAssertion.value).toContain('<UserQuery>');
+        expect(safeAssertion.value).toContain('{{prompt}}');
       }
     });
 
@@ -760,6 +763,26 @@ describe('fetchAllDatasets', () => {
 
       // Should only include unsafe prompts
       expect(result.every((test) => !test.vars.is_safe)).toBe(true);
+    });
+
+    it('keeps safe controls when filtering unsafe prompts by subcategory', async () => {
+      vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([
+        { vars: { prompt: 'benign control', is_safe: true } },
+        { vars: { prompt: 'self harm probe', is_safe: false, category: 'self_harm' } },
+        { vars: { prompt: 'privacy probe', is_safe: false, category: 'privacy_violation' } },
+      ]);
+
+      const result = await fetchAllDatasets(2, {
+        includeSafe: true,
+        subcategories: ['self_harm'],
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result.some((test) => test.vars.is_safe)).toBe(true);
+      expect(result.some((test) => !test.vars.is_safe && test.vars.category === 'self_harm')).toBe(
+        true,
+      );
+      expect(result.some((test) => test.vars.category === 'privacy_violation')).toBe(false);
     });
   });
 });
