@@ -20,8 +20,8 @@ description: Langfuse traces evaluation example
 prompts:
   - '{{input}}'
 
-# Use the stored output directly (assertion-only evaluation)
-# The echo provider returns the output variable from the trace
+# Use the stored output directly (assertion-only evaluation).
+# The provider is a placeholder and is not invoked for loaded traces.
 providers:
   - id: echo
     config:

@@ -112,6 +112,8 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
 
 vi.mock('../../src/integrations/langfuseTraces', () => ({
   fetchLangfuseTraces: vi.fn(),
+  isLangfuseTracesUrl: (url: string) =>
+    url === 'langfuse://traces' || url.startsWith('langfuse://traces?'),
 }));
 
 vi.mock('../../src/util/azureBlob', async () => ({
@@ -249,6 +251,13 @@ describe('readStandaloneTestsFile', () => {
 
     expect(fetchLangfuseTraces).toHaveBeenCalledWith('langfuse://traces?tags=production&limit=1');
     expect(result).toEqual(mockTraces);
+  });
+
+  it('should not route lookalike Langfuse paths as trace sources', async () => {
+    const result = await readStandaloneTestsFile('langfuse://traces-archive');
+
+    expect(result).toEqual([]);
+    expect(fetchLangfuseTraces).not.toHaveBeenCalled();
   });
 
   it('should read CSV file and return test cases', async () => {
@@ -1938,6 +1947,15 @@ describe('loadTestsFromGlob', () => {
 
     expect(fetchLangfuseTraces).toHaveBeenCalledWith('langfuse://traces?tags=production&limit=1');
     expect(result).toEqual(mockTraces);
+  });
+
+  it('should not route lookalike Langfuse globs as trace sources', async () => {
+    vi.mocked(globSync).mockReturnValue([]);
+
+    const result = await loadTestsFromGlob('langfuse://traces-archive');
+
+    expect(result).toEqual([]);
+    expect(fetchLangfuseTraces).not.toHaveBeenCalled();
   });
 
   it('should recursively resolve file:// references in YAML test files', async () => {

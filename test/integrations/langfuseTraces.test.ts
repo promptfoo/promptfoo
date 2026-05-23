@@ -32,6 +32,7 @@ vi.mock('langfuse', () => ({
 import { getEnvString } from '../../src/envars';
 import {
   fetchLangfuseTraces,
+  isLangfuseTracesUrl,
   parseTracesUrl,
   shutdownLangfuse,
 } from '../../src/integrations/langfuseTraces';
@@ -53,6 +54,15 @@ describe('langfuseTraces', () => {
   });
 
   describe('parseTracesUrl', () => {
+    it('should only accept the traces source URL and its query parameters', () => {
+      expect(isLangfuseTracesUrl('langfuse://traces')).toBe(true);
+      expect(isLangfuseTracesUrl('langfuse://traces?limit=1')).toBe(true);
+      expect(isLangfuseTracesUrl('langfuse://traces-archive')).toBe(false);
+      expect(() => parseTracesUrl('langfuse://traces-archive')).toThrow(
+        'Invalid Langfuse traces URL',
+      );
+    });
+
     it('should parse URL with no parameters', () => {
       const result = parseTracesUrl('langfuse://traces');
       expect(result).toEqual({});
@@ -335,7 +345,7 @@ describe('langfuseTraces', () => {
       expect(tests).toHaveLength(50);
     });
 
-    it('should handle traces without output for assertion-only mode', async () => {
+    it('should keep traces without output in assertion-only mode', async () => {
       mockTraceList.mockResolvedValueOnce({
         data: [
           {
@@ -351,7 +361,7 @@ describe('langfuseTraces', () => {
 
       expect(tests[0].vars).not.toHaveProperty('__langfuse_output');
       expect(tests[0].vars).not.toHaveProperty('output');
-      expect(tests[0].providerOutput).toBeUndefined();
+      expect(tests[0].providerOutput).toBe('');
     });
 
     it('should skip null inputs and preserve non-string primitive outputs', async () => {

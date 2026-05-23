@@ -106,49 +106,37 @@ langfuse://sessions/<session-id>
 
 ```yaml
 # Evaluate existing LLM outputs stored in Langfuse
-tests: langfuse://traces?tags=production&limit=50
-
-# No prompts/providers needed - we're evaluating existing outputs
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: 'Response is helpful and accurate'
-    - type: cost
-      threshold: 0.01
-    - type: latency
-      threshold: 2000
-```
-
-#### With Prompt Comparison (A/B Testing)
-
-```yaml
-# Compare stored trace outputs against a new prompt version
 prompts:
-  - langfuse://my-prompt@production
-  - langfuse://my-prompt@experiment-v2
+  - '{{input}}'
 
 providers:
-  - openai:gpt-4o
-
-tests: langfuse://traces?tags=production&limit=100&name=chat-completion
-
-# Map trace fields to test variables
-testTransform: |
-  return tests.map(t => ({
-    vars: {
-      user_input: t.vars.__langfuse_input,
-      context: t.vars.__langfuse_metadata?.context
-    },
-    metadata: {
-      langfuseTraceId: t.vars.__langfuse_trace_id
-    }
-  }));
+  - echo
 
 defaultTest:
   assert:
-    - type: similar
-      value: '{{__langfuse_output}}'
-      threshold: 0.8
+    - type: javascript
+      value: typeof output === 'string' && output.length > 0
+
+tests: langfuse://traces?tags=production&limit=50
+```
+
+#### Deterministic Audit of Stored Outputs
+
+```yaml
+description: Audit production trace outputs
+
+prompts:
+  - '{{input}}'
+
+providers:
+  - echo
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: typeof output === 'string' && output.length > 0
+
+tests: langfuse://traces?tags=production&limit=100&name=chat-completion
 ```
 
 #### Session Evaluation
@@ -202,13 +190,8 @@ interface TestCaseFromTrace {
     ...flattenedInput
   };
 
-  // For assertion-only evaluation (no re-running)
-  providerOutput?: {
-    output: any;
-    tokenUsage?: TokenUsage;
-    cost?: number;
-    latency?: number;
-  };
+  // For assertion-only evaluation (always set; missing outputs become '')
+  providerOutput: string | Record<string, unknown>;
 
   metadata: {
     langfuseTraceId: string;
@@ -230,7 +213,7 @@ interface TestCaseFromTrace {
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   testCaseReader.ts                              │
-│  if (varsPath.startsWith('langfuse://traces'))                  │
+│  if (isLangfuseTracesUrl(varsPath))                             │
 │    return fetchLangfuseTraces(varsPath)                         │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -246,8 +229,8 @@ interface TestCaseFromTrace {
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Evaluator                                   │
-│  - Run assertions against providerOutput (no LLM call needed)   │
-│  - Or run prompts with vars from trace input                    │
+│  - Run assertions against providerOutput                        │
+│  - Never replay the configured response provider                │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -303,20 +286,13 @@ interface TestCaseFromTrace {
 
 ## Key Decisions Needed
 
-### 1. Assertion-Only vs Re-run Mode
+### 1. Assertion-Only Semantics
 
-**Option A: Assertion-only by default**
-
-- When `prompts` is empty, evaluate the stored `output` directly
-- Faster, no LLM costs
-- Good for: quality monitoring, trace auditing
-
-**Option B: Re-run mode**
-
-- Use trace `input` as test vars, run through new prompts
-- Useful for: A/B testing, regression testing
-
-**Recommendation:** Support both. Assertion-only when no prompts defined.
+`langfuse://traces` evaluates stored outputs and always supplies
+`providerOutput`, using an empty string when a trace has no stored output.
+This avoids accidental response-provider calls and is appropriate for quality
+monitoring and trace auditing. Replaying new prompts against historical inputs
+requires ordinary test cases rather than this stored-output source.
 
 ### 2. Variable Naming Convention
 

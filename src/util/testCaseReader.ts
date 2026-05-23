@@ -12,7 +12,7 @@ import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
-import { fetchLangfuseTraces } from '../integrations/langfuseTraces';
+import { fetchLangfuseTraces, isLangfuseTracesUrl } from '../integrations/langfuseTraces';
 import logger from '../logger';
 import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
@@ -104,7 +104,7 @@ export async function readStandaloneTestsFile(
     return await fetchHuggingFaceDataset(varsPath);
   }
 
-  if (varsPath.startsWith('langfuse://traces')) {
+  if (isLangfuseTracesUrl(varsPath)) {
     telemetry.record('feature_used', {
       feature: 'langfuse traces',
     });
@@ -472,7 +472,7 @@ export async function loadTestsFromGlob(
     });
     return await fetchHuggingFaceDataset(loadTestsGlob);
   }
-  if (loadTestsGlob.startsWith('langfuse://traces')) {
+  if (isLangfuseTracesUrl(loadTestsGlob)) {
     telemetry.record('feature_used', {
       feature: 'langfuse traces',
     });
@@ -564,6 +564,10 @@ export async function loadTestsFromGlob(
   return ret;
 }
 
+function shouldLoadTestsFromGlob(tests: string): boolean {
+  return !tests.startsWith('az://') && (tests.endsWith('yaml') || tests.endsWith('yml'));
+}
+
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
@@ -571,11 +575,8 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   if (typeof tests === 'string') {
-    if (tests.startsWith('az://')) {
-      return readStandaloneTestsFile(tests, basePath);
-    }
     // Points to a tests file with multiple test cases
-    if (tests.endsWith('yaml') || tests.endsWith('yml')) {
+    if (shouldLoadTestsFromGlob(tests)) {
       return loadTestsFromGlob(tests, basePath);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet

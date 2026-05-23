@@ -25,7 +25,7 @@ npx promptfoo@latest eval
 
 - Loading traces from Langfuse using `langfuse://traces` URL scheme
 - Filtering traces by tags, limit, and other parameters
-- Running assertions on stored trace outputs (assertion-only evaluation)
+- Running assertions on stored trace outputs without replaying a response provider
 
 ## URL Parameters
 

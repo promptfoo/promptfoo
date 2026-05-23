@@ -136,18 +136,29 @@ Use these filters in Langfuse UI or API calls:
 After implementing the Langfuse traces integration, test with:
 
 ```yaml
-# promptfooconfig.yaml
-tests: langfuse://traces?tags=seed-data&limit=10
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Audit seeded Langfuse traces
+
+prompts:
+  - '{{input}}'
+
+providers:
+  - echo
 
 defaultTest:
   assert:
-    - type: llm-rubric
-      value: 'Response is helpful and accurate'
+    - type: javascript
+      value: typeof output === 'string' && output.length > 0
+
+tests: langfuse://traces?tags=seed-data&limit=10
 ```
 
 ```bash
 npm run local -- eval -c promptfooconfig.yaml --no-cache
 ```
+
+This checks stored outputs without replaying the configured provider. Add
+model-graded assertions only when you intend to call a grading provider.
 
 ---
 

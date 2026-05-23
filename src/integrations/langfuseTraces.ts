@@ -34,6 +34,7 @@ import type { TestCase, VarValue } from '../types';
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
 const PAGE_SIZE = 100;
+const LANGFUSE_TRACES_PREFIX = 'langfuse://traces';
 
 interface LangfuseTrace {
   id: string;
@@ -120,6 +121,10 @@ function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
   return `${baseUrl}${htmlPath.startsWith('/') ? '' : '/'}${htmlPath}`;
 }
 
+export function isLangfuseTracesUrl(url: string): boolean {
+  return url === LANGFUSE_TRACES_PREFIX || url.startsWith(`${LANGFUSE_TRACES_PREFIX}?`);
+}
+
 /**
  * Get or create the Langfuse client instance
  */
@@ -159,8 +164,11 @@ async function getLangfuseClient(): Promise<LangfuseTracesClient> {
  * Parse the langfuse://traces URL and extract query parameters
  */
 export function parseTracesUrl(url: string): FetchTracesQuery {
-  // Remove the langfuse://traces prefix
-  const queryString = url.replace(/^langfuse:\/\/traces\??/, '');
+  if (!isLangfuseTracesUrl(url)) {
+    throw new Error(`Invalid Langfuse traces URL: ${url}`);
+  }
+
+  const queryString = url.slice(LANGFUSE_TRACES_PREFIX.length).replace(/^\?/, '');
   const params = new URLSearchParams(queryString);
 
   const query: FetchTracesQuery = {};
@@ -344,12 +352,13 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
     },
   };
 
-  // If we have an output, set providerOutput for assertion-only evaluation
-  // This allows evaluating stored outputs without re-running the LLM
-  if (outputValue !== undefined && outputValue !== null) {
-    testCase.providerOutput =
-      typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue);
-  }
+  // Never fall back to a configured provider for stored-trace evaluation.
+  testCase.providerOutput =
+    outputValue === undefined || outputValue === null
+      ? ''
+      : typeof outputValue === 'string'
+        ? outputValue
+        : JSON.stringify(outputValue);
 
   return testCase;
 }
@@ -426,8 +435,9 @@ function shouldFetchNextPage(
 export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
   const query = parseTracesUrl(url);
   const limit = query.limit ?? DEFAULT_LIMIT;
+  const appliedFilters = Object.keys(query).filter((key) => key !== 'limit');
 
-  logger.debug(`[Langfuse Traces] Fetching traces with query: ${JSON.stringify(query)}`);
+  logger.debug('[Langfuse Traces] Fetching traces', { limit, appliedFilters });
 
   const langfuse = await getLangfuseClient();
   const baseUrl = getLangfuseBaseUrl();
@@ -448,12 +458,12 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
         page,
       };
 
-      logger.debug(`[Langfuse Traces] Fetching page ${page} with limit ${pageLimit}`);
+      logger.debug('[Langfuse Traces] Fetching page', { page, pageLimit });
 
       const response = await fetchTracePage(langfuse, fetchQuery);
 
       if (!response.data || response.data.length === 0) {
-        logger.debug(`[Langfuse Traces] No more traces found on page ${page}`);
+        logger.debug('[Langfuse Traces] No more traces found', { page });
         break;
       }
 
@@ -477,7 +487,7 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
 
       // Log progress for large fetches
       if (tests.length > 0 && tests.length % 100 === 0) {
-        logger.debug(`[Langfuse Traces] Fetched ${tests.length} traces so far`);
+        logger.debug('[Langfuse Traces] Fetch progress', { traceCount: tests.length });
       }
     }
   } finally {
@@ -486,15 +496,10 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
     }
   }
 
-  // Log summary
-  const filterDesc = Object.entries(query)
-    .filter(([k, v]) => k !== 'limit' && v !== undefined)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(', ');
-
-  logger.info(
-    `[Langfuse Traces] Loaded ${tests.length} traces${filterDesc ? ` (filters: ${filterDesc})` : ''}`,
-  );
+  logger.info('[Langfuse Traces] Loaded traces', {
+    traceCount: tests.length,
+    appliedFilters,
+  });
 
   if (tests.length === 0) {
     logger.warn(
