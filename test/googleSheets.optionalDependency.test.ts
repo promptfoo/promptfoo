@@ -65,6 +65,24 @@ describe('Google Sheets optional dependency', () => {
     ]);
   });
 
+  it('labels login-page export errors for authentication fallback classification', async () => {
+    const fetchWithProxy = vi.fn().mockResolvedValueOnce({
+      status: 200,
+      headers: {
+        get: () => 'text/html; charset=utf-8',
+      },
+      text: async () => '<!doctype html><html><body>Sign in</body></html>',
+    });
+
+    vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
+
+    const { fetchCsvFromGoogleSheetUnauthenticated } = await import('../src/googleSheets');
+
+    await expect(fetchCsvFromGoogleSheetUnauthenticated(SHEET_URL)).rejects.toMatchObject({
+      name: 'GoogleSheetAuthenticationRequiredError',
+    });
+  });
+
   it('falls back to authenticated sheet access when the probe and CSV export both fail', async () => {
     const fetchWithProxy = vi
       .fn()

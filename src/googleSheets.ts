@@ -4,7 +4,12 @@ import { isMissingPackageImportError } from './util/packageImportErrors';
 
 import type { CsvRow } from './types/index';
 
-class GoogleSheetAuthenticationRequiredError extends Error {}
+class GoogleSheetAuthenticationRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GoogleSheetAuthenticationRequiredError';
+  }
+}
 
 async function loadGoogleSheetsApi(): Promise<typeof import('@googleapis/sheets')> {
   try {
