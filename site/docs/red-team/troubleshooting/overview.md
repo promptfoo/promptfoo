@@ -8,6 +8,23 @@ description: Red team LLM applications by diagnosing attack generation, connecti
 
 Common issues encountered when red teaming LLM applications with promptfoo.
 
+## Quick Diagnostics
+
+Run these commands to diagnose common red team issues:
+
+```bash
+# Verify your configuration is valid
+npx promptfoo redteam validate
+
+# Test connection to your target
+npx promptfoo eval --config redteam.yaml --dry-run
+
+# Check environment variables are set
+echo $OPENAI_API_KEY  # or your provider's key
+```
+
+## Common Issues Table
+
 | Issue                                                                             | Description                                                                                                                 |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | [Attack Generation](/docs/red-team/troubleshooting/attack-generation)             | Configuration errors in system scope, permissions, or available actions can prevent effective attack generation.            |
