@@ -12,7 +12,7 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
-import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
 
 import type { TraceStore } from '../../src/tracing/store';
 
@@ -700,6 +700,75 @@ describe('OTLPReceiver', () => {
           warnIfMissingTrace: false,
         },
       );
+    });
+
+    it('does not apply receiver-default redaction to a linked trace with no policy', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({});
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'c'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer visible' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'cccccccccccccccccccccccccccccccc',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: 'Bearer visible',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
+  });
+
+  describe('Singleton startup recovery', () => {
+    it('creates a new receiver after a failed listen attempt', async () => {
+      const listenSpy = vi
+        .spyOn(OTLPReceiver.prototype, 'listen')
+        .mockRejectedValueOnce(new Error('EADDRINUSE'))
+        .mockResolvedValueOnce(undefined);
+
+      try {
+        await expect(startOTLPReceiver(4318, '127.0.0.1', ['json'])).rejects.toThrow('EADDRINUSE');
+        await startOTLPReceiver(4319, '127.0.0.1', ['protobuf']);
+
+        expect(listenSpy).toHaveBeenCalledTimes(2);
+        expect(listenSpy.mock.instances[1]).not.toBe(listenSpy.mock.instances[0]);
+      } finally {
+        await stopOTLPReceiver();
+      }
     });
   });
 

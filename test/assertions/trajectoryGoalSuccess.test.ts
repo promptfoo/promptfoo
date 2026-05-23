@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
 import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
+import { getProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
@@ -289,12 +290,13 @@ describe('handleTrajectoryGoalSuccess', () => {
   it('fails the assertion when the judge exceeds timeoutMs', async () => {
     vi.useFakeTimers();
     try {
-      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(
-        () =>
-          new Promise(() => {
-            /* never resolves; simulate a stuck judge call */
-          }),
-      );
+      let judgeAbortSignal: AbortSignal | undefined;
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(() => {
+        judgeAbortSignal = getProviderCallExecutionContext()?.abortSignal;
+        return new Promise(() => {
+          /* never resolves; simulate a stuck judge call */
+        });
+      });
 
       const params: AssertionParams = {
         ...defaultParams,
@@ -314,6 +316,7 @@ describe('handleTrajectoryGoalSuccess', () => {
       expect(result.reason).toBe('trajectory:goal-success judge timed out after 250ms');
       expect(result.assertion).toBe(params.assertion);
       expect(result.metadata?.graderError).toBe(true);
+      expect(judgeAbortSignal?.aborted).toBe(true);
     } finally {
       vi.useRealTimers();
     }
@@ -358,7 +361,25 @@ describe('handleTrajectoryGoalSuccess', () => {
     };
 
     await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
-      'trajectory:goal-success timeoutMs must be a positive number',
+      'trajectory:goal-success timeoutMs must be a finite positive number',
+    );
+  });
+
+  it.each([
+    Number.POSITIVE_INFINITY,
+    '1000',
+  ])('throws when timeoutMs is not a finite number (%s)', async (timeoutMs) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trajectory:goal-success',
+        value: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
+      },
+      renderedValue: { goal: 'Resolve the order lookup task', timeoutMs } as unknown as object,
+    };
+
+    await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
+      'trajectory:goal-success timeoutMs must be a finite positive number',
     );
   });
 

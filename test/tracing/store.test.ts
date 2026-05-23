@@ -26,6 +26,7 @@ let TraceStore: typeof import('../../src/tracing/store').TraceStore;
 describe('TraceStore', () => {
   let traceStore: InstanceType<typeof TraceStore>;
   let mockDb: any;
+  let mockDeleteChain: any;
 
   beforeAll(async () => {
     const mod = await import('../../src/tracing/store');
@@ -46,14 +47,16 @@ describe('TraceStore', () => {
       where: vi.fn().mockReturnThis(),
       limit: vi.fn(() => Promise.resolve([])),
     };
-    const mockDeleteChain = {
-      where: vi.fn(() => Promise.resolve(undefined)),
+    mockDeleteChain = {
+      where: vi.fn().mockReturnThis(),
+      run: vi.fn(),
     };
 
     mockDb = {
       insert: vi.fn(() => mockInsertChain),
       select: vi.fn(() => mockSelectChain),
       delete: vi.fn(() => mockDeleteChain),
+      transaction: vi.fn((callback) => callback()),
     };
 
     // Create trace store and inject mock DB
@@ -651,18 +654,22 @@ describe('TraceStore', () => {
   });
 
   describe('deleteOldTraces', () => {
-    it('should delete traces older than retention period', async () => {
+    it('should delete dependent spans before traces older than retention period', async () => {
       const retentionDays = 30;
 
       await traceStore.deleteOldTraces(retentionDays);
 
-      expect(mockDb.delete).toHaveBeenCalledWith(expect.anything());
-      expect(mockDb.delete().where).toHaveBeenCalledWith(expect.anything());
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.delete).toHaveBeenCalledTimes(2);
+      expect(mockDeleteChain.where).toHaveBeenCalledTimes(2);
+      expect(mockDeleteChain.run).toHaveBeenCalledTimes(2);
     });
 
     it('should handle errors when deleting old traces', async () => {
       const error = new Error('Delete failed');
-      mockDb.delete().where.mockRejectedValueOnce(error);
+      mockDeleteChain.run.mockImplementationOnce(() => {
+        throw error;
+      });
 
       await expect(traceStore.deleteOldTraces(30)).rejects.toThrow('Delete failed');
     });

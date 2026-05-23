@@ -506,11 +506,13 @@ export class OTLPReceiver {
 
   private async getRedactAttributePatterns(traceId: string): Promise<string[]> {
     const metadata = await this.traceStore.getTraceMetadata(traceId);
-    if (!Array.isArray(metadata?.otlpHttpRedactAttributes)) {
+    if (metadata === undefined) {
       return this.redactAttributePatterns;
     }
 
-    return normalizeRedactAttributePatterns(metadata.otlpHttpRedactAttributes);
+    return Array.isArray(metadata.otlpHttpRedactAttributes)
+      ? normalizeRedactAttributePatterns(metadata.otlpHttpRedactAttributes)
+      : [];
   }
 
   private handleProcessingError(error: unknown, res: express.Response): void {
@@ -960,7 +962,15 @@ export async function startOTLPReceiver(
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });
-  await receiver.listen(port, host);
+  try {
+    await receiver.listen(port, host);
+  } catch (error) {
+    // A receiver that never bound must not dictate options for a later retry.
+    if (otlpReceiver === receiver) {
+      otlpReceiver = null;
+    }
+    throw error;
+  }
 }
 
 export async function stopOTLPReceiver(): Promise<void> {
