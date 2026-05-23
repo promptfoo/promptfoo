@@ -207,6 +207,12 @@ describe('metricDisplay', () => {
     expect(getMetricDisplayKind('avg_cost', {}, [undefined])).toBe('value');
   });
 
+  it('preserves explicitly classified percentage metrics when counts are missing', () => {
+    expect(getMetricDisplayKind('accuracy', { accuracy: 'percentage' }, [undefined])).toBe(
+      'percentage',
+    );
+  });
+
   it('computes value and percentage averages correctly', () => {
     expect(getMetricAverage('value', 1, 4)).toBe(0.25);
     expect(getMetricAverage('percentage', 3, 4)).toBe(75);

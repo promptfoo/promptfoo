@@ -141,8 +141,9 @@ export function getMetricDisplayKind(
   metricKinds: Record<string, MetricDisplayKind>,
   counts: Array<number | undefined>,
 ): MetricDisplayKind {
-  if (metricKinds[metric] === 'value') {
-    return 'value';
+  const configuredKind = metricKinds[metric];
+  if (configuredKind) {
+    return configuredKind;
   }
 
   return counts.some((count) => typeof count === 'number' && count > 0) ? 'percentage' : 'value';
