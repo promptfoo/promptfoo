@@ -14,12 +14,30 @@ import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
-import { renderVarsInObject } from './render';
+import { type RenderVarsInObjectOptions, renderVarsInObject } from './render';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
+};
+
+const SCHEMA_TEMPLATE_KEYS = new Set([
+  'input_schema',
+  'inputSchema',
+  'parameters',
+  'responseSchema',
+  'schema',
+]);
+
+const STRUCTURED_SCHEMA_RENDER_OPTIONS: RenderVarsInObjectOptions = {
+  allowDumpSafeObjectReferences: (path) => {
+    if (path.length === 0) {
+      return true;
+    }
+    const key = path[path.length - 1];
+    return typeof key === 'string' && SCHEMA_TEMPLATE_KEYS.has(key);
+  },
 };
 
 /**
@@ -420,6 +438,14 @@ export function maybeLoadFromExternalFileWithVars(
   return maybeLoadFromExternalFile(rendered);
 }
 
+export function maybeLoadStructuredConfigFromExternalFileWithVars(
+  config: any,
+  vars?: Record<string, VarValue>,
+): any {
+  const rendered = renderVarsInObject(config, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
+  return maybeLoadFromExternalFile(rendered);
+}
+
 /**
  * Loads response_format configuration from an external file with variable rendering.
  *
@@ -442,7 +468,7 @@ export function maybeLoadResponseFormatFromExternalFile(
   }
 
   // First, render variables and load the outer response_format
-  const rendered = renderVarsInObject(responseFormat, vars);
+  const rendered = renderVarsInObject(responseFormat, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
   const loaded = maybeLoadFromExternalFile(rendered);
 
   if (!loaded || typeof loaded !== 'object') {
@@ -455,7 +481,9 @@ export function maybeLoadResponseFormatFromExternalFile(
 
     if (nestedSchema) {
       // Render and load the nested schema
-      const loadedSchema = maybeLoadFromExternalFile(renderVarsInObject(nestedSchema, vars));
+      const loadedSchema = maybeLoadFromExternalFile(
+        renderVarsInObject(nestedSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS),
+      );
 
       // Return with the loaded schema in place
       if (loaded.schema !== undefined) {
@@ -488,7 +516,7 @@ export async function maybeLoadToolsFromExternalFile(
   tools: any,
   vars?: Record<string, VarValue>,
 ): Promise<any> {
-  const rendered = renderVarsInObject(tools, vars);
+  const rendered = renderVarsInObject(tools, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS);
 
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result

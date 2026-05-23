@@ -1218,8 +1218,8 @@ tests:
         required: [order_id]
 ```
 
-Existing configs that use `{{ schema | dump | safe }}` for structured schema injection
-remain supported. Use `{{ schema | dump }}` when the intended value is serialized JSON text.
+Existing tool/function schema configs that use `{{ schema | dump | safe }}` remain supported.
+Outside schema fields, `dump | safe` keeps the Nunjucks behavior and renders serialized JSON text.
 
 They can also include functions that dynamically reference vars:
 

@@ -5,10 +5,14 @@ import { getNunjucksEngine } from './templates';
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
-// `dump | safe` is the schema-injection form originally requested in #2266.
-// Other filters must still execute through Nunjucks rather than be ignored.
-const DIRECT_OBJECT_REFERENCE_PATTERN =
-  /^\{\{\s*([A-Za-z_]\w*)\s*(?:\|\s*dump\s*\|\s*safe\s*)?\}\}$/;
+type TemplatePath = readonly (string | number)[];
+
+export type RenderVarsInObjectOptions = {
+  allowDumpSafeObjectReferences?: boolean | ((path: TemplatePath) => boolean);
+};
+
+const DIRECT_OBJECT_REFERENCE_PATTERN = /^\{\{\s*([A-Za-z_]\w*)\s*\}\}$/;
+const DUMP_SAFE_OBJECT_REFERENCE_PATTERN = /^\{\{\s*([A-Za-z_]\w*)\s*\|\s*dump\s*\|\s*safe\s*\}\}$/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -22,14 +26,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function getDirectObjectReferenceValue(
   template: string,
   vars: Record<string, VarValue>,
+  options: RenderVarsInObjectOptions,
+  path: TemplatePath,
 ): object | undefined {
-  const match = DIRECT_OBJECT_REFERENCE_PATTERN.exec(template);
+  let match = DIRECT_OBJECT_REFERENCE_PATTERN.exec(template);
+  if (!match && shouldAllowDumpSafeObjectReference(options, path)) {
+    match = DUMP_SAFE_OBJECT_REFERENCE_PATTERN.exec(template);
+  }
+
   if (!match || !Object.prototype.hasOwnProperty.call(vars, match[1])) {
     return undefined;
   }
 
   const value = vars[match[1]];
   return Array.isArray(value) || isPlainObject(value) ? value : undefined;
+}
+
+function shouldAllowDumpSafeObjectReference(
+  options: RenderVarsInObjectOptions,
+  path: TemplatePath,
+): boolean {
+  if (typeof options.allowDumpSafeObjectReferences === 'function') {
+    return options.allowDumpSafeObjectReferences(path);
+  }
+  return Boolean(options.allowDumpSafeObjectReferences);
 }
 
 /**
@@ -141,15 +161,36 @@ export function renderEnvOnlyInObject<T>(
   return obj;
 }
 
-export function renderVarsInObject(obj: string, vars?: Record<string, VarValue>): string | object;
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T;
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T | object {
+export function renderVarsInObject(
+  obj: string,
+  vars?: Record<string, VarValue>,
+  options?: RenderVarsInObjectOptions,
+): string | object;
+export function renderVarsInObject<T>(
+  obj: T,
+  vars?: Record<string, VarValue>,
+  options?: RenderVarsInObjectOptions,
+): T;
+export function renderVarsInObject<T>(
+  obj: T,
+  vars?: Record<string, VarValue>,
+  options: RenderVarsInObjectOptions = {},
+): T | object {
+  return renderVarsInObjectInternal(obj, vars, options, []);
+}
+
+function renderVarsInObjectInternal<T>(
+  obj: T,
+  vars: Record<string, VarValue> | undefined,
+  options: RenderVarsInObjectOptions,
+  path: (string | number)[] = [],
+): T | object {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
   if (typeof obj === 'string') {
-    const directObjectReferenceValue = getDirectObjectReferenceValue(obj, vars);
+    const directObjectReferenceValue = getDirectObjectReferenceValue(obj, vars, options, path);
     if (directObjectReferenceValue !== undefined) {
       return directObjectReferenceValue as T;
     }
@@ -158,12 +199,19 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     return nunjucksEngine.renderString(obj, vars) as unknown as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
+    return obj.map((item, index) =>
+      renderVarsInObjectInternal(item, vars, options, [...path, index]),
+    ) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};
     for (const key in obj) {
-      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
+      result[key] = renderVarsInObjectInternal(
+        (obj as Record<string, unknown>)[key],
+        vars,
+        options,
+        [...path, key],
+      );
     }
     return result as T;
   } else if (typeof obj === 'function') {

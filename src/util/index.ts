@@ -15,6 +15,7 @@ export { setupEnv } from './env';
 export {
   maybeLoadFromExternalFileWithVars,
   maybeLoadResponseFormatFromExternalFile,
+  maybeLoadStructuredConfigFromExternalFileWithVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   readFilters,

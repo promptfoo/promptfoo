@@ -1087,6 +1087,31 @@ describe('file utilities', () => {
       expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
     });
 
+    it('should scope dump-safe object templates to schema-like tool fields', async () => {
+      const schema = { type: 'object', properties: { query: { type: 'string' } } };
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: '{{ schema | dump | safe }}',
+            parameters: '{{ schema | dump | safe }}',
+          },
+        },
+      ];
+
+      expect(await maybeLoadToolsFromExternalFile(tools, { schema })).toEqual([
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: JSON.stringify(schema),
+            parameters: schema,
+          },
+        },
+      ]);
+    });
+
     it('should render variables and load from external file', async () => {
       const tools = 'file://{{ file_path }}.json';
       const vars = { file_path: 'tools' };

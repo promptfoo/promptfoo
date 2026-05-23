@@ -193,7 +193,7 @@ describe('renderVarsInObject', () => {
       expect(rendered).toEqual(schema);
     });
 
-    it('should preserve the documented dump-safe schema substitution form', async () => {
+    it('should preserve dump-safe serialization by default', async () => {
       const schema = {
         type: 'object',
         properties: {
@@ -201,7 +201,40 @@ describe('renderVarsInObject', () => {
         },
       };
       const rendered = renderVarsInObject('{{ schema | dump | safe }}', { schema });
+      expect(rendered).toBe(JSON.stringify(schema));
+    });
+
+    it('should allow dump-safe object substitution when explicitly enabled', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      };
+      const rendered = renderVarsInObject(
+        '{{ schema | dump | safe }}',
+        { schema },
+        {
+          allowDumpSafeObjectReferences: true,
+        },
+      );
       expect(rendered).toEqual(schema);
+    });
+
+    it('should scope dump-safe object substitution to allowed object paths', async () => {
+      const schema = { type: 'object', properties: { name: { type: 'string' } } };
+      const rendered = renderVarsInObject(
+        {
+          content: '{{ schema | dump | safe }}',
+          parameters: '{{ schema | dump | safe }}',
+        },
+        { schema },
+        { allowDumpSafeObjectReferences: (path) => path.at(-1) === 'parameters' },
+      );
+      expect(rendered).toEqual({
+        content: JSON.stringify(schema),
+        parameters: schema,
+      });
     });
 
     it('should still serialize object variables with dump unless safe marks schema injection', async () => {

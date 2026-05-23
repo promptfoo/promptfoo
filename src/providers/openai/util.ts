@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { maybeLoadFromExternalFileWithVars } from '../../util/index';
+import { maybeLoadStructuredConfigFromExternalFileWithVars } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 
@@ -801,7 +801,7 @@ export function validateFunctionCall(
   }
 
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFileWithVars(
+  const interpolatedFunctions = maybeLoadStructuredConfigFromExternalFileWithVars(
     functions,
     vars,
   ) as OpenAiFunction[];

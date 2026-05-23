@@ -2774,6 +2774,50 @@ describe('doGenerateRedteam', () => {
       );
     });
 
+    it('should keep dump-safe object purpose templates as rendered text', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [createMockProvider({ response: { output: 'test output' } })],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+          defaultTest: {
+            vars: { schema: { type: 'object' } },
+          },
+        },
+        config: {
+          redteam: {
+            purpose: 'Schema {{ schema | dump | safe }}',
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Schema {"type":"object"}',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      });
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'Schema {"type":"object"}',
+        }),
+      );
+    });
+
     it('should infer purpose when no root or context purpose resolves', async () => {
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
