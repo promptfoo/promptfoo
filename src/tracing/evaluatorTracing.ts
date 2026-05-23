@@ -77,13 +77,16 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
   );
 
   const httpTracing = testSuite.tracing?.otlp?.http;
+  if (testSuite.tracing?.enabled) {
+    await pruneTraceStoreIfNeeded(testSuite);
+  }
+
   if (testSuite.tracing?.enabled && httpTracing?.enabled) {
     const acceptFormats = normalizeOtlpAcceptFormats(httpTracing.acceptFormats);
     const redactAttributes = httpTracing.redactAttributes;
 
     if (otlpReceiverStarted) {
       logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
-      await pruneTraceStoreIfNeeded(testSuite);
       return;
     }
 
@@ -106,7 +109,6 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
       );
-      await pruneTraceStoreIfNeeded(testSuite);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
