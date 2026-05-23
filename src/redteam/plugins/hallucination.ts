@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
+import { sleep } from '../../util/time';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 import { renderAnchorsBlock } from './hallucination/calibration/anchors';
 import { scoreCandidates, selectTopN } from './hallucination/critic';
@@ -7,15 +8,17 @@ import { dedupByCluster } from './hallucination/dedup';
 import { mutateCandidates } from './hallucination/mutator';
 import { pickPersonas } from './hallucination/personaPicker';
 import { HALLUCINATION_PERSONAS, type Persona } from './hallucination/personas';
+import { safeJsonForLlm } from './hallucination/safeJson';
 import { pickSeeds } from './hallucination/seedPicker';
 import { type Seed } from './hallucination/seeds';
 import { createInitialStats, type GenerationStats } from './hallucination/telemetry';
 
-import type { Assertion, PluginConfig, TestCase } from '../../types/index';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:hallucination';
 
 const DEFAULT_OVERSAMPLE_FACTOR = 3;
+const MAX_OVERSAMPLE_FACTOR = 20;
 const DEFAULT_PERSONA_COUNT = 5;
 const DEFAULT_SEED_COUNT = 5;
 const MIN_PERSONA_COUNT = 2;
@@ -23,6 +26,25 @@ const MIN_PERSONA_COUNT = 2;
 // Defaults to {} so callers don't have to null-check.
 function getGenerationConfig(config: PluginConfig): NonNullable<PluginConfig['generation']> {
   return config.generation ?? {};
+}
+
+function getOversampleFactor(config: NonNullable<PluginConfig['generation']>): number {
+  const configured = config.oversampleFactor;
+  if (typeof configured !== 'number' || !Number.isFinite(configured)) {
+    return DEFAULT_OVERSAMPLE_FACTOR;
+  }
+
+  return Math.min(MAX_OVERSAMPLE_FACTOR, Math.max(1, Math.floor(configured)));
+}
+
+function getPersonaCap(config: NonNullable<PluginConfig['generation']>, n: number): number {
+  const configured = config.personaCount;
+  const requested =
+    typeof configured === 'number' && Number.isFinite(configured)
+      ? Math.floor(configured)
+      : DEFAULT_PERSONA_COUNT;
+
+  return Math.max(MIN_PERSONA_COUNT, Math.min(requested, n));
 }
 
 function buildTemplateForPersona(persona: Persona, seeds: Seed[]): string {
@@ -116,12 +138,9 @@ export class HallucinationPlugin extends RedteamPluginBase {
     }
 
     const generationConfig = getGenerationConfig(this.config);
-    const oversampleFactor = generationConfig.oversampleFactor ?? DEFAULT_OVERSAMPLE_FACTOR;
+    const oversampleFactor = getOversampleFactor(generationConfig);
     const targetCandidateCount = Math.max(n, n * oversampleFactor);
-    const personaCap = Math.max(
-      MIN_PERSONA_COUNT,
-      Math.min(generationConfig.personaCount ?? DEFAULT_PERSONA_COUNT, n),
-    );
+    const personaCap = getPersonaCap(generationConfig, n);
 
     const stats = createInitialStats(oversampleFactor, targetCandidateCount);
 
@@ -130,12 +149,13 @@ export class HallucinationPlugin extends RedteamPluginBase {
         `(targetCandidates=${targetCandidateCount}, personaCap=${personaCap})`,
     );
 
-    const personaPick = await pickPersonas(this.provider, this.purpose, personaCap);
+    const helperProvider = this.getHelperProvider(delayMs);
+    const personaPick = await pickPersonas(helperProvider, this.purpose, personaCap);
     stats.degraded.personaPicker = personaPick.degraded;
     stats.toppedUp.personaPicker = personaPick.toppedUp;
     stats.personaIds = personaPick.personas.map((p) => p.id);
 
-    const seedPick = await pickSeeds(this.provider, this.purpose, DEFAULT_SEED_COUNT);
+    const seedPick = await pickSeeds(helperProvider, this.purpose, DEFAULT_SEED_COUNT);
     stats.degraded.seedPicker = seedPick.degraded;
     stats.toppedUp.seedPicker = seedPick.toppedUp;
     stats.seedIds = seedPick.seeds.map((s) => s.id);
@@ -174,7 +194,7 @@ export class HallucinationPlugin extends RedteamPluginBase {
           typeof this.config.maxCharsPerMessage === 'number'
             ? this.config.maxCharsPerMessage
             : undefined;
-        const mutationResult = await mutateCandidates(this.provider, working, {
+        const mutationResult = await mutateCandidates(helperProvider, working, {
           language,
           maxCharsPerMessage,
           rebuild: (original, mutatedPrompt) => ({
@@ -203,14 +223,14 @@ export class HallucinationPlugin extends RedteamPluginBase {
     const dedupMode = generationConfig.dedup ?? 'llm';
     let deduped = literalDeduped;
     if (dedupMode === 'llm' && literalDeduped.length > 1) {
-      const clusterResult = await dedupByCluster(this.provider, literalDeduped);
+      const clusterResult = await dedupByCluster(helperProvider, literalDeduped);
       stats.degraded.llmDedup = clusterResult.degraded;
       stats.llmDuplicatesCollapsed = clusterResult.collapsed;
       deduped = clusterResult.kept;
     }
 
     const candidatePrompts = deduped.map((c) => c.promptText);
-    const criticResult = await scoreCandidates(this.provider, this.purpose, candidatePrompts);
+    const criticResult = await scoreCandidates(helperProvider, this.purpose, candidatePrompts);
     stats.degraded.critic = criticResult.degraded;
 
     const bucketKeys = new Map<number, string>();
@@ -259,6 +279,22 @@ export class HallucinationPlugin extends RedteamPluginBase {
     }
 
     return finalTests;
+  }
+
+  private getHelperProvider(delayMs: number): ApiProvider {
+    if (delayMs <= 0) {
+      return this.provider;
+    }
+
+    return {
+      id: () => this.provider.id(),
+      callApi: async (...args: Parameters<ApiProvider['callApi']>) => {
+        const response = await this.provider.callApi(...args);
+        logger.debug(`[hallucination] Delaying helper provider call for ${delayMs}ms`);
+        await sleep(delayMs);
+        return response;
+      },
+    };
   }
 
   private async runGenerationPerPersona(
@@ -368,7 +404,7 @@ const V2_RUBRIC = dedent`
   The user query the agent was responding to:
 
   <UserQuery>
-  {{prompt}}
+  {{hallucinationPromptJson}}
   </UserQuery>
 
   Evaluate the agent's output against the following four criteria,
@@ -410,6 +446,13 @@ const V2_RUBRIC = dedent`
 
 export class HallucinationGrader extends RedteamGraderBase {
   readonly id = PLUGIN_ID;
+
+  override renderRubric(vars: Record<string, any>): string {
+    return super.renderRubric({
+      ...vars,
+      hallucinationPromptJson: safeJsonForLlm(vars.prompt ?? ''),
+    });
+  }
 
   /**
    * Switches between the legacy and v2 calibrated rubrics based on the
