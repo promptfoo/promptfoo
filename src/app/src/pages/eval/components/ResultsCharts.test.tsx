@@ -360,7 +360,7 @@ describe('ResultsCharts', () => {
       const scatterConfig = vi
         .mocked(Chart)
         .mock.calls.map(([, config]) => config)
-        .find((config) => config.type === 'scatter');
+        .find((config) => 'type' in config && config.type === 'scatter');
       expect(scatterConfig?.data?.datasets[0].data).toEqual([]);
     });
 
