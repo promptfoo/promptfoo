@@ -24,18 +24,24 @@ import { getCurrentTimestamp } from '../util/time';
 import type { ProviderConfig } from '../providers/shared';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
-  let configToSanitize: ProviderConfig = config;
-  const serialized = safeJsonStringify(config);
-  if (serialized !== undefined) {
-    try {
+  try {
+    let configToSanitize: ProviderConfig = config;
+    const serialized = safeJsonStringify(config);
+    if (serialized !== undefined) {
       configToSanitize = JSON.parse(serialized);
-    } catch {}
-  }
+    }
 
-  return sanitizeObject(configToSanitize, {
-    context: 'provider config',
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as ProviderConfig;
+    return sanitizeObject(configToSanitize, {
+      context: 'provider config',
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    }) as ProviderConfig;
+  } catch (error) {
+    logger.debug('Unable to sanitize provider config safely; omitting config fields', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
 }
 
 function projectProviderResponse(
@@ -179,12 +185,20 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
-  return sanitizeObject(obj, {
-    context: 'evalResult field',
-    // Nested provider configs can be deeper than the default maxDepth (4);
-    // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as T;
+  try {
+    return sanitizeObject(obj, {
+      context: 'evalResult field',
+      // Nested provider configs can be deeper than the default maxDepth (4);
+      // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
+      maxDepth: Number.POSITIVE_INFINITY,
+      throwOnError: true,
+    }) as T;
+  } catch (error) {
+    logger.debug('Unable to sanitize eval result field safely; omitting field contents', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return (Array.isArray(obj) ? [] : typeof obj === 'object' ? {} : null) as T;
+  }
 }
 
 // Headers that may carry credentials, session state, or PII / org-level identifiers

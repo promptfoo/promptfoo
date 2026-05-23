@@ -107,6 +107,24 @@ describe('EvalResult', () => {
       });
     });
 
+    it('should omit provider configs that throw during sanitization', () => {
+      const config = { apiKey: 'sk-should-never-persist' } as Record<string, unknown>;
+      Object.defineProperty(config, 'client', {
+        enumerable: true,
+        get() {
+          throw new Error('SDK client unavailable');
+        },
+      });
+
+      const result = sanitizeProvider({
+        id: 'test-provider',
+        config,
+      } as unknown as ProviderOptions);
+
+      expect(result.config).toEqual({});
+      expect(JSON.stringify(result)).not.toContain('sk-should-never-persist');
+    });
+
     it('should handle generic objects with id function', () => {
       const provider = {
         id: () => 'test-provider',
@@ -717,6 +735,36 @@ describe('EvalResult', () => {
 
         expect(result.persisted).toBe(true);
         expect(JSON.stringify(result.testCase)).not.toContain('sk-live-leak');
+      });
+
+      it('omits an unsafely inspectable provider-bearing field instead of persisting secrets', async () => {
+        const providerConfig = { apiKey: 'sk-ant-api03-THROWING-GETTER' } as Record<
+          string,
+          unknown
+        >;
+        Object.defineProperty(providerConfig, 'client', {
+          enumerable: true,
+          get() {
+            throw new Error('SDK getter failed');
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-redact-throwing-getter',
+          {
+            ...mockEvaluateResult,
+            testCase: {
+              vars: {},
+              options: {
+                provider: { id: 'anthropic:messages:claude', config: providerConfig },
+              },
+            } as AtomicTestCase,
+          },
+          { persist: true },
+        );
+
+        expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
+        expect(result.testCase).toEqual({});
       });
     });
 
