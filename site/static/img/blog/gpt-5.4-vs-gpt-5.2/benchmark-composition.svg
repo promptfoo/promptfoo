@@ -31,14 +31,14 @@
   <rect class="panel" x="40" y="40" width="1120" height="620" rx="28" />
 
   <text class="ink title" x="80" y="94">Recovered December Benchmark</text>
-  <text class="muted subtitle" x="80" y="126">We started from the original December corpus, recovered the replayable payloads, and ran that same benchmark against both models.</text>
+  <text class="muted subtitle" x="80" y="126">Recovered December prompts replayed unchanged against both models.</text>
 
   <rect class="card" x="80" y="174" width="270" height="360" rx="24" />
   <text class="muted small" x="112" y="214">Original December run</text>
   <text class="ink value" x="112" y="266">620</text>
   <text class="ink section" x="112" y="300">saved cases</text>
   <text class="muted body" x="112" y="340">Source eval</text>
-  <text class="ink small" x="112" y="366">eval-E24-2025-12-11T18:49:28</text>
+  <text class="ink small" x="112" y="366">eval-E24-2025-12-11</text>
   <line class="rule" x1="112" y1="392" x2="318" y2="392" />
   <text class="muted body" x="112" y="426">What was in it:</text>
   <text class="ink body" x="112" y="456">baseline, Hydra, Meta</text>
@@ -69,7 +69,7 @@
 
   <rect class="card" x="80" y="560" width="1000" height="70" rx="22" />
   <text class="muted small" x="112" y="590">Excluded from the fixed benchmark</text>
-  <text class="ink body" x="112" y="616">9 Hydra traces total: 7 had no saved message trace after backtracking, and 2 contained literal template syntax in the saved messages.</text>
+  <text class="ink body" x="112" y="616">9 Hydra traces excluded: 7 lacked saved messages; 2 contained template syntax.</text>
 
   <rect class="skip" x="910" y="560" width="170" height="70" rx="22" />
   <text class="muted small center" x="995" y="590">skipped</text>

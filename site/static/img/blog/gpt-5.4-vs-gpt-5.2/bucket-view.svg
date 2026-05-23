@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 870" role="img" aria-labelledby="title desc">
   <title id="title">Grouped slices of the fixed benchmark</title>
   <desc id="desc">A grouped benchmark view comparing GPT-5.2 and GPT-5.4 across selected broader buckets. GPT-5.4 regresses on operational actions and politics/persuasion, stays flat on imitation, and improves on misinformation-related slices.</desc>
   <defs>
@@ -28,11 +28,11 @@
     </style>
   </defs>
 
-  <rect class="bg" width="1200" height="780" rx="24" />
-  <rect class="panel" x="40" y="40" width="1120" height="700" rx="28" />
+  <rect class="bg" width="1200" height="870" rx="24" />
+  <rect class="panel" x="40" y="40" width="1120" height="790" rx="28" />
 
   <text class="ink title" x="80" y="96">Grouped Slices of the Fixed Benchmark</text>
-  <text class="muted subtitle" x="80" y="128">These buckets aggregate related plugin families so the category story does not depend only on 4- and 5-prompt cells. They are selected slices, not an exhaustive relabeling of all 611 cases.</text>
+  <text class="muted subtitle" x="80" y="128">Selected grouped slices reduce dependence on four- and five-prompt cells.</text>
 
   <rect class="pill-good" x="80" y="154" width="128" height="30" rx="15" />
   <text class="ink small center" x="144" y="173">GPT-5.2</text>
@@ -62,7 +62,7 @@
     <rect class="card" x="0" y="302" width="1040" height="112" rx="24" />
     <rect class="card" x="0" y="432" width="1040" height="112" rx="24" />
 
-    <text class="ink section" x="24" y="78">Operational actions and commitments</text>
+    <text class="ink section" x="24" y="78">Actions and commitments</text>
     <text class="muted body" x="24" y="104">excessive-agency, contracts, coppa</text>
     <text class="g52 small" x="372" y="82">GPT-5.2</text>
     <rect class="track" x="460" y="68" width="380" height="14" rx="7" />
@@ -75,7 +75,7 @@
     <rect class="pill-warn" x="948" y="72" width="76" height="34" rx="17" />
     <text class="ink value center" x="986" y="94">+9.1pp</text>
 
-    <text class="ink section" x="24" y="208">Representation and impersonation</text>
+    <text class="ink section" x="24" y="208">Impersonation</text>
     <text class="muted body" x="24" y="234">imitation</text>
     <text class="g52 small" x="372" y="212">GPT-5.2</text>
     <rect class="track" x="460" y="198" width="380" height="14" rx="7" />
@@ -88,8 +88,8 @@
     <rect class="pill" x="954" y="202" width="64" height="34" rx="17" />
     <text class="ink value center" x="986" y="224">flat</text>
 
-    <text class="ink section" x="24" y="338">Misinformation and unsupported claims</text>
-    <text class="muted body" x="24" y="364">misinformation-disinformation, hallucination, unverifiable-claims</text>
+    <text class="ink section" x="24" y="338">Misinformation claims</text>
+    <text class="muted body" x="24" y="364">misinformation, hallucination, unverifiable</text>
     <text class="g52 small" x="372" y="342">GPT-5.2</text>
     <rect class="track" x="460" y="328" width="380" height="14" rx="7" />
     <rect class="g52" x="460" y="328" width="118" height="14" rx="7" />
@@ -101,7 +101,7 @@
     <rect class="pill-good" x="948" y="332" width="76" height="34" rx="17" />
     <text class="ink value center" x="986" y="354">-4.4pp</text>
 
-    <text class="ink section" x="24" y="468">Politics, persuasion, and bias</text>
+    <text class="ink section" x="24" y="468">Politics, persuasion, bias</text>
     <text class="muted body" x="24" y="494">politics, religion, and selected bias plugins</text>
     <text class="g52 small" x="372" y="472">GPT-5.2</text>
     <rect class="track" x="460" y="458" width="380" height="14" rx="7" />
@@ -115,6 +115,6 @@
     <text class="ink value center" x="986" y="484">+6.7pp</text>
   </g>
 
-  <line class="rule" x1="80" y1="696" x2="1120" y2="696" />
-  <text class="muted small" x="80" y="722">Across these broader slices, GPT-5.4 loosened most on operational commitments and persuasion-oriented prompts, stayed flat on imitation, and improved modestly on misinformation-related cases.</text>
+  <line class="rule" x1="80" y1="788" x2="1120" y2="788" />
+  <text class="muted small" x="80" y="814">GPT-5.4 loosened on commitments and persuasion, stayed flat on imitation, and improved on misinformation.</text>
 </svg>

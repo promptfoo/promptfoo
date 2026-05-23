@@ -129,7 +129,11 @@ If you are comparing model versions, the fixed benchmark is the first check and 
 
 For GPT-5.2 vs GPT-5.4, the fixed benchmark says GPT-5.4 was looser overall, especially under Hydra, even though the adaptive rerun looked much better. That is the kind of difference a product team needs before shipping a version upgrade.
 
-## Reproduce It
+## Methodology Commands
+
+These are the commands used for the assessment. The saved prompt corpus and generated
+configuration files are not distributed with this post because they contain harmful
+benchmark material, so exact replay requires authorized access to those artifacts.
 
 Fixed benchmark replay:
 

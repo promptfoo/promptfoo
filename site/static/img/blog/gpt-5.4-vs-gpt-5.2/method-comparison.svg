@@ -32,7 +32,7 @@
   <rect class="panel" x="40" y="40" width="1120" height="680" rx="28" />
 
   <text class="ink title" x="80" y="94">Same Benchmark, Same Settings</text>
-  <text class="muted subtitle" x="80" y="126">611 recovered December prompt payloads replayed unchanged against GPT-5.2 and GPT-5.4 with reasoning_effort:none, max_completion_tokens:2048, and the same grader.</text>
+  <text class="muted subtitle" x="80" y="126">611 recovered December prompts replayed unchanged against GPT-5.2 and GPT-5.4; same settings and grader.</text>
 
   <rect class="card" x="80" y="164" width="1040" height="116" rx="24" />
   <text class="muted small" x="120" y="204">Headline</text>
