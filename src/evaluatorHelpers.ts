@@ -157,7 +157,7 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
  * JS, Python, image, video, audio, and PDF references are intentionally not supported
  * inside nested structures — only plain-text files are resolved (txt, md, html, etc.).
  */
-async function resolveNestedFileRefs(value: unknown, basePath: string): Promise<unknown> {
+async function resolveNestedFileRefs(value: unknown, basePath: string): Promise<VarValue> {
   if (typeof value === 'string' && value.startsWith('file://')) {
     const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
     logger.debug(`Resolving nested file reference: ${value} -> ${filePath}`);
@@ -169,14 +169,14 @@ async function resolveNestedFileRefs(value: unknown, basePath: string): Promise<
   }
 
   if (typeof value === 'object' && value !== null) {
-    const result: Record<string, unknown> = {};
+    const result: Record<string, VarValue> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       result[k] = await resolveNestedFileRefs(v, basePath);
     }
     return result;
   }
 
-  return value;
+  return value as VarValue;
 }
 
 /**
