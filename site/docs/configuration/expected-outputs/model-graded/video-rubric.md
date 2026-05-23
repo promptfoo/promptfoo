@@ -1,6 +1,6 @@
 ---
 sidebar_label: Video Rubric
-description: 'Evaluate AI-generated videos using LLM-as-a-judge with multimodal models like Gemini'
+description: 'Score AI-generated videos with secure multimodal rubric grading, explicit thresholds, and managed media from Sora, Veo, Azure, xAI, or Bedrock providers.'
 ---
 
 # Video Rubric
@@ -33,15 +33,18 @@ tests:
 
 Under the hood, `video-rubric`:
 
-1. Extracts the video from the provider response (supports URLs, base64, and storage references)
+1. Reads the video from Promptfoo-managed blob or media storage references in the provider response
 2. Converts the video to base64 for inline embedding
 3. Sends a multimodal request to the grading model with the video and rubric
-4. Parses the JSON response to determine pass/fail and score
+4. Validates the JSON response to determine pass/fail and a score between 0.0 and 1.0
 
-The grading model must support video understanding. By default, it uses:
+For security, `video-rubric` does not fetch external video URLs during grading. Built-in video
+providers store the generated video before returning it; Bedrock providers must retain their
+default `downloadFromS3: true` setting when used with this assertion.
 
-- **Vertex AI credentials**: `gemini-3-flash-preview` (recommended for video analysis)
-- **Google AI Studio API key**: `gemini-3-flash-preview`
+The grading model must support video understanding. By default, it uses Google AI Studio
+`google:gemini-3.5-flash` with `GEMINI_API_KEY` or `GOOGLE_API_KEY`. To use Vertex AI,
+configure `vertex:gemini-3.5-flash` explicitly.
 
 ## Supported video providers
 
@@ -52,6 +55,7 @@ The grading model must support video understanding. By default, it uses:
 - `bedrock:video:amazon.nova-reel-v1:1` - Amazon Nova Reel
 - `bedrock:video:luma.ray-v2:0` - Luma Ray 2 (via AWS Bedrock)
 - `azure:video:sora` - Azure AI Foundry Sora
+- `xai:video:grok-imagine-video` - xAI Grok Imagine Video
 
 ## Overriding the grading provider
 
@@ -61,7 +65,7 @@ You can specify a different multimodal model for grading:
 assert:
   - type: video-rubric
     value: Does the video show smooth motion without artifacts?
-    provider: vertex:gemini-3-pro-preview
+    provider: vertex:gemini-3.5-flash
 ```
 
 Or set a default grading provider for all tests:
@@ -70,7 +74,7 @@ Or set a default grading provider for all tests:
 defaultTest:
   options:
     provider:
-      id: vertex:gemini-3-flash-preview
+      id: vertex:gemini-3.5-flash
       config:
         generationConfig:
           response_mime_type: application/json
@@ -93,9 +97,15 @@ tests:
           Score 1.0 if the subject and action match, 0.0 otherwise.
 ```
 
-## Video size limits
+## Video size limits and judge output
 
-Videos up to 20MB can be sent inline. Larger videos will fail with a size limit error. Support for the Gemini File API (for larger videos) is planned for a future release.
+Gemini inline requests have a 20MB total request budget. Video bytes are base64-encoded and the
+rubric also counts toward that budget, so usable video files must be smaller than 15MB. Larger
+payloads fail with a size limit error; Gemini File API support is planned for a future release.
+
+The judge response must contain a boolean `pass` and a numeric `score` from `0.0` to `1.0`.
+Malformed or out-of-range judge responses fail rather than being interpreted as successful
+grades.
 
 ## Threshold support
 
@@ -130,7 +140,7 @@ providers:
 
 defaultTest:
   options:
-    provider: vertex:gemini-3-flash-preview
+    provider: vertex:gemini-3.5-flash
 
 tests:
   - vars:
@@ -148,7 +158,8 @@ tests:
 
 ## Requirements
 
-- A multimodal model that supports video understanding (Gemini 3 Flash/Pro Preview recommended)
+- A multimodal model that supports video understanding (Gemini 3.5 Flash supported)
+- Promptfoo-managed video storage; external URLs are not downloaded for grading
 - For Vertex AI: `GOOGLE_PROJECT_ID` environment variable and application default credentials
 - For AI Studio: `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable
 

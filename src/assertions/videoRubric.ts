@@ -34,19 +34,23 @@ export const handleVideoRubric = async ({
     };
   }
 
-  if (test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object') {
-    test.options.rubricPrompt = JSON.stringify(test.options.rubricPrompt);
-  }
+  const grading =
+    test.options?.rubricPrompt && typeof test.options.rubricPrompt === 'object'
+      ? { ...test.options, rubricPrompt: JSON.stringify(test.options.rubricPrompt) }
+      : test.options;
 
-  // Update the assertion value for web view display
-  assertion.value = assertion.value || test.options?.rubricPrompt;
+  // Include a custom prompt in results without mutating the shared test definition.
+  const resultAssertion =
+    assertion.value === undefined && grading?.rubricPrompt !== undefined
+      ? { ...assertion, value: grading.rubricPrompt }
+      : assertion;
 
   return matchesVideoRubric(
-    renderedValue || '',
+    renderedValue ?? '',
     video,
-    test.options,
+    grading,
     test.vars,
-    assertion,
+    resultAssertion,
     providerCallContext,
   );
 };

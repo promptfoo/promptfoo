@@ -2,7 +2,7 @@
 
 Demonstrates using `video-rubric` assertion to evaluate generated videos using LLM-as-a-judge.
 
-The `video-rubric` assertion uses a multimodal LLM (Gemini 3 Flash Preview by default) to evaluate video outputs against a custom rubric. This is useful for:
+The `video-rubric` assertion uses Google AI Studio Gemini 3.5 Flash by default to evaluate video outputs against a custom rubric. This is useful for:
 
 - Quality assessment of AI-generated videos
 - Checking if generated videos match the prompt
@@ -14,7 +14,7 @@ Set the following environment variables:
 
 ```bash
 export GOOGLE_API_KEY=your-google-api-key  # For video generation (Veo)
-export GEMINI_API_KEY=your-gemini-key      # For video evaluation (Gemini 3 Flash)
+export GEMINI_API_KEY=your-gemini-key      # For video evaluation (Gemini 3.5 Flash)
 ```
 
 ## Usage
@@ -30,12 +30,11 @@ npx promptfoo@latest eval
 2. **Validity Check**: The `is-valid-video` assertion ensures a video was produced
 3. **Rubric Evaluation**: The `video-rubric` assertion sends the video to Gemini for evaluation
 
+The assertion grades Promptfoo-managed video assets. Built-in video providers store generated
+media before grading; for Bedrock providers, keep `downloadFromS3` enabled.
+
 The grading model receives the video and rubric, then returns:
 
 - `pass`: Whether the video meets the rubric criteria
 - `score`: A numeric score (0.0 - 1.0)
 - `reason`: Explanation of the evaluation
-
-## Guide evals
-
-The [`guide-evals`](guide-evals/) subdirectory contains the extended example suite referenced by the video evaluation guide, including camera-motion, negative-case, multi-provider, quickstart, text-rendering, variance, and PR-review hero configs.

@@ -12,7 +12,7 @@ describe('Google AI Studio Default Providers', () => {
     expect(providers.llmRubricProvider.id()).toBe('google:gemini-2.5-pro');
     expect(providers.suggestionsProvider.id()).toBe('google:gemini-2.5-pro');
     expect(providers.synthesizeProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(providers.videoGradingProvider.id()).toBe('google:gemini-3-flash-preview');
+    expect(providers.videoGradingProvider.id()).toBe('google:gemini-3.5-flash');
   });
 
   it('should create AIStudioChatProvider instances', () => {

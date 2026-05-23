@@ -4,18 +4,17 @@
  * This module provides functions to resolve video data from various sources:
  * - Blob storage (blobRef) - used by Google Veo, Bedrock Luma Ray, Nova Reel
  * - Media storage (storageRef) - used by OpenAI Sora, Azure video
- * - S3 URLs - used as fallback by Bedrock providers
+ * - Managed blob/media URI representations of the above
  */
 
 import logger from '../logger';
 import { retrieveMedia } from '../storage';
-import { fetchWithProxy } from './fetch/index';
 
 import type { BlobRef } from '../blobs/types';
 
 /**
- * Maximum video size (in bytes) that can be sent inline to Gemini.
- * Videos larger than this require the File API (not yet supported).
+ * Maximum inline request budget for Gemini video grading.
+ * The base64 video and grading prompt must fit within this budget.
  */
 export const VIDEO_INLINE_LIMIT_BYTES = 20 * 1024 * 1024; // 20MB
 
@@ -36,7 +35,7 @@ export interface ResolvedVideo {
  * Priority order:
  * 1. blobRef - blob storage (most common for modern providers)
  * 2. storageRef - media file storage (Sora, Azure)
- * 3. url - S3/HTTPS URL fallback
+ * 3. url - a managed promptfoo blob or media-storage URI
  */
 export async function resolveVideoBytes(video: VideoRef): Promise<ResolvedVideo> {
   // Try blob storage first (Veo, Luma Ray, Nova Reel)
@@ -63,11 +62,11 @@ export async function resolveVideoBytes(video: VideoRef): Promise<ResolvedVideo>
     const format = video.storageRef.key.split('.').pop() || 'mp4';
     return {
       buffer,
-      mimeType: `video/${format}`,
+      mimeType: getVideoMimeType(format),
     };
   }
 
-  // Try URL (S3 or HTTPS)
+  // Try managed URI representations returned by promptfoo providers.
   if (video.url) {
     // Check if it's a blob URI (promptfoo://blob/<hash>)
     if (video.url.startsWith('promptfoo://blob/')) {
@@ -89,43 +88,18 @@ export async function resolveVideoBytes(video: VideoRef): Promise<ResolvedVideo>
       const format = key.split('.').pop() || 'mp4';
       return {
         buffer,
-        mimeType: `video/${format}`,
+        mimeType: getVideoMimeType(format),
       };
     }
 
-    // Download from URL (S3 or HTTPS)
-    logger.debug('[VideoRubric] Downloading video from URL', { url: video.url });
-    return downloadVideoFromUrl(video.url);
+    throw new Error(
+      '[VideoRubric] External video URLs are not supported for grading. Store the video as a blobRef or storageRef before grading.',
+    );
   }
 
   throw new Error(
     '[VideoRubric] No valid video source found. Expected blobRef, storageRef, or url.',
   );
-}
-
-/**
- * Downloads video from a URL (S3 presigned URL or HTTPS).
- */
-async function downloadVideoFromUrl(url: string): Promise<ResolvedVideo> {
-  // For S3 URLs, we can use fetchWithProxy which works with presigned S3 URLs
-  const response = await fetchWithProxy(url);
-
-  if (!response.ok) {
-    throw new Error(
-      `[VideoRubric] Failed to download video from URL: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  // Get mime type from response headers or default to mp4
-  const contentType = response.headers.get('content-type') || 'video/mp4';
-
-  return {
-    buffer,
-    mimeType: contentType,
-  };
 }
 
 /**
@@ -150,9 +124,10 @@ export function getVideoMimeType(format?: string): string {
 }
 
 /**
- * Checks if a video size is within the inline limit for Gemini.
- * Videos under 20MB can be sent inline; larger videos need the File API.
+ * Checks whether base64 video bytes alone can fit within Gemini's inline budget.
+ * The matcher performs a second check including the rendered rubric prompt.
  */
 export function isWithinInlineLimit(buffer: Buffer): boolean {
-  return buffer.length < VIDEO_INLINE_LIMIT_BYTES;
+  const encodedSizeBytes = Math.ceil(buffer.length / 3) * 4;
+  return encodedSizeBytes < VIDEO_INLINE_LIMIT_BYTES;
 }

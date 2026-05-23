@@ -118,6 +118,26 @@ describe('matchesVideoRubric', () => {
     expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it('fails before grading when the encoded video and rubric exceed the request budget', async () => {
+    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    mocks.videoToBase64.mockReturnValue('x'.repeat(20 * 1024 * 1024));
+
+    const result = await matchesVideoRubric(
+      'rubric',
+      { storageRef: { key: 'video/test.mp4' } },
+      { provider: mocks.gradingProvider },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('inline request limit'),
+      }),
+    );
+    expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('fails before grading when the video exceeds the inline limit', async () => {
     const { matchesVideoRubric } = await import('../../src/matchers/video');
     mocks.resolveVideoBytes.mockResolvedValue({
@@ -136,7 +156,7 @@ describe('matchesVideoRubric', () => {
       expect.objectContaining({
         pass: false,
         score: 0,
-        reason: expect.stringContaining('inline limit'),
+        reason: expect.stringContaining('inline request limit'),
       }),
     );
     expect(mocks.gradingProvider.callApi).not.toHaveBeenCalled();
@@ -261,7 +281,7 @@ describe('matchesVideoRubric', () => {
     );
   });
 
-  it('falls back to boolean score semantics when the grader omits pass and returns a nonnumeric score', async () => {
+  it('fails closed when the grader omits pass or returns a nonnumeric score', async () => {
     const { matchesVideoRubric } = await import('../../src/matchers/video');
     vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
       output: { score: 'not-a-number' },
@@ -275,9 +295,30 @@ describe('matchesVideoRubric', () => {
 
     expect(result).toEqual(
       expect.objectContaining({
-        pass: true,
-        score: 1,
-        reason: 'Video grading passed',
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('must include a boolean pass and a finite score'),
+      }),
+    );
+  });
+
+  it('fails closed when the grader returns a score outside the documented range', async () => {
+    const { matchesVideoRubric } = await import('../../src/matchers/video');
+    vi.mocked(mocks.gradingProvider.callApi).mockResolvedValue({
+      output: { pass: true, score: 2 },
+    });
+
+    const result = await matchesVideoRubric(
+      'rubric',
+      { url: 'https://example.com/video.mp4' },
+      { provider: mocks.gradingProvider },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining('must include a boolean pass and a finite score'),
       }),
     );
   });

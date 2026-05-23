@@ -47,12 +47,15 @@ describe('video-utils', () => {
       expect(result.error).toBeUndefined();
     });
 
-    it('should reject path traversal before checking the filesystem', () => {
-      const result = loadImageData('file://../../../etc/passwd');
+    it('should preserve relative parent paths configured by the user', () => {
+      const mockImageData = Buffer.from('frame in sibling assets directory');
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockImageData);
+      const result = loadImageData('file://../assets/frame.png');
 
-      expect(result.error).toContain('Invalid image path');
-      expect(result.data).toBeUndefined();
-      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(result.data).toBe(mockImageData.toString('base64'));
+      expect(result.error).toBeUndefined();
+      expect(fs.existsSync).toHaveBeenCalled();
     });
 
     it('should return error when file does not exist', () => {
@@ -80,6 +83,7 @@ describe('video-utils', () => {
       expect(detectImageFormat('/path/to/image.jpg')).toBe('jpeg');
       expect(detectImageFormat('/path/to/image.jpeg')).toBe('jpeg');
       expect(detectImageFormat('/path/to/image.bmp')).toBe('jpeg');
+      expect(detectImageFormat('/path/to/image.png.backup')).toBe('jpeg');
       expect(detectImageFormat('randomBase64Data')).toBe('jpeg');
     });
   });

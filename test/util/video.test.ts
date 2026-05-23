@@ -16,10 +16,6 @@ vi.mock('../../src/storage', () => ({
   retrieveMedia: vi.fn(),
 }));
 
-vi.mock('../../src/util/fetch/index', () => ({
-  fetchWithProxy: vi.fn(),
-}));
-
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -56,9 +52,9 @@ describe('video utilities', () => {
       expect(isWithinInlineLimit(smallBuffer)).toBe(true);
     });
 
-    it('should return true for videos under the limit', () => {
-      const limitBuffer = Buffer.alloc(VIDEO_INLINE_LIMIT_BYTES - 1);
-      expect(isWithinInlineLimit(limitBuffer)).toBe(true);
+    it('should return true when base64 content fits under the request budget', () => {
+      const fourteenMegabytes = Buffer.alloc(14 * 1024 * 1024);
+      expect(isWithinInlineLimit(fourteenMegabytes)).toBe(true);
     });
 
     it('should return false for large videos', () => {
@@ -66,9 +62,9 @@ describe('video utilities', () => {
       expect(isWithinInlineLimit(largeBuffer)).toBe(false);
     });
 
-    it('should return false for exactly the limit', () => {
-      const exactBuffer = Buffer.alloc(VIDEO_INLINE_LIMIT_BYTES);
-      expect(isWithinInlineLimit(exactBuffer)).toBe(false);
+    it('should account for base64 expansion before reaching the raw limit', () => {
+      const fifteenMegabytes = Buffer.alloc(15 * 1024 * 1024);
+      expect(isWithinInlineLimit(fifteenMegabytes)).toBe(false);
     });
   });
 
@@ -170,6 +166,17 @@ describe('video utilities', () => {
       expect(retrieveMedia).toHaveBeenCalledWith('video/test123.webm');
     });
 
+    it('should use the mapped MIME type for stored QuickTime videos', async () => {
+      const { retrieveMedia } = await import('../../src/storage');
+      vi.mocked(retrieveMedia).mockResolvedValue(Buffer.from('quicktime video'));
+
+      const result = await resolveVideoBytes({
+        storageRef: { key: 'video/test123.mov' },
+      });
+
+      expect(result.mimeType).toBe('video/quicktime');
+    });
+
     it('should resolve video from promptfoo://blob/ URL', async () => {
       const mockBlobData = Buffer.from('video from blob uri');
       const { getBlobByHash } = await import('../../src/blobs');
@@ -200,42 +207,15 @@ describe('video utilities', () => {
       expect(retrieveMedia).toHaveBeenCalledWith('video/abc.mp4');
     });
 
-    it('should resolve video from HTTP URL', async () => {
-      const mockBuffer = Buffer.from('video from http');
-      const { fetchWithProxy } = await import('../../src/util/fetch/index');
-      vi.mocked(fetchWithProxy).mockResolvedValue({
-        ok: true,
-        arrayBuffer: () => Promise.resolve(mockBuffer.buffer),
-        headers: {
-          get: (name: string) => (name === 'content-type' ? 'video/quicktime' : null),
-        },
-      } as any);
-
-      const result = await resolveVideoBytes({
-        url: 'https://example.com/video.mov',
-      });
-
-      expect(result.buffer).toEqual(Buffer.from(mockBuffer.buffer));
-      expect(result.mimeType).toBe('video/quicktime');
-      expect(fetchWithProxy).toHaveBeenCalledWith('https://example.com/video.mov');
-    });
-
     it('should throw error when no valid source is found', async () => {
       await expect(resolveVideoBytes({})).rejects.toThrow(
         '[VideoRubric] No valid video source found',
       );
     });
 
-    it('should throw error when HTTP fetch fails', async () => {
-      const { fetchWithProxy } = await import('../../src/util/fetch/index');
-      vi.mocked(fetchWithProxy).mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      } as any);
-
-      await expect(resolveVideoBytes({ url: 'https://example.com/missing.mp4' })).rejects.toThrow(
-        '[VideoRubric] Failed to download video from URL: 404 Not Found',
+    it('should reject external video URLs instead of fetching provider-controlled locations', async () => {
+      await expect(resolveVideoBytes({ url: 'https://example.com/video.mp4' })).rejects.toThrow(
+        '[VideoRubric] External video URLs are not supported for grading',
       );
     });
 
@@ -267,7 +247,6 @@ describe('video utilities', () => {
     it('should prioritize storageRef over url', async () => {
       const mockBuffer = Buffer.from('storage data');
       const { retrieveMedia } = await import('../../src/storage');
-      const { fetchWithProxy } = await import('../../src/util/fetch/index');
       vi.mocked(retrieveMedia).mockResolvedValue(mockBuffer);
 
       const result = await resolveVideoBytes({
@@ -277,7 +256,6 @@ describe('video utilities', () => {
 
       expect(result.buffer).toEqual(mockBuffer);
       expect(retrieveMedia).toHaveBeenCalled();
-      expect(fetchWithProxy).not.toHaveBeenCalled();
     });
   });
 });

@@ -21,17 +21,12 @@ export type ImageFormat = 'png' | 'jpeg';
 /**
  * Load image data from file:// path or return as-is if base64.
  *
- * Includes path traversal protection for file:// paths.
- *
  * @param imagePath - Either a file:// URL or base64 encoded image data
  * @returns Object with either data (base64 string) or error message
  */
 export function loadImageData(imagePath: string): ImageLoadResult {
   if (imagePath.startsWith('file://')) {
     const filePath = imagePath.slice(7);
-    if (filePath.split(/[\\/]+/).includes('..')) {
-      return { error: `Invalid image path (path traversal detected): ${filePath}` };
-    }
     const resolvedPath = path.resolve(filePath);
     if (!fs.existsSync(resolvedPath)) {
       return { error: `Image file not found: ${resolvedPath}` };
@@ -54,8 +49,12 @@ export function loadImageData(imagePath: string): ImageLoadResult {
  */
 export function detectImageFormat(imagePath: string): ImageFormat {
   const lowerPath = imagePath.toLowerCase();
-  // Check file extension or PNG base64 magic bytes
-  if (lowerPath.includes('.png') || lowerPath.startsWith('ivborw')) {
+  if (lowerPath.startsWith('ivborw')) {
+    return 'png';
+  }
+
+  const extension = path.extname(imagePath.startsWith('file://') ? imagePath.slice(7) : imagePath);
+  if (extension.toLowerCase() === '.png') {
     return 'png';
   }
   return 'jpeg';

@@ -576,7 +576,7 @@ export class AIStudioEmbeddingProvider
 }
 
 const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
-const DEFAULT_AI_STUDIO_VIDEO_GRADING_MODEL = 'gemini-3-flash-preview';
+const DEFAULT_AI_STUDIO_VIDEO_GRADING_MODEL = 'gemini-3.5-flash';
 
 function createVideoGradingProvider(env?: EnvOverrides) {
   return new AIStudioChatProvider(DEFAULT_AI_STUDIO_VIDEO_GRADING_MODEL, {
@@ -589,8 +589,7 @@ function createVideoGradingProvider(env?: EnvOverrides) {
   });
 }
 
-// Gemini 3 Flash Preview for video understanding (video-rubric assertion).
-// AI Studio video content may require OAuth2; Vertex AI mode remains the production fallback.
+// Gemini 3.5 Flash supports video understanding for video-rubric assertions.
 export const DefaultVideoGradingProvider = createVideoGradingProvider();
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {

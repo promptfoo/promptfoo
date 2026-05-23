@@ -180,4 +180,40 @@ describe('handleVideoRubric', () => {
     );
     expect(result.pass).toBe(true);
   });
+
+  it('should not mutate assertion or object rubricPrompt inputs while preparing results', async () => {
+    vi.mocked(matchesVideoRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Excellent',
+    });
+
+    const rubricPrompt = [{ role: 'user', content: 'Judge: {{ rubric }}' }];
+    const assertion = { type: 'video-rubric' as const };
+    const params = createParams({
+      assertion,
+      renderedValue: undefined,
+      test: {
+        vars: {},
+        options: { rubricPrompt },
+      },
+      providerResponse: {
+        output: 'test output',
+        video: { blobRef: createBlobRef() },
+      },
+    });
+
+    await handleVideoRubric(params);
+
+    expect(params.assertion).toEqual({ type: 'video-rubric' });
+    expect(params.test.options?.rubricPrompt).toBe(rubricPrompt);
+    expect(matchesVideoRubric).toHaveBeenCalledWith(
+      '',
+      expect.any(Object),
+      expect.objectContaining({ rubricPrompt: JSON.stringify(rubricPrompt) }),
+      expect.any(Object),
+      expect.objectContaining({ value: JSON.stringify(rubricPrompt) }),
+      expect.any(Object),
+    );
+  });
 });
