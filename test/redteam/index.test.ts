@@ -73,6 +73,10 @@ describe('synthesize', () => {
     vi.restoreAllMocks();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
 
@@ -3703,7 +3707,7 @@ describe('Language configuration', () => {
             numTests: 2,
             config: {
               policy: {
-                id: 'abc123def456',
+                id: 'abc123de-f456-4123-8123-abc123def456',
                 text: 'Some policy text',
                 name: 'Secret Protection Policy',
               },
@@ -3761,7 +3765,7 @@ describe('Language configuration', () => {
             numTests: 2,
             config: {
               policy: {
-                id: 'abc123def456',
+                id: 'abc123de-f456-4123-8123-abc123def456',
                 text: 'Never share confidential data',
                 name: 'Data Protection Policy',
               },

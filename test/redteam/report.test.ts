@@ -84,12 +84,12 @@ describe('report', () => {
       expect(
         getPluginDisplayId({
           id: 'policy',
-          config: { policy: { ...policy, id: '11111111-1111-1111-1111-111111111111' } },
+          config: { policy: { ...policy, id: '11111111-1111-4111-8111-111111111111' } },
         }),
       ).not.toBe(
         getPluginDisplayId({
           id: 'policy',
-          config: { policy: { ...policy, id: '22222222-2222-2222-2222-222222222222' } },
+          config: { policy: { ...policy, id: '22222222-2222-4222-8222-222222222222' } },
         }),
       );
     });
