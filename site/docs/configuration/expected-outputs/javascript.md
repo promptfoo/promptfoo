@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
-description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
+description: Write JavaScript assertions for LLM outputs using async logic, custom scores, provider metadata, trace context, and clear failure handling in promptfoo evals.
 ---
 
 # Javascript assertions
@@ -143,7 +143,7 @@ interface AssertionValueFunctionContext {
   // OpenTelemetry trace data (when tracing is enabled)
   trace?: TraceData;
 
-  // Shortcut to providerResponse.metadata (provider-specific fields)
+  // Shortcut to providerResponse?.metadata (provider-specific fields)
   metadata?: Record<string, any>;
 }
 ```
@@ -174,7 +174,7 @@ tests:
 
 ## Accessing provider metadata
 
-Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access metadata via `context.metadata`, which is a shortcut for `context.providerResponse.metadata`.
+Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access metadata via `context.metadata`, which is a shortcut for `context.providerResponse?.metadata`.
 
 ```yaml
 tests:

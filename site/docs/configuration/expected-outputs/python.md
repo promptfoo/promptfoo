@@ -1,7 +1,7 @@
 ---
 sidebar_position: 51
 sidebar_label: Python
-description: Create advanced Python validation scripts with complex logic, external APIs, and ML libraries for sophisticated output grading
+description: Write Python assertions for LLM outputs using custom scores, provider metadata, external scripts, trace context, and clear failure handling in promptfoo evals.
 ---
 
 # Python assertions
@@ -98,7 +98,7 @@ class AssertionValueFunctionContext(TypedDict):
     # OpenTelemetry trace data (when tracing is enabled)
     trace: Optional[TraceData]
 
-    # Shortcut to providerResponse.metadata
+    # Shortcut to providerResponse.metadata; key is omitted when unavailable
     metadata: Optional[Dict[str, Any]]
 ```
 
@@ -116,7 +116,7 @@ tests:
 
 ## Accessing provider metadata
 
-Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access metadata via `context.get('metadata')`, which is a shortcut for `context.get('providerResponse', {}).get('metadata')`.
+Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access optional metadata via `context.get('metadata', {})`.
 
 ```yaml
 tests:

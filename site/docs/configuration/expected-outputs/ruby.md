@@ -1,7 +1,7 @@
 ---
 sidebar_position: 52
 sidebar_label: Ruby
-description: Create advanced Ruby validation scripts with complex logic, external APIs, and custom libraries for sophisticated output grading
+description: Write Ruby assertions for LLM outputs using custom scores, provider metadata, external scripts, trace context, and clear failure handling in promptfoo evals.
 ---
 
 # Ruby assertions
@@ -93,6 +93,9 @@ A `context` object is available in the Ruby method. Here is its type definition:
   # The complete provider response
   'providerResponse' => Object | nil,  # ProviderResponse type
 
+  # Shortcut to providerResponse metadata; key is omitted when unavailable
+  'metadata' => Hash | nil,
+
   # OpenTelemetry trace data (when tracing is enabled)
   'trace' => TraceData | nil
 }
@@ -108,6 +111,20 @@ tests:
     assert:
       - type: ruby
         value: 'context["vars"]["example"] in output'
+```
+
+## Accessing provider metadata
+
+Providers can include metadata in their responses. Access optional metadata through `context.fetch('metadata', {})`:
+
+```yaml
+tests:
+  - assert:
+      - type: ruby
+        value: "context.fetch('metadata', {}).dig('http', 'status') == 200"
+
+      - type: ruby
+        value: "context.fetch('metadata', {}).fetch('customField', 0) <= 10"
 ```
 
 ## External .rb
