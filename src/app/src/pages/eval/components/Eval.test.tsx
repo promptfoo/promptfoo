@@ -71,7 +71,6 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => mockNavigate,
-    useSearchParams: () => [new URLSearchParams(window.location.search), vi.fn()],
     useParams: () => ({}),
   };
 });
