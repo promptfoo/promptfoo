@@ -1,4 +1,36 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockRandomUUID } = vi.hoisted(() => ({
+  mockRandomUUID: vi.fn(() => 'secure-mcp-session-id'),
+}));
+
+vi.mock('node:crypto', () => ({
+  randomUUID: mockRandomUUID,
+}));
+
+const expressMocks = vi.hoisted(() => {
+  const close = vi.fn((callback: (error?: Error) => void) => callback());
+  const listen = vi.fn((_port: number, callback: () => void) => {
+    callback();
+    return { close };
+  });
+  const app = {
+    use: vi.fn(),
+    post: vi.fn(),
+    get: vi.fn(),
+    listen,
+  };
+  const json = vi.fn();
+  const express = Object.assign(
+    vi.fn(() => app),
+    { json },
+  );
+  return { app, close, express, json, listen };
+});
+
+vi.mock('express', () => ({
+  default: expressMocks.express,
+}));
 
 // Mock dependencies before importing the module
 vi.mock('../../../src/logger', () => ({
@@ -78,6 +110,7 @@ const mcpServerMocks = vi.hoisted(() => {
   const mockMcpServerImplementation = function MockMcpServer(
     this: {
       connect: ReturnType<typeof vi.fn>;
+      close: ReturnType<typeof vi.fn>;
       tool: ReturnType<typeof vi.fn>;
       resource: ReturnType<typeof vi.fn>;
     },
@@ -85,6 +118,7 @@ const mcpServerMocks = vi.hoisted(() => {
   ) {
     mcpServerCalls.push(config);
     this.connect = vi.fn();
+    this.close = vi.fn().mockResolvedValue(undefined);
     this.tool = vi.fn();
     this.resource = vi.fn();
   };
@@ -101,20 +135,32 @@ vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn().mockImplementation(() => ({})),
 }));
 
+const streamableHttpMocks = vi.hoisted(() => ({
+  constructor: vi.fn().mockImplementation(function MockStreamableHTTPServerTransport() {
+    return {
+      handleRequest: vi.fn(),
+    };
+  }),
+}));
+
 vi.mock('@modelcontextprotocol/sdk/server/streamableHttp.js', () => ({
-  StreamableHTTPServerTransport: vi.fn().mockImplementation(() => ({
-    handleRequest: vi.fn(),
-  })),
+  StreamableHTTPServerTransport: streamableHttpMocks.constructor,
 }));
 
 const { mcpServerCalls } = mcpServerMocks;
 
 describe('MCP Server', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mcpServerMocks.MockMcpServer.mockReset().mockImplementation(
       mcpServerMocks.mockMcpServerImplementation,
     );
+    streamableHttpMocks.constructor.mockClear();
+    mockRandomUUID.mockClear();
     mcpServerCalls.length = 0;
   });
 
@@ -234,6 +280,34 @@ describe('MCP Server', () => {
         feature: 'mcp_server',
         transport: expect.any(String),
       });
+    });
+  });
+
+  describe('startHttpMcpServer', () => {
+    it('creates cryptographically random session identifiers', async () => {
+      let shutdown: (() => void) | undefined;
+      vi.spyOn(process, 'once').mockImplementation(((event: string, listener: () => void) => {
+        if (event === 'SIGINT') {
+          shutdown = listener;
+        }
+        return process;
+      }) as typeof process.once);
+
+      const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+      const serverPromise = startHttpMcpServer(3100);
+
+      await vi.waitFor(() => {
+        expect(streamableHttpMocks.constructor).toHaveBeenCalledOnce();
+      });
+
+      const transportOptions = streamableHttpMocks.constructor.mock.calls[0][0] as {
+        sessionIdGenerator: () => string;
+      };
+      expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
+      expect(mockRandomUUID).toHaveBeenCalledOnce();
+
+      shutdown?.();
+      await serverPromise;
     });
   });
 });
