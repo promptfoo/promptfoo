@@ -36,7 +36,7 @@ export type SemanticFrontierSummary = {
 
 function escapeNunjucksLiteral(value: string): string {
   // All Nunjucks tags start with "{". Emit it at render time so candidate text is never parsed.
-  return value.replaceAll('{', '{{ "{" }}');
+  return value.replace(/\{/g, '{{ "{" }}');
 }
 
 export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
