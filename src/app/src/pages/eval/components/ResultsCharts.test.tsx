@@ -404,14 +404,19 @@ describe('ResultsCharts', () => {
         .mocked(Chart)
         .mock.calls.map(([, config]) => config)
         .find((config) => 'type' in config && config.type === 'scatter');
-      const scatterData = scatterConfig?.data?.datasets[0].data;
+      const scatterData = scatterConfig?.data?.datasets[0].data as
+        | Array<{ x: number; y: number; rowIndex: number }>
+        | undefined;
+      const tooltipLabel = scatterConfig?.options?.plugins?.tooltip?.callbacks?.label as
+        | ((context: { dataIndex: number; raw?: unknown }) => string)
+        | undefined;
 
       expect(scatterData).toEqual([expect.objectContaining({ x: 0.6, y: 0.8, rowIndex: 1 })]);
       expect(
-        scatterConfig?.options?.plugins?.tooltip?.callbacks?.label?.({
+        tooltipLabel?.({
           dataIndex: 0,
           raw: scatterData?.[0],
-        } as any),
+        }),
       ).toContain('right first output');
     });
 

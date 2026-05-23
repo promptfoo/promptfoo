@@ -29,6 +29,8 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeParts,
@@ -539,12 +541,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
         }
 
-        if (
-          Array.isArray(data) &&
-          !datum.candidates?.length &&
-          datum.usageMetadata &&
-          !datum.promptFeedback
-        ) {
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
           continue;
         }
 
@@ -634,10 +631,9 @@ export class GoogleProvider extends GoogleGenericProvider {
       const lastDataWithCandidate =
         dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
       const candidate = getCandidate(lastDataWithCandidate);
-      if (lastDataWithCandidate.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastDataWithCandidate.promptFeedback?.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
+      if (promptSafetyRatings || candidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
         guardrails = { flaggedInput, flaggedOutput, flagged };

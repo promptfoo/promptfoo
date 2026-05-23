@@ -13,6 +13,8 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
   mergeParts,
   normalizeSafetySettings,
@@ -380,19 +382,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     const dataWithResponse = (Array.isArray(data) ? data : [data]) as GeminiResponseData[];
-    const lastData = dataWithResponse[dataWithResponse.length - 1] ?? data;
-    const lastDataWithCandidate =
-      dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
+    const lastData = dataWithResponse[dataWithResponse.length - 1];
+    if (!lastData) {
+      return {
+        error: `No response data found in response: ${JSON.stringify(data)}`,
+      };
+    }
     let output: ReturnType<typeof formatCandidateContents> | undefined;
-    let candidate;
+    let candidate: ReturnType<typeof getCandidate> | undefined;
     try {
       for (const datum of dataWithResponse) {
-        if (
-          Array.isArray(data) &&
-          !datum.candidates?.length &&
-          datum.usageMetadata &&
-          !datum.promptFeedback
-        ) {
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
           continue;
         }
 
@@ -400,7 +400,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         output = mergeParts(output, formatCandidateContents(candidate));
       }
 
-      if (output === undefined) {
+      if (output === undefined || candidate === undefined) {
         throw new Error(`No output found in response: ${JSON.stringify(data)}`);
       }
     } catch (err) {
@@ -408,15 +408,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         error: `${String(err)}`,
       };
     }
+    const finalCandidate = candidate;
 
     try {
       let guardrails: GuardrailResponse | undefined;
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
 
-      if (lastDataWithCandidate.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastDataWithCandidate.promptFeedback?.safetyRatings?.some(
+      if (promptSafetyRatings || finalCandidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
+        const flaggedOutput = finalCandidate.safetyRatings?.some(
           (r) => r.probability !== 'NEGLIGIBLE',
         );
-        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
 
         guardrails = {
@@ -477,10 +479,18 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         cached,
         ...(guardrails && { guardrails }),
         metadata: {
-          ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
-          ...(candidate.groundingMetadata && { groundingMetadata: candidate.groundingMetadata }),
-          ...(candidate.groundingSupports && { groundingSupports: candidate.groundingSupports }),
-          ...(candidate.webSearchQueries && { webSearchQueries: candidate.webSearchQueries }),
+          ...(finalCandidate.groundingChunks && {
+            groundingChunks: finalCandidate.groundingChunks,
+          }),
+          ...(finalCandidate.groundingMetadata && {
+            groundingMetadata: finalCandidate.groundingMetadata,
+          }),
+          ...(finalCandidate.groundingSupports && {
+            groundingSupports: finalCandidate.groundingSupports,
+          }),
+          ...(finalCandidate.webSearchQueries && {
+            webSearchQueries: finalCandidate.webSearchQueries,
+          }),
         },
       };
     } catch (err) {

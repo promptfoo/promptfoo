@@ -320,6 +320,51 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('should preserve prompt safety ratings from separate streaming chunks', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            promptFeedback: {
+              safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'HIGH' }],
+            },
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'safe response' }] },
+                safetyRatings: [
+                  { category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' },
+                ],
+              },
+            ],
+          },
+          {
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('safe response');
+      expect(response.guardrails).toEqual({
+        flaggedInput: true,
+        flaggedOutput: false,
+        flagged: true,
+      });
+    });
+
     it('should reject array responses that never provide output', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {

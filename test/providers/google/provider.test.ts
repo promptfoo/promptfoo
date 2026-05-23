@@ -585,6 +585,44 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it('should preserve prompt safety ratings from separate streaming chunks', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            promptFeedback: {
+              safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT', probability: 'HIGH' }],
+            },
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'streamed response' }] },
+                safetyRatings: [
+                  { category: 'HARM_CATEGORY_HARASSMENT', probability: 'NEGLIGIBLE' },
+                ],
+              },
+            ],
+          },
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('streamed response');
+      expect(result.guardrails).toEqual({
+        flaggedInput: true,
+        flaggedOutput: false,
+        flagged: true,
+      });
+    });
+
     it('should accumulate incremental chunks in streaming responses', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
