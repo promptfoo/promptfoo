@@ -31,6 +31,7 @@ import {
   getGoogleClient,
   loadCredentials,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -498,7 +499,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const dataWithResponse = normalizedData as GeminiResponseData[];
-      let output;
+      let output: ReturnType<typeof formatCandidateContents> | undefined;
 
       for (const datum of dataWithResponse) {
         // Check for blockReason first
@@ -584,14 +585,14 @@ export class GoogleProvider extends GoogleGenericProvider {
         } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
           // MAX_TOKENS is treated as a successful completion
           if (candidate.content?.parts) {
-            output = formatCandidateContents(candidate);
+            output = mergeParts(output, formatCandidateContents(candidate));
           }
         } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
           return {
             error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
           };
         } else if (candidate.content?.parts) {
-          output = formatCandidateContents(candidate);
+          output = mergeParts(output, formatCandidateContents(candidate));
         }
       }
 

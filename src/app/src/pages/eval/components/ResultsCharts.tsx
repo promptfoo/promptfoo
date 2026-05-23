@@ -40,6 +40,13 @@ interface ChartProps {
   datasetId?: string | null;
 }
 
+type ScatterPoint = {
+  x: number;
+  y: number;
+  backgroundColor: string;
+  rowIndex: number;
+};
+
 const COLOR_PALETTE = [
   '#fd7f6f',
   '#7eb0d5',
@@ -243,7 +250,7 @@ function ScatterChart({ table }: ChartProps) {
     const minScore = Math.min(...scores);
     const maxScore = Math.max(...scores);
 
-    const data = table.body.flatMap((row) => {
+    const data = table.body.flatMap<ScatterPoint>((row, rowIndex) => {
       const prompt1Score = row.outputs[xAxisPrompt]?.score;
       const prompt2Score = row.outputs[yAxisPrompt]?.score;
 
@@ -270,6 +277,7 @@ function ScatterChart({ table }: ChartProps) {
           x: prompt1Score,
           y: prompt2Score,
           backgroundColor,
+          rowIndex,
         },
       ];
     });
@@ -306,9 +314,16 @@ function ScatterChart({ table }: ChartProps) {
           tooltip: {
             callbacks: {
               label(tooltipItem: TooltipItem<'scatter'>) {
-                const row = table.body[tooltipItem.dataIndex];
-                let prompt1Text = row.outputs[0]?.text || 'No output';
-                let prompt2Text = row.outputs[1]?.text || 'No output';
+                const point = tooltipItem.raw as Partial<ScatterPoint> | undefined;
+                const rowIndex =
+                  typeof point?.rowIndex === 'number' ? point.rowIndex : tooltipItem.dataIndex;
+                const row = table.body[rowIndex];
+                if (!row) {
+                  return '';
+                }
+
+                let prompt1Text = row.outputs[xAxisPrompt]?.text || 'No output';
+                let prompt2Text = row.outputs[yAxisPrompt]?.text || 'No output';
                 if (prompt1Text.length > 30) {
                   prompt1Text = prompt1Text.substring(0, 30) + '...';
                 }

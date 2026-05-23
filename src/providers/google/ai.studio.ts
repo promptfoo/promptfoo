@@ -14,6 +14,7 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -378,10 +379,30 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       };
     }
 
-    let output, candidate;
+    const dataWithResponse = (Array.isArray(data) ? data : [data]) as GeminiResponseData[];
+    const lastData = dataWithResponse[dataWithResponse.length - 1] ?? data;
+    const lastDataWithCandidate =
+      dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
+    let output: ReturnType<typeof formatCandidateContents> | undefined;
+    let candidate;
     try {
-      candidate = getCandidate(data);
-      output = formatCandidateContents(candidate);
+      for (const datum of dataWithResponse) {
+        if (
+          Array.isArray(data) &&
+          !datum.candidates?.length &&
+          datum.usageMetadata &&
+          !datum.promptFeedback
+        ) {
+          continue;
+        }
+
+        candidate = getCandidate(datum);
+        output = mergeParts(output, formatCandidateContents(candidate));
+      }
+
+      if (output === undefined) {
+        throw new Error(`No output found in response: ${JSON.stringify(data)}`);
+      }
     } catch (err) {
       return {
         error: `${String(err)}`,
@@ -391,8 +412,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     try {
       let guardrails: GuardrailResponse | undefined;
 
-      if (data.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = data.promptFeedback?.safetyRatings?.some(
+      if (lastDataWithCandidate.promptFeedback?.safetyRatings || candidate.safetyRatings) {
+        const flaggedInput = lastDataWithCandidate.promptFeedback?.safetyRatings?.some(
           (r) => r.probability !== 'NEGLIGIBLE',
         );
         const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
@@ -407,25 +428,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
       const tokenUsage = cached
         ? {
-            cached: data.usageMetadata?.totalTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
+            cached: lastData.usageMetadata?.totalTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 0,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
+                reasoning: lastData.usageMetadata.thoughtsTokenCount,
                 acceptedPrediction: 0,
                 rejectedPrediction: 0,
               },
             }),
           }
         : {
-            prompt: data.usageMetadata?.promptTokenCount,
-            completion: data.usageMetadata?.candidatesTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
+            prompt: lastData.usageMetadata?.promptTokenCount,
+            completion: lastData.usageMetadata?.candidatesTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
+                reasoning: lastData.usageMetadata.thoughtsTokenCount,
                 acceptedPrediction: 0,
                 rejectedPrediction: 0,
               },
@@ -435,15 +456,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount == null
+        lastData.usageMetadata?.candidatesTokenCount == null
           ? undefined
-          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+          : lastData.usageMetadata.candidatesTokenCount +
+            (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
         : calculateGoogleCost(
             this.modelName,
             config,
-            data.usageMetadata?.promptTokenCount,
+            lastData.usageMetadata?.promptTokenCount,
             completionForCost,
           );
 

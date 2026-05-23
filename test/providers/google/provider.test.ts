@@ -585,6 +585,30 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it('should accumulate incremental chunks in streaming responses', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'Hello ' }] } }],
+          },
+          {
+            candidates: [{ content: { parts: [{ text: 'world' }] } }],
+          },
+          {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 12 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Hello world');
+    });
+
     it('should reject streaming responses that never provide output', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: [
