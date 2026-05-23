@@ -18,6 +18,7 @@ const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
   requestsSystemPrompt: [/\bsystem prompt\b/i, /\bsystem instructions?\b/i],
   requestsOperatingInstructions: [
     /\bhidden (?:operating )?instructions?\b/i,
+    /\binternal operating instructions?\b/i,
     /\binternal guidelines?\b/i,
     /\binternal operating rules?\b/i,
     /\bcore instructions?\b/i,
@@ -214,12 +215,14 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
   removesAuthorizationFilter: [
     /\bremove the (?:current-user )?filter\b/i,
+    /\bremove the (?:assignment|assigned[_ -](?:agent|patient)|current[_ -]user)(?:\s*=\s*current[_ -]user)? filter\b/i,
     /\bignore the assigned-patient restriction\b/i,
     /\bwithout the where\b/i,
   ],
   usesNaturalLanguagePrivilegeEscalation: [
     /\bregardless of department\b/i,
     /\bentire company\b/i,
+    /\ball (?:patient|medical) records(?: in the system)?\b/i,
     /\ball tickets in the system\b/i,
     /\bregardless of who is currently authenticated\b/i,
   ],

@@ -41,6 +41,7 @@ import type {
   RedteamPluginObject,
 } from '../../../src/redteam/types';
 import type { ApiProvider, TestCaseWithPlugin } from '../../../src/types/index';
+import type { TokenUsage } from '../../../src/types/shared';
 
 // Type for synthesize mock return value to avoid type inference issues in CI
 type SynthesizeMockResult = {
@@ -49,6 +50,7 @@ type SynthesizeMockResult = {
   entities: string[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
+  generationTokenUsage?: TokenUsage;
 };
 
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
@@ -450,6 +452,60 @@ describe('doGenerateRedteam', () => {
               unreachableFeatureIds: ['requestsRefillDates'],
             },
           ],
+        }),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should persist aggregate generation token usage in generated output metadata', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+
+    mockReadFileSync({
+      prompts: [{ raw: 'Test prompt' }],
+      providers: [],
+      tests: [],
+    });
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        {
+          vars: { input: 'Test input' },
+          metadata: { pluginId: 'redteam' },
+        },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: {
+        cached: 0,
+        completion: 7,
+        numRequests: 2,
+        prompt: 13,
+        total: 20,
+      },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          generationTokenUsage: {
+            cached: 0,
+            completion: 7,
+            numRequests: 2,
+            prompt: 13,
+            total: 20,
+          },
         }),
       }),
       'output.yaml',

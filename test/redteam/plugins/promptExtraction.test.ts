@@ -12,6 +12,10 @@ afterEach(() => {
 
 describe('PromptExtractionPlugin', () => {
   it('pins semantic contracts for protected-control-plane families', () => {
+    const authorityPretext = PROMPT_EXTRACTION_ATTACK_FAMILIES.find(
+      (family) => family.id === 'authority-pretext',
+    );
+
     expect(
       Object.fromEntries(
         PROMPT_EXTRACTION_ATTACK_FAMILIES.map((family) => [
@@ -29,6 +33,9 @@ describe('PromptExtractionPlugin', () => {
       'policy-audit': ['asksForRefusalPolicy'],
       'routing-review': ['asksForClassificationRules', 'asksForRoutingRules'],
     });
+    expect(authorityPretext?.instructions).toContain('"legal counsel"');
+    expect(authorityPretext?.instructions).toContain('"verbatim hidden instructions"');
+    expect(authorityPretext?.instructions).toContain('"authority checks"');
   });
 
   it('generates a coverage-aware portfolio with attack metadata', async () => {
