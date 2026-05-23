@@ -361,8 +361,9 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
-    it('redacts Azure Blob SAS tokens from table config without mutating stored config', async () => {
-      const sasUri = 'az://account/container/tests.yaml?sp=r&sig=azure-secret';
+    it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {
+      const sasUri =
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=azure-secret&sv={{ version }}';
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
       eval_.config.tests = sasUri;
@@ -372,12 +373,19 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.config.tests).toBe(
-        'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+        'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=%5BREDACTED%5D&sv={{ version }}',
       );
 
-      const storedEval = await Eval.findById(eval_.id);
-      invariant(storedEval, 'Eval is required');
-      expect(storedEval.config.tests).toBe(sasUri);
+      const patchRes = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toBe(sasUri);
+      expect(updatedEval.config.description).toBe('renamed eval');
     });
 
     it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
