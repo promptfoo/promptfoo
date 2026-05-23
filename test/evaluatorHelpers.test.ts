@@ -11,6 +11,7 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
+import * as pythonUtils from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -110,6 +111,9 @@ vi.mock('../src/esm', () => ({
     // Return a mock path for the package (matches what dynamic module mocks expect)
     return `/node_modules/${packageName}/index.js`;
   }),
+}));
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
 }));
 vi.mock('../src/database', () => ({
   getDb: vi.fn(),
@@ -426,6 +430,119 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(renderedPrompt).toBe('Items: Content 1, Content 2');
+    });
+
+    it('should preserve variable rendering semantics for nested YAML files', async () => {
+      const prompt = toPrompt('Schema: {{ payload.schema }}');
+      const vars = {
+        payload: {
+          schema: 'file://nested-schema.yaml',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('type: object');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Schema: {"type":"object"}');
+    });
+
+    it('should pass variable context to nested JavaScript file variables', async () => {
+      const prompt = toPrompt('Context: {{ payload.context }}');
+      const vars = {
+        payload: {
+          context: 'file:///path/to/nested.js',
+        },
+        sibling: 'visible',
+      };
+
+      mockDynamicModule(
+        '/path/to/nested.js',
+        (varName: string, rawPrompt: string, allVars: object, provider: object) => {
+          expect(varName).toBe('payload.context');
+          expect(rawPrompt).toBe(prompt.raw);
+          expect(allVars).toBe(vars);
+          expect(provider).toBe(mockApiProvider);
+          return { output: 'nested dynamic value' };
+        },
+      );
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, mockApiProvider);
+
+      expect(renderedPrompt).toBe('Context: nested dynamic value');
+    });
+
+    it('should pass variable context to nested Python file variables', async () => {
+      const prompt = toPrompt('Context: {{ payload.context }}');
+      const vars = {
+        payload: {
+          context: 'file:///path/to/nested.py',
+        },
+      };
+
+      vi.mocked(pythonUtils.runPython).mockResolvedValueOnce({ output: ' nested python value ' });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(pythonUtils.runPython).toHaveBeenCalledWith('/path/to/nested.py', 'get_var', [
+        'payload.context',
+        prompt.raw,
+        vars,
+      ]);
+      expect(renderedPrompt).toBe('Context: nested python value');
+    });
+
+    it('should preserve non-plain nested variable values', async () => {
+      const date = new Date('2024-01-15T00:00:00.000Z');
+      const vars = { eventDate: date };
+
+      await renderPrompt(toPrompt('{{ eventDate }}'), vars, {});
+
+      expect(vars.eventDate).toBe(date);
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+    });
+
+    it('should retain plain object identity when no nested file values are present', async () => {
+      const payload = { nested: { value: 'plain value' } };
+      const vars = { payload };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ payload.nested.value }}'), vars, {});
+
+      expect(renderedPrompt).toBe('plain value');
+      expect(vars.payload).toBe(payload);
+      expect(vars.payload.nested).toBe(payload.nested);
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+    });
+
+    it('should preserve own __proto__ fields when resolving nested file values', async () => {
+      const payload = JSON.parse('{"__proto__":"file://nested-value.txt"}') as Record<
+        string,
+        string
+      >;
+      const vars = { payload };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('loaded value');
+
+      await renderPrompt(toPrompt('done'), vars, {});
+
+      expect(Object.prototype.hasOwnProperty.call(vars.payload, '__proto__')).toBe(true);
+      expect(vars.payload.__proto__).toBe('loaded value');
+    });
+
+    it('should preserve cycles while resolving nested file values', async () => {
+      const payload: Record<string, unknown> = {
+        content: 'file://nested-value.txt',
+      };
+      payload.self = payload;
+      const vars = { payload };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('loaded value');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ payload.content }}'), vars, {});
+
+      expect(renderedPrompt).toBe('loaded value');
+      expect(vars.payload.content).toBe('loaded value');
+      expect(vars.payload.self).toBe(vars.payload);
     });
 
     it('should not load nested file:// references for skipped render vars', async () => {

@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import fs from 'fs';
+import path from 'path';
 
 import yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,19 +34,6 @@ vi.mock('../../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
 }));
 vi.mock('../../src/util/fileExtensions');
-vi.mock('../../src/envars', () => ({
-  getEnvBool: vi.fn().mockReturnValue(false),
-}));
-vi.mock('../../src/telemetry', () => ({
-  default: {
-    record: vi.fn(),
-  },
-}));
-vi.mock('../../src/util/file', () => ({
-  getMimeTypeFromExtension: vi.fn().mockReturnValue('image/jpeg'),
-  detectMimeFromBase64: vi.fn().mockReturnValue(null),
-  extractTextFromPDF: vi.fn().mockResolvedValue('PDF text content'),
-}));
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -134,8 +121,7 @@ describe('fileReference utility functions', () => {
 
       expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
       expect(yaml.load).toHaveBeenCalledWith(fileContent);
-      // YAML returns JSON string to match top-level behavior in evaluatorHelpers
-      expect(result).toEqual(JSON.stringify(parsedContent));
+      expect(result).toEqual(parsedContent);
     });
 
     it('should load JavaScript files correctly', async () => {
@@ -217,16 +203,13 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(parsedContent);
     });
 
-    it('should read unknown file types as text', async () => {
+    it('should throw an error for unsupported file types', async () => {
       const fileRef = 'file:///path/to/file.xyz';
-      const textContent = 'Some text content in unknown file';
 
       vi.mocked(path.extname).mockReturnValue('.xyz');
       vi.mocked(isJavascriptFile).mockReturnValue(false);
-      readFileMock.mockResolvedValue(textContent);
 
-      const result = await loadFileReference(fileRef);
-      expect(result).toBe(textContent);
+      await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .xyz');
     });
   });
 
@@ -290,8 +273,7 @@ describe('fileReference utility functions', () => {
         setting1: 'value1',
         setting2: { key: 'value2' },
         nested: {
-          // YAML returns JSON string to match top-level behavior in evaluatorHelpers
-          setting3: JSON.stringify({ key: 'value3' }),
+          setting3: { key: 'value3' },
         },
       });
     });
@@ -330,13 +312,7 @@ describe('fileReference utility functions', () => {
 
       const result = await processConfigFileReferences(config);
 
-      // YAML returns JSON string to match top-level behavior in evaluatorHelpers
-      expect(result).toEqual([
-        'regular string',
-        { name: 'item1' },
-        JSON.stringify({ name: 'item2' }),
-        42,
-      ]);
+      expect(result).toEqual(['regular string', { name: 'item1' }, { name: 'item2' }, 42]);
     });
 
     it('should handle errors when processing file references', async () => {
