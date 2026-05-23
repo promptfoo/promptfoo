@@ -42,7 +42,7 @@ function sanitizeAzureBlobErrorDetail(uri: string, detail: string): string {
 
   const fragmentStart = uri.indexOf('#', queryStart);
   const query = uri.slice(queryStart, fragmentStart >= 0 ? fragmentStart : undefined);
-  return detail.replaceAll(query, '?<redacted>');
+  return detail.split(query).join('?<redacted>');
 }
 
 function formatAzureBlobReadError(uri: string, error: unknown): Error {
