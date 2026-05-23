@@ -94,7 +94,7 @@ A `context` object is available in the Ruby method. Here is its type definition:
   'providerResponse' => Object | nil,  # ProviderResponse type
 
   # Shortcut to providerResponse metadata; key is omitted when unavailable
-  'metadata' => Hash | nil,
+  'metadata' => Hash,
 
   # OpenTelemetry trace data (when tracing is enabled)
   'trace' => TraceData | nil
