@@ -9,8 +9,8 @@ import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
-const { mockSetSearchParams, mockShowToast } = vi.hoisted(() => ({
-  mockSetSearchParams: vi.fn(),
+const { mockNavigate, mockShowToast } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
   mockShowToast: vi.fn(),
 }));
 
@@ -60,8 +60,8 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
-    useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
+    useNavigate: () => mockNavigate,
+    useSearchParams: () => [new URLSearchParams(window.location.search), vi.fn()],
     useParams: () => ({}),
   };
 });
@@ -127,7 +127,16 @@ describe('Eval', () => {
     baseMockTableStore.setIsStreaming.mockClear();
     baseMockResultsViewSettings.setInComparisonMode.mockClear();
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
+    mockNavigate.mockClear();
     mockShowToast.mockClear();
+    window.history.replaceState({}, '', '/eval/test-eval');
+
+    (useTableStore as any).getState = vi.fn(() => ({
+      filters: { values: {} },
+      resetFilters: baseMockTableStore.resetFilters,
+      addFilter: baseMockTableStore.addFilter,
+    }));
+    (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
     useTestTimers();
 
@@ -141,54 +150,6 @@ describe('Eval', () => {
 
   afterEach(() => {
     restoreTestTimers({ runPending: true });
-  });
-
-  it('should call resetFilters when mounted with a new fetchId', async () => {
-    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-1" />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-2" />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
-  });
-
-  it('should call resetFilters only once per render, even with different fetchIds', async () => {
-    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-1" />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      render(
-        <MemoryRouter>
-          <Eval fetchId="eval-2" />
-        </MemoryRouter>,
-      );
-    });
-
-    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
   });
 
   it('should call resetFilters when navigating from one eval to another', async () => {
@@ -423,8 +384,8 @@ describe('Eval', () => {
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
-  it('should call setSearchParams with { replace: true } when clearing filters', async () => {
-    let subscriptionCallback: ((filters: any) => void) | null = null;
+  it('does not rewrite a details hash on a zero-filter store update', async () => {
+    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
 
     // Mock subscribe to capture the callback and trigger it
     (useTableStore as any).subscribe = vi.fn((selector, callback) => {
@@ -444,10 +405,11 @@ describe('Eval', () => {
       filters: mockFilters,
     });
 
-    mockSetSearchParams.mockClear();
+    const initialUrl = '/eval/test-eval#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialUrl]}>
         <Eval fetchId="test-eval" />
       </MemoryRouter>,
     );
@@ -459,15 +421,234 @@ describe('Eval', () => {
     // Trigger the subscription callback manually
     if (subscriptionCallback) {
       await act(async () => {
-        subscriptionCallback!(mockFilters);
+        subscriptionCallback!(mockFilters, mockFilters);
       });
     }
 
-    // Should call setSearchParams with replace: true when clearing filters
-    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('should call setSearchParams with { replace: true } when applying filters', async () => {
+  it('preserves an initial rowId details deep link on a zero-filter store update', async () => {
+    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
+
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn();
+    });
+
+    const mockFilters = {
+      values: {},
+      appliedCount: 0,
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    const initialUrl = '/eval/test-eval?rowId=51#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters, mockFilters);
+      });
+    }
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('clears a stale rowId param when filters are cleared without a filter param', async () => {
+    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
+
+    // Mock subscribe to capture the callback and trigger it
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn(); // unsubscribe function
+    });
+
+    const mockFilters = {
+      values: {},
+      appliedCount: 0, // Filters cleared
+    };
+    const previousFilters = {
+      values: {
+        filter1: {
+          id: 'filter1',
+          type: 'text',
+          operator: 'contains',
+          value: 'weather',
+        },
+      },
+      appliedCount: 1,
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    // No `filter` param, but a stale `rowId` and details hash are present.
+    const initialUrl = '/eval/test-eval?rowId=51#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    // Trigger the subscription callback manually
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters, previousFilters);
+      });
+    }
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/eval/test-eval',
+        hash: '',
+      }),
+      { replace: true },
+    );
+
+    const [nextLocation] = mockNavigate.mock.calls[0];
+    expect(new URLSearchParams(nextLocation.search).has('rowId')).toBe(false);
+    expect(new URLSearchParams(nextLocation.search).has('filter')).toBe(false);
+  });
+
+  it('does not discard an unrelated hash when filters clear without URL filter state', async () => {
+    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
+
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn();
+    });
+
+    const mockFilters = {
+      values: {},
+      appliedCount: 0,
+    };
+    const previousFilters = {
+      values: {
+        filter1: {
+          id: 'filter1',
+          type: 'text',
+          operator: 'contains',
+          value: 'weather',
+        },
+      },
+      appliedCount: 1,
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: mockFilters,
+    });
+
+    const initialUrl = '/eval/test-eval#section';
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    if (subscriptionCallback) {
+      await act(async () => {
+        subscriptionCallback!(mockFilters, previousFilters);
+      });
+    }
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#section');
+  });
+
+  it('preserves a details hash while rehydrating filters from the URL', async () => {
+    let subscriptionCallback: ((filters: any) => void) | null = null;
+
+    const hydratedFilters = {
+      values: {
+        filter1: {
+          id: 'filter1',
+          type: 'text' as const,
+          operator: 'contains' as const,
+          value: 'test',
+          field: 'text',
+          logicOperator: 'and' as const,
+          sortIndex: 0,
+        },
+      },
+      appliedCount: 1,
+    };
+
+    (useTableStore as any).subscribe = vi.fn((selector, callback) => {
+      if (selector.toString().includes('filters')) {
+        subscriptionCallback = callback;
+      }
+      return vi.fn();
+    });
+    (useTableStore as any).getState = vi.fn(() => ({
+      filters: { values: {} },
+      resetFilters: vi.fn(() => {
+        subscriptionCallback?.({ values: {}, appliedCount: 0 });
+      }),
+      addFilter: vi.fn(() => {
+        subscriptionCallback?.(hydratedFilters);
+      }),
+    }));
+
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      filters: hydratedFilters,
+    });
+
+    const serializedFilters = encodeURIComponent(
+      JSON.stringify(Object.values(hydratedFilters.values)),
+    );
+    const initialUrl = `/eval/test-eval?filter=${serializedFilters}#details-row-51-prompt-1`;
+    window.history.replaceState({}, '', initialUrl);
+
+    render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('clears the details hash when applying filters', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 
     // Mock subscribe to capture the callback and trigger it
@@ -498,10 +679,11 @@ describe('Eval', () => {
       filters: mockFilters,
     });
 
-    mockSetSearchParams.mockClear();
+    const initialUrl = '/eval/test-eval?rowId=51#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
 
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialUrl]}>
         <Eval fetchId="test-eval" />
       </MemoryRouter>,
     );
@@ -517,7 +699,18 @@ describe('Eval', () => {
       });
     }
 
-    // Should call setSearchParams with replace: true when applying filters
-    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/eval/test-eval',
+        hash: '',
+      }),
+      { replace: true },
+    );
+
+    const [nextLocation] = mockNavigate.mock.calls[0];
+    expect(new URLSearchParams(nextLocation.search).get('filter')).toBe(
+      JSON.stringify(Object.values(mockFilters.values)),
+    );
+    expect(new URLSearchParams(nextLocation.search).has('rowId')).toBe(false);
   });
 });
