@@ -199,7 +199,7 @@ export type ReasoningContent =
       signature?: string;
     }
   | {
-      /** Meta Llama-Nemotron (extracted from <think> tags) */
+      /** Bedrock DeepSeek, Qwen, and Meta Llama-Nemotron (extracted from <think> tags) */
       type: 'think';
       /** The thinking content */
       content: string;
