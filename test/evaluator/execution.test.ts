@@ -808,6 +808,81 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('clamps oversized maxEvalTimeMs before scheduling the timer', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: Number.MAX_SAFE_INTEGER,
+        timeoutMs: 0,
+      });
+
+      expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 2_147_483_647)).toBe(true);
+      expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === Number.MAX_SAFE_INTEGER)).toBe(
+        false,
+      );
+    } finally {
+      setTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the max eval timer when evaluation throws before finalization', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await expect(
+        evaluate(testSuite, evalRecord, {
+          maxEvalTimeMs: 10_000,
+          progressCallback: () => {
+            throw new Error('progress callback failed');
+          },
+          timeoutMs: 0,
+        }),
+      ).rejects.toThrow('progress callback failed');
+
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+      const maxEvalTimerResult = setTimeoutSpy.mock.results.find(
+        (_result, index) => setTimeoutSpy.mock.calls[index]?.[1] === 10_000,
+      );
+      expect(maxEvalTimerResult?.value).toBeDefined();
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(maxEvalTimerResult?.value);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('uses longer redteam timeout defaults for direct redteam suite evaluation', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
@@ -1112,7 +1187,10 @@ describeEvaluator('evaluator execution control', () => {
       prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
       tests: [
         {
-          assert: [{ type: 'select-best', value: 'pick the best response' }],
+          assert: [
+            { type: 'contains', value: 'Target', metric: 'target_contains' },
+            { type: 'select-best', value: 'pick the best response' },
+          ],
         },
       ],
     };
@@ -1139,9 +1217,36 @@ describeEvaluator('evaluator execution control', () => {
           (result) =>
             result.error?.includes('during comparison grading') &&
             result.failureReason === ResultFailureReason.ERROR &&
-            !result.success,
+            !result.success &&
+            result.score === 0 &&
+            Object.keys(result.namedScores).length === 0 &&
+            result.gradingResult === null,
         ),
       ).toBe(true);
+      expect(summary.prompts.map((prompt) => prompt.metrics)).toEqual([
+        expect.objectContaining({
+          assertFailCount: 0,
+          assertPassCount: 0,
+          namedScores: {},
+          namedScoresCount: {},
+          namedScoreWeights: {},
+          score: 0,
+          testErrorCount: 1,
+          testFailCount: 0,
+          testPassCount: 0,
+        }),
+        expect.objectContaining({
+          assertFailCount: 0,
+          assertPassCount: 0,
+          namedScores: {},
+          namedScoresCount: {},
+          namedScoreWeights: {},
+          score: 0,
+          testErrorCount: 1,
+          testFailCount: 0,
+          testPassCount: 0,
+        }),
+      ]);
     } finally {
       await vi.runOnlyPendingTimersAsync();
       await evalPromise?.catch(() => undefined);
