@@ -46,7 +46,6 @@ interface PendingTestCaseImport {
 }
 
 const TEST_CASE_FIELDS = new Set(Object.keys(TestCaseSchema.shape));
-const FORM_EDITABLE_TEST_CASE_FIELDS = new Set(['description', 'vars', 'assert']);
 
 function isValidTestCase(obj: unknown): obj is TestCase {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
@@ -67,10 +66,15 @@ function isInlineTestCase(obj: unknown): obj is TestCase {
   return isValidTestCase(obj) && !isTestGeneratorConfig(obj);
 }
 
+// The dialog only edits description/vars/assert, but it preserves the remaining
+// schema-recognized fields verbatim, so test cases with options/metadata/threshold/
+// etc. round-trip through the form without losing their advanced configuration.
+// assert-set assertions still need the YAML editor — the form's assertion editor
+// doesn't render them.
 function isFormEditableTestCase(obj: unknown): obj is TestCase {
   return (
     isInlineTestCase(obj) &&
-    Object.keys(obj).every((field) => FORM_EDITABLE_TEST_CASE_FIELDS.has(field)) &&
+    Object.keys(obj).every((field) => TEST_CASE_FIELDS.has(field)) &&
     (obj.assert || []).every((assertion) => assertion.type !== 'assert-set')
   );
 }
