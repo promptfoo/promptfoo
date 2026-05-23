@@ -18,6 +18,7 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
+import { parseAzureBlobUri, readAzureBlobText } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
@@ -37,6 +38,10 @@ type StandaloneTestsFileMetadata = {
   fileExtension: string;
   extensionWithoutSheet: string;
 };
+
+type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
+
+const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -69,6 +74,7 @@ export async function readTestFiles(
  * Supports multiple input sources:
  * - Hugging Face datasets (huggingface://datasets/...)
  * - Langfuse traces (langfuse://traces?...)
+ * - Azure Blob Storage test sets (az://...)
  * - JavaScript/TypeScript files (.js, .ts, .mjs)
  * - Python files (.py) with optional function name
  * - Google Sheets (https://docs.google.com/spreadsheets/...)
@@ -105,6 +111,10 @@ export async function readStandaloneTestsFile(
     return await fetchLangfuseTraces(varsPath);
   }
 
+  if (varsPath.startsWith('az://')) {
+    return await readAzureBlobStandaloneTestsFile(varsPath);
+  }
+
   let rows: CsvRow[];
   if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
     telemetry.record('feature_used', {
@@ -121,6 +131,56 @@ export async function readStandaloneTestsFile(
   }
 
   return csvRowsToTestCases(rows);
+}
+
+async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestCase[]> {
+  const fileExtension = getAzureBlobTestFileExtension(varsPath);
+  if (!fileExtension) {
+    throw new Error(
+      'Unsupported Azure Blob Storage test file type. Supported formats: CSV, JSON, JSONL, YAML, and YML.',
+    );
+  }
+
+  const fileContent = await readAzureBlobText(varsPath);
+  if (fileExtension === 'csv') {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - azure blob',
+    });
+    return csvRowsToTestCases(parseCsvRows(fileContent));
+  }
+  if (fileExtension === 'json') {
+    telemetry.record('feature_used', {
+      feature: 'json tests file - azure blob',
+    });
+    return parseJsonTestCases(fileContent);
+  }
+  if (fileExtension === 'jsonl') {
+    telemetry.record('feature_used', {
+      feature: 'jsonl tests file - azure blob',
+    });
+    return parseJsonlTestCases(fileContent);
+  }
+
+  telemetry.record('feature_used', {
+    feature: 'yaml tests file - azure blob',
+  });
+  return parseYamlTestCases(fileContent);
+}
+
+function getAzureBlobTestFileExtension(varsPath: string): AzureBlobTestFileExtension | undefined {
+  const { blobName } = parseAzureBlobUri(varsPath);
+  const pathWithoutBlobHash = blobName.replace(SHA256_BLOB_SUFFIX, '');
+  const extension = parsePath(pathWithoutBlobHash).ext.slice(1).toLowerCase();
+  if (
+    extension === 'csv' ||
+    extension === 'json' ||
+    extension === 'jsonl' ||
+    extension === 'yaml' ||
+    extension === 'yml'
+  ) {
+    return extension;
+  }
+  return undefined;
 }
 
 async function readLocalStandaloneTestsFile(
@@ -259,8 +319,12 @@ function parseLocalCsv(fileContent: string, delimiter: string, relaxQuotes: bool
 }
 
 async function readLocalCsvRows(resolvedVarsPath: string): Promise<CsvRow[]> {
-  const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  return parseCsvRows(fileContent);
+}
+
+function parseCsvRows(fileContent: string): CsvRow[] {
+  const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
   try {
@@ -284,6 +348,10 @@ async function readLocalCsvRows(resolvedVarsPath: string): Promise<CsvRow[]> {
 
 async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  return parseJsonTestCases(fileContent);
+}
+
+function parseJsonTestCases(fileContent: string): TestCase[] {
   const jsonData = yaml.load(fileContent) as any;
   const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
   return testCases.map((item, idx) => ({
@@ -294,7 +362,10 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
   const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  return parseJsonlTestCases(fileContent);
+}
 
+function parseJsonlTestCases(fileContent: string): TestCase[] {
   return fileContent
     .split('\n')
     .filter((line) => line.trim())
@@ -305,6 +376,17 @@ async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]>
         description: `Row #${idx + 1}`,
       };
     });
+}
+
+function parseYamlTestCases(fileContent: string): TestCase[] {
+  const rawContent = yaml.load(fileContent);
+  const testCases: TestCase[] = Array.isArray(rawContent)
+    ? (rawContent as TestCase[])
+    : [rawContent as TestCase];
+  return testCases.map((item, idx) => ({
+    ...item,
+    description: item.description || `Row #${idx + 1}`,
+  }));
 }
 
 async function loadTestWithVars(
@@ -489,6 +571,9 @@ export async function readTests(
   const ret: TestCase[] = [];
 
   if (typeof tests === 'string') {
+    if (tests.startsWith('az://')) {
+      return readStandaloneTestsFile(tests, basePath);
+    }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       return loadTestsFromGlob(tests, basePath);
