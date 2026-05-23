@@ -713,6 +713,49 @@ describe('OpenAI Provider', () => {
       ]);
     });
 
+    it('should preserve tool calls when reasoning responses have null content', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                reasoning: 'Private tool selection reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual([
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'lookup', arguments: '{"query":"weather"}' },
+        },
+      ]);
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Private tool selection reasoning.' },
+      ]);
+    });
+
     it('should hide reasoning content when showThinking is false', async () => {
       const mockResponse = {
         data: {

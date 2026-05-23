@@ -5,7 +5,12 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
+import {
+  extractReasoningFromMessage,
+  isClaudeOpus47Model,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -632,7 +637,11 @@ export function parseValue(value: string | number, defaultValue: any) {
  * Used by DeepSeek and Qwen models that wrap reasoning in think tags.
  * Returns output with think blocks removed and reasoning content separately.
  */
-function parseThinkBlocks(content: string, showThinking: boolean): BedrockModelOutputResult {
+function parseThinkBlocks(
+  content: string,
+  showThinking: boolean,
+  allowSeededClosingTag: boolean = false,
+): BedrockModelOutputResult {
   let output = content;
   const thinkingContents: string[] = [];
 
@@ -642,6 +651,7 @@ function parseThinkBlocks(content: string, showThinking: boolean): BedrockModelO
   const firstCloseTagIndex = output.indexOf('</think>');
   const firstOpenTagIndex = output.indexOf('<think>');
   if (
+    allowSeededClosingTag &&
     firstCloseTagIndex !== -1 &&
     (firstOpenTagIndex === -1 || firstCloseTagIndex < firstOpenTagIndex)
   ) {
@@ -1832,8 +1842,15 @@ export const BEDROCK_MODEL = {
 
       return params;
     },
-    output: (config: BedrockClaudeMessagesCompletionOptions, responseJson: any) => {
-      return outputFromMessage(responseJson, config?.showThinking ?? true);
+    output: (
+      config: BedrockClaudeMessagesCompletionOptions,
+      responseJson: any,
+    ): BedrockModelOutputResult => {
+      return {
+        output: outputFromMessage(responseJson),
+        reasoning:
+          config?.showThinking === false ? undefined : extractReasoningFromMessage(responseJson),
+      };
     },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       if (!responseJson?.usage) {
@@ -2094,7 +2111,7 @@ ${prompt}
       if (responseJson.choices && Array.isArray(responseJson.choices)) {
         const choice = responseJson.choices[0];
         if (choice?.text) {
-          return parseThinkBlocks(choice.text, config.showThinking !== false);
+          return parseThinkBlocks(choice.text, config.showThinking !== false, true);
         }
       }
 

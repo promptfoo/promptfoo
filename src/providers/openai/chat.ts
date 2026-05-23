@@ -643,8 +643,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         } else {
           output = stripOpenAiCompatibleReasoningFields(message);
         }
-      } else if (message.reasoning) {
-        output = message.content || '';
       } else if (
         message.content === null ||
         message.content === undefined ||

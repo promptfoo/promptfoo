@@ -511,6 +511,28 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params).not.toHaveProperty('tool_choice');
     });
 
+    it('should expose Claude thinking separately when enabled and suppress it when disabled', () => {
+      const responseJson = {
+        content: [
+          { type: 'thinking', thinking: 'Private reasoning', signature: 'signature-1' },
+          { type: 'text', text: 'Visible answer' },
+        ],
+      };
+
+      expect(
+        modelHandler.output({ region: 'us-east-1', showThinking: true }, responseJson),
+      ).toEqual({
+        output: 'Visible answer',
+        reasoning: [{ type: 'thinking', thinking: 'Private reasoning', signature: 'signature-1' }],
+      });
+      expect(
+        modelHandler.output({ region: 'us-east-1', showThinking: false }, responseJson),
+      ).toEqual({
+        output: 'Visible answer',
+        reasoning: undefined,
+      });
+    });
+
     it('should include specific tool_choice when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -3884,6 +3906,22 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result).toEqual({
         output: 'The answer is 42',
         reasoning: undefined,
+      });
+    });
+
+    it('should preserve literal unmatched closing think tags in Qwen output', () => {
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: 'Document the literal </think> closing tag in this XML example.',
+            },
+          },
+        ],
+      };
+
+      expect(qwenHandler.output({ showThinking: false }, responseJson)).toEqual({
+        output: 'Document the literal </think> closing tag in this XML example.',
       });
     });
 

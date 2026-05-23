@@ -36,7 +36,7 @@ function extractOpenRouterReasoning(
   showThinking: boolean,
 ): ReasoningContent[] | undefined {
   const reasoning = message?.reasoning;
-  if (!showThinking || typeof reasoning !== 'string' || !reasoning) {
+  if (!showThinking || typeof reasoning !== 'string' || !reasoning.trim()) {
     return undefined;
   }
   return [{ type: 'reasoning', content: reasoning }];

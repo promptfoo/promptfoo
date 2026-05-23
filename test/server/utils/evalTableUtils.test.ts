@@ -164,6 +164,37 @@ describe('evalTableUtils', () => {
         expect(lines[1]).toContain('Needs improvement');
       });
 
+      it('should export reasoning in a separate column and redact protected blocks', () => {
+        const tableWithReasoning = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'Visible output',
+                  response: {
+                    reasoning: [
+                      { type: 'reasoning' as const, content: 'Private reasoning' },
+                      { type: 'redacted_thinking' as const, data: 'encrypted-content' },
+                    ],
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithReasoning);
+        const lines = csv.split('\n');
+
+        expect(lines[0]).toContain('Reasoning');
+        expect(csv).toContain('Private reasoning');
+        expect(csv).toContain('[Redacted]');
+        expect(csv).not.toContain('encrypted-content');
+      });
+
       it('should include named scores as JSON', () => {
         const tableWithNamedScores = {
           ...mockTable,
@@ -1118,7 +1149,10 @@ describe('evalTableUtils', () => {
           testIdx: 0,
           promptIdx: 0, // First prompt, returned second
           testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
-          response: { output: 'First output' },
+          response: {
+            output: 'First output',
+            reasoning: [{ type: 'reasoning', content: 'First private reasoning' }],
+          },
           success: true,
           score: 1,
           namedScores: {},
@@ -1173,6 +1207,8 @@ describe('evalTableUtils', () => {
       expect(lines[1]).toContain('First output');
       expect(lines[1]).toContain('Second output');
       expect(lines[1]).toContain('Third output');
+      expect(lines[0]).toContain('Reasoning');
+      expect(lines[1]).toContain('First private reasoning');
 
       // Verify order: First should come before Second, Second before Third
       const firstIdx = lines[1].indexOf('First output');

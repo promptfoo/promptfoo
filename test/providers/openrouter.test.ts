@@ -435,13 +435,13 @@ describe('OpenRouter', () => {
         });
       });
 
-      it('should handle empty reasoning field', async () => {
+      it('should ignore blank reasoning fields', async () => {
         const mockResponse = {
           choices: [
             {
               message: {
                 content: 'Response with empty reasoning',
-                reasoning: '',
+                reasoning: ' \n\t',
               },
             },
           ],
@@ -457,8 +457,8 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // Should not add "Thinking:" prefix for empty reasoning
         expect(result.output).toBe('Response with empty reasoning');
+        expect(result.reasoning).toBeUndefined();
         expect(result.tokenUsage).toEqual({
           total: 30,
           prompt: 10,

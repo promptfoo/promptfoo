@@ -193,10 +193,13 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
       prompt,
@@ -274,7 +277,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         .join('');
       const reasoning = extractReasoningFromOpenAiCompatibleMessage(
         { thinking },
-        this.config.showThinking !== false,
+        (context?.prompt?.config?.showThinking ?? this.config.showThinking) !== false,
       );
 
       // Extract token usage from the final chunk (where done: true)
@@ -456,7 +459,7 @@ export class OllamaChatProvider implements ApiProvider {
         .join('');
       const reasoning = extractReasoningFromOpenAiCompatibleMessage(
         { thinking },
-        this.config.showThinking !== false,
+        (context?.prompt?.config?.showThinking ?? this.config.showThinking) !== false,
       );
 
       // Find tool_calls from any chunk (they may appear before done: true)

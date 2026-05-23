@@ -2890,6 +2890,42 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       ]);
     });
 
+    it('should honor prompt-level showThinking overrides for Claude reasoning', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 }, showThinking: true },
+      });
+      setupClaudeMocks();
+
+      mockRequest.mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-3-5-sonnet-v2@20241022',
+          content: [
+            { type: 'thinking', thinking: 'Let me think...', signature: 'sig123' },
+            { type: 'text', text: 'The answer is 42' },
+          ],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 20,
+            output_tokens: 50,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+
+      const result = await provider.callClaudeApi('Think about this', {
+        prompt: { raw: 'Think about this', label: 'test', config: { showThinking: false } },
+        vars: {},
+      });
+
+      expect(result.output).toBe('The answer is 42');
+      expect(result.reasoning).toBeUndefined();
+    });
+
     it('should return cost for Vertex Claude model names', async () => {
       const result = await provider.callClaudeApi('Hello');
 

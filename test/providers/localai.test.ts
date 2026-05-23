@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
 
+import type { CallApiContextParams } from '../../src/types/index';
+
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
@@ -48,6 +50,33 @@ describe('LocalAI temperature handling', () => {
 
     expect(result.output).toBe('Final answer.');
     expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Private reasoning.' }]);
+  });
+
+  it('should honor prompt-level showThinking overrides for chat output', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Final answer.',
+              reasoning_content: 'Private reasoning.',
+            },
+          },
+        ],
+      },
+    } as any);
+
+    const provider = new LocalAiChatProvider('test-model', {
+      config: { showThinking: true },
+    });
+    const context: CallApiContextParams = {
+      prompt: { raw: 'Test prompt', label: 'test', config: { showThinking: false } },
+      vars: {},
+    };
+    const result = await provider.callApi('Test prompt', context);
+
+    expect(result.output).toBe('Final answer.');
+    expect(result.reasoning).toBeUndefined();
   });
 
   it('should send temperature: 0 to the API when explicitly configured (completion)', async () => {

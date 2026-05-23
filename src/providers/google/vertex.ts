@@ -328,7 +328,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       messages: extractedMessages as ClaudeRequest['messages'],
     };
 
-    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+    const showThinking =
+      context?.prompt?.config?.showThinking ?? this.config.showThinking ?? isThinkingEnabled;
 
     const cache = await getCache();
     const cacheKey = getVertexBodyCacheKey(
