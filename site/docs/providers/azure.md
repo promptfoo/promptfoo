@@ -177,6 +177,67 @@ The Responses API supports Azure deployments backed by current Azure OpenAI resp
 
 Use your Azure deployment name in promptfoo, even if it differs from the underlying model ID.
 
+### Reasoning Effort, Tokens, and Summaries
+
+As described in Microsoft's
+[Azure reasoning models documentation](https://learn.microsoft.com/azure/foundry/openai/how-to/reasoning#reasoning-summary),
+Azure does not expose a reasoning model's private chain-of-thought. Configuring
+`reasoning_effort` controls how much reasoning work the model may perform; it does not
+make hidden reasoning steps visible.
+
+| Provider type     | Reasoning request behavior                                                                                                                | Visible promptfoo output                                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `azure:chat`      | For reasoning deployments, sends `reasoning_effort` and `max_completion_tokens`; set `isReasoningModel: true` for aliases                 | Assistant `message.content`. If Azure reports `completion_tokens_details.reasoning_tokens`, promptfoo records that count in `tokenUsage.completionDetails.reasoning`. |
+| `azure:responses` | For reasoning deployments, maps `reasoning_effort` to `reasoning.effort` and uses `max_output_tokens`; set `isReasoningModel` for aliases | Assistant output plus an Azure-provided reasoning **summary** when the response contains a non-empty `output` reasoning item. It is not raw chain-of-thought.         |
+
+For `azure:responses`, the current provider exposes Azure's summary request through
+`passthrough.reasoning`. Keep `effort` and `summary` in that same raw object because
+`passthrough` supplies the final Responses API field:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Azure reasoning output surfaces
+
+prompts:
+  - 'Which is larger: 9.11 or 9.9? Answer with a brief explanation.'
+
+providers:
+  - id: azure:chat:my-o4-mini-deployment
+    label: azure-chat-final-answer
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      isReasoningModel: true
+      reasoning_effort: 'medium'
+      max_completion_tokens: 2000
+
+  - id: azure:responses:my-gpt-5-deployment
+    label: azure-responses-summary
+    config:
+      apiHost: 'your-resource.openai.azure.com'
+      isReasoningModel: true
+      max_output_tokens: 2000
+      passthrough:
+        reasoning:
+          effort: 'medium'
+          summary: 'auto'
+
+tests:
+  - assert:
+      - type: contains
+        value: '9.9'
+```
+
+Set `AZURE_API_KEY`, replace the deployment names and `apiHost`, then run:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o output.json
+```
+
+If Azure returns a Responses API reasoning summary, promptfoo includes it in normalized
+output as `Reasoning: <summary>` before the assistant answer and preserves the API
+response in `raw`. A returned reasoning token count without summary text indicates
+hidden reasoning usage, not missing chain-of-thought output.
+
 ### Responses API Features
 
 #### Response Format with External Files
@@ -321,8 +382,9 @@ providers:
   - id: azure:responses:o3-mini-deployment
     label: azure-reasoning
     config:
+      isReasoningModel: true
       reasoning_effort: medium
-      max_completion_tokens: 4000
+      max_output_tokens: 4000
 
 prompts:
   - 'Analyze this data and provide insights: {{data}}'
@@ -700,9 +762,10 @@ These properties can be set under the provider `config` key:
 | Name                  | Description                                                                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
-| isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
-| max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| isReasoningModel      | Treat the deployment as reasoning-capable. Set to `true` for custom deployment names; recognizable reasoning model names are auto-detected.     |
+| max_completion_tokens | Maximum tokens for `azure:chat` and `azure:completion` reasoning models. Use `max_output_tokens` for `azure:responses`.                         |
+| max_output_tokens     | Maximum output tokens for `azure:responses`, including reasoning deployments.                                                                   |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Sent directly for chat/completion and as `reasoning.effort` by `azure:responses`.         |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
 | top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
@@ -724,7 +787,7 @@ Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-m
 2. They don't support `temperature` (it's ignored)
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
 
-Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, you must explicitly set the `isReasoningModel` flag to `true` in your configuration when using reasoning models. This works with both chat and completion endpoints:
+Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for aliases or deployment names that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. The explicit configuration below works with chat and completion endpoints:
 
 ```yaml
 # For chat endpoints
@@ -787,6 +850,12 @@ API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is
 ```
 
 This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
+
+For `azure:responses`, use `max_output_tokens`, not `max_completion_tokens`. If you
+request a reasoning summary and only see a final answer or a reasoning token count,
+check that the Azure deployment supports Responses reasoning summaries and returned a
+non-empty reasoning `summary` item. Promptfoo cannot expose hidden reasoning tokens as
+text.
 
 ## Using Vision Models
 
