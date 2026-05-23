@@ -9,7 +9,7 @@ import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { sanitizeObject } from '../../util/sanitizer';
+import { redactAzureBlobSasTokens, sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -468,7 +468,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
-    config: eval_.config,
+    config: redactAzureBlobSasTokens(eval_.config),
     author: eval_.author || null,
     version: eval_.version(),
     id,

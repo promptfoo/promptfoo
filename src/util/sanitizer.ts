@@ -190,10 +190,56 @@ function isClassInstance(obj: any): boolean {
   return hasMethods;
 }
 
+function redactAzureBlobSasToken(value: string): string {
+  if (!value.startsWith('az://')) {
+    return value;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'az:' || !parsed.searchParams.has('sig')) {
+      return value;
+    }
+  } catch {
+    return value;
+  }
+
+  return sanitizeUrl(value);
+}
+
+/**
+ * Redact SAS credentials embedded in Azure Blob config references without
+ * applying broader output sanitization to configuration consumed by clients.
+ */
+export function redactAzureBlobSasTokens<T>(value: T): T {
+  if (typeof value === 'string') {
+    return redactAzureBlobSasToken(value) as T;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactAzureBlobSasTokens(item)) as T;
+  }
+
+  if (!value || typeof value !== 'object' || isClassInstance(value)) {
+    return value;
+  }
+
+  const redactedEntries = Object.entries(value).map(([key, item]) => [
+    key,
+    redactAzureBlobSasTokens(item),
+  ]);
+  return Object.fromEntries(redactedEntries) as T;
+}
+
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
 function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+  const redactedAzureBlobUri = redactAzureBlobSasToken(str);
+  if (redactedAzureBlobUri !== str) {
+    return redactedAzureBlobUri;
+  }
+
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {

@@ -61,6 +61,14 @@ describe('sanitizeObject', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
     });
+
+    it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
+      const result = sanitizeObject({
+        tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
+      });
+
+      expect(result.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    });
   });
 
   describe('function handling', () => {

@@ -361,6 +361,25 @@ describe('eval routes', () => {
       expect(updatedEval.config.tests).toHaveLength(2);
     });
 
+    it('redacts Azure Blob SAS tokens from table config without mutating stored config', async () => {
+      const sasUri = 'az://account/container/tests.yaml?sp=r&sig=azure-secret';
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      eval_.config.tests = sasUri;
+      await eval_.save();
+
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config.tests).toBe(
+        'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
+      );
+
+      const storedEval = await Eval.findById(eval_.id);
+      invariant(storedEval, 'Eval is required');
+      expect(storedEval.config.tests).toBe(sasUri);
+    });
+
     it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
       testEvalIds.add(eval_.id);

@@ -150,6 +150,7 @@ describe('writeOutput', () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
       description: 'Test config',
+      tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
       env: {
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-secret-token',
         ANTHROPIC_API_KEY: 'anthropic-secret-token',
@@ -177,6 +178,7 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
+    expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
   });
 
   it.each([
