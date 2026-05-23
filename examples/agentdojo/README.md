@@ -8,8 +8,8 @@ Evaluate LLM agents against prompt injection attacks using [AgentDojo](https://g
 npx promptfoo@latest init --example agentdojo
 cd agentdojo
 
-# Setup Python environment
-python3 -m venv .venv
+# Setup Python 3.10+ environment
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -26,6 +26,8 @@ The checked-in config runs one user task against one injection task so that
 you can inspect a trace before spending on a benchmark run. Remove
 `max_user_tasks` and `max_injection_tasks` from `promptfooconfig.yaml` when
 you are ready to run the full 560-row workspace suite.
+
+AgentDojo 0.1.35 requires Python 3.10 or newer.
 
 ## Configuration
 

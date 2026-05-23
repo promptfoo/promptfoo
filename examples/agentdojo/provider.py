@@ -44,6 +44,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_OUTPUT_TOKENS = 4096
 DEFAULT_REQUEST_TIMEOUT = 120
+AGENTDOJO_DOS_ATTACK = "dos"
+AGENTDOJO_DOS_ATTACK_SUFFIX = "_dos"
 
 # Cache for expensive objects
 _pipeline_cache: dict[str, Any] = {}
@@ -916,11 +918,41 @@ def _start_attributes(
     }
 
 
-def _select_result(settings: ProviderSettings, utility_results, security_results):
+def _is_dos_attack_name(attack_name: str) -> bool:
+    normalized = attack_name.strip().lower().replace("-", "_")
+    return normalized == AGENTDOJO_DOS_ATTACK or normalized.endswith(
+        AGENTDOJO_DOS_ATTACK_SUFFIX
+    )
+
+
+def _first_injection_task_id(suite) -> str | None:
+    try:
+        return next(iter(suite.injection_tasks))
+    except StopIteration:
+        return None
+
+
+def _agentdojo_result_injection_task_id(
+    settings: ProviderSettings, suite=None
+) -> str | None:
+    """Return the injection task id AgentDojo uses in result/log keys."""
+    if (
+        settings.injection_task_id
+        and suite is not None
+        and _is_dos_attack_name(settings.attack_name)
+    ):
+        return _first_injection_task_id(suite) or settings.injection_task_id
+    return settings.injection_task_id
+
+
+def _select_result(
+    settings: ProviderSettings, utility_results, security_results, suite=None
+):
     # AgentDojo's second boolean is targeted attack success: True means the
     # injected malicious goal was executed.
-    if settings.injection_task_id:
-        key = (settings.user_task_id, settings.injection_task_id)
+    injection_task_id = _agentdojo_result_injection_task_id(settings, suite)
+    if injection_task_id:
+        key = (settings.user_task_id, injection_task_id)
         return utility_results.get(key, False), security_results.get(key, True)
     return (
         all(utility_results.values()) if utility_results else False,
@@ -946,9 +978,10 @@ def _result_payload(
     injection_success: bool,
     utility_results: dict,
     security_results: dict,
+    agentdojo_result_injection_task_id: str | None = None,
 ) -> dict[str, Any]:
     injection_blocked = not injection_success
-    return {
+    payload = {
         "user_task_success": utility,
         "injection_blocked": injection_blocked,
         "injection_success": injection_success,
@@ -964,6 +997,14 @@ def _result_payload(
         "num_utility_results": len(utility_results),
         "num_security_results": len(security_results),
     }
+    if (
+        agentdojo_result_injection_task_id
+        and agentdojo_result_injection_task_id != settings.injection_task_id
+    ):
+        payload["agentdojo_result_injection_task_id"] = (
+            agentdojo_result_injection_task_id
+        )
+    return payload
 
 
 def _metadata(
@@ -1050,8 +1091,11 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
                 injection_tasks=injection_tasks,
                 benchmark_version=settings.version,
             )
+            agentdojo_result_injection_task_id = _agentdojo_result_injection_task_id(
+                settings, suite
+            )
             utility, injection_success = _select_result(
-                settings, utility_results, security_results
+                settings, utility_results, security_results, suite
             )
 
             trace_log = _read_agentdojo_log(
@@ -1060,7 +1104,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
                 suite_name=settings.suite_name,
                 user_task_id=settings.user_task_id,
                 attack_name=settings.attack_name,
-                injection_task_id=settings.injection_task_id,
+                injection_task_id=agentdojo_result_injection_task_id,
             )
             messages = _format_trace_messages(trace_log)
             result = _result_payload(
@@ -1070,6 +1114,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
                 injection_success,
                 utility_results,
                 security_results,
+                agentdojo_result_injection_task_id,
             )
             injection_blocked = not injection_success
 
@@ -1079,6 +1124,9 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
                     "agentdojo.user_task_success": utility,
                     "agentdojo.injection_success": injection_success,
                     "agentdojo.injection_blocked": injection_blocked,
+                    "agentdojo.result_injection_task_id": (
+                        agentdojo_result_injection_task_id
+                    ),
                     "agentdojo.safe_utility": utility and injection_blocked,
                     "llm.usage.prompt_tokens": _token_usage["prompt"],
                     "llm.usage.completion_tokens": _token_usage["completion"],

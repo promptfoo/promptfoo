@@ -188,6 +188,12 @@ The Promptfoo example can run AgentDojo attacks by name. These are representativ
 
 The interesting part is where the attack appears. It is usually not in the user's prompt. It is inside tool data: an email body, calendar description, document, Slack message, banking record, or travel record that the agent reads while solving the benign task.
 
+AgentDojo's DoS-style attacks, such as `dos` and `captcha_dos`, are a little
+different from the targeted injection attacks: AgentDojo records their raw
+result under the suite's first injection task. The Promptfoo provider preserves
+the row's requested `injection_task_id` and adds `agentdojo_result_injection_task_id`
+metadata when the raw AgentDojo result key differs.
+
 ## AgentDojo Defense Types
 
 AgentDojo also models defenses as pipeline components. The custom GPT wrapper in this Promptfoo example mirrors AgentDojo's built-in defense ordering so you can test current GPT models through the OpenAI Responses API and still exercise the same defense ideas.
@@ -223,10 +229,10 @@ npx promptfoo@latest init --example agentdojo
 cd agentdojo
 ```
 
-Install the Python dependencies in a virtual environment:
+Install the Python dependencies in a Python 3.10+ virtual environment:
 
 ```bash
-python3 -m venv .venv
+python3.10 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
