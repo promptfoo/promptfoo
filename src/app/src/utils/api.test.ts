@@ -252,6 +252,18 @@ describe('updateEvalAuthor', () => {
     );
   });
 
+  it('surfaces API error messages when updating eval author fails', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({ error: 'Cloud eval authors cannot be changed once assigned' }),
+      { status: 403 },
+    );
+    mockFetch.mockResolvedValue(mockResponse);
+
+    await expect(updateEvalAuthor('eval-123', 'Jane Doe')).rejects.toThrow(
+      'Cloud eval authors cannot be changed once assigned',
+    );
+  });
+
   it('handles 404 response', async () => {
     const mockResponse = new Response('Not found', { status: 404 });
     mockFetch.mockResolvedValue(mockResponse);

@@ -14,11 +14,14 @@ type MockAuthorChipProps = {
   onEditAuthor: (newAuthor: string) => Promise<void>;
 };
 
-const { mockAuthorChip, mockFetchUserEmail, mockUseCloudConfig } = vi.hoisted(() => ({
-  mockAuthorChip: vi.fn(),
-  mockFetchUserEmail: vi.fn(),
-  mockUseCloudConfig: vi.fn(),
-}));
+const { mockAuthorChip, mockFetchUserEmail, mockUpdateEvalAuthor, mockUseCloudConfig } = vi.hoisted(
+  () => ({
+    mockAuthorChip: vi.fn(),
+    mockFetchUserEmail: vi.fn(),
+    mockUpdateEvalAuthor: vi.fn(),
+    mockUseCloudConfig: vi.fn(),
+  }),
+);
 
 vi.mock('@app/hooks/useCloudConfig', () => ({
   default: () => mockUseCloudConfig(),
@@ -32,7 +35,7 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/utils/api', () => ({
   fetchUserEmail: () => mockFetchUserEmail(),
-  updateEvalAuthor: vi.fn().mockResolvedValue({}),
+  updateEvalAuthor: (evalId: string, author: string) => mockUpdateEvalAuthor(evalId, author),
 }));
 
 vi.mock('./AuthorChip', () => ({
@@ -147,6 +150,7 @@ describe('EvalHeader author editability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchUserEmail.mockResolvedValue('current@example.com');
+    mockUpdateEvalAuthor.mockResolvedValue({});
     setCloudConfig();
   });
 
@@ -235,5 +239,15 @@ describe('EvalHeader author editability', () => {
         isCloudEnabled: true,
       });
     });
+  });
+
+  it('normalizes a cleared author to null in the table store', async () => {
+    const setAuthor = vi.fn();
+    renderHeader({ author: 'owner@example.com', setAuthor });
+
+    await lastAuthorChipProps().onEditAuthor('');
+
+    expect(mockUpdateEvalAuthor).toHaveBeenCalledWith('eval-1', '');
+    expect(setAuthor).toHaveBeenCalledWith(null);
   });
 });

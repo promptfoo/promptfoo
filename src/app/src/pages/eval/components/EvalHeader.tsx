@@ -141,7 +141,7 @@ export default function EvalHeader({
     if (evalId) {
       try {
         await updateEvalAuthor(evalId, newAuthor);
-        setAuthor(newAuthor);
+        setAuthor(newAuthor || null);
       } catch (error) {
         console.error('Failed to update author:', error);
         throw error;
