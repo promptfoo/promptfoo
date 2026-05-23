@@ -78,7 +78,7 @@ export class AudioBuffer {
    * Convert the audio to WAV format.
    */
   toWav(): Buffer {
-    const pcmData = this.toBuffer();
+    const pcmData = audioDataToPcm16(this.toBuffer(), this.format);
     return pcm16ToWav(pcmData, this.sampleRate);
   }
 
@@ -200,6 +200,47 @@ export function base64ToBuffer(base64: string): Buffer {
  */
 export function bufferToBase64(buffer: Buffer): string {
   return buffer.toString('base64');
+}
+
+function clampInt16(value: number): number {
+  return Math.max(-32768, Math.min(32767, value));
+}
+
+function decodeMuLawSample(value: number): number {
+  const byte = ~value & 0xff;
+  const sign = byte & 0x80;
+  const exponent = (byte >> 4) & 0x07;
+  const mantissa = byte & 0x0f;
+  let sample = ((mantissa << 3) + 0x84) << exponent;
+  sample -= 0x84;
+  return clampInt16(sign ? -sample : sample);
+}
+
+function decodeALawSample(value: number): number {
+  const byte = value ^ 0x55;
+  const sign = byte & 0x80;
+  const exponent = (byte >> 4) & 0x07;
+  const mantissa = byte & 0x0f;
+  const sample = exponent === 0 ? (mantissa << 4) + 8 : ((mantissa << 4) + 0x108) << (exponent - 1);
+  return clampInt16(sign ? sample : -sample);
+}
+
+/**
+ * Convert supported voice audio formats to PCM16 samples.
+ */
+export function audioDataToPcm16(data: Buffer, format: AudioFormat): Buffer {
+  if (format === 'pcm16') {
+    return data;
+  }
+
+  const decoded = Buffer.alloc(data.length * 2);
+  for (let i = 0; i < data.length; i++) {
+    const encodedSample = data[i] ?? 0;
+    const sample =
+      format === 'g711_ulaw' ? decodeMuLawSample(encodedSample) : decodeALawSample(encodedSample);
+    decoded.writeInt16LE(sample, i * 2);
+  }
+  return decoded;
 }
 
 /**
@@ -325,11 +366,11 @@ function placeStereoChunks(
   sampleRate: number,
   channelOffset: number,
 ): void {
-  const bytesPerSample = 2; // PCM16
+  const bytesPerSample = 2; // PCM16 after format-aware decoding
   const bytesPerFrame = 4; // Stereo: 2 bytes x 2 channels
 
   for (const chunk of chunks) {
-    const pcmData = base64ToBuffer(chunk.data);
+    const pcmData = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
     const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
     const numSamples = pcmData.length / bytesPerSample;
 
@@ -386,8 +427,8 @@ export function createStereoWav(
 
   if (allChunks.length === 0) {
     // No valid timestamps - fall back to simple sequential placement
-    const agentPcm = agentBuffer.toBuffer();
-    const userPcm = userBuffer.toBuffer();
+    const agentPcm = audioDataToPcm16(agentBuffer.toBuffer(), agentBuffer.getFormat());
+    const userPcm = audioDataToPcm16(userBuffer.toBuffer(), userBuffer.getFormat());
     const maxSamples = Math.max(agentPcm.length, userPcm.length) / bytesPerSample;
     const stereoBuffer = Buffer.alloc(Math.ceil(maxSamples) * bytesPerFrame);
 

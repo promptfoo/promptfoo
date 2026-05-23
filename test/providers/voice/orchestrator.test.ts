@@ -141,6 +141,7 @@ describe('VoiceConversationOrchestrator', () => {
     target.emit('speech_started');
     target.emit('audio_delta', chunk(0));
     target.emit('audio_done');
+    expect(user.requestResponse).not.toHaveBeenCalled();
     target.emit('transcript_delta', 'Welcome ');
     target.emit('transcript_done', 'Welcome caller');
     target.emit('speech_stopped');
@@ -153,6 +154,7 @@ describe('VoiceConversationOrchestrator', () => {
     user.emit('speech_started');
     user.emit('audio_delta', chunk(5));
     user.emit('audio_done');
+    expect(target.commitAudio).not.toHaveBeenCalled();
     user.emit('transcript_delta', 'Thanks ');
     user.emit('transcript_done', `Thanks ${STOP_MARKER}`);
     user.emit('speech_stopped');
@@ -168,10 +170,53 @@ describe('VoiceConversationOrchestrator', () => {
     expect(completed.transcript).toContain('Welcome caller');
     expect(completed.targetAudio).toBeInstanceOf(Buffer);
     expect(completed.combinedAudio).toBeInstanceOf(Buffer);
-    expect(target.commitAudio).toHaveBeenCalled();
+    expect(target.commitAudio).not.toHaveBeenCalled();
+    expect(target.requestResponse).toHaveBeenCalledTimes(1);
     expect(target.disconnect).toHaveBeenCalled();
     expect(userAudio).toHaveBeenCalled();
     expect(orchestrator.getState()).toBe('idle');
+  });
+
+  it('feeds local audio chunks into silence turn detection without provider VAD events', async () => {
+    const orchestrator = new VoiceConversationOrchestrator(
+      config({
+        turnDetection: {
+          mode: 'silence',
+          silenceThresholdMs: 500,
+          vadThreshold: 0.02,
+          minTurnDurationMs: 0,
+          maxTurnDurationMs: 30000,
+          prefixPaddingMs: 300,
+        },
+      }),
+    );
+    const turnStart = vi.fn();
+    const turnEnd = vi.fn();
+    orchestrator.on('turn_start', turnStart);
+    orchestrator.on('turn_end', turnEnd);
+
+    const { result, target } = await startConversation(orchestrator);
+    const audio = Buffer.alloc(100);
+    for (let i = 0; i < audio.length; i += 2) {
+      audio.writeInt16LE(10000, i);
+    }
+
+    target.emit('audio_delta', {
+      data: audio.toString('base64'),
+      duration: 2,
+      format: 'pcm16',
+      sampleRate: 24000,
+      timestamp: 0,
+    });
+    target.emit('audio_done');
+
+    expect(turnStart).toHaveBeenCalledTimes(1);
+    expect(turnEnd).toHaveBeenCalledTimes(1);
+
+    target.emit('transcript_done', `${STOP_MARKER} from the target`);
+    await expect(result).resolves.toEqual(
+      expect.objectContaining({ stopReason: 'goal_achieved', success: true }),
+    );
   });
 
   it('keeps audio routing conditional when peer connections are not ready', async () => {
@@ -253,7 +298,6 @@ describe('VoiceConversationOrchestrator', () => {
     const { result, target } = await startConversation(orchestrator);
     target.emit('speech_started');
     (orchestrator as any).turnDetector.emit('turn_start');
-    (orchestrator as any).turnDetector.emit('turn_end');
     (orchestrator as any).turnDetector.emit('turn_timeout');
     expect(target.cancelResponse).toHaveBeenCalled();
 

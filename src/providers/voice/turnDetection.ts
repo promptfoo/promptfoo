@@ -7,7 +7,7 @@
 
 import { EventEmitter } from 'events';
 
-import { base64ToBuffer } from './audioBuffer';
+import { audioDataToPcm16, base64ToBuffer } from './audioBuffer';
 import { DEFAULT_TURN_DETECTION } from './types';
 
 import type { AudioChunk, TurnDetectionConfig } from './types';
@@ -78,7 +78,8 @@ export class TurnDetector extends EventEmitter {
     if (this.turnStartTime !== null) {
       const duration = Date.now() - this.turnStartTime;
       if (duration < this.config.minTurnDurationMs) {
-        // Too short, don't end the turn yet
+        // Too short: schedule the end for the earliest valid turn boundary.
+        this.scheduleTurnEnd(this.config.minTurnDurationMs - duration);
         return;
       }
     }
@@ -96,7 +97,7 @@ export class TurnDetector extends EventEmitter {
       return;
     }
 
-    const buffer = base64ToBuffer(chunk.data);
+    const buffer = audioDataToPcm16(base64ToBuffer(chunk.data), chunk.format);
     const isSilent = this.silenceDetector.isSilent(buffer);
 
     if (!isSilent) {
@@ -169,8 +170,17 @@ export class TurnDetector extends EventEmitter {
 
   private startSilenceTimer(): void {
     this.silenceTimer = setTimeout(() => {
+      this.silenceTimer = null;
       this.onSpeechEnd();
     }, this.config.silenceThresholdMs);
+  }
+
+  private scheduleTurnEnd(delayMs: number): void {
+    this.clearSilenceTimer();
+    this.silenceTimer = setTimeout(() => {
+      this.silenceTimer = null;
+      this.onSpeechEnd();
+    }, delayMs);
   }
 
   private resetSilenceTimer(): void {
@@ -241,7 +251,7 @@ export class SilenceDetector {
     let sumSquares = 0;
     const sampleCount = Math.floor(pcmData.length / 2);
 
-    for (let i = 0; i < pcmData.length; i += 2) {
+    for (let i = 0; i + 1 < pcmData.length; i += 2) {
       // Read 16-bit signed integer (little-endian)
       const sample = pcmData.readInt16LE(i);
       // Normalize to -1 to 1 range
@@ -265,7 +275,7 @@ export class SilenceDetector {
 
     let maxAbsSample = 0;
 
-    for (let i = 0; i < pcmData.length; i += 2) {
+    for (let i = 0; i + 1 < pcmData.length; i += 2) {
       const sample = Math.abs(pcmData.readInt16LE(i));
       if (sample > maxAbsSample) {
         maxAbsSample = sample;

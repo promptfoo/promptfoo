@@ -154,6 +154,23 @@ describe('OpenAIRealtimeConnection', () => {
 
       await expect(connectPromise).rejects.toThrow('Connection failed');
     });
+
+    it('should reject when the WebSocket handshake times out', async () => {
+      vi.useFakeTimers();
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      const connectPromise = connection.connect();
+      const rejection = expect(connectPromise).rejects.toThrow('Connection timeout');
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      await rejection;
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Connection timeout' }),
+      );
+      vi.useRealTimers();
+    });
   });
 
   describe('sendAudio', () => {
@@ -343,6 +360,32 @@ describe('OpenAIRealtimeConnection', () => {
           data: 'base64audiodata',
           format: 'pcm16',
           sampleRate: 24000,
+        }),
+      );
+    });
+
+    it('should calculate audio duration using the configured Realtime audio format', () => {
+      const g711Connection = new OpenAIRealtimeConnection({
+        ...config,
+        audioFormat: 'g711_ulaw',
+        sampleRate: 8000,
+      });
+      const handler = vi.fn();
+      g711Connection.on('audio_delta', handler);
+
+      (g711Connection as any).handleMessage(
+        JSON.stringify({
+          type: 'response.output_audio.delta',
+          delta: Buffer.alloc(800).toString('base64'),
+        }),
+      );
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          duration: 100,
+          format: 'g711_ulaw',
+          sampleRate: 8000,
+          timestamp: 0,
         }),
       );
     });

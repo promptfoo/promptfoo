@@ -29,7 +29,7 @@ const { providerMocks } = vi.hoisted(() => {
     providerMocks: {
       cloud: {
         getApiHost: vi.fn(() => 'https://cloud.example.test'),
-        getApiKey: vi.fn(() => 'cloud-key'),
+        getApiKey: vi.fn<() => string | undefined>(() => 'cloud-key'),
         isEnabled: vi.fn(() => false),
       },
       fetchWithProxy: vi.fn(),
@@ -286,6 +286,10 @@ describe('SimulatedVoiceUser', () => {
         method: 'POST',
       }),
     );
+    const remoteRequest = providerMocks.fetchWithProxy.mock.calls[0]?.[1] as RequestInit;
+    const remoteBody = JSON.parse(String(remoteRequest.body));
+    expect(remoteBody.simulatedUserInstructions).toContain('You are simulating a user');
+    expect(remoteBody.simulatedUserInstructions).toContain('###STOP###');
     expect(result).toEqual(
       expect.objectContaining({
         audio: { data: 'target-audio', format: 'wav' },
@@ -300,6 +304,17 @@ describe('SimulatedVoiceUser', () => {
         output: 'Assistant: Remote greeting',
       }),
     );
+  });
+
+  it('returns a clear remote error when no cloud token is configured', async () => {
+    vi.stubEnv('API_HOST', 'https://alt.example.test');
+    providerMocks.cloud.getApiKey.mockReturnValue(undefined);
+
+    await expect(new SimulatedVoiceUser({}).callApi('Target prompt')).resolves.toEqual({
+      error:
+        'Remote voice-tau requires Promptfoo Cloud authentication. Run `promptfoo auth login` or set PROMPTFOO_API_KEY.',
+    });
+    expect(providerMocks.fetchWithProxy).not.toHaveBeenCalled();
   });
 
   it('uses API_HOST for remote errors and reports remote transport failures', async () => {

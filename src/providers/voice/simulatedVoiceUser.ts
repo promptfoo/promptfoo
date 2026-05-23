@@ -188,7 +188,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     const apiHost = getEnvString('API_HOST', '');
     const useRemote = cloudConfig.isEnabled() || (apiHost && apiHost !== CLOUD_API_HOST);
     if (useRemote) {
-      return this.callRemoteVoiceTau(prompt, instructions);
+      return this.callRemoteVoiceTau(prompt, this.buildSimulatedUserInstructions(instructions));
     }
 
     // Build configs for both connections
@@ -232,6 +232,13 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     const apiHost = envApiHost || cloudConfig.getApiHost();
     const apiKey = cloudConfig.getApiKey();
     const url = `${apiHost}/api/v1/task`;
+
+    if (!apiKey) {
+      return {
+        error:
+          'Remote voice-tau requires Promptfoo Cloud authentication. Run `promptfoo auth login` or set PROMPTFOO_API_KEY.',
+      };
+    }
 
     logger.debug('[SimulatedVoiceUser] Using remote voice-tau task:', { apiHost });
 

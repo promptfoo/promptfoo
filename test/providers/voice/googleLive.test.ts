@@ -143,6 +143,22 @@ describe('GoogleLiveConnection', () => {
 
       await expect(connectPromise).rejects.toThrow('Connection failed');
     });
+
+    it('should reject when the WebSocket handshake times out', async () => {
+      vi.useFakeTimers();
+      const errorHandler = vi.fn();
+      connection.on('error', errorHandler);
+
+      const connectPromise = connection.connect();
+      const rejection = expect(connectPromise).rejects.toThrow('Connection timeout');
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      await rejection;
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Connection timeout' }),
+      );
+    });
   });
 
   describe('sendAudio', () => {
@@ -523,7 +539,17 @@ describe('GoogleLiveConnection', () => {
       connection.sendText('Hello');
 
       expect(sendSpy.mock.calls.map(([message]) => message)).toEqual([
-        { realtimeInput: { text: 'Begin the conversation now.' } },
+        {
+          clientContent: {
+            turns: [
+              {
+                role: 'user',
+                parts: [{ text: 'Begin the conversation now.' }],
+              },
+            ],
+            turnComplete: true,
+          },
+        },
         { realtimeInput: { activityStart: {} } },
         {
           realtimeInput: {
@@ -531,7 +557,17 @@ describe('GoogleLiveConnection', () => {
           },
         },
         { realtimeInput: { activityEnd: {} } },
-        { realtimeInput: { text: 'Hello' } },
+        {
+          clientContent: {
+            turns: [
+              {
+                role: 'user',
+                parts: [{ text: 'Hello' }],
+              },
+            ],
+            turnComplete: true,
+          },
+        },
       ]);
     });
   });

@@ -237,11 +237,13 @@ export abstract class BaseVoiceConnection extends EventEmitter {
   /**
    * Set a connection timeout.
    */
-  protected setConnectionTimeout(ms: number): void {
+  protected setConnectionTimeout(ms: number, onTimeout?: (error: Error) => void): void {
     this.clearConnectionTimeout();
     this.connectionTimeout = setTimeout(() => {
       if (this.state === 'connecting') {
-        this.handleError(new Error('Connection timeout'));
+        const error = new Error('Connection timeout');
+        onTimeout?.(error);
+        this.handleError(error);
         this.disconnect();
       }
     }, ms);

@@ -8,6 +8,7 @@
 import WebSocket from 'ws';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { calculateDuration } from '../audioBuffer';
 import { BaseVoiceConnection, waitForEvent } from './base';
 
 import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
@@ -62,7 +63,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     logger.debug('[OpenAIRealtime] Connecting to:', { url: url.replace(apiKey, '***') });
 
     return new Promise((resolve, reject) => {
-      this.setConnectionTimeout(CONNECTION_TIMEOUT_MS);
+      this.setConnectionTimeout(CONNECTION_TIMEOUT_MS, reject);
 
       this.ws = new WebSocket(url, {
         headers: {
@@ -246,9 +247,9 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
       // Audio output events
       case 'response.output_audio.delta': {
         const sampleRate = this.config.sampleRate || DEFAULT_SAMPLE_RATE;
+        const audioFormat = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
         const audioData = Buffer.from(msg.delta as string, 'base64');
-        const bytesPerSample = 2; // PCM16
-        const durationMs = (audioData.length / bytesPerSample / sampleRate) * 1000;
+        const durationMs = calculateDuration(audioData.length, sampleRate, audioFormat);
 
         // Use cumulative audio position as timestamp (not real time).
         // This ensures proper playback alignment: a 10s audio response gets
@@ -259,7 +260,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
           data: msg.delta as string,
           timestamp: timestamp,
           duration: durationMs,
-          format: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
+          format: audioFormat,
           sampleRate: sampleRate,
         });
 

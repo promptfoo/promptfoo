@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AudioBuffer,
+  audioDataToPcm16,
   base64ToBuffer,
   bufferToBase64,
   calculateBytes,
   calculateDuration,
   createAudioChunk,
+  createStereoWav,
   mergeAudioBuffers,
   pcm16ToWav,
   splitAudioBuffer,
@@ -164,6 +166,25 @@ describe('AudioBuffer', () => {
       // Header is 44 bytes + data
       expect(wav.length).toBe(44 + pcmData.length);
     });
+
+    it('should decode G.711 audio before creating WAV output', () => {
+      const g711Buffer = new AudioBuffer('g711_ulaw', 8000);
+      const encoded = Buffer.from([0xff, 0x7f, 0x00, 0x80]);
+      g711Buffer.append({
+        data: bufferToBase64(encoded),
+        timestamp: 0,
+        format: 'g711_ulaw',
+        sampleRate: 8000,
+      });
+
+      const wav = g711Buffer.toWav();
+
+      expect(wav.slice(0, 4).toString()).toBe('RIFF');
+      expect(wav.readUInt16LE(20)).toBe(1);
+      expect(wav.readUInt16LE(34)).toBe(16);
+      expect(wav.readUInt32LE(40)).toBe(encoded.length * 2);
+      expect(wav.length).toBe(44 + encoded.length * 2);
+    });
   });
 
   describe('getStartTime and getEndTime', () => {
@@ -291,6 +312,18 @@ describe('calculateBytes', () => {
   });
 });
 
+describe('audioDataToPcm16', () => {
+  it('passes PCM16 data through unchanged', () => {
+    const pcm = Buffer.from([0, 1, 2, 3]);
+    expect(audioDataToPcm16(pcm, 'pcm16')).toEqual(pcm);
+  });
+
+  it('decodes G.711 mu-law and A-law bytes into PCM16 samples', () => {
+    expect(audioDataToPcm16(Buffer.from([0xff, 0x7f]), 'g711_ulaw')).toHaveLength(4);
+    expect(audioDataToPcm16(Buffer.from([0xd5, 0x55]), 'g711_alaw')).toHaveLength(4);
+  });
+});
+
 describe('createAudioChunk', () => {
   it('should create chunk from buffer', () => {
     const data = Buffer.alloc(4800); // 100ms at 24kHz PCM16
@@ -369,5 +402,34 @@ describe('splitAudioBuffer', () => {
 
     expect(before.getChunkCount()).toBe(2);
     expect(after.getChunkCount()).toBe(1);
+  });
+});
+
+describe('createStereoWav', () => {
+  it('decodes G.711 chunks before placing them in a stereo WAV', () => {
+    const agent = new AudioBuffer('g711_ulaw', 8000);
+    const user = new AudioBuffer('g711_alaw', 8000);
+
+    agent.append({
+      data: bufferToBase64(Buffer.from([0xff, 0x7f])),
+      duration: 250,
+      format: 'g711_ulaw',
+      sampleRate: 8000,
+      timestamp: 0,
+    });
+    user.append({
+      data: bufferToBase64(Buffer.from([0xd5, 0x55])),
+      duration: 250,
+      format: 'g711_alaw',
+      sampleRate: 8000,
+      timestamp: 0,
+    });
+
+    const wav = createStereoWav(agent, user);
+
+    expect(wav.slice(0, 4).toString()).toBe('RIFF');
+    expect(wav.readUInt16LE(22)).toBe(2);
+    expect(wav.readUInt16LE(34)).toBe(16);
+    expect(wav.readUInt32LE(40)).toBeGreaterThan(0);
   });
 });

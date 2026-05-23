@@ -89,6 +89,12 @@ export class VoiceConversationOrchestrator extends EventEmitter {
   // Track where the CURRENT response ends (updated on each chunk, copied to baseline in audio_done).
   private targetCurrentEndMs = 0;
   private userCurrentEndMs = 0;
+  private pendingTurnDetectorSpeaker: 'target' | 'user' | null = null;
+  private activeTurnDetectorSpeaker: 'target' | 'user' | null = null;
+  private targetAudioDonePending = false;
+  private userAudioDonePending = false;
+  private targetTranscriptDoneForTurn = false;
+  private userTranscriptDoneForTurn = false;
 
   constructor(config: OrchestratorConfig) {
     super();
@@ -219,6 +225,74 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     await this.completeConversation(reason);
   }
 
+  private shouldUseLocalTurnDetection(): boolean {
+    return this.config.turnDetection.mode !== 'server_vad';
+  }
+
+  private feedTurnDetector(speaker: 'target' | 'user', chunk: AudioChunk): void {
+    if (!this.shouldUseLocalTurnDetection()) {
+      return;
+    }
+
+    this.pendingTurnDetectorSpeaker = speaker;
+    this.turnDetector.onAudioChunk(chunk);
+    this.pendingTurnDetectorSpeaker = null;
+  }
+
+  private markAudioDoneForTurnDetection(speaker: 'target' | 'user'): void {
+    if (this.shouldUseLocalTurnDetection() && this.activeTurnDetectorSpeaker === speaker) {
+      this.turnDetector.onSpeechEnd();
+    }
+  }
+
+  private completeTranscriptTurn(speaker: 'agent' | 'user', text: string): boolean {
+    const turn = this.transcript.completeWithText(speaker, text);
+    this.turnCount++;
+    this.emit('turn_complete', { speaker, text: turn });
+
+    if (this.transcript.hasStopMarker()) {
+      logger.debug(`[Orchestrator] Stop marker detected in ${speaker} speech`);
+      void this.completeConversation('goal_achieved');
+      return true;
+    }
+
+    if (this.turnCount >= (this.config.maxTurns || DEFAULT_MAX_TURNS)) {
+      logger.debug('[Orchestrator] Max turns reached');
+      void this.completeConversation('max_turns');
+      return true;
+    }
+
+    return false;
+  }
+
+  private maybeRequestSimulatedUserResponse(): void {
+    if (!this.targetAudioDonePending || !this.targetTranscriptDoneForTurn) {
+      return;
+    }
+
+    this.targetAudioDonePending = false;
+    this.targetTranscriptDoneForTurn = false;
+
+    if (this.state === 'active' && this.simulatedUserConnection?.isReady()) {
+      this.simulatedUserConnection.commitAudio();
+      this.simulatedUserConnection.requestResponse();
+    }
+  }
+
+  private maybeRequestTargetResponse(): void {
+    if (!this.userAudioDonePending || !this.userTranscriptDoneForTurn) {
+      return;
+    }
+
+    this.userAudioDonePending = false;
+    this.userTranscriptDoneForTurn = false;
+
+    if (this.state === 'active' && this.targetConnection?.isReady()) {
+      this.targetConnection.commitAudio();
+      this.targetConnection.requestResponse();
+    }
+  }
+
   /**
    * Setup event handlers for the target connection.
    */
@@ -229,6 +303,8 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     // Audio from target → forward to simulated user
     this.targetConnection.on('audio_delta', (chunk: AudioChunk) => {
+      this.targetTranscriptDoneForTurn = false;
+
       // Map connection's internal timestamp to global timeline.
       // The connection's internal timestamps are cumulative across all responses,
       // so we subtract the baseline (where previous response ended) to get position within this response.
@@ -258,6 +334,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         this.simulatedUserConnection.sendAudio(chunk);
       }
 
+      this.feedTurnDetector('target', chunk);
       this.emit('target_audio', adjustedChunk);
     });
 
@@ -267,7 +344,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         globalPosition: this.globalAudioPositionMs,
         targetCurrentEndMs: this.targetCurrentEndMs,
       });
-      this.isTargetSpeaking = false;
+      this.markAudioDoneForTurnDetection('target');
 
       // Update baseline for next target response (where this response ended)
       this.targetBaselineMs = this.targetCurrentEndMs;
@@ -275,11 +352,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       // Set the user's offset to start after target's audio ends
       this.userAudioOffsetMs = this.globalAudioPositionMs;
 
-      // Commit audio to simulated user
-      if (this.simulatedUserConnection?.isReady()) {
-        this.simulatedUserConnection.commitAudio();
-        this.simulatedUserConnection.requestResponse();
-      }
+      this.isTargetSpeaking = false;
+      this.targetAudioDonePending = true;
+      this.maybeRequestSimulatedUserResponse();
     });
 
     // Transcript from target
@@ -289,20 +364,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     });
 
     this.targetConnection.on('transcript_done', (text: string) => {
-      const turn = this.transcript.completeWithText('agent', text);
-      this.turnCount++;
-      this.emit('turn_complete', { speaker: 'agent', text: turn });
-
-      // Check for stop marker
-      if (this.transcript.hasStopMarker()) {
-        logger.debug('[Orchestrator] Stop marker detected in target speech');
-        void this.completeConversation('goal_achieved');
-      }
-
-      // Check turn limit
-      if (this.turnCount >= (this.config.maxTurns || DEFAULT_MAX_TURNS)) {
-        logger.debug('[Orchestrator] Max turns reached');
-        void this.completeConversation('max_turns');
+      this.targetTranscriptDoneForTurn = true;
+      if (!this.completeTranscriptTurn('agent', text)) {
+        this.maybeRequestSimulatedUserResponse();
       }
     });
 
@@ -344,6 +408,8 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     // Audio from simulated user → forward to target
     this.simulatedUserConnection.on('audio_delta', (chunk: AudioChunk) => {
+      this.userTranscriptDoneForTurn = false;
+
       // Map connection's internal timestamp to global timeline.
       // The connection's internal timestamps are cumulative across all responses,
       // so we subtract the baseline (where previous response ended) to get position within this response.
@@ -373,6 +439,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         this.targetConnection.sendAudio(chunk);
       }
 
+      this.feedTurnDetector('user', chunk);
       this.emit('simulated_user_audio', adjustedChunk);
     });
 
@@ -382,7 +449,7 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         globalPosition: this.globalAudioPositionMs,
         userCurrentEndMs: this.userCurrentEndMs,
       });
-      this.isSimulatedUserSpeaking = false;
+      this.markAudioDoneForTurnDetection('user');
 
       // Update baseline for next user response (where this response ended)
       this.userBaselineMs = this.userCurrentEndMs;
@@ -390,11 +457,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       // Set the target's offset to start after user's audio ends
       this.targetAudioOffsetMs = this.globalAudioPositionMs;
 
-      // Commit audio to target and request response
-      if (this.targetConnection?.isReady()) {
-        this.targetConnection.commitAudio();
-        this.targetConnection.requestResponse();
-      }
+      this.isSimulatedUserSpeaking = false;
+      this.userAudioDonePending = true;
+      this.maybeRequestTargetResponse();
     });
 
     // Transcript from simulated user
@@ -403,20 +468,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     });
 
     this.simulatedUserConnection.on('transcript_done', (text: string) => {
-      const turn = this.transcript.completeWithText('user', text);
-      this.turnCount++;
-      this.emit('turn_complete', { speaker: 'user', text: turn });
-
-      // Check for stop marker
-      if (this.transcript.hasStopMarker()) {
-        logger.debug('[Orchestrator] Stop marker detected in simulated user speech');
-        void this.completeConversation('goal_achieved');
-      }
-
-      // Check turn limit
-      if (this.turnCount >= (this.config.maxTurns || DEFAULT_MAX_TURNS)) {
-        logger.debug('[Orchestrator] Max turns reached');
-        void this.completeConversation('max_turns');
+      this.userTranscriptDoneForTurn = true;
+      if (!this.completeTranscriptTurn('user', text)) {
+        this.maybeRequestTargetResponse();
       }
     });
 
@@ -451,18 +505,42 @@ export class VoiceConversationOrchestrator extends EventEmitter {
    */
   private setupTurnDetectorHandlers(): void {
     this.turnDetector.on('turn_start', () => {
+      this.activeTurnDetectorSpeaker =
+        this.pendingTurnDetectorSpeaker ||
+        (this.isTargetSpeaking ? 'target' : this.isSimulatedUserSpeaking ? 'user' : null);
+
+      if (this.activeTurnDetectorSpeaker === 'target') {
+        this.isTargetSpeaking = true;
+      } else if (this.activeTurnDetectorSpeaker === 'user') {
+        this.isSimulatedUserSpeaking = true;
+      }
+
       this.emit('turn_start');
     });
 
     this.turnDetector.on('turn_end', () => {
+      if (this.activeTurnDetectorSpeaker === 'target') {
+        this.isTargetSpeaking = false;
+      } else if (this.activeTurnDetectorSpeaker === 'user') {
+        this.isSimulatedUserSpeaking = false;
+      }
+      this.activeTurnDetectorSpeaker = null;
       this.emit('turn_end');
     });
 
     this.turnDetector.on('turn_timeout', () => {
       logger.warn('[Orchestrator] Turn timeout detected');
       // Force end the current turn
-      if (this.isTargetSpeaking && this.targetConnection) {
+      if (
+        (this.activeTurnDetectorSpeaker === 'target' || this.isTargetSpeaking) &&
+        this.targetConnection
+      ) {
         this.targetConnection.cancelResponse();
+      } else if (
+        (this.activeTurnDetectorSpeaker === 'user' || this.isSimulatedUserSpeaking) &&
+        this.simulatedUserConnection
+      ) {
+        this.simulatedUserConnection.cancelResponse();
       }
     });
   }
@@ -565,6 +643,12 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     }
 
     this.turnDetector.reset();
+    this.pendingTurnDetectorSpeaker = null;
+    this.activeTurnDetectorSpeaker = null;
+    this.targetAudioDonePending = false;
+    this.userAudioDonePending = false;
+    this.targetTranscriptDoneForTurn = false;
+    this.userTranscriptDoneForTurn = false;
 
     if (this.targetConnection) {
       await this.targetConnection.disconnect();

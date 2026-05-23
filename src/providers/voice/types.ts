@@ -357,7 +357,7 @@ export interface TranscriptDeltaMessage extends RealtimeMessage {
  */
 export interface TranscriptDoneMessage extends RealtimeMessage {
   type: 'response.output_audio_transcript.done';
-  text: string;
+  transcript: string;
 }
 
 /**

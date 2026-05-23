@@ -72,7 +72,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     logger.debug('[GoogleLive] Connecting to:', { url: url.replace(apiKey, '***') });
 
     return new Promise((resolve, reject) => {
-      this.setConnectionTimeout(CONNECTION_TIMEOUT_MS);
+      this.setConnectionTimeout(CONNECTION_TIMEOUT_MS, reject);
 
       this.ws = new WebSocket(url);
 
@@ -219,7 +219,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    this.send({ realtimeInput: { text: INITIAL_RESPONSE_PROMPT } });
+    this.sendText(INITIAL_RESPONSE_PROMPT);
   }
 
   /**
@@ -250,8 +250,14 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     }
 
     this.send({
-      realtimeInput: {
-        text,
+      clientContent: {
+        turns: [
+          {
+            role: 'user',
+            parts: [{ text }],
+          },
+        ],
+        turnComplete: true,
       },
     });
   }

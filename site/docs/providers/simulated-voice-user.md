@@ -1,6 +1,7 @@
 ---
+title: Simulated Voice User
 sidebar_label: Simulated Voice User
-description: 'Test voice agent prompts with realistic multi-turn voice conversations using a simulated caller'
+description: 'Test realtime voice agents with simulated callers, multi-turn audio streaming, transcripts, and stereo WAV recordings for promptfoo evals.'
 ---
 
 # Simulated Voice User

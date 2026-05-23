@@ -65,7 +65,7 @@ describe('TurnDetector', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
-    it('should not emit turn_end if below minimum duration', () => {
+    it('should delay turn_end until the minimum duration elapses', () => {
       const handler = vi.fn();
       detector.on('turn_end', handler);
 
@@ -74,6 +74,12 @@ describe('TurnDetector', () => {
       detector.onSpeechEnd();
 
       expect(handler).not.toHaveBeenCalled();
+      expect(detector.isInTurn()).toBe(true);
+
+      vi.advanceTimersByTime(50);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(detector.isInTurn()).toBe(false);
     });
 
     it('should not emit turn_end if not speaking', () => {
@@ -190,6 +196,20 @@ describe('TurnDetector', () => {
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
+    it('should decode G.711 audio before local silence detection', () => {
+      const handler = vi.fn();
+      detector.on('turn_start', handler);
+
+      detector.onAudioChunk({
+        data: bufferToBase64(Buffer.from([0xff, 0x7f, 0xff, 0x7f])),
+        timestamp: 0,
+        format: 'g711_ulaw',
+        sampleRate: 8000,
+      });
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
     it('should end turn after silence threshold', () => {
       const endHandler = vi.fn();
       detector.on('turn_end', endHandler);
@@ -220,6 +240,52 @@ describe('TurnDetector', () => {
       vi.advanceTimersByTime(500);
 
       expect(endHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reschedule local silence ending when the minimum duration has not elapsed', () => {
+      detector = new TurnDetector({
+        mode: 'silence',
+        silenceThresholdMs: 20,
+        vadThreshold: 0.02,
+        minTurnDurationMs: 100,
+        maxTurnDurationMs: 10000,
+        prefixPaddingMs: 300,
+      });
+      const endHandler = vi.fn();
+      detector.on('turn_end', endHandler);
+
+      const loudAudio = Buffer.alloc(100);
+      for (let i = 0; i < loudAudio.length; i += 2) {
+        loudAudio.writeInt16LE(10000, i);
+      }
+
+      detector.onAudioChunk({
+        data: bufferToBase64(loudAudio),
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+      detector.onAudioChunk({
+        data: bufferToBase64(Buffer.alloc(100)),
+        timestamp: 20,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+
+      vi.advanceTimersByTime(20);
+      expect(endHandler).not.toHaveBeenCalled();
+      expect(detector.isInTurn()).toBe(true);
+
+      detector.onAudioChunk({
+        data: bufferToBase64(Buffer.alloc(100)),
+        timestamp: 40,
+        format: 'pcm16',
+        sampleRate: 24000,
+      });
+      vi.advanceTimersByTime(80);
+
+      expect(endHandler).toHaveBeenCalledTimes(1);
+      expect(detector.isInTurn()).toBe(false);
     });
   });
 });
@@ -281,6 +347,10 @@ describe('SilenceDetector', () => {
       const rms = detector.getRmsAmplitude(data);
       expect(rms).toBeCloseTo(0.5, 1);
     });
+
+    it('should ignore a trailing partial sample', () => {
+      expect(detector.getRmsAmplitude(Buffer.from([0, 1, 2]))).toBeCloseTo(256 / 32768, 5);
+    });
   });
 
   describe('getPeakAmplitude', () => {
@@ -305,6 +375,10 @@ describe('SilenceDetector', () => {
 
       const peak = detector.getPeakAmplitude(data);
       expect(peak).toBeCloseTo(32000 / 32768, 2);
+    });
+
+    it('should ignore a trailing partial sample', () => {
+      expect(detector.getPeakAmplitude(Buffer.from([0, 1, 2]))).toBeCloseTo(256 / 32768, 5);
     });
   });
 
