@@ -25,16 +25,13 @@ providers:
       tools:
         - googleSearch: {}
 
-  # Dynamic retrieval configuration for Gemini 2.5 models
+  # Google Search grounding on the cost-efficient Flash-Lite model
   - id: google:gemini-2.5-flash-lite
     config:
       temperature: 0.2
       maxOutputTokens: 1024
       tools:
-        - googleSearchRetrieval:
-            dynamicRetrievalConfig:
-              mode: 'MODE_DYNAMIC'
-              dynamicThreshold: 0
+        - googleSearch: {}
 
 tests:
   # Test current events
@@ -44,7 +41,7 @@ tests:
       - type: contains
         value: stock
       - type: contains
-        value: price
+        value: '$'
 
   # Test a technical question
   - vars:
