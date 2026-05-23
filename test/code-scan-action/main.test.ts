@@ -541,6 +541,46 @@ describe('code-scan-action main', () => {
       expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
       expect(mocks.core.getIDToken).toHaveBeenCalled();
     });
+
+    it('should accept a structured successful skip response if fork PR scanning awaits maintainer approval', async () => {
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  commentsPosted: true,
+                  comments: [
+                    {
+                      file: null,
+                      line: null,
+                      finding:
+                        'Fork PR scanning requires maintainer approval. See PR comment for options.',
+                      severity: 'none',
+                    },
+                  ],
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith('✅ Comments posted to PR by scan server');
+      });
+
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
   });
 
   describe('SARIF output', () => {

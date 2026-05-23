@@ -12,6 +12,7 @@ import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
+  CodeScanSeverity,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
@@ -330,7 +331,24 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Handle fork PR auth rejection as success (helpful comment posted to PR)
     if (errorMessage.includes('Fork PR scanning not authorized')) {
       const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
-      if (showSpinner && spinner) {
+      if (outputFormat !== CodeScanOutputFormat.TEXT) {
+        const response: ScanResponse = {
+          success: true,
+          commentsPosted: true,
+          comments: [
+            {
+              file: null,
+              line: null,
+              finding: msg,
+              severity: CodeScanSeverity.NONE,
+            },
+          ],
+        };
+        displayScanResults(response, Date.now() - startTime, {
+          format: outputFormat,
+          githubPr: options.githubPr,
+        });
+      } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);
