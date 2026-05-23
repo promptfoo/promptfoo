@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
+
 import { callApi } from '@app/utils/api';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,9 +10,16 @@ import EvalsTable from './EvalsTable';
 // Mock the API
 vi.mock('@app/utils/api');
 
+vi.mock('@app/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
 // Mock the DataTable component to simplify testing
 vi.mock('@app/components/data-table/data-table', () => ({
   DataTable: ({
+    columns,
     data,
     isLoading,
     error,
@@ -40,8 +49,15 @@ vi.mock('@app/components/data-table/data-table', () => ({
         {data.map((row: any) => {
           const rowId = getRowId ? getRowId(row) : row.evalId;
           const isSelected = rowSelection?.[rowId] || false;
+          const favoriteColumn = columns?.find(
+            (column: any) => column.accessorKey === 'isFavorite' || column.id === 'isFavorite',
+          );
           return (
             <div key={rowId} data-testid={`row-${rowId}`}>
+              {favoriteColumn?.cell?.({
+                row: { original: row },
+                getValue: () => row.isFavorite,
+              })}
               {enableRowSelection && (
                 <input
                   type="checkbox"
@@ -72,9 +88,10 @@ vi.mock('@app/components/data-table/data-table', () => ({
 const mockEvals = [
   {
     evalId: 'eval-1',
-    createdAt: Date.now(),
+    createdAt: 1000,
     description: 'Original Description',
     datasetId: 'dataset-1',
+    isFavorite: false,
     isRedteam: false,
     label: 'eval-1',
     numTests: 10,
@@ -82,9 +99,10 @@ const mockEvals = [
   },
   {
     evalId: 'eval-2',
-    createdAt: Date.now(),
+    createdAt: 2000,
     description: 'Another Eval',
     datasetId: 'dataset-1',
+    isFavorite: true,
     isRedteam: false,
     label: 'eval-2',
     numTests: 5,
@@ -95,9 +113,10 @@ const mockEvals = [
 const mockEvalsWithMultipleDatasets = [
   {
     evalId: 'eval-1',
-    createdAt: Date.now(),
+    createdAt: 1000,
     description: 'Eval 1 - Dataset 1',
     datasetId: 'dataset-1',
+    isFavorite: false,
     isRedteam: false,
     label: 'eval-1',
     numTests: 10,
@@ -105,9 +124,10 @@ const mockEvalsWithMultipleDatasets = [
   },
   {
     evalId: 'eval-2',
-    createdAt: Date.now(),
+    createdAt: 2000,
     description: 'Eval 2 - Dataset 1',
     datasetId: 'dataset-1',
+    isFavorite: true,
     isRedteam: false,
     label: 'eval-2',
     numTests: 5,
@@ -115,9 +135,10 @@ const mockEvalsWithMultipleDatasets = [
   },
   {
     evalId: 'eval-3',
-    createdAt: Date.now(),
+    createdAt: 3000,
     description: 'Eval 3 - Dataset 2',
     datasetId: 'dataset-2',
+    isFavorite: false,
     isRedteam: false,
     label: 'eval-3',
     numTests: 8,
@@ -215,6 +236,83 @@ describe('EvalsTable', () => {
     await user.click(screen.getByTestId('select-eval-1'));
 
     expect(onEvalSelected).toHaveBeenCalledWith('eval-1');
+  });
+
+  it('should sort favorite evals first', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({ data: mockEvals }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('data-table')).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByTestId(/^row-/).map((row) => row.dataset.testid)).toEqual([
+      'row-eval-2',
+      'row-eval-1',
+    ]);
+  });
+
+  it('should toggle favorite status without selecting the row', async () => {
+    const user = userEvent.setup();
+    const mockCall = vi.mocked(callApi);
+    mockCall.mockImplementation((url: string) => {
+      if (url === '/results') {
+        return Promise.resolve({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ data: mockEvals }),
+        } as any);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          message: 'Favorite status updated successfully',
+          isFavorite: true,
+        }),
+      } as any);
+    });
+    const onEvalSelected = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <EvalsTable onEvalSelected={onEvalSelected} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('data-table')).toBeInTheDocument();
+    });
+
+    await user.click(
+      within(screen.getByTestId('row-eval-1')).getByRole('button', {
+        name: 'Add to favorites',
+      }),
+    );
+
+    expect(onEvalSelected).not.toHaveBeenCalled();
+    expect(mockCall).toHaveBeenCalledWith('/eval/eval-1/favorite', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ isFavorite: true }),
+    });
+
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId('row-eval-1')).getByRole('button', {
+          name: 'Remove from favorites',
+        }),
+      ).toBeInTheDocument();
+    });
   });
 
   it('should delete selected evals when delete button is clicked', async () => {

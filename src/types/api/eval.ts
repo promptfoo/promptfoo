@@ -209,6 +209,22 @@ export type UpdateEvalParams = z.infer<typeof UpdateEvalParamsSchema>;
 export type UpdateEvalRequest = z.infer<typeof UpdateEvalRequestSchema>;
 export type UpdateEvalResponse = z.infer<typeof UpdateEvalResponseSchema>;
 
+// PATCH /api/eval/:id/favorite
+
+export const UpdateEvalFavoriteParamsSchema = EvalIdParamSchema;
+
+export const UpdateEvalFavoriteRequestSchema = z.object({
+  isFavorite: z.boolean(),
+});
+
+export const UpdateEvalFavoriteResponseSchema = MessageResponseSchema.extend({
+  isFavorite: z.boolean(),
+});
+
+export type UpdateEvalFavoriteParams = z.infer<typeof UpdateEvalFavoriteParamsSchema>;
+export type UpdateEvalFavoriteRequest = z.infer<typeof UpdateEvalFavoriteRequestSchema>;
+export type UpdateEvalFavoriteResponse = z.infer<typeof UpdateEvalFavoriteResponseSchema>;
+
 // POST /api/eval/:id/results
 
 export const AddResultsParamsSchema = EvalIdParamSchema;
@@ -349,6 +365,11 @@ export const EvalSchemas = {
     Params: UpdateEvalAuthorParamsSchema,
     Request: UpdateEvalAuthorRequestSchema,
     Response: UpdateEvalAuthorResponseSchema,
+  },
+  UpdateFavorite: {
+    Params: UpdateEvalFavoriteParamsSchema,
+    Request: UpdateEvalFavoriteRequestSchema,
+    Response: UpdateEvalFavoriteResponseSchema,
   },
   MetadataKeys: {
     Params: GetMetadataKeysParamsSchema,

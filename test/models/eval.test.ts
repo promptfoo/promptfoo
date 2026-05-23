@@ -137,6 +137,23 @@ describe('evaluator', () => {
       expect(evaluations).toContainEqual(expect.objectContaining({ evalId: eval3.id }));
     });
 
+    it('should persist favorite status in eval summaries', async () => {
+      const eval1 = await EvalFactory.create();
+      eval1.isFavorite = true;
+      await eval1.save();
+
+      const reloaded = await Eval.findById(eval1.id);
+      expect(reloaded?.isFavorite).toBe(true);
+
+      const evaluations = await getEvalSummaries();
+      expect(evaluations).toContainEqual(
+        expect.objectContaining({
+          evalId: eval1.id,
+          isFavorite: true,
+        }),
+      );
+    });
+
     it('should return evaluations in descending order by createdAt', async () => {
       const eval1 = await EvalFactory.create();
       const eval2 = await EvalFactory.create();

@@ -291,6 +291,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  isFavorite: boolean = false;
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -370,6 +371,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
+      isFavorite: eval_.isFavorite ?? false,
       durationMs,
       generationDurationMs,
       evaluationDurationMs,
@@ -405,6 +407,7 @@ export default class Eval {
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
+          isFavorite: e.isFavorite ?? false,
         }),
     );
   }
@@ -561,6 +564,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      isFavorite?: boolean;
       durationMs?: number;
       generationDurationMs?: number;
       evaluationDurationMs?: number;
@@ -578,6 +582,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.isFavorite = opts?.isFavorite ?? false;
     this.durationMs = opts?.durationMs;
     this.generationDurationMs = opts?.generationDurationMs;
     this.evaluationDurationMs = opts?.evaluationDurationMs;
@@ -611,6 +616,7 @@ export default class Eval {
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+      isFavorite: this.isFavorite,
     };
 
     if (this.useOldResults()) {
@@ -1560,6 +1566,7 @@ export async function getEvalSummaries(
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
       config: evalsTable.config,
+      isFavorite: evalsTable.isFavorite,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -1650,6 +1657,7 @@ export async function getEvalSummaries(
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: Boolean(result.isRedteam),
+      isFavorite: result.isFavorite ?? false,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,

@@ -18,6 +18,7 @@ import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import invariant from '@promptfoo/util/invariant';
+import { Star } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
@@ -93,7 +94,13 @@ export default function EvalsTable({
       }
     }
 
-    return rows_;
+    return [...rows_].sort((a, b) => {
+      const favoriteSort = Number(Boolean(b.isFavorite)) - Number(Boolean(a.isFavorite));
+      if (favoriteSort !== 0) {
+        return favoriteSort;
+      }
+      return b.createdAt - a.createdAt;
+    });
   }, [evals, filterByDatasetId, focusedEvalId]);
 
   const hasRedteamEvals = useMemo(() => {
@@ -139,6 +146,42 @@ export default function EvalsTable({
     }
   };
 
+  const handleToggleFavorite = useCallback(async (row: EvalSummary) => {
+    const nextIsFavorite = !row.isFavorite;
+
+    setEvals((prev) =>
+      prev.map((evalSummary) =>
+        evalSummary.evalId === row.evalId
+          ? { ...evalSummary, isFavorite: nextIsFavorite }
+          : evalSummary,
+      ),
+    );
+
+    try {
+      const res = await callApi(`/eval/${encodeURIComponent(row.evalId)}/favorite`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ isFavorite: nextIsFavorite }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update favorite status');
+      }
+    } catch (err) {
+      setEvals((prev) =>
+        prev.map((evalSummary) =>
+          evalSummary.evalId === row.evalId
+            ? { ...evalSummary, isFavorite: row.isFavorite }
+            : evalSummary,
+        ),
+      );
+      console.error('Failed to update favorite status:', err);
+      alert('Failed to update favorite status');
+    }
+  }, []);
+
   // Export CSV handler
   const handleExportCSV = useCallback(() => {
     const headers = ['ID', 'Created', 'Type', 'Description', 'Pass Rate', '# Tests'];
@@ -168,6 +211,42 @@ export default function EvalsTable({
   // Column definitions
   const columns: ColumnDef<EvalSummary>[] = useMemo(
     () => [
+      {
+        accessorKey: 'isFavorite',
+        header: 'Favorite',
+        cell: ({ row }) => {
+          const isFavorite = Boolean(row.original.isFavorite);
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    'size-8',
+                    isFavorite
+                      ? 'text-amber-500 hover:text-amber-600'
+                      : 'text-muted-foreground hover:text-amber-500',
+                  )}
+                  aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void handleToggleFavorite(row.original);
+                  }}
+                >
+                  <Star className={cn('size-4', isFavorite && 'fill-current')} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              </TooltipContent>
+            </Tooltip>
+          );
+        },
+        size: 88,
+      },
       {
         accessorKey: 'evalId',
         header: 'ID',
@@ -291,7 +370,7 @@ export default function EvalsTable({
         meta: { align: 'right' },
       },
     ],
-    [focusedEvalId, onEvalSelected, hasRedteamEvals],
+    [focusedEvalId, handleToggleFavorite, onEvalSelected, hasRedteamEvals],
   );
 
   // Delete button for toolbar
@@ -325,7 +404,10 @@ export default function EvalsTable({
         rowSelection={rowSelection}
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
-        initialSorting={[{ id: 'createdAt', desc: true }]}
+        initialSorting={[
+          { id: 'isFavorite', desc: true },
+          { id: 'createdAt', desc: true },
+        ]}
         globalFilterLabel="Search evaluations"
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}

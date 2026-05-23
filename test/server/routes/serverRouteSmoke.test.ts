@@ -454,6 +454,13 @@ const smokeCases: SmokeCase[] = [
     expectedStatus: 400,
   },
   {
+    method: 'patch',
+    openApiPath: '/api/eval/{id}/favorite',
+    path: '/api/eval/eval-1/favorite',
+    body: { isFavorite: 'yes' },
+    expectedStatus: 400,
+  },
+  {
     method: 'delete',
     openApiPath: '/api/eval/{id}',
     path: '/api/eval/eval-1',

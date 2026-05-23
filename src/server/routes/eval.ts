@@ -265,6 +265,44 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+evalRouter.patch('/:id/favorite', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.UpdateFavorite.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
+  const bodyResult = EvalSchemas.UpdateFavorite.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+
+  const { id } = paramsResult.data;
+  const { isFavorite } = bodyResult.data;
+
+  try {
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    eval_.isFavorite = isFavorite;
+    await eval_.save();
+
+    res.json(
+      EvalSchemas.UpdateFavorite.Response.parse({
+        message: 'Favorite status updated successfully',
+        isFavorite,
+      }),
+    );
+  } catch (error) {
+    logger.error(`Failed to update favorite status: ${error}`);
+    res.status(500).json({ error: 'Failed to update favorite status' });
+  }
+});
+
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.UpdateAuthor.Params.safeParse(req.params);
   if (!paramsResult.success) {
