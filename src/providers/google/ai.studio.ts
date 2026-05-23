@@ -75,19 +75,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Get the API version.
    *
-   * Uses config.apiVersion if set, otherwise auto-detects based on model
-   * (v1alpha for thinking/gemini-3 models, v1beta for others).
+   * Uses config.apiVersion if set, otherwise defaults to v1beta — Google's
+   * primary endpoint for current Gemini models, including the Gemini 3.x
+   * family. The legacy gemini-2.0-flash-thinking-exp model only responds on
+   * v1alpha. Set config.apiVersion to 'v1alpha' to opt into preview-only
+   * features such as media_resolution.
    */
   private getApiVersion(): string {
     // Allow explicit override
     if (this.config.apiVersion) {
       return this.config.apiVersion;
     }
-    // Auto-detect based on model
-    return this.modelName === 'gemini-2.0-flash-thinking-exp' ||
-      this.modelName.startsWith('gemini-3-')
-      ? 'v1alpha'
-      : 'v1beta';
+    // gemini-2.0-flash-thinking-exp only responds on v1alpha; everything else
+    // (including Gemini 3.x) uses the stable v1beta endpoint.
+    return this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
   }
 
   /**
