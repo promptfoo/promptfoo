@@ -148,6 +148,17 @@ describe('eval-details hash store', () => {
     expect(window.location.hash).toBe('#details-row-51-prompt-2');
   });
 
+  it('clears the stale row hint when removing the details hash', () => {
+    window.history.replaceState({}, '', '/eval/x?rowId=51#details-row-51-prompt-2');
+
+    act(() => {
+      setEvalDetailsHash('');
+    });
+
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
+  });
+
   it('coordinates updates across multiple subscribers', () => {
     const { result: a } = renderHook(() => useEvalDetailsHash());
     const { result: b } = renderHook(() => useEvalDetailsHash());
