@@ -2823,7 +2823,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       messages.push({ role: 'assistant', content: output });
     }
 
-    return messages;
+    return this.sanitizeForMetadata(messages) as CodexConversationMessage[];
   }
 
   private normalizeItemForMetadata(item: any): Record<string, unknown> {
