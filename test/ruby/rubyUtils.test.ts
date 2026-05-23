@@ -1,0 +1,90 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvString } from '../../src/envars';
+import logger from '../../src/logger';
+import * as rubyUtils from '../../src/ruby/rubyUtils';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../../src/util/secureTempFiles';
+
+const { mockExecFileAsync, mockExecFile } = vi.hoisted(() => {
+  const mockExecFileAsync = vi.fn();
+  const mockExecFile = Object.assign(vi.fn(), {
+    [Symbol.for('nodejs.util.promisify.custom')]: mockExecFileAsync,
+  });
+  return { mockExecFileAsync, mockExecFile };
+});
+
+vi.mock('child_process', () => ({
+  execFile: mockExecFile,
+}));
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: vi
+      .fn()
+      .mockResolvedValue(JSON.stringify({ type: 'final_result', data: 'secret-result' })),
+  },
+}));
+
+vi.mock('../../src/envars', () => ({
+  getEnvString: vi.fn(),
+}));
+
+vi.mock('../../src/esm', () => ({
+  getWrapperDir: vi.fn(() => '/wrappers'),
+}));
+
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/util/secureTempFiles', () => ({
+  createSecureTempDirectory: vi.fn().mockResolvedValue('/tmp/promptfoo-ruby-test'),
+  removeSecureTempDirectory: vi.fn().mockResolvedValue(undefined),
+  writeSecureTempFile: vi.fn(
+    async (directory: string, filename: string) => `${directory}/${filename}`,
+  ),
+}));
+
+describe('Ruby utilities', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockExecFileAsync.mockReset();
+    rubyUtils.state.cachedRubyPath = null;
+    rubyUtils.state.validationPromise = null;
+    rubyUtils.state.validatingPath = null;
+    vi.mocked(getEnvString).mockReturnValue('');
+    mockExecFileAsync
+      .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
+      .mockResolvedValueOnce({ stdout: '', stderr: '' });
+  });
+
+  it('uses secure temporary files without logging arguments or results', async () => {
+    const result = await rubyUtils.runRuby('/path/to/script.rb', 'call_api', ['secret-input']);
+
+    expect(result).toBe('secret-result');
+    expect(createSecureTempDirectory).toHaveBeenCalledWith('promptfoo-ruby-');
+    expect(writeSecureTempFile).toHaveBeenNthCalledWith(
+      1,
+      '/tmp/promptfoo-ruby-test',
+      'input.json',
+      '["secret-input"]',
+    );
+    expect(writeSecureTempFile).toHaveBeenNthCalledWith(
+      2,
+      '/tmp/promptfoo-ruby-test',
+      'output.json',
+      '',
+    );
+    expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-ruby-test');
+
+    const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
+    expect(debugMessages).not.toContain('secret-input');
+    expect(debugMessages).not.toContain('secret-result');
+  });
+});

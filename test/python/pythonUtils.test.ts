@@ -20,7 +20,13 @@ vi.mock('child_process', () => ({
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
+import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../../src/util/secureTempFiles';
 
 const fsMock = vi.hoisted(() => ({
   writeFileSync: vi.fn(),
@@ -50,6 +56,22 @@ vi.mock('fs/promises', () => ({
 vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),
   getEnvBool: vi.fn(),
+}));
+
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/util/secureTempFiles', () => ({
+  createSecureTempDirectory: vi.fn().mockResolvedValue('/tmp/promptfoo-python-test'),
+  removeSecureTempDirectory: vi.fn().mockResolvedValue(undefined),
+  writeSecureTempFile: vi.fn(
+    async (directory: string, filename: string) => `${directory}/${filename}`,
+  ),
 }));
 
 // Must be hoisted for vi.mock factory
@@ -506,7 +528,20 @@ describe('Python Utils', () => {
       const result = await pythonUtils.runPython(scriptPath, 'test_method', [1, 2, 3]);
 
       expect(result).toBe(42);
-      expect(fs.writeFileSync).toHaveBeenCalled();
+      expect(createSecureTempDirectory).toHaveBeenCalledWith('promptfoo-python-');
+      expect(writeSecureTempFile).toHaveBeenNthCalledWith(
+        1,
+        '/tmp/promptfoo-python-test',
+        'input.json',
+        '[1,2,3]',
+      );
+      expect(writeSecureTempFile).toHaveBeenNthCalledWith(
+        2,
+        '/tmp/promptfoo-python-test',
+        'output.json',
+        '',
+      );
+      expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-python-test');
       expect(PythonShell).toHaveBeenCalledWith(
         'wrapper.py',
         expect.objectContaining({
@@ -556,6 +591,23 @@ describe('Python Utils', () => {
       );
     });
 
+    it('should not log arguments or returned payloads', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'secret-result' }),
+      );
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      await pythonUtils.runPython('/path/to/script.py', 'test_method', ['secret-input']);
+
+      const debugMessages = vi.mocked(logger.debug).mock.calls.flat().map(String).join('\n');
+      expect(debugMessages).not.toContain('secret-input');
+      expect(debugMessages).not.toContain('secret-result');
+    });
+
     it('should throw an error if Python script does not return final_result', async () => {
       vi.mocked(fs.writeFileSync).mockImplementation(() => {});
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ type: 'other', data: 42 }));
@@ -587,8 +639,7 @@ describe('Python Utils', () => {
         pythonUtils.runPython('/path/to/script.py', 'test_method', []),
       ).rejects.toThrow();
 
-      // Should attempt to clean up both temp files
-      expect(fs.unlinkSync).toHaveBeenCalledTimes(2);
+      expect(removeSecureTempDirectory).toHaveBeenCalledWith('/tmp/promptfoo-python-test');
     });
   });
 });

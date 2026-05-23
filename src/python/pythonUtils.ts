@@ -1,6 +1,5 @@
 import { execFile } from 'child_process';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
@@ -9,6 +8,11 @@ import { getEnvBool, getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
 
 const execFileAsync = promisify(execFile);
 
@@ -301,32 +305,31 @@ export async function runPython<T = unknown>(
   options: { pythonExecutable?: string } = {},
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
-  const tempJsonPath = path.join(
-    os.tmpdir(),
-    `promptfoo-python-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
-  const outputPath = path.join(
-    os.tmpdir(),
-    `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
   const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
+  let tempDirectory: string | undefined;
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
 
-  const pythonOptions: PythonShellOptions = {
-    args: [absPath, method, tempJsonPath, outputPath],
-    env: process.env,
-    mode: 'binary',
-    pythonPath,
-    scriptPath: getWrapperDir('python'),
-    // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
-    ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
-  };
-
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
-    logger.debug(`Running Python wrapper with args: ${safeJsonStringify(args)}`);
+    tempDirectory = await createSecureTempDirectory('promptfoo-python-');
+    const tempJsonPath = await writeSecureTempFile(
+      tempDirectory,
+      'input.json',
+      safeJsonStringify(args) as string,
+    );
+    const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
+    const pythonOptions: PythonShellOptions = {
+      args: [absPath, method, tempJsonPath, outputPath],
+      env: process.env,
+      mode: 'binary',
+      pythonPath,
+      scriptPath: getWrapperDir('python'),
+      // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
+      ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
+    };
+
+    logger.debug(`Running Python script ${absPath} with method ${method}`);
 
     await new Promise<void>((resolve, reject) => {
       try {
@@ -353,7 +356,7 @@ export async function runPython<T = unknown>(
     });
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug(`Python script ${absPath} returned: ${output}`);
+    logger.debug(`Python script ${absPath} returned a result`);
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
@@ -363,9 +366,9 @@ export async function runPython<T = unknown>(
       );
     } catch (error) {
       throw new Error(
-        `Invalid JSON: ${(error as Error).message} when parsing result: ${
-          output
-        }\nStack Trace: ${(error as Error).stack}`,
+        `Invalid JSON returned by Python script: ${(error as Error).message}\nStack Trace: ${
+          (error as Error).stack
+        }`,
       );
     }
     if (result?.type !== 'final_result') {
@@ -387,14 +390,12 @@ export async function runPython<T = unknown>(
       }`,
     );
   } finally {
-    await Promise.all(
-      [tempJsonPath, outputPath].map(async (file) => {
-        try {
-          await fs.unlink(file);
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      }),
-    );
+    if (tempDirectory) {
+      try {
+        await removeSecureTempDirectory(tempDirectory);
+      } catch (error) {
+        logger.error(`Error removing temporary Python directory: ${error}`);
+      }
+    }
   }
 }

@@ -1,6 +1,5 @@
 import { execFile } from 'child_process';
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
 
@@ -8,6 +7,11 @@ import { getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
 
 const execFileAsync = promisify(execFile);
 
@@ -281,24 +285,23 @@ export async function runRuby<T = unknown>(
   options: { rubyExecutable?: string } = {},
 ): Promise<T> {
   const absPath = path.resolve(scriptPath);
-  const tempJsonPath = path.join(
-    os.tmpdir(),
-    `promptfoo-ruby-input-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
-  const outputPath = path.join(
-    os.tmpdir(),
-    `promptfoo-ruby-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-  );
   const customPath = options.rubyExecutable || getEnvString('PROMPTFOO_RUBY');
   let rubyPath = customPath || 'ruby';
+  let tempDirectory: string | undefined;
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
 
   const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
   try {
-    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
-    logger.debug(`Running Ruby wrapper with args: ${safeJsonStringify(args)}`);
+    tempDirectory = await createSecureTempDirectory('promptfoo-ruby-');
+    const tempJsonPath = await writeSecureTempFile(
+      tempDirectory,
+      'input.json',
+      safeJsonStringify(args) as string,
+    );
+    const outputPath = await writeSecureTempFile(tempDirectory, 'output.json', '');
+    logger.debug(`Running Ruby script ${absPath} with method ${method}`);
 
     const { stdout, stderr } = await execFileAsync(rubyPath, [
       wrapperPath,
@@ -317,7 +320,7 @@ export async function runRuby<T = unknown>(
     }
 
     const output = await fs.readFile(outputPath, 'utf-8');
-    logger.debug(`Ruby script ${absPath} returned: ${output}`);
+    logger.debug(`Ruby script ${absPath} returned a result`);
 
     let result: { type: 'final_result'; data: T } | undefined;
     try {
@@ -327,9 +330,9 @@ export async function runRuby<T = unknown>(
       );
     } catch (error) {
       throw new Error(
-        `Invalid JSON: ${(error as Error).message} when parsing result: ${
-          output
-        }\nStack Trace: ${(error as Error).stack}`,
+        `Invalid JSON returned by Ruby script: ${(error as Error).message}\nStack Trace: ${
+          (error as Error).stack
+        }`,
       );
     }
     if (result?.type !== 'final_result') {
@@ -349,14 +352,12 @@ export async function runRuby<T = unknown>(
       }`,
     );
   } finally {
-    await Promise.all(
-      [tempJsonPath, outputPath].map(async (file) => {
-        try {
-          await fs.unlink(file);
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      }),
-    );
+    if (tempDirectory) {
+      try {
+        await removeSecureTempDirectory(tempDirectory);
+      } catch (error) {
+        logger.error(`Error removing temporary Ruby directory: ${error}`);
+      }
+    }
   }
 }

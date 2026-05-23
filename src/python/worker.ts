@@ -1,5 +1,4 @@
 import fs from 'fs/promises';
-import os from 'os';
 import path from 'path';
 import { StringDecoder } from 'string_decoder';
 
@@ -8,6 +7,11 @@ import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
+import {
+  createSecureTempDirectory,
+  removeSecureTempDirectory,
+  writeSecureTempFile,
+} from '../util/secureTempFiles';
 import { validatePythonPath } from './pythonUtils';
 
 export const MAX_STDERR_BUFFER_LENGTH = 16_384;
@@ -250,18 +254,16 @@ export class PythonWorker {
   }
 
   private async executeCall(functionName: string, args: unknown[]): Promise<unknown> {
-    const requestFile = path.join(
-      os.tmpdir(),
-      `promptfoo-worker-req-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-    );
-    const responseFile = path.join(
-      os.tmpdir(),
-      `promptfoo-worker-resp-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
-    );
+    let tempDirectory: string | undefined;
 
     try {
-      // Write request
-      await fs.writeFile(requestFile, safeJsonStringify(args) as string, 'utf-8');
+      tempDirectory = await createSecureTempDirectory('promptfoo-worker-');
+      const requestFile = await writeSecureTempFile(
+        tempDirectory,
+        'request.json',
+        safeJsonStringify(args) as string,
+      );
+      const responseFile = await writeSecureTempFile(tempDirectory, 'response.json', '');
 
       // Send CALL command with function name
       // Note: PythonShell.send() adds newline automatically in 'text' mode
@@ -302,16 +304,15 @@ export class PythonWorker {
 
       // If we exhausted all retries, throw with debugging info
       if (!responseData!) {
-        const tempDir = path.dirname(responseFile);
         try {
-          const files = (await fs.readdir(tempDir)).filter((f) =>
-            f.startsWith('promptfoo-worker-'),
-          );
+          const files = await fs.readdir(tempDirectory);
           logger.error(
-            `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
+            `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in temporary directory: ${files.join(', ')}`,
           );
         } catch {
-          logger.error(`Failed to read response file: ${responseFile}`);
+          logger.error(
+            `Failed to read Python worker response file: ${path.basename(responseFile)}`,
+          );
         }
         throw lastError;
       }
@@ -324,18 +325,13 @@ export class PythonWorker {
 
       return response.data;
     } finally {
-      // Cleanup temp files
-      await Promise.all(
-        [requestFile, responseFile].map(async (file) => {
-          try {
-            await fs.unlink(file);
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              logger.error(`Error removing ${file}: ${error}`);
-            }
-          }
-        }),
-      );
+      if (tempDirectory) {
+        try {
+          await removeSecureTempDirectory(tempDirectory);
+        } catch (error) {
+          logger.error(`Error removing temporary Python worker directory: ${error}`);
+        }
+      }
     }
   }
 
