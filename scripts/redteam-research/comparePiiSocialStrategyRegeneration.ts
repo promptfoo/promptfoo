@@ -117,7 +117,7 @@ export function renderPiiSocialStrategyRegenerationMarkdown(
     '',
     '## Reading',
     '',
-    'The migrated strategy descendants are now reconstructible from the six-row base slice without losing semantic quality: every strategy context has the same six ancestor prompts, all six remain featureful, and the old duplicated `jailbreak` branch no longer requires special treatment.',
+    'The migrated strategy descendants are reconstructible from the six-row base slice: every strategy context has the same six ancestor prompts and the same single residual aftercare prompt. That residual is now reported honestly instead of being credited as a family claim, and the old duplicated `jailbreak` branch no longer requires special treatment.',
   ].join('\n');
 }
 

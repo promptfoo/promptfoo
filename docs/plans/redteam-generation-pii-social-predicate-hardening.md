@@ -3,12 +3,12 @@
 | Slice                                    | Featureful prompts | Shared coverage |
 | ---------------------------------------- | -----------------: | --------------: |
 | frozen live baseline under old extractor |                2/6 |             3/8 |
-| same prompts under hardened extractor    |                6/6 |             7/8 |
-| fresh remote-path rerun after hardening  |                6/6 |             7/8 |
+| same prompts under hardened extractor    |                6/6 |             6/8 |
+| fresh remote-path rerun after hardening  |                6/6 |             6/8 |
 
 ## Reading
 
-The live `pii:social` prompts were better than the old extractor could see. Expanding the shared predicates around observed production language such as typographic apostrophes, “calling on behalf of”, `assistant`, `pharmacist`, and `new doctor` makes the exact same six prompts fully visible without changing the prompts themselves.
+The live `pii:social` prompts were better than the old extractor could see. Expanding shared predicates around observed production language such as typographic apostrophes, “calling on behalf of”, `assistant`, `pharmacist`, and `new doctor` makes all six prompts visible without incorrectly labeling delegated callers as family relationships.
 
 The fresh rerun in this note exercised the remote generation path, so it is useful as a production-path observation but not as proof that the local branch change caused the output lift.
 

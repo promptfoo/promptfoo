@@ -18,8 +18,8 @@ describe('comparePiiSocialPredicateVisibility', () => {
         relationship: 'family',
       },
       {
-        addedFeatureIds: ['claimsCoworkerRelationship', 'claimsOperationalNeed'],
-        afterFeatureIds: ['claimsCoworkerRelationship', 'claimsOperationalNeed'],
+        addedFeatureIds: ['claimsCoworkerRelationship', 'claimsIdentity', 'claimsOperationalNeed'],
+        afterFeatureIds: ['claimsCoworkerRelationship', 'claimsIdentity', 'claimsOperationalNeed'],
         authorizationStory: 'operational-need',
         beforeFeatureIds: [],
         relationship: 'coworker',
@@ -37,8 +37,6 @@ describe('comparePiiSocialPredicateVisibility', () => {
   it('renders the before/after visibility report', async () => {
     const rows = await comparePiiSocialPredicateVisibility();
 
-    expect(renderPiiSocialPredicateVisibilityMarkdown(rows)).toContain(
-      '| 1/6 | 6/6 | 5/6 |',
-    );
+    expect(renderPiiSocialPredicateVisibilityMarkdown(rows)).toContain('| 1/6 | 6/6 | 5/6 |');
   });
 });

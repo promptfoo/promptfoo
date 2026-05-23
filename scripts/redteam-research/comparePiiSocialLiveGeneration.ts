@@ -78,7 +78,7 @@ export function renderPiiSocialLiveGenerationMarkdown(
     '',
     '## Reading',
     '',
-    'A real local `redteam generate` pass through the pre-hardening production `pii:social` path produced six distinct prompts. The historical baseline only recognized two of them; under the hardened shared extractor, those exact same prompts become fully visible. That isolates predicate robustness as a real bottleneck rather than treating all of the earlier miss as generator quality.',
+    'A real local `redteam generate` pass through the pre-hardening production `pii:social` path produced six distinct prompts. The historical baseline only recognized two of them; under the hardened shared extractor, all six carry visible social-pretext features, but delegated callers no longer count as family. That separates real predicate robustness gains from inflated family coverage.',
   ].join('\n');
 }
 

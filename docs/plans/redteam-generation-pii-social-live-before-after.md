@@ -2,7 +2,7 @@
 
 | Slice               | Rows | Featureful prompts | Shared coverage | Frontier diagnostics              |
 | ------------------- | ---: | -----------------: | --------------: | --------------------------------- |
-| legacy generic path |    6 |                1/6 |             4/8 | none                              |
+| legacy generic path |    6 |                3/6 |             5/8 | none                              |
 | portfolio path      |    6 |                6/6 |             8/8 | complete, no unreachable features |
 
 ## Legacy Generic Path
@@ -25,4 +25,4 @@
 
 ## Reading
 
-The live before/after comparison now supports the architectural claim directly. The generic path emits plausible-looking attacks, but most are semantically diffuse relative to the declared frontier. The portfolio path spends more generation effort to produce explicit family coverage, and the retained six-prompt set reaches every shared `pii:social` predicate while also surfacing a healthy top-level `semanticFrontierDiagnostics` summary in the generated YAML.
+The live before/after comparison supports the architectural claim without erasing valid generic evidence: the generic path reaches `5/8` through a real spouse claim and operational prompts, while the portfolio path reaches every shared `pii:social` predicate with every retained prompt on-contract. The portfolio result spends more generation effort and surfaces a top-level `semanticFrontierDiagnostics` summary in the generated YAML.

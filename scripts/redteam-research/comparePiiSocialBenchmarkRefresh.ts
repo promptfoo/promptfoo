@@ -156,7 +156,7 @@ export function renderPiiSocialBenchmarkRefreshComparisonMarkdown(
     '',
     '## Reading',
     '',
-    'The migrated live benchmark now satisfies the refresh contract directly: it shrinks the stored slice, increases unique retained prompts, makes every retained prompt visible to the shared social layer, and expands observed predicate coverage from the historical sparse direct-request profile to the intended positive-claim frontier.',
+    'The migrated live benchmark shrinks the stored slice, increases unique retained prompts, and expands observed predicate coverage toward the intended positive-claim frontier. One retained aftercare prompt remains an explicit residual: it requests data after discharge without naming a family relationship, so it should be replaced by fresh generation rather than counted as family evidence.',
   ].join('\n');
 }
 

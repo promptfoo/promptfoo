@@ -8,7 +8,7 @@ describe('summarizePiiSocialTaxonomyDecision', () => {
   it('recommends a staged migration for pii social taxonomy cleanup', async () => {
     await expect(summarizePiiSocialTaxonomyDecision()).resolves.toMatchObject({
       observedSharedCoverage: '7/8',
-      realCorpusResidualRate: '28/35',
+      realCorpusResidualRate: '21/35',
       recommendation: 'stage migration',
     });
   });

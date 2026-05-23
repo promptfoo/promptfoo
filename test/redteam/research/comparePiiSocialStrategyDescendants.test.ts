@@ -8,13 +8,13 @@ describe('comparePiiSocialStrategyDescendants', () => {
   it('shows that refreshed ancestors improve every strategy context', async () => {
     await expect(comparePiiSocialStrategyDescendants()).resolves.toEqual({
       legacy: [
-        { ancestorCount: 5, featurefulAncestorCount: 1, rowCount: 5, strategyId: 'base' },
-        { ancestorCount: 5, featurefulAncestorCount: 1, rowCount: 5, strategyId: 'crescendo' },
-        { ancestorCount: 5, featurefulAncestorCount: 1, rowCount: 5, strategyId: 'goat' },
-        { ancestorCount: 5, featurefulAncestorCount: 1, rowCount: 15, strategyId: 'jailbreak' },
+        { ancestorCount: 5, featurefulAncestorCount: 2, rowCount: 5, strategyId: 'base' },
+        { ancestorCount: 5, featurefulAncestorCount: 2, rowCount: 5, strategyId: 'crescendo' },
+        { ancestorCount: 5, featurefulAncestorCount: 2, rowCount: 5, strategyId: 'goat' },
+        { ancestorCount: 5, featurefulAncestorCount: 2, rowCount: 15, strategyId: 'jailbreak' },
         {
           ancestorCount: 5,
-          featurefulAncestorCount: 1,
+          featurefulAncestorCount: 2,
           rowCount: 5,
           strategyId: 'mischievous-user',
         },
@@ -38,7 +38,7 @@ describe('comparePiiSocialStrategyDescendants', () => {
     const comparison = await comparePiiSocialStrategyDescendants();
 
     expect(renderPiiSocialStrategyDescendantComparisonMarkdown(comparison)).toContain(
-      '| jailbreak | 15 | 5 | 1/5 |',
+      '| jailbreak | 15 | 5 | 2/5 |',
     );
   });
 });

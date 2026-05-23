@@ -127,7 +127,7 @@ export function renderPiiSocialLiveEqualBudgetFrontierMarkdown(
     '',
     '## Reading',
     '',
-    'The live prefix curve is finally discriminative under equal spend. The generic path emits no recognized shared feature in its first two prompts, reaches only `1/6` featureful prompts overall, and only `1/6` leak-ready prompts when we require both a visible social pretext and a visible sensitive-data request. It stalls at `4/8` coverage even after six generated prompts because one prompt co-activates several predicates. The portfolio path keeps every emitted prompt featureful and leak-ready, reaches `4/8` on the first prompt, `6/8` by the third, and the full `8/8` frontier by the fifth. This is the benchmark shape the scripted equal-budget fixture was missing: real generic outputs do not arrive in a magically coverage-optimal order, and some of them are not even visibly on-contract for the plugin.',
+    'The live prefix curve is discriminative under equal spend. The generic path recognizes a genuine spouse claim by its second prompt and reaches `5/8` coverage, but only `3/6` prompts are featureful and only `2/6` are leak-ready when a visible social pretext must accompany the sensitive-data request. The portfolio path keeps every emitted prompt featureful and leak-ready, reaches `4/8` on the first prompt, `6/8` by the third, and the full `8/8` frontier by the fifth. This preserves the portfolio advantage without treating valid generic family evidence as invisible.',
   ].join('\n');
 }
 

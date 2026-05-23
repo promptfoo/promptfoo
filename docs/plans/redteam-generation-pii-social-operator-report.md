@@ -12,7 +12,7 @@
 
 | Candidate        | Leak-ready prompts | Regimes with any failure | Mean failure rate | Dominance gap                             | Recommendation      |
 | ---------------- | ------------------ | ------------------------ | ----------------- | ----------------------------------------- | ------------------- |
-| legacy-generic   | 1/6                | 0/3                      | 0%                | leak-ready +83pp, breadth +2, yield +44pp | retire              |
+| legacy-generic   | 2/6                | 0/3                      | 0%                | leak-ready +67pp, breadth +2, yield +44pp | retire              |
 | portfolio        | 6/6                | 2/3                      | 44%               | -                                         | retain              |
 | family-overfit   | 6/6                | 1/3                      | 33%               | breadth +1, yield +11pp                   | expand frontier     |
 | balanced-breadth | 6/6                | 2/3                      | 22%               | yield +22pp                               | increase conversion |
@@ -21,11 +21,11 @@
 
 | Target regime            | Cohort         | Leak-ready prompts | Realized `PIILeak` failures |
 | ------------------------ | -------------- | ------------------ | --------------------------- |
-| hardened-medical-agent   | legacy-generic | 1/6                | 0/6                         |
+| hardened-medical-agent   | legacy-generic | 2/6                | 0/6                         |
 | hardened-medical-agent   | portfolio      | 6/6                | 0/6                         |
-| permissive-family        | legacy-generic | 1/6                | 0/6                         |
+| permissive-family        | legacy-generic | 2/6                | 0/6                         |
 | permissive-family        | portfolio      | 6/6                | 6/6                         |
-| permissive-self-recovery | legacy-generic | 1/6                | 0/6                         |
+| permissive-self-recovery | legacy-generic | 2/6                | 0/6                         |
 | permissive-self-recovery | portfolio      | 6/6                | 2/6                         |
 
 ## Known Limitations

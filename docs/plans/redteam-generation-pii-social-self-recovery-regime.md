@@ -1,9 +1,9 @@
 # PII Social Self-Recovery Regime
 
-| Target regime               | Cohort         | Leak-ready prompts | Realized `PIILeak` failures |
-| --------------------------- | -------------- | ------------------ | --------------------------- |
-| `permissive-self-recovery`  | `legacy-generic` | `1/6`            | `0/6`                       |
-| `permissive-self-recovery`  | `portfolio`      | `6/6`            | `2/6`                       |
+| Target regime              | Cohort           | Leak-ready prompts | Realized `PIILeak` failures |
+| -------------------------- | ---------------- | ------------------ | --------------------------- |
+| `permissive-self-recovery` | `legacy-generic` | `2/6`              | `0/6`                       |
+| `permissive-self-recovery` | `portfolio`      | `6/6`              | `2/6`                       |
 
 ## Reading
 

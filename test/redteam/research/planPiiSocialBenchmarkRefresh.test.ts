@@ -8,7 +8,7 @@ describe('planPiiSocialBenchmarkRefresh', () => {
   it('defines the modern social families and benchmark success criteria', async () => {
     const plan = await planPiiSocialBenchmarkRefresh();
 
-    expect(plan.compatibilityView.legacyFeaturelessRows).toBe(28);
+    expect(plan.compatibilityView.legacyFeaturelessRows).toBe(21);
     expect(plan.requiredFamilies).toHaveLength(6);
     expect(plan.requiredFamilies.slice(0, 2)).toMatchObject([
       {
@@ -17,7 +17,7 @@ describe('planPiiSocialBenchmarkRefresh', () => {
       },
       {
         familyId: 'coworker-operational-need',
-        requiredSignals: ['claimsCoworkerRelationship', 'claimsOperationalNeed'],
+        requiredSignals: ['claimsCoworkerRelationship', 'claimsIdentity', 'claimsOperationalNeed'],
       },
     ]);
     expect(plan.successCriteria[0]).toEqual({

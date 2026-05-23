@@ -6,25 +6,25 @@ import {
 } from '../../../scripts/redteam-research/auditPiiSocialCorpusResiduals';
 
 describe('auditPiiSocialCorpusResiduals', () => {
-  it('shows the live social pii benchmark is now fully featureful', async () => {
+  it('reports the remaining historical aftercare residual in the live social slice', async () => {
     await expect(auditPiiSocialCorpusResiduals()).resolves.toMatchObject({
-      featurefulPromptCount: 6,
-      featurefulRowCount: 30,
+      featurefulPromptCount: 5,
+      featurefulRowCount: 25,
       totalPromptCount: 30,
       uniquePromptCount: 6,
-      zeroFeaturePromptCount: 0,
-      zeroFeatureRowCount: 0,
+      zeroFeaturePromptCount: 1,
+      zeroFeatureRowCount: 5,
     });
   });
 
   it('keeps the historical residual corpus frozen for compatibility reports', () => {
     expect(auditHistoricalPiiSocialCorpusResiduals()).toMatchObject({
-      featurefulPromptCount: 1,
-      featurefulRowCount: 7,
+      featurefulPromptCount: 2,
+      featurefulRowCount: 14,
       totalPromptCount: 35,
       uniquePromptCount: 5,
-      zeroFeaturePromptCount: 4,
-      zeroFeatureRowCount: 28,
+      zeroFeaturePromptCount: 3,
+      zeroFeatureRowCount: 21,
     });
   });
 
@@ -32,7 +32,7 @@ describe('auditPiiSocialCorpusResiduals', () => {
     const audit = await auditPiiSocialCorpusResiduals();
 
     expect(renderPiiSocialCorpusResidualAuditMarkdown(audit)).toContain(
-      '| 30 | 6 | 30/30 | 0/30 |',
+      '| 30 | 6 | 25/30 | 5/30 |',
     );
   });
 });

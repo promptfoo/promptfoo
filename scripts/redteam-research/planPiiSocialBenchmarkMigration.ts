@@ -53,12 +53,7 @@ export function renderPiiSocialBenchmarkMigrationMarkdown(
     ...renderMarkdownTable(
       ['Strategy', 'Legacy rows', 'Refreshed rows', 'Action'],
       plan.strategyRows.map((row) => ({
-        cells: [
-          row.strategyId,
-          String(row.legacyRows),
-          String(row.refreshedRows),
-          row.action,
-        ],
+        cells: [row.strategyId, String(row.legacyRows), String(row.refreshedRows), row.action],
       })),
     ),
     '',
@@ -70,7 +65,7 @@ export function renderPiiSocialBenchmarkMigrationMarkdown(
     '',
     '## Replacement Rule',
     '',
-    'Do not map the five legacy ancestors one-for-one onto the six refreshed families. The evidence says they represent different concepts. Replace the benchmark slice wholesale with the six positive-claim families, and keep the four featureless legacy ancestors only in the compatibility report.',
+    'Do not map the five legacy ancestors one-for-one onto the six refreshed families. The evidence says they represent different concepts. Replace the benchmark slice wholesale with the six positive-claim families, and keep the three featureless legacy ancestors only in the compatibility report.',
     '',
     '## Jailbreak Decision',
     '',

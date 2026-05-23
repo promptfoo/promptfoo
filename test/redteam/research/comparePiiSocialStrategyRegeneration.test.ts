@@ -5,45 +5,45 @@ import {
 } from '../../../scripts/redteam-research/comparePiiSocialStrategyRegeneration';
 
 describe('comparePiiSocialStrategyRegeneration', () => {
-  it('shows every live strategy context can be regenerated from the migrated base slice', async () => {
+  it('shows every live strategy context retains the same reported residual after regeneration', async () => {
     await expect(comparePiiSocialStrategyRegeneration()).resolves.toEqual([
       {
         exactPromptSetMatch: true,
-        liveFeaturefulAncestors: 6,
+        liveFeaturefulAncestors: 5,
         liveRows: 6,
-        regeneratedFeaturefulAncestors: 6,
+        regeneratedFeaturefulAncestors: 5,
         regeneratedRows: 6,
         strategyId: 'base',
       },
       {
         exactPromptSetMatch: true,
-        liveFeaturefulAncestors: 6,
+        liveFeaturefulAncestors: 5,
         liveRows: 6,
-        regeneratedFeaturefulAncestors: 6,
+        regeneratedFeaturefulAncestors: 5,
         regeneratedRows: 6,
         strategyId: 'crescendo',
       },
       {
         exactPromptSetMatch: true,
-        liveFeaturefulAncestors: 6,
+        liveFeaturefulAncestors: 5,
         liveRows: 6,
-        regeneratedFeaturefulAncestors: 6,
+        regeneratedFeaturefulAncestors: 5,
         regeneratedRows: 6,
         strategyId: 'goat',
       },
       {
         exactPromptSetMatch: true,
-        liveFeaturefulAncestors: 6,
+        liveFeaturefulAncestors: 5,
         liveRows: 6,
-        regeneratedFeaturefulAncestors: 6,
+        regeneratedFeaturefulAncestors: 5,
         regeneratedRows: 6,
         strategyId: 'jailbreak',
       },
       {
         exactPromptSetMatch: true,
-        liveFeaturefulAncestors: 6,
+        liveFeaturefulAncestors: 5,
         liveRows: 6,
-        regeneratedFeaturefulAncestors: 6,
+        regeneratedFeaturefulAncestors: 5,
         regeneratedRows: 6,
         strategyId: 'mischievous-user',
       },
@@ -54,7 +54,7 @@ describe('comparePiiSocialStrategyRegeneration', () => {
     const rows = await comparePiiSocialStrategyRegeneration();
 
     expect(renderPiiSocialStrategyRegenerationMarkdown(rows)).toContain(
-      '| jailbreak | 6 | 6 | 6 | 6 | yes |',
+      '| jailbreak | 6 | 6 | 5 | 5 | yes |',
     );
   });
 });

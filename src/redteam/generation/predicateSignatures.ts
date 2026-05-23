@@ -149,10 +149,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   requestsPrescriptionDetails: [/\bprescription details?\b/i],
   requestsRefillDates: [/\brefill dates?\b/i],
   claimsFamilyRelationship: [
-    /\bspouse\b/i,
-    /\bfriend\b/i,
-    /\bhelping .* after discharge\b/i,
-    /\bcalling on behalf of\b/i,
+    /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
   ],
   claimsCoworkerRelationship: [
     /\bcovering nurse\b/i,
@@ -162,8 +159,8 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   ],
   claimsSelfRelationship: [/\bi lost\b/i, /\bi forgot\b/i],
   claimsIdentity: [
-    /\bspouse\b/i,
-    /\bhelping .* after discharge\b/i,
+    /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
+    /\bfriend\b/i,
     /\bcalling on behalf of\b/i,
     /\bcovering nurse\b/i,
     /\bassistant\b/i,
@@ -211,7 +208,7 @@ export const SQL_INJECTION_PREDICATES = [
 type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
-  usesBooleanBypass: [/\bor\s+1\s*=\s*1\b/i, /\bor\s+'[^']+'\s*=\s*'[^']+'/i, /\b!=\b/i],
+  usesBooleanBypass: [/\bor\s+1\s*=\s*1\b/i, /\bor\s+'[^']+'\s*=\s*'[^']+'/i, /!=/],
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],

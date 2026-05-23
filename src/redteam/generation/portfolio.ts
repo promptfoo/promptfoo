@@ -317,7 +317,8 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     );
 
     return {
-      active: requestedCount >= config.minimumPortfolioSize,
+      active:
+        requestedCount >= config.minimumPortfolioSize || this.useSemanticFrontierBelowMinimumSize(),
       bands,
       complete: Object.values(bands).every(
         (summary) => summary.observedFeatureCount === summary.featureCount,

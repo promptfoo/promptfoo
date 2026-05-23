@@ -1,12 +1,12 @@
 # PII Social Benchmark Migration Sketch
 
-| Strategy | Legacy rows | Refreshed rows | Action |
-| --- | ---: | ---: | ---: |
-| base | 5 | 6 | replace legacy ancestors with refreshed ancestors |
-| crescendo | 5 | 6 | replace legacy ancestors with refreshed ancestors |
-| goat | 5 | 6 | replace legacy ancestors with refreshed ancestors |
-| jailbreak | 15 | 6 | collapse duplicate iterative descendants to one row per refreshed ancestor |
-| mischievous-user | 5 | 6 | replace legacy ancestors with refreshed ancestors |
+| Strategy         | Legacy rows | Refreshed rows |                                                                     Action |
+| ---------------- | ----------: | -------------: | -------------------------------------------------------------------------: |
+| base             |           5 |              6 |                          replace legacy ancestors with refreshed ancestors |
+| crescendo        |           5 |              6 |                          replace legacy ancestors with refreshed ancestors |
+| goat             |           5 |              6 |                          replace legacy ancestors with refreshed ancestors |
+| jailbreak        |          15 |              6 | collapse duplicate iterative descendants to one row per refreshed ancestor |
+| mischievous-user |           5 |              6 |                          replace legacy ancestors with refreshed ancestors |
 
 ## Totals
 
@@ -16,7 +16,7 @@
 
 ## Replacement Rule
 
-Do not map the five legacy ancestors one-for-one onto the six refreshed families. The evidence says they represent different concepts. Replace the benchmark slice wholesale with the six positive-claim families, and keep the four featureless legacy ancestors only in the compatibility report.
+Do not map the five legacy ancestors one-for-one onto the six refreshed families. The evidence says they represent different concepts. Replace the benchmark slice wholesale with the six positive-claim families, and keep the three featureless legacy ancestors only in the compatibility report.
 
 ## Jailbreak Decision
 

@@ -9,11 +9,11 @@ describe('comparePiiSocialBenchmarkRefresh', () => {
     await expect(comparePiiSocialBenchmarkRefresh()).resolves.toEqual({
       legacy: {
         authorizationStoryCoverage: [],
-        featurefulPromptCount: 1,
-        observedFeatureCount: 4,
+        featurefulPromptCount: 2,
+        observedFeatureCount: 5,
         promptCount: 35,
         relationshipCoverage: [],
-        sharedFeatureCoverage: '4/8',
+        sharedFeatureCoverage: '5/8',
         uniquePromptCount: 5,
       },
       refreshed: {
@@ -23,7 +23,7 @@ describe('comparePiiSocialBenchmarkRefresh', () => {
           'lost-access',
           'operational-need',
         ],
-        featurefulPromptCount: 6,
+        featurefulPromptCount: 5,
         observedFeatureCount: 7,
         promptCount: 30,
         relationshipCoverage: ['coworker', 'family', 'self', 'unknown-third-party'],
@@ -37,7 +37,7 @@ describe('comparePiiSocialBenchmarkRefresh', () => {
     const comparison = await comparePiiSocialBenchmarkRefresh();
 
     expect(renderPiiSocialBenchmarkRefreshComparisonMarkdown(comparison)).toContain(
-      '| refreshed benchmark | 30 | 6 | 6/6 | 7/8 | 7 |',
+      '| refreshed benchmark | 30 | 6 | 5/6 | 7/8 | 7 |',
     );
   });
 });

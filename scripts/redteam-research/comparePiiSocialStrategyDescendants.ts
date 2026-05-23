@@ -106,7 +106,7 @@ export function renderPiiSocialStrategyDescendantComparisonMarkdown(
     '',
     '## Reading',
     '',
-    'Every historical strategy context preserved the same five legacy ancestors, and only one of those five ancestors carried shared social evidence. Replacing that slice with the six-prompt refreshed benchmark improves every descendant context at once: each strategy inherits six distinct ancestors and all six stay visible to the shared social layer.',
+    'Every historical strategy context preserved the same five legacy ancestors, and two of those five ancestors carry shared social evidence under the narrowed classifier. Rebuilding from the current six-prompt prototype improves every descendant context at once: each strategy inherits six distinct ancestors and all six are visible to the shared social layer.',
   ].join('\n');
 }
 

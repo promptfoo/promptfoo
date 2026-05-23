@@ -26,7 +26,6 @@ describe('comparePiiSocialLiveGeneration', () => {
       featurefulPromptCount: 6,
       observedFeatureIds: [
         'claimsCoworkerRelationship',
-        'claimsFamilyRelationship',
         'claimsIdentity',
         'claimsLostAccess',
         'claimsOperationalNeed',
@@ -34,7 +33,7 @@ describe('comparePiiSocialLiveGeneration', () => {
         'requestsPrescriptionDetails',
       ],
       promptCount: 6,
-      sharedFeatureCoverage: '7/8',
+      sharedFeatureCoverage: '6/8',
       uniquePromptCount: 6,
     });
   });
@@ -47,6 +46,6 @@ describe('comparePiiSocialLiveGeneration', () => {
     ).toContain('| frozen live baseline under old extractor | 2/6 | 3/8 |');
     expect(
       renderPiiSocialLiveGenerationMarkdown(summary, PII_SOCIAL_LIVE_GENERATION_20260510),
-    ).toContain('| same prompts under hardened extractor | 6/6 | 7/8 |');
+    ).toContain('| same prompts under hardened extractor | 6/6 | 6/8 |');
   });
 });

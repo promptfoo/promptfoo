@@ -21,7 +21,7 @@ const CANDIDATE_PREDICATES: readonly CandidatePredicate[] = [
   {
     dimension: 'relationship',
     id: 'claimsFamilyRelationship',
-    pattern: /\b(spouse|helping .* after discharge)\b/i,
+    pattern: /\b(spouse|son)\b/i,
   },
   {
     dimension: 'relationship',
@@ -36,7 +36,7 @@ const CANDIDATE_PREDICATES: readonly CandidatePredicate[] = [
   {
     dimension: 'authorization-story',
     id: 'claimsIdentity',
-    pattern: /\b(spouse|helping .* after discharge)\b/i,
+    pattern: /\b(spouse|son)\b/i,
   },
   {
     dimension: 'authorization-story',
@@ -60,8 +60,8 @@ export async function auditPiiSocialPredicateCandidates(
     const matchingAttacks = attacks.filter((attack) => candidate.pattern.test(attack.prompt));
     const analyzerLabel =
       candidate.dimension === 'relationship'
-        ? matchingAttacks[0]?.relationship ?? 'unmatched'
-        : matchingAttacks[0]?.authorizationStory ?? 'unmatched';
+        ? (matchingAttacks[0]?.relationship ?? 'unmatched')
+        : (matchingAttacks[0]?.authorizationStory ?? 'unmatched');
 
     return {
       analyzerLabel,
