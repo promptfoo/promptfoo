@@ -384,6 +384,52 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
+    it('should resolve file:// references nested inside an object var (issue #1613)', async () => {
+      const prompt = toPrompt('Test prompt with {{ reporting_period | dump }}');
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: {
+            period: '2024-02-15',
+            report: 'file:///path/to/report.txt',
+          },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('file content here');
+
+      await renderPrompt(toPrompt('{{ reporting_period.previous.report }}'), vars, {});
+
+      // The nested file:// reference should have been resolved
+      expect((vars.reporting_period as any).previous.report).toBe('file content here');
+    });
+
+    it('should resolve file:// references nested inside an array var (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        items: ['plain string', 'file:///path/to/item.txt'],
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('item file content');
+
+      await renderPrompt(toPrompt('{{ items }}'), vars, {});
+
+      expect(vars.items[1]).toBe('item file content');
+    });
+
+    it('should not modify nested non-file:// strings in object vars (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        context: {
+          name: 'Alice',
+          role: 'admin',
+        },
+      };
+
+      await renderPrompt(toPrompt('{{ context.name }}'), vars, {});
+
+      expect(vars.context.name).toBe('Alice');
+      expect(vars.context.role).toBe('admin');
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
         mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });

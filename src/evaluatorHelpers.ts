@@ -152,6 +152,34 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
 }
 
 /**
+ * Recursively resolves file:// references inside nested objects and arrays.
+ * This is used when a var value is itself an object/array containing file:// strings.
+ * JS, Python, image, video, audio, and PDF references are intentionally not supported
+ * inside nested structures — only plain-text files are resolved (txt, md, html, etc.).
+ */
+async function resolveNestedFileRefs(value: unknown, basePath: string): Promise<unknown> {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+    logger.debug(`Resolving nested file reference: ${value} -> ${filePath}`);
+    return (await fs.readFile(filePath, 'utf8')).trim();
+  }
+
+  if (Array.isArray(value)) {
+    return Promise.all(value.map((item) => resolveNestedFileRefs(item, basePath)));
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      result[k] = await resolveNestedFileRefs(v, basePath);
+    }
+    return result;
+  }
+
+  return value;
+}
+
+/**
  * Gets MIME type from file extension
  *
  * Supported formats:
@@ -381,6 +409,10 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (typeof value === 'object' && value !== null) {
+      // Recursively resolve file:// references inside nested objects/arrays (issue #1613)
+      const basePath = cliState.basePath || '';
+      vars[varName] = await resolveNestedFileRefs(value, basePath);
     }
   }
 
