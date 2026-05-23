@@ -178,15 +178,7 @@ describe('TTFT End-to-End Integration', () => {
 
     // Verify response is not cached
     expect(result.cached).toBe(false);
-
-    console.log('\n✅ End-to-End Test Results:');
-    console.log(`   Output: "${result.output}"`);
-    console.log(`   TTFT: ${ttft}ms`);
-    console.log(`   Total Latency: ${result.latencyMs}ms`);
-    console.log(`   Streaming Efficiency: ${(streamingEfficiency * 100).toFixed(1)}%`);
-    console.log(`   Multi-chunk delivery: ${result.streamingMetrics?.multiChunkDelivery}`);
-    console.log(`   Tokens/Second: ${result.streamingMetrics?.tokensPerSecond?.toFixed(1)}`);
-  }, 10000);
+  });
 
   it('should handle non-streaming responses without streaming metrics', async () => {
     const provider = new HttpProvider(`${serverUrl}/v1/chat/completions`, {
@@ -214,11 +206,6 @@ describe('TTFT End-to-End Integration', () => {
     // Should still have latencyMs
     expect(result.latencyMs).toBeDefined();
     expect(result.latencyMs).toBeGreaterThan(0);
-
-    console.log('\n✅ Non-Streaming Test Results:');
-    console.log(`   Output: "${result.output}"`);
-    console.log(`   Latency: ${result.latencyMs}ms`);
-    console.log(`   Has Streaming Metrics: ${!!result.streamingMetrics}`);
   });
 
   it('should ensure TTFT invariant: TTFT <= latencyMs always holds', async () => {
@@ -256,18 +243,14 @@ describe('TTFT End-to-End Integration', () => {
         .map(() => provider.callApi('Test prompt')),
     );
 
-    results.forEach((result, index) => {
+    results.forEach((result) => {
       const ttft = result.streamingMetrics!.timeToFirstToken!;
       const latency = result.latencyMs!;
 
       // CRITICAL INVARIANT: TTFT must always be <= latency
       expect(ttft).toBeLessThanOrEqual(latency);
-
-      console.log(`   Request ${index + 1}: TTFT=${ttft}ms, Latency=${latency}ms ✓`);
     });
-
-    console.log('\n✅ Invariant holds for all 5 requests');
-  }, 30000);
+  });
 
   it('streamFormat: openai-chat pins TTFT to the content delta, not the role frame', async () => {
     // The mock server at `beforeAll` sends a role-only delta 100ms after
@@ -336,10 +319,9 @@ describe('TTFT End-to-End Integration', () => {
     expect(presetMean).toBeGreaterThan(defaultMean);
     expect(presetMean - defaultMean).toBeGreaterThan(20); // Well above jitter.
 
-    console.log(
-      `\n✅ streamFormat gap: default mean=${defaultMean.toFixed(0)}ms, preset mean=${presetMean.toFixed(0)}ms, diff=${(presetMean - defaultMean).toFixed(0)}ms`,
-    );
-  }, 30000);
+    expect(defaultTtfts.every((ttft) => Number.isFinite(ttft))).toBe(true);
+    expect(presetTtfts.every((ttft) => Number.isFinite(ttft))).toBe(true);
+  });
 
   it('populates completionChars with parsed output length (not raw SSE length)', async () => {
     // Regression pin: completionChars is the length of the parsed content,
