@@ -169,7 +169,7 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
               fontSize="10"
               fill="var(--ifm-font-color-secondary, #4b5563)"
             >
-              "Answer is 4"
+              "First line = 4"
             </text>
             <text x="70" y="60" textAnchor="middle" fontSize="8" fill="#1d4ed8">
               (trusted)
@@ -427,7 +427,7 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
           <g transform="translate(30, 280)">
             <rect width="640" height="30" rx="6" fill="#f0fdf4" stroke="#86efac" />
             <text x="320" y="20" textAnchor="middle" fontSize="11" fill="#166534">
-              Code defines what gets evaluated — LLM only judges the extracted, validated content
+              Code defines what gets evaluated - LLM only judges the extracted, validated content
             </text>
           </g>
         </>

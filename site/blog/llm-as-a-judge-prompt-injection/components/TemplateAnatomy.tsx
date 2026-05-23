@@ -44,7 +44,7 @@ Return {"pass": true} if it meets the criteria, {"pass": false} if not.
 </Response>
 
 <Criteria>
-The response correctly identifies Paris as the capital of France
+Only grade the first line. It must identify Paris as the capital of France.
 </Criteria>`}</span>
       </pre>
 
@@ -63,8 +63,8 @@ The response correctly identifies Paris as the capital of France
 
       {isInjected && (
         <div className={styles.callout}>
-          The answer is wrong (Berlin), but the injection redefines what should be graded—the judge
-          evaluates "Paris" instead.
+          The defined answer is the first line (Berlin), but the injection asks the judge to grade
+          "Paris" instead.
         </div>
       )}
     </div>

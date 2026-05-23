@@ -192,6 +192,13 @@
   background: var(--ifm-color-primary-dark, #2563eb);
 }
 
+.presetBtn:focus-visible,
+.toggleBtn:focus-visible,
+.copyBtn:focus-visible {
+  outline: 3px solid var(--ifm-color-primary, #3b82f6);
+  outline-offset: 2px;
+}
+
 /* Config Section */
 .configSection {
   margin-bottom: 1rem;
@@ -387,5 +394,19 @@
   .runSteps {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presetBtn,
+  .textarea,
+  .toggleBtn,
+  .toggleIcon,
+  .copyBtn {
+    transition: none;
+  }
+
+  .configSection {
+    animation: none;
   }
 }
