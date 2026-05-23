@@ -133,18 +133,20 @@ function Install-PromptfooNpm {
         throw "npm install failed"
     }
 
-    # Create batch file wrapper in bin directory
-    $mainJs = Join-Path $InstallDir "node_modules" "promptfoo" "dist" "src" "main.js"
-    if (-not (Test-Path $mainJs)) {
+    # Create batch file wrappers in bin directory for the package entrypoint.
+    $entrypointJs = [System.IO.Path]::Combine($InstallDir, "node_modules", "promptfoo", "dist", "src", "entrypoint.js")
+    if (-not (Test-Path $entrypointJs)) {
         # Try lib path (npm global install structure)
-        $mainJs = Join-Path $InstallDir "lib" "node_modules" "promptfoo" "dist" "src" "main.js"
+        $entrypointJs = [System.IO.Path]::Combine($InstallDir, "lib", "node_modules", "promptfoo", "dist", "src", "entrypoint.js")
     }
 
-    if (Test-Path $mainJs) {
-        $batContent = "@echo off`nnode `"$mainJs`" %*"
-        Set-Content -Path (Join-Path $binDir "promptfoo.cmd") -Value $batContent -Encoding ASCII
-        Set-Content -Path (Join-Path $binDir "pf.cmd") -Value $batContent -Encoding ASCII
+    if (-not (Test-Path $entrypointJs)) {
+        throw "npm install completed, but promptfoo entrypoint was not found under $InstallDir"
     }
+
+    $batContent = "@echo off`r`nnode `"$entrypointJs`" %*`r`nexit /b %ERRORLEVEL%"
+    Set-Content -Path (Join-Path $binDir "promptfoo.cmd") -Value $batContent -Encoding ASCII
+    Set-Content -Path (Join-Path $binDir "pf.cmd") -Value $batContent -Encoding ASCII
 
     return $true
 }

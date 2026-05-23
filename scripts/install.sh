@@ -124,6 +124,9 @@ parse_args() {
       show_help
       ;;
     -d | --dir)
+      if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
+        error "Option $1 requires a non-empty directory.\nRun with --help for usage."
+      fi
       INSTALL_DIR="$2"
       BIN_DIR="$INSTALL_DIR/bin"
       shift 2
@@ -268,14 +271,12 @@ install_npm() {
     return 1
   fi
 
-  # Create symlinks in bin directory
-  if [[ -f "$INSTALL_DIR/lib/node_modules/promptfoo/dist/src/main.js" ]]; then
-    ln -sf "$INSTALL_DIR/lib/node_modules/promptfoo/dist/src/main.js" "$BIN_DIR/promptfoo"
-    chmod +x "$BIN_DIR/promptfoo"
+  if [[ ! -x "$BIN_DIR/promptfoo" ]]; then
+    error "npm install completed, but promptfoo executable was not found at $BIN_DIR/promptfoo"
+  fi
 
-    # Also create 'pf' alias
-    ln -sf "$INSTALL_DIR/lib/node_modules/promptfoo/dist/src/main.js" "$BIN_DIR/pf"
-    chmod +x "$BIN_DIR/pf"
+  if [[ ! -x "$BIN_DIR/pf" ]]; then
+    error "npm install completed, but pf executable was not found at $BIN_DIR/pf"
   fi
 
   return 0
