@@ -2,7 +2,7 @@
 description: Compare a plain OpenAI baseline against the same model with an Ejentum cognitive scaffold injected per task
 
 prompts:
-  - "{{task}}"
+  - '{{task}}'
 
 providers:
   - id: openai:gpt-4o-mini

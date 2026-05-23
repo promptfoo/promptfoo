@@ -34,11 +34,11 @@ Get an Ejentum key at <https://ejentum.com/dashboard>. Free and paid tiers are a
 
 Provider config options (set in `promptfooconfig.yaml`):
 
-| Option | Default | Notes |
-|---|---|---|
-| `mode` | `reasoning` | One of `reasoning`, `code`, `anti-deception`, `memory`. |
-| `model` | `gpt-4o-mini` | Any OpenAI chat-completion model. |
-| `temperature` | `0` | Standard OpenAI temperature. |
+| Option        | Default       | Notes                                                   |
+| ------------- | ------------- | ------------------------------------------------------- |
+| `mode`        | `reasoning`   | One of `reasoning`, `code`, `anti-deception`, `memory`. |
+| `model`       | `gpt-4o-mini` | Any OpenAI chat-completion model.                       |
+| `temperature` | `0`           | Standard OpenAI temperature.                            |
 
 To test a different harness (for example, the anti-deception mode), copy the `file://provider.js` provider block, change `mode: reasoning` to `mode: anti-deception`, and update the label.
 
