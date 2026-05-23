@@ -12,6 +12,7 @@ import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-
  * AWS pricing updates up to 3x daily, so 4 hours is a reasonable TTL.
  */
 const PRICING_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const BEDROCK_PRICING_SERVICE_CODES = ['AmazonBedrock', 'AmazonBedrockFoundationModels'] as const;
 
 export interface BedrockPricingData {
   models: Map<string, BedrockModelPricing>;
@@ -58,9 +59,19 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
     'anthropic.claude-3-5-sonnet-20241022-v2': 'Claude 3.5 Sonnet v2',
     'anthropic.claude-3-5-sonnet-20240620-v1': 'Claude 3.5 Sonnet',
     'anthropic.claude-3-5-haiku-20241022-v1': 'Claude 3.5 Haiku',
+    'anthropic.claude-3-7-sonnet-20250219-v1': 'Claude 3.7 Sonnet',
     'anthropic.claude-3-opus-20240229-v1': 'Claude 3 Opus',
     'anthropic.claude-3-sonnet-20240229-v1': 'Claude 3 Sonnet',
     'anthropic.claude-3-haiku-20240307-v1': 'Claude 3 Haiku',
+    'anthropic.claude-haiku-4-5-20251001-v1': 'Claude Haiku 4.5',
+    'anthropic.claude-sonnet-4-20250514-v1': 'Claude Sonnet 4',
+    'anthropic.claude-sonnet-4-5-20250929-v1': 'Claude Sonnet 4.5',
+    'anthropic.claude-sonnet-4-6': 'Claude Sonnet 4.6',
+    'anthropic.claude-opus-4-20250514-v1': 'Claude Opus 4',
+    'anthropic.claude-opus-4-1-20250805-v1': 'Claude Opus 4.1',
+    'anthropic.claude-opus-4-5-20251101-v1': 'Claude Opus 4.5',
+    'anthropic.claude-opus-4-6-v1': 'Claude Opus 4.6',
+    'anthropic.claude-opus-4-7': 'Claude Opus 4.7',
     // Anthropic Claude models - Legacy
     'anthropic.claude-instant-v1': 'Claude Instant',
     'anthropic.claude-v1': 'Claude',
@@ -265,36 +276,38 @@ async function sendPricingCommandWithTimeout(
 async function fetchAllPriceItems(pricingClient: PricingClient, region: string): Promise<string[]> {
   const { GetProductsCommand } = await import('@aws-sdk/client-pricing');
   const allPriceItems: string[] = [];
-  let nextToken: string | undefined;
 
-  do {
-    const response = await sendPricingCommandWithTimeout(
-      pricingClient,
-      new GetProductsCommand({
-        ServiceCode: 'AmazonBedrock',
-        Filters: [
-          {
-            Type: 'TERM_MATCH',
-            Field: 'regionCode',
-            Value: region,
-          },
-        ],
-        MaxResults: 100,
-        NextToken: nextToken,
-      }),
-    );
+  for (const serviceCode of BEDROCK_PRICING_SERVICE_CODES) {
+    let nextToken: string | undefined;
+    do {
+      const response = await sendPricingCommandWithTimeout(
+        pricingClient,
+        new GetProductsCommand({
+          ServiceCode: serviceCode,
+          Filters: [
+            {
+              Type: 'TERM_MATCH',
+              Field: 'regionCode',
+              Value: region,
+            },
+          ],
+          MaxResults: 100,
+          NextToken: nextToken,
+        }),
+      );
 
-    if (response.PriceList) {
-      allPriceItems.push(...response.PriceList);
-    }
+      if (response.PriceList) {
+        allPriceItems.push(...response.PriceList);
+      }
 
-    nextToken = response.NextToken;
-  } while (nextToken);
+      nextToken = response.NextToken;
+    } while (nextToken);
+  }
 
   return allPriceItems;
 }
 
-function getOnDemandUsdPrice(product: any): number | undefined {
+function getOnDemandUsdPricePerToken(product: any, tokensPerPriceUnit: number): number | undefined {
   const onDemand = Object.values(product.terms?.OnDemand ?? {})[0] as any;
   const priceDim = Object.values(onDemand?.priceDimensions ?? {})[0] as any;
   const priceRaw = priceDim?.pricePerUnit?.USD;
@@ -304,24 +317,15 @@ function getOnDemandUsdPrice(product: any): number | undefined {
   }
 
   const price = parseFloat(priceRaw);
-  return Number.isFinite(price) && price >= 0 ? price : undefined;
+  return Number.isFinite(price) && price >= 0 ? price / tokensPerPriceUnit : undefined;
 }
 
 function setModelPricingRate(
   models: Map<string, BedrockModelPricing>,
   modelName: string,
-  inferenceType: string,
-  price: number,
+  rateType: 'input' | 'output' | undefined,
+  pricePerToken: number,
 ) {
-  const normalizedInferenceType = inferenceType.toLowerCase();
-  const rateType =
-    normalizedInferenceType === 'input tokens' || normalizedInferenceType === 'text input token'
-      ? 'input'
-      : normalizedInferenceType === 'output tokens' ||
-          normalizedInferenceType === 'text output token'
-        ? 'output'
-        : undefined;
-
   if (!rateType) {
     return;
   }
@@ -330,7 +334,7 @@ function setModelPricingRate(
     models.set(modelName, { input: 0, output: 0 });
   }
 
-  models.get(modelName)![rateType] = price / 1000;
+  models.get(modelName)![rateType] = pricePerToken;
 }
 
 function removeIncompleteModelPricing(models: Map<string, BedrockModelPricing>) {
@@ -343,6 +347,46 @@ function removeIncompleteModelPricing(models: Map<string, BedrockModelPricing>) 
       models.delete(modelName);
     }
   }
+}
+
+function getFoundationModelName(serviceName: string): string | undefined {
+  const suffix = ' (Amazon Bedrock Edition)';
+  if (!serviceName.endsWith(suffix)) {
+    return undefined;
+  }
+
+  const foundationModelName = serviceName.slice(0, -suffix.length);
+  const aliases: Record<string, string> = {
+    'Cohere Command R': 'Command R',
+    'Cohere Command R+': 'Command R+',
+    'Cohere Generate Model - Command': 'Command',
+    'Cohere Generate Model - Command-Light': 'Command Light',
+    'Meta Llama 2 Chat 13B': 'Llama 2 Chat 13B',
+    'Meta Llama 2 Chat 70B': 'Llama 2 Chat 70B',
+  };
+  return aliases[foundationModelName] ?? foundationModelName;
+}
+
+function getStandardTextTokenRateType(attrs: any): 'input' | 'output' | undefined {
+  const normalizedInferenceType = String(attrs.inferenceType ?? '').toLowerCase();
+  if (attrs.feature === 'On-demand Inference') {
+    return normalizedInferenceType === 'input tokens' ||
+      normalizedInferenceType === 'text input token'
+      ? 'input'
+      : normalizedInferenceType === 'output tokens' ||
+          normalizedInferenceType === 'text output token'
+        ? 'output'
+        : undefined;
+  }
+
+  const usageType = String(attrs.usagetype ?? '').toLowerCase();
+  return usageType.endsWith('_inputtokencount-units') ||
+    usageType.endsWith('_input_tokens_standard-units')
+    ? 'input'
+    : usageType.endsWith('_outputtokencount-units') ||
+        usageType.endsWith('_output_tokens_standard-units')
+      ? 'output'
+      : undefined;
 }
 
 function parseBedrockPriceItems(priceItems: string[]): {
@@ -358,7 +402,8 @@ function parseBedrockPriceItems(priceItems: string[]): {
     try {
       const product = JSON.parse(priceItem);
       const attrs = product.product?.attributes;
-      const modelName = attrs?.model;
+      const foundationModelName = getFoundationModelName(String(attrs?.servicename ?? ''));
+      const modelName = attrs?.model ?? foundationModelName;
 
       if (!modelName) {
         continue;
@@ -367,19 +412,23 @@ function parseBedrockPriceItems(priceItems: string[]): {
       allModelsFound.add(modelName);
       usageTypeSamples[modelName] ||= attrs.usagetype || '';
 
-      if (attrs.feature !== 'On-demand Inference') {
+      const rateType = getStandardTextTokenRateType(attrs);
+      if (!rateType) {
         continue;
       }
 
-      const price = getOnDemandUsdPrice(product);
-      if (price === undefined) {
+      // AmazonBedrock reports per-1K-token prices; foundation model marketplace
+      // rows report per-million-token prices in their Units dimensions.
+      const tokensPerPriceUnit = foundationModelName ? 1_000_000 : 1_000;
+      const pricePerToken = getOnDemandUsdPricePerToken(product, tokensPerPriceUnit);
+      if (pricePerToken === undefined) {
         logger.debug('[Bedrock Pricing]: Skipping invalid price', {
           modelName,
         });
         continue;
       }
 
-      setModelPricingRate(models, modelName, attrs.inferenceType || '', price);
+      setModelPricingRate(models, modelName, rateType, pricePerToken);
     } catch (err) {
       logger.debug('[Bedrock Pricing]: Failed to parse price item', {
         error: String(err),
@@ -478,6 +527,14 @@ export function calculateCostWithFetchedPricing(
       '[Bedrock Pricing]: Skipping automatic pricing for application inference profile ARN',
       { modelId },
     );
+    return undefined;
+  }
+
+  const pricingModelId = getPricingModelId(modelId);
+  if (/^global\./.test(pricingModelId)) {
+    logger.debug('[Bedrock Pricing]: Skipping automatic pricing for global inference profile', {
+      modelId,
+    });
     return undefined;
   }
 

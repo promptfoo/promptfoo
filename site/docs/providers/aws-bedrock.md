@@ -1142,7 +1142,7 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 
 No configuration is needed. When IAM pricing credentials are unavailable or AWS does not return standard token pricing for a model, Promptfoo does not add an estimated automatic charge. Evaluation totals may therefore show zero cost for those calls. Configure `cost` when deterministic cost reporting is required without Pricing API access.
 
-Automatic pricing can identify direct Bedrock model IDs and system-defined inference profile ARNs because those identifiers include the underlying model ID. Application inference profile ARNs are opaque profile resources, so Promptfoo does not infer pricing from their names. Add a `cost` override when you need deterministic cost reporting for application inference profile calls.
+Automatic pricing can identify direct Bedrock model IDs and regional system-defined inference profile IDs because those identifiers include the underlying model and map to regional standard-token rates. Global and application inference profiles require distinct or opaque pricing selection, so Promptfoo does not infer a charge for them. Add a `cost` override when you need deterministic cost reporting for those calls.
 
 ### Model Coverage
 

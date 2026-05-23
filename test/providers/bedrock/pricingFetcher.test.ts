@@ -30,11 +30,12 @@ vi.mock('@aws-sdk/client-pricing', () => ({
   GetProductsCommand: vi.fn(),
 }));
 
-import { PricingClient } from '@aws-sdk/client-pricing';
+import { GetProductsCommand, PricingClient } from '@aws-sdk/client-pricing';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 
 const mockGetCache = vi.mocked(getCache);
 const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
+const MockGetProductsCommand = vi.mocked(GetProductsCommand);
 const MockPricingClient = vi.mocked(PricingClient);
 
 describe('pricingFetcher', () => {
@@ -136,6 +137,12 @@ describe('pricingFetcher', () => {
       expect(mapBedrockModelIdToApiName('amazon.nova-2-lite-v1:0')).toBe('Nova 2.0 Lite');
       expect(mapBedrockModelIdToApiName('deepseek.v3-v1:0')).toBe('DeepSeek V3.1');
       expect(mapBedrockModelIdToApiName('deepseek.v3.2')).toBe('DeepSeek v3.2');
+      expect(mapBedrockModelIdToApiName('us.anthropic.claude-sonnet-4-6')).toBe(
+        'Claude Sonnet 4.6',
+      );
+      expect(mapBedrockModelIdToApiName('us.anthropic.claude-opus-4-1-20250805-v1:0')).toBe(
+        'Claude Opus 4.1',
+      );
       expect(mapBedrockModelIdToApiName('mistral.pixtral-large-2502-v1:0')).toBe(
         'Pixtral Large 25.02',
       );
@@ -155,6 +162,7 @@ describe('pricingFetcher', () => {
     const mockPricingData: BedrockPricingData = {
       models: new Map<string, BedrockModelPricing>([
         ['Claude 3.5 Sonnet v2', { input: 0.000003, output: 0.000015 }],
+        ['Claude Opus 4.7', { input: 0.000005, output: 0.000025 }],
         ['Nova Micro', { input: 0.000000035, output: 0.00000014 }],
       ]),
       region: 'us-east-1',
@@ -177,6 +185,17 @@ describe('pricingFetcher', () => {
       const cost = calculateCostWithFetchedPricing(
         'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-4-5-prod',
         null,
+        10,
+        5,
+      );
+
+      expect(cost).toBeUndefined();
+    });
+
+    it('should not substitute regional prices for global inference profiles', () => {
+      const cost = calculateCostWithFetchedPricing(
+        'global.anthropic.claude-opus-4-7',
+        mockPricingData,
         10,
         5,
       );
@@ -614,6 +633,69 @@ describe('pricingFetcher', () => {
       expect(result?.models.get('Nova Micro')?.output).toBeCloseTo(0.00000014);
       expect(result?.models.get('Nova 2.0 Pro')?.input).toBeCloseTo(0.00000015);
       expect(result?.models.get('Nova 2.0 Pro')?.output).toBeCloseTo(0.0000006);
+    });
+
+    it('should parse standard million-token rows from the foundation-model pricing service', async () => {
+      const testRegion = 'us-east-1';
+      mockIsCacheEnabled.mockReturnValue(false);
+
+      const mockSend = vi.fn().mockResolvedValue({
+        PriceList: [
+          JSON.stringify({
+            product: {
+              attributes: {
+                servicename: 'Claude Sonnet 4.6 (Amazon Bedrock Edition)',
+                usagetype: 'USE1-MP:USE1_InputTokenCount-Units',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '3.0000000000' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                servicename: 'Claude Sonnet 4.6 (Amazon Bedrock Edition)',
+                usagetype: 'USE1-MP:USE1_OutputTokenCount-Units',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '15.0000000000' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        ],
+        NextToken: undefined,
+      });
+
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
+
+      const result = await getPricingData(testRegion);
+
+      expect(result?.models.get('Claude Sonnet 4.6')?.input).toBeCloseTo(0.000003);
+      expect(result?.models.get('Claude Sonnet 4.6')?.output).toBeCloseTo(0.000015);
+      expect(MockGetProductsCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ ServiceCode: 'AmazonBedrockFoundationModels' }),
+      );
     });
 
     it('should return null when cache is disabled and API fails', async () => {
