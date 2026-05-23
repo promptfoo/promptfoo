@@ -60,4 +60,35 @@ describe('Eval.getFilteredTestIndices', () => {
     expect(filteredCount).toBe(2);
     expect(testIndices).toEqual([1, 3]);
   });
+
+  it('treats lowercase OR filter operators as disjunctions', async () => {
+    const eval_ = await EvalFactory.create();
+    const results = await eval_.getResults();
+
+    results[0].metadata = { category: 'alpha' };
+    results[1].metadata = { category: 'beta' };
+    await Promise.all(results.map((result) => result.save()));
+
+    const { testIndices, filteredCount } = await eval_.getFilteredTestIndices({
+      filters: [
+        JSON.stringify({
+          type: 'metadata',
+          field: 'category',
+          operator: 'equals',
+          value: 'alpha',
+          logicOperator: 'and',
+        }),
+        JSON.stringify({
+          type: 'metadata',
+          field: 'category',
+          operator: 'equals',
+          value: 'beta',
+          logicOperator: 'or',
+        }),
+      ],
+    });
+
+    expect(filteredCount).toBe(2);
+    expect(testIndices).toEqual([0, 1]);
+  });
 });

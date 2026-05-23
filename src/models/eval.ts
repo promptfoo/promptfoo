@@ -136,7 +136,7 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    return logicOperator.toUpperCase() === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 

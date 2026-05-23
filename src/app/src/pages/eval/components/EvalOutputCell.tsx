@@ -1054,6 +1054,7 @@ function renderOutputActions({
   promptIndex,
   evaluationId,
   testCaseId,
+  promptCount,
   openAssertions,
   copiedAssertion,
   isReplaying,
@@ -1089,6 +1090,7 @@ function renderOutputActions({
   promptIndex: number;
   evaluationId?: string;
   testCaseId?: string;
+  promptCount?: number;
   openAssertions: boolean;
   copiedAssertion: boolean;
   isReplaying: boolean;
@@ -1312,6 +1314,7 @@ function renderOutputActions({
           defaultScope="results"
           resultId={output.id}
           testIndex={testIdx}
+          promptCount={promptCount}
           onApplied={onAssertionsApplied}
         />
       )}
@@ -1381,7 +1384,8 @@ function EvalOutputCell({
     maxImageHeight,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters, refreshTable, table } =
+    useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
   const { showToast } = useToast();
@@ -1459,6 +1463,13 @@ function EvalOutputCell({
   const [commentDraftText, setCommentDraftText] = React.useState(
     output.gradingResult?.comment || '',
   );
+  const originalText = stringifyOutputText(output.text);
+  const outputIdentity = `${output.id ?? ''}:${originalText}`;
+  const [replayState, setReplayState] = React.useState<{
+    outputIdentity: string;
+    text: string | null;
+  }>(() => ({ outputIdentity, text: null }));
+  const replayedText = replayState.outputIdentity === outputIdentity ? replayState.text : null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset local draft state when switching outputs that share the same stored comment value.
   React.useEffect(() => {
@@ -1496,7 +1507,7 @@ function EvalOutputCell({
     setCommentDraftText(newCommentText);
   };
 
-  const text = stringifyOutputText(output.text);
+  const text = replayedText ?? originalText;
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
@@ -1699,7 +1710,8 @@ function EvalOutputCell({
       if (result.error) {
         showToast(`Re-run failed: ${result.error}`, 'error');
       } else {
-        showToast('Cell re-run complete', 'success');
+        setReplayState({ outputIdentity, text: result.output ?? '' });
+        showToast('Cell re-run complete. Showing the new output in this cell.', 'success');
         refreshTable();
       }
     } catch (error) {
@@ -1807,6 +1819,7 @@ function EvalOutputCell({
         promptIndex,
         evaluationId,
         testCaseId,
+        promptCount: table?.head.prompts.length,
         openAssertions,
         copiedAssertion,
         isReplaying,

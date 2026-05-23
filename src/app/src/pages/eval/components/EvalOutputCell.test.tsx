@@ -2383,6 +2383,11 @@ describe('EvalOutputCell extra actions hover behavior', () => {
     await waitFor(() => {
       expect(mockTableStoreState.refreshTable).toHaveBeenCalled();
     });
+    expect(await screen.findByText('Updated output')).toBeInTheDocument();
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'Cell re-run complete. Showing the new output in this cell.',
+      'success',
+    );
   });
 
   it('shows extra actions when shift key is pressed (mocked as true)', () => {

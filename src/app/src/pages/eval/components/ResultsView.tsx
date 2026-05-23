@@ -1059,6 +1059,7 @@ export default function ResultsView({
         filterMode={filterMode}
         searchText={debouncedSearchText}
         filteredCount={filteredResultsCount}
+        promptCount={table?.head.prompts.length}
         onApplied={refreshTable}
       />
       <ConfirmEvalNameDialog

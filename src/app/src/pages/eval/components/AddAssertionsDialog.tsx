@@ -61,6 +61,8 @@ const NO_VALUE_REQUIRED: Set<AssertionType> = new Set([
   'not-contains-json',
 ]);
 
+const THRESHOLD_REQUIRED: Set<AssertionType> = new Set(['cost', 'latency']);
+
 // LLM assertion types for cost calculation
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -128,6 +130,7 @@ interface AddAssertionsDialogProps {
   filterMode?: EvalResultsFilterMode;
   searchText?: string;
   filteredCount?: number;
+  promptCount?: number;
   onApplied?: () => void;
   readOnly?: boolean;
 }
@@ -144,6 +147,7 @@ export default function AddAssertionsDialog({
   filterMode,
   searchText,
   filteredCount,
+  promptCount,
   onApplied,
   readOnly,
 }: AddAssertionsDialogProps) {
@@ -202,6 +206,9 @@ export default function AddAssertionsDialog({
     if (NO_VALUE_REQUIRED.has(assertion.type)) {
       return true;
     }
+    if (THRESHOLD_REQUIRED.has(assertion.type)) {
+      return typeof assertion.threshold === 'number';
+    }
     const value = assertion.value;
     return value !== undefined && value !== null && String(value).trim() !== '';
   });
@@ -222,12 +229,14 @@ export default function AddAssertionsDialog({
     () => assertions.filter((a) => LLM_ASSERTION_TYPES.has(a.type)).length,
     [assertions],
   );
-  const totalApiCalls = llmAssertionCount * targetCount;
+  const outputCountEstimate =
+    scope === 'results' ? targetCount : targetCount * Math.max(promptCount ?? 1, 1);
+  const totalApiCalls = llmAssertionCount * outputCountEstimate;
   const targetLabel = scope === 'results' ? 'output' : 'test case';
-  const mayIncludeMultipleOutputs = scope !== 'results';
+  const mayIncludeMultipleOutputs = outputCountEstimate > targetCount;
 
   // Determine if this is a large run requiring confirmation
-  const isLargeRun = targetCount > LARGE_RUN_THRESHOLD;
+  const isLargeRun = outputCountEstimate > LARGE_RUN_THRESHOLD;
 
   // Get active filter summary for confirmation
   const filterSummary = useMemo(() => {
@@ -510,6 +519,13 @@ export default function AddAssertionsDialog({
                       </strong>
                       .
                     </p>
+                    {outputCountEstimate > targetCount && (
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        This can process up to{' '}
+                        <strong>{outputCountEstimate.toLocaleString()} outputs</strong> across
+                        prompts.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -532,7 +548,8 @@ export default function AddAssertionsDialog({
                       <Zap className="size-3.5" />
                       <span>
                         {llmAssertionCount} LLM assertion{llmAssertionCount > 1 ? 's' : ''} ×{' '}
-                        {targetCount.toLocaleString()} ={' '}
+                        {outputCountEstimate.toLocaleString()} output
+                        {outputCountEstimate === 1 ? '' : 's'} ={' '}
                         <strong>
                           at least {totalApiCalls.toLocaleString()} model request
                           {totalApiCalls === 1 ? '' : 's'}
@@ -678,8 +695,8 @@ export default function AddAssertionsDialog({
             <PosthocAssertionsForm
               assertions={assertions}
               onChange={setAssertions}
-              targetCount={targetCount}
-              targetLabel={targetLabel}
+              targetCount={outputCountEstimate}
+              targetLabel="output"
               mayIncludeMultipleOutputs={mayIncludeMultipleOutputs}
             />
           )}

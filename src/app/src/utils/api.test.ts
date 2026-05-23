@@ -386,6 +386,21 @@ describe('addEvalAssertions', () => {
       }),
     ).rejects.toThrow('Internal server error');
   });
+
+  it('throws a clean JSON error when assertion request fails with structured error body', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ success: false, error: 'Another update is running' }), {
+        status: 409,
+      }),
+    );
+
+    await expect(
+      addEvalAssertions('eval-error', {
+        assertions: [{ type: 'contains', value: 'test' }],
+        scope: { type: 'results', resultIds: ['result-1'] },
+      }),
+    ).rejects.toThrow('Another update is running');
+  });
 });
 
 describe('getAssertionJobStatus', () => {
@@ -420,6 +435,14 @@ describe('getAssertionJobStatus', () => {
     mockFetch.mockResolvedValue(new Response('Job not found', { status: 404 }));
 
     await expect(getAssertionJobStatus('eval-123', 'missing-job')).rejects.toThrow('Job not found');
+  });
+
+  it('throws a clean JSON error when job status request fails with structured error body', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Job expired' }), { status: 404 }),
+    );
+
+    await expect(getAssertionJobStatus('eval-123', 'missing-job')).rejects.toThrow('Job expired');
   });
 });
 
@@ -467,5 +490,15 @@ describe('generateAssertionSuggestions', () => {
     mockFetch.mockResolvedValue(new Response('Generation failed', { status: 500 }));
 
     await expect(generateAssertionSuggestions('eval-123')).rejects.toThrow('Generation failed');
+  });
+
+  it('throws a clean JSON error when suggestion generation fails with structured error body', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Result not found in eval' }), { status: 404 }),
+    );
+
+    await expect(generateAssertionSuggestions('eval-123')).rejects.toThrow(
+      'Result not found in eval',
+    );
   });
 });

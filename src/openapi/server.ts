@@ -717,6 +717,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('PosthocAssertionsResponse', OpenApiPosthocAssertionsResponseSchema),
       400: validationError(),
       404: notFound('Evaluation or result not found'),
+      409: errorResponse('Evaluation update already in progress'),
     },
   });
 

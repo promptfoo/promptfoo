@@ -17,6 +17,7 @@ import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { ResultFailureReason } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import { loadFunction, parseFileUrl } from '../../util/functions/loadFunction';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { recalculatePromptMetrics } from '../../util/recalculatePromptMetrics';
@@ -47,6 +48,7 @@ import type {
   Job,
   PromptMetrics,
   ResultsFile,
+  ScoringFunction,
   Vars,
 } from '../../types/index';
 
@@ -154,8 +156,14 @@ async function recomputeAggregateGradingResult(
 ): Promise<GradingResult> {
   const assertionResults = new AssertionsResult({ threshold: testCase.threshold });
   const topLevelResults = getTopLevelComponentResults(componentResults);
+  const manualOverrideResult = getManualOverrideResult(topLevelResults);
+  const assertScoringFunction = await resolveAssertScoringFunction(testCase);
 
   topLevelResults.forEach((result, index) => {
+    if (result.assertion?.type === HUMAN_ASSERTION_TYPE) {
+      return;
+    }
+
     const options = getAggregateResultOptions(result, testCase);
     if (!options) {
       return;
@@ -168,7 +176,43 @@ async function recomputeAggregateGradingResult(
     });
   });
 
-  return assertionResults.testResult();
+  const aggregated = await assertionResults.testResult(assertScoringFunction);
+  if (!manualOverrideResult) {
+    return aggregated;
+  }
+
+  return {
+    ...aggregated,
+    pass: manualOverrideResult.pass,
+    score: manualOverrideResult.score,
+    reason: manualOverrideResult.reason || aggregated.reason,
+  };
+}
+
+function getManualOverrideResult(componentResults: GradingResult[]): GradingResult | undefined {
+  for (let index = componentResults.length - 1; index >= 0; index--) {
+    const result = componentResults[index];
+    if (result.assertion?.type === HUMAN_ASSERTION_TYPE) {
+      return result;
+    }
+  }
+  return undefined;
+}
+
+async function resolveAssertScoringFunction(
+  testCase: AtomicTestCase,
+): Promise<ScoringFunction | undefined> {
+  const scoringFunction = testCase.assertScoringFunction;
+  if (typeof scoringFunction === 'function') {
+    return scoringFunction as ScoringFunction;
+  }
+
+  if (typeof scoringFunction !== 'string') {
+    return undefined;
+  }
+
+  const { filePath, functionName } = parseFileUrl(scoringFunction);
+  return loadFunction<ScoringFunction>({ filePath, functionName });
 }
 
 type PosthocAssertionTargetResolution =
@@ -1289,7 +1333,15 @@ evalRouter.post(
       let results: EvalResult[];
       if (resultIds && resultIds.length > 0) {
         const fetchedResults = await Promise.all(resultIds.map((id) => EvalResult.findById(id)));
-        results = fetchedResults.filter((r): r is EvalResult => r !== null && r.evalId === evalId);
+        const missingResultIndex = fetchedResults.findIndex((result) => result?.evalId !== evalId);
+        if (missingResultIndex !== -1) {
+          res.status(404).json({
+            success: false,
+            error: `Result not found in eval: ${resultIds[missingResultIndex]}`,
+          });
+          return;
+        }
+        results = fetchedResults as EvalResult[];
       } else if (testIndices && testIndices.length > 0) {
         results = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
       } else {

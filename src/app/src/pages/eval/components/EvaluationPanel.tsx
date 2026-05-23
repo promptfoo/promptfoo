@@ -422,11 +422,6 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                     variant="ghost"
                     size="icon"
                     onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        copyAssertionToClipboard(valueKey, value, e);
-                      }
-                    }}
                     onFocus={() => setFocusedAssertion(valueKey)}
                     onBlur={() => setFocusedAssertion(null)}
                     className={cn(
@@ -468,11 +463,6 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                       onClick={(e) => {
                         e.stopPropagation();
                         copyAssertionToClipboard(reasonKey, result.reason || '', e);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          copyAssertionToClipboard(reasonKey, result.reason || '', e);
-                        }
                       }}
                       onFocus={() => setFocusedAssertion(reasonKey)}
                       onBlur={() => setFocusedAssertion(null)}

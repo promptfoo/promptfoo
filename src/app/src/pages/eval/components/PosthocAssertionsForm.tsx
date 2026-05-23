@@ -200,6 +200,8 @@ const NO_VALUE_REQUIRED = new Set<AssertionType>([
   'not-contains-json',
 ]);
 
+const THRESHOLD_REQUIRED = new Set<AssertionType>(['cost', 'latency']);
+
 // Assertion types that benefit from advanced options being auto-expanded
 // These types often need threshold, config, or other settings to work properly
 const AUTO_EXPAND_ADVANCED = new Set<AssertionType>([
@@ -284,7 +286,7 @@ export default function PosthocAssertionsForm({
     }
 
     // Focus input for types that need a value
-    if (!NO_VALUE_REQUIRED.has(action.type)) {
+    if (!NO_VALUE_REQUIRED.has(action.type) && !THRESHOLD_REQUIRED.has(action.type)) {
       setFocusIndex(newIndex);
     }
   };
@@ -301,7 +303,7 @@ export default function PosthocAssertionsForm({
       setExpandedAdvanced((prev) => ({ ...prev, [newIndex]: true }));
     }
 
-    if (!NO_VALUE_REQUIRED.has(type)) {
+    if (!NO_VALUE_REQUIRED.has(type) && !THRESHOLD_REQUIRED.has(type)) {
       setFocusIndex(newIndex);
     }
   };
@@ -429,7 +431,8 @@ export default function PosthocAssertionsForm({
 
           <div className="rounded-lg border border-border divide-y divide-border">
             {assertions.map((assertion, index) => {
-              const valueRequired = !NO_VALUE_REQUIRED.has(assertion.type);
+              const valueRequired =
+                !NO_VALUE_REQUIRED.has(assertion.type) && !THRESHOLD_REQUIRED.has(assertion.type);
               const currentValue =
                 typeof assertion.value === 'string'
                   ? assertion.value

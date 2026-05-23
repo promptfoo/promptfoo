@@ -171,6 +171,39 @@ describe('AddAssertionsDialog', () => {
     });
   });
 
+  it('allows threshold-only assertions to submit with a threshold and no value', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-latency',
+      availableScopes: ['results'],
+      defaultScope: 'results',
+      resultId: 'result-latency',
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText(/Browse all/));
+    await user.type(screen.getByPlaceholderText('Search assertion types...'), 'latency');
+    await user.click(screen.getByRole('button', { name: /latency/i }));
+
+    const submitButton = screen.getByRole('button', { name: /Run 1 on 1/ });
+    expect(submitButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Threshold'), '250');
+    expect(submitButton).toBeEnabled();
+
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(addEvalAssertions).toHaveBeenCalledWith('eval-latency', {
+        assertions: [{ type: 'latency', value: '', threshold: 250 }],
+        scope: { type: 'results', resultIds: ['result-latency'] },
+      });
+    });
+  });
+
   describe('handleSubmit', () => {
     it('constructs filtered scope payload correctly', async () => {
       const user = userEvent.setup();
@@ -307,6 +340,7 @@ describe('AddAssertionsDialog', () => {
         },
       ],
       searchText: 'timeout',
+      promptCount: 2,
       onApplied: mockOnApplied,
     });
 
@@ -325,10 +359,11 @@ describe('AddAssertionsDialog', () => {
     expect(screen.getByText('Confirm large assertion run')).toBeInTheDocument();
     expect(screen.getByText(/2 assertions/)).toBeInTheDocument();
     expect(screen.getByText(/150 test cases/)).toBeInTheDocument();
+    expect(screen.getAllByText(/300 outputs/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Active: 2 filters, search: "timeout"/)).toBeInTheDocument();
     expect(screen.getByText(/Search: "timeout"/)).toBeInTheDocument();
-    expect(screen.getByText(/2 LLM assertions × 150 =/)).toBeInTheDocument();
-    expect(screen.getByText(/at least 300 model requests/)).toBeInTheDocument();
+    expect(screen.getByText(/2 LLM assertions × 300 outputs =/)).toBeInTheDocument();
+    expect(screen.getByText(/at least 600 model requests/)).toBeInTheDocument();
     expect(screen.getByText(/each output is scored separately/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Back' }));

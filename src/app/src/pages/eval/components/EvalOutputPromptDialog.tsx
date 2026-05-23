@@ -189,7 +189,7 @@ export default function EvalOutputPromptDialog({
   cloudConfig,
   readOnly = false,
 }: EvalOutputPromptDialogProps) {
-  const { refreshTable } = useTableStore();
+  const { refreshTable, table } = useTableStore();
   const [activeTab, setActiveTab] = useState('prompt-output');
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
@@ -601,6 +601,7 @@ export default function EvalOutputPromptDialog({
             defaultScope={defaultScope}
             resultId={resultId}
             testIndex={testIndex}
+            promptCount={table?.head.prompts.length}
             onApplied={refreshTable}
             readOnly={readOnly}
           />

@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
@@ -9,6 +12,7 @@ import EvalResult from '../../src/models/evalResult';
 import { activeEvalMutationsByEval, assertionJobs } from '../../src/server/routes/eval';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
+import { ResultFailureReason } from '../../src/types/index';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -690,6 +694,96 @@ describe('eval routes', () => {
       expect(updatedResult?.score).toBeCloseTo(0.75, 5);
     });
 
+    it('preserves an existing manual override when adding post-hoc assertions', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+
+      const ratingRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(ratingRes.status).toBe(200);
+
+      const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'missing' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(res.status).toBe(200);
+      invariant(res.body.data.jobId, 'Job ID is required');
+      await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.success).toBe(true);
+      expect(updatedResult?.score).toBe(1);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.NONE);
+      expect(updatedResult?.gradingResult?.reason).toBe(
+        'Manual result (overrides all other grading results)',
+      );
+      expect(updatedResult?.gradingResult?.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ assertion: { type: 'human' }, pass: true, score: 1 }),
+          expect.objectContaining({
+            assertion: expect.objectContaining({ type: 'contains', value: 'missing' }),
+            pass: false,
+          }),
+        ]),
+      );
+    });
+
+    it('applies custom assertion scoring when recomputing post-hoc results', async () => {
+      const scoringDir = await mkdtemp(path.join(tmpdir(), 'promptfoo-scoring-'));
+      const scoringFile = path.join(scoringDir, 'score.mjs');
+
+      try {
+        await writeFile(
+          scoringFile,
+          [
+            'export function score(_namedScores, context) {',
+            '  return {',
+            '    pass: true,',
+            '    score: 0.42,',
+            '    reason: `custom scorer saw ${context.componentResults.length} components`,',
+            '  };',
+            '}',
+          ].join('\n'),
+        );
+
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+
+        const results = await eval_.getResults();
+        const result = results[0];
+        invariant(result.id, 'Result ID is required');
+        const persistedResult = await EvalResult.findById(result.id);
+        invariant(persistedResult, 'Persisted result is required');
+        persistedResult.testCase = {
+          ...persistedResult.testCase,
+          assertScoringFunction: `file://${scoringFile}:score`,
+        };
+        await persistedResult.save();
+
+        const res = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+          assertions: [{ type: 'contains', value: 'missing' }],
+          scope: { type: 'results', resultIds: [result.id] },
+        });
+
+        expect(res.status).toBe(200);
+        invariant(res.body.data.jobId, 'Job ID is required');
+        await waitForAssertionJob(eval_.id, res.body.data.jobId);
+
+        const updatedResult = await EvalResult.findById(result.id);
+        expect(updatedResult?.success).toBe(true);
+        expect(updatedResult?.score).toBe(0.42);
+        expect(updatedResult?.gradingResult?.reason).toBe('custom scorer saw 2 components');
+      } finally {
+        await rm(scoringDir, { recursive: true, force: true });
+      }
+    });
+
     it('schedules completed assertion job cleanup without waiting for a terminal poll', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -728,6 +822,27 @@ describe('eval routes', () => {
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Failed to generate assertions' });
       expect(res.text).not.toContain('sensitive assertion generation failure');
+    });
+
+    it('rejects generation result ids from another eval', async () => {
+      const evalA = await EvalFactory.create();
+      const evalB = await EvalFactory.create();
+      testEvalIds.add(evalA.id);
+      testEvalIds.add(evalB.id);
+
+      const resultsB = await evalB.getResults();
+      const resultB = resultsB[0];
+      invariant(resultB.id, 'Result ID is required');
+
+      const res = await api
+        .post(`/api/eval/${evalA.id}/assertions/generate`)
+        .send({ resultIds: [resultB.id] });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({
+        success: false,
+        error: `Result not found in eval: ${resultB.id}`,
+      });
     });
   });
 

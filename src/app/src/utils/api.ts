@@ -15,6 +15,31 @@ export async function callApi(path: string, options: RequestInit = {}): Promise<
   return fetch(`${getApiBaseUrl()}/api${path}`, options);
 }
 
+export async function getApiErrorMessage(
+  response: Response,
+  fallbackMessage: string,
+): Promise<string> {
+  const errorText = await response.text();
+  if (!errorText) {
+    return fallbackMessage;
+  }
+
+  try {
+    const parsed = JSON.parse(errorText) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      if (typeof record.error === 'string' && record.error.trim()) {
+        return record.error;
+      }
+      if (typeof record.message === 'string' && record.message.trim()) {
+        return record.message;
+      }
+    }
+  } catch {}
+
+  return errorText;
+}
+
 export async function fetchUserEmail(): Promise<string | null> {
   try {
     const response = await callApi('/user/email', {
@@ -129,8 +154,7 @@ export async function addEvalAssertions(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Failed to add assertions');
+    throw new Error(await getApiErrorMessage(response, 'Failed to add assertions'));
   }
 
   return response.json();
@@ -143,8 +167,7 @@ export async function getAssertionJobStatus(
   const response = await callApi(`/eval/${evalId}/assertions/job/${jobId}`);
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Failed to get job status');
+    throw new Error(await getApiErrorMessage(response, 'Failed to get job status'));
   }
 
   return response.json();
@@ -187,8 +210,7 @@ export async function generateAssertionSuggestions(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(errorText || 'Failed to generate assertion suggestions');
+    throw new Error(await getApiErrorMessage(response, 'Failed to generate assertion suggestions'));
   }
 
   return response.json();
