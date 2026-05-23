@@ -71,10 +71,7 @@ describe('Google Sheets optional dependency', () => {
           values: {
             get: vi.fn().mockResolvedValue({
               data: {
-                values: [
-                  ['header'],
-                  ['value'],
-                ],
+                values: [['header'], ['value']],
               },
             }),
           },
@@ -115,10 +112,51 @@ describe('Google Sheets optional dependency', () => {
           values: {
             get: vi.fn().mockResolvedValue({
               data: {
-                values: [
-                  ['header'],
-                  ['value'],
-                ],
+                values: [['header'], ['value']],
+              },
+            }),
+          },
+        },
+      }),
+    }));
+
+    const { fetchCsvFromGoogleSheet } = await import('../src/googleSheets');
+
+    await expect(fetchCsvFromGoogleSheet(SHEET_URL)).resolves.toEqual([{ header: 'value' }]);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to authenticated access when the access probe masks a login page', async () => {
+    const fetchWithProxy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        headers: {
+          get: () => 'text/html; charset=utf-8',
+        },
+        text: async () => '<!doctype html><html><body>Sign in</body></html>',
+      });
+
+    vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
+    vi.doMock('@googleapis/sheets', () => ({
+      auth: {
+        GoogleAuth: class {},
+      },
+      sheets: () => ({
+        spreadsheets: {
+          get: vi.fn().mockResolvedValue({
+            data: {
+              sheets: [{ properties: { title: 'Sheet1' } }],
+            },
+          }),
+          values: {
+            get: vi.fn().mockResolvedValue({
+              data: {
+                values: [['header'], ['value']],
               },
             }),
           },
