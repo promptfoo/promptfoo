@@ -1,7 +1,7 @@
 ---
 title: SSRF Plugin
 sidebar_label: SSRF
-description: Red team server-side request forgery (SSRF) vulnerabilities by testing AI systems against malicious URL fetching to prevent unauthorized resource access and data theft
+description: Red team server-side request forgery risks by testing AI systems against malicious URL fetching, internal resource access, and data theft scenarios in APIs
 ---
 
 # Server-Side Request Forgery (SSRF) Plugin

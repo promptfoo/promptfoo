@@ -1,7 +1,7 @@
 ---
 title: Broken Object Level Authorization
 sidebar_label: Object-Level Authorization
-description: Red team object-level authorization by testing AI systems for unauthorized data access and resource manipulation, protecting enterprise systems from BOLA vulnerabilities
+description: Red team object-level authorization controls by testing AI systems for unauthorized data access, resource manipulation, and BOLA vulnerability patterns
 ---
 
 # BOLA (Broken Object Level Authorization) Plugin

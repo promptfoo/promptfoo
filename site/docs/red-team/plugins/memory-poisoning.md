@@ -1,7 +1,7 @@
 ---
 title: Memory Poisoning Plugin
 sidebar_label: Memory Poisoning
-description: Red team memory poisoning vulnerabilities in AI agents through persistent state manipulation to prevent malicious instruction injection and protect decision integrity
+description: Red team memory poisoning in AI agents by testing persistent state manipulation, malicious instruction injection, and decision integrity failures in apps
 ---
 
 # Memory Poisoning Plugin
