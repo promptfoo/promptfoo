@@ -47,6 +47,24 @@ describe('Google Sheets optional dependency', () => {
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   });
 
+  it('parses CSV exports whose first header looks like an HTML tag', async () => {
+    const fetchWithProxy = vi.fn().mockResolvedValueOnce({
+      status: 200,
+      headers: {
+        get: () => 'text/csv; charset=utf-8',
+      },
+      text: async () => '<html>,label\nliteral,value',
+    });
+
+    vi.doMock('../src/util/fetch/index', () => ({ fetchWithProxy }));
+
+    const { fetchCsvFromGoogleSheetUnauthenticated } = await import('../src/googleSheets');
+
+    await expect(fetchCsvFromGoogleSheetUnauthenticated(SHEET_URL)).resolves.toEqual([
+      { '<html>': 'literal', label: 'value' },
+    ]);
+  });
+
   it('falls back to authenticated sheet access when the probe and CSV export both fail', async () => {
     const fetchWithProxy = vi
       .fn()

@@ -41,6 +41,9 @@ function isHtmlExportResponse(
   if (contentType.includes('text/html')) {
     return true;
   }
+  if (contentType.includes('text/csv') || contentType.includes('application/csv')) {
+    return false;
+  }
 
   const prefix = body.trimStart().slice(0, 32).toLowerCase();
   return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
