@@ -784,6 +784,8 @@ export default function ResultsView({
       return Boolean(filter.value);
     });
   }, [filters.values]);
+  const hasScopedResultSelection =
+    appliedFilters.length > 0 || debouncedSearchText.trim().length > 0 || filterMode !== 'all';
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
@@ -894,16 +896,20 @@ export default function ResultsView({
                           variant="outline"
                           size="sm"
                           onClick={() => setAddAssertionsDialogOpen(true)}
-                          disabled={!evalId || filteredResultsCount === 0}
+                          disabled={
+                            !evalId || !hasScopedResultSelection || filteredResultsCount === 0
+                          }
                         >
                           <Plus className="size-4 mr-2" />
                           Add assertions
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {filteredResultsCount === 0
-                          ? 'Apply filters to select test cases'
-                          : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`}
+                        {hasScopedResultSelection
+                          ? filteredResultsCount === 0
+                            ? 'No test cases match the current selection'
+                            : `Add assertions to ${filteredResultsCount} filtered test case${filteredResultsCount === 1 ? '' : 's'}`
+                          : 'Apply filters or search to select test cases'}
                       </TooltipContent>
                     </Tooltip>
                     {chartsToggleButton}

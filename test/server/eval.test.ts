@@ -6,7 +6,7 @@ import { runAssertions } from '../../src/assertions';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
-import { assertionJobs } from '../../src/server/routes/eval';
+import { activeEvalMutationsByEval, assertionJobs } from '../../src/server/routes/eval';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
 import invariant from '../../src/util/invariant';
@@ -63,6 +63,7 @@ describe('eval routes', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     assertionJobs.clear();
+    activeEvalMutationsByEval.clear();
 
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
@@ -177,6 +178,47 @@ describe('eval routes', () => {
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Failed to submit rating' });
       expect(findByIdSpy).toHaveBeenCalledWith('result-1');
+    });
+
+    it('rejects post-hoc assertions while a manual rating is being persisted', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      let signalSaveStarted!: () => void;
+      const saveStarted = new Promise<void>((resolve) => {
+        signalSaveStarted = resolve;
+      });
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const originalSave = Eval.prototype.save;
+      vi.spyOn(Eval.prototype, 'save').mockImplementationOnce(async function (this: Eval) {
+        signalSaveStarted();
+        await saveGate;
+        return originalSave.call(this);
+      });
+
+      const ratingPromise = api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, false))
+        .then((response) => response);
+      await saveStarted;
+
+      const assertionRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(assertionRes.status).toBe(409);
+      expect(assertionRes.body.error).toContain('already running');
+
+      releaseSave();
+      expect((await ratingPromise).status).toBe(200);
+      expect(activeEvalMutationsByEval.has(eval_.id)).toBe(false);
     });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
@@ -501,6 +543,58 @@ describe('eval routes', () => {
       expect(jobResult.updatedResults).toBe(0);
       expect(jobResult.skippedResults).toBe(1);
       expect(jobResult.skippedAssertions).toBe(1);
+    });
+
+    it('rejects overlapping assertion mutations for the same evaluation', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      let signalSaveStarted!: () => void;
+      const saveStarted = new Promise<void>((resolve) => {
+        signalSaveStarted = resolve;
+      });
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const originalSave = EvalResult.prototype.save;
+      vi.spyOn(EvalResult.prototype, 'save').mockImplementationOnce(async function (
+        this: EvalResult,
+      ) {
+        signalSaveStarted();
+        await saveGate;
+        return originalSave.call(this);
+      });
+
+      const firstRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'denver' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+      expect(firstRes.status).toBe(200);
+      invariant(firstRes.body.data.jobId, 'Job ID is required');
+      await saveStarted;
+
+      const secondRes = await api.post(`/api/eval/${eval_.id}/assertions`).send({
+        assertions: [{ type: 'contains', value: 'colorado' }],
+        scope: { type: 'results', resultIds: [result.id] },
+      });
+
+      expect(secondRes.status).toBe(409);
+      expect(secondRes.body.error).toContain('already running');
+
+      const ratingRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+      expect(ratingRes.status).toBe(409);
+      expect(ratingRes.body.error).toContain('already running');
+
+      releaseSave();
+      await waitForAssertionJob(eval_.id, firstRes.body.data.jobId);
+      expect(activeEvalMutationsByEval.has(eval_.id)).toBe(false);
     });
 
     it('skips ERROR results', async () => {

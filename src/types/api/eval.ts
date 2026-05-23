@@ -297,24 +297,24 @@ export const EvalAssertionsParamsSchema = z.object({
 });
 
 export const PosthocResultsFilterSchema = z.object({
-  type: z.string(),
-  operator: z.string(),
-  value: z.string().optional(),
-  field: z.string().optional(),
+  type: z.string().min(1).max(64),
+  operator: z.string().min(1).max(64),
+  value: z.string().max(10000).optional(),
+  field: z.string().max(256).optional(),
   logicOperator: z.enum(['and', 'or']).optional(),
 });
 
 export const PosthocAssertionsScopeSchema = z.object({
   type: z.enum(['results', 'tests', 'filtered']),
-  resultIds: z.array(z.string()).optional(),
-  testIndices: z.array(z.number()).optional(),
-  filters: z.array(PosthocResultsFilterSchema).optional(),
+  resultIds: z.array(z.string().min(1).max(256)).max(10000).optional(),
+  testIndices: z.array(z.number().int().nonnegative()).max(10000).optional(),
+  filters: z.array(PosthocResultsFilterSchema).max(100).optional(),
   filterMode: EvalResultsFilterMode.optional(),
-  searchText: z.string().optional(),
+  searchText: z.string().max(10000).optional(),
 });
 
 export const AddEvalAssertionsRequestSchema = z.object({
-  assertions: z.array(AssertionOrSetSchema).min(1),
+  assertions: z.array(AssertionOrSetSchema).min(1).max(100),
   scope: PosthocAssertionsScopeSchema,
 });
 
@@ -325,10 +325,10 @@ export const EvalAssertionJobParamsSchema = EvalAssertionsParamsSchema.extend({
 export const GenerateEvalAssertionsRequestSchema = z.object({
   type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
   numAssertions: z.number().int().min(1).max(20).default(5),
-  instructions: z.string().optional(),
-  provider: z.string().optional(),
-  testIndices: z.array(z.number()).optional(),
-  resultIds: z.array(z.string()).optional(),
+  instructions: z.string().max(4000).optional(),
+  provider: z.string().min(1).max(512).optional(),
+  testIndices: z.array(z.number().int().nonnegative()).max(10000).optional(),
+  resultIds: z.array(z.string().min(1).max(256)).max(10000).optional(),
 });
 
 export type EvalAssertionsParams = z.infer<typeof EvalAssertionsParamsSchema>;

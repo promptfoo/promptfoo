@@ -32,6 +32,8 @@ interface PosthocAssertionsFormProps {
   assertions: Assertion[];
   onChange: (assertions: Assertion[]) => void;
   targetCount?: number;
+  targetLabel?: 'output' | 'test case';
+  mayIncludeMultipleOutputs?: boolean;
 }
 
 // Quick actions - the most common assertion patterns
@@ -234,6 +236,8 @@ export default function PosthocAssertionsForm({
   assertions,
   onChange,
   targetCount,
+  targetLabel = 'output',
+  mayIncludeMultipleOutputs = false,
 }: PosthocAssertionsFormProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAllTypes, setShowAllTypes] = useState(false);
@@ -600,8 +604,14 @@ export default function PosthocAssertionsForm({
         >
           <Zap className="size-3.5" />
           <span>
-            {llmAssertionCount} LLM assertion{llmAssertionCount > 1 ? 's' : ''} × {targetCount} test
-            cases = <strong>{totalApiCalls.toLocaleString()} API calls</strong>
+            {llmAssertionCount} model-based assertion{llmAssertionCount > 1 ? 's' : ''} ×{' '}
+            {targetCount} {targetLabel}
+            {targetCount === 1 ? '' : 's'} ={' '}
+            <strong>
+              at least {totalApiCalls.toLocaleString()} model request
+              {totalApiCalls === 1 ? '' : 's'}
+            </strong>
+            {mayIncludeMultipleOutputs && '; each output is scored separately'}
           </span>
         </div>
       )}

@@ -328,7 +328,8 @@ describe('AddAssertionsDialog', () => {
     expect(screen.getByText(/Active: 2 filters, search: "timeout"/)).toBeInTheDocument();
     expect(screen.getByText(/Search: "timeout"/)).toBeInTheDocument();
     expect(screen.getByText(/2 LLM assertions × 150 =/)).toBeInTheDocument();
-    expect(screen.getByText(/300 API calls/)).toBeInTheDocument();
+    expect(screen.getByText(/at least 300 model requests/)).toBeInTheDocument();
+    expect(screen.getByText(/each output is scored separately/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
@@ -381,6 +382,60 @@ describe('AddAssertionsDialog', () => {
     expect(screen.getByText(/1 \/ 2 outputs/)).toBeInTheDocument();
     expect(screen.getByText('1 passed')).toBeInTheDocument();
     expect(screen.getByText('1 failed')).toBeInTheDocument();
+  });
+
+  it('waits for each job response before scheduling another poll', async () => {
+    const user = userEvent.setup();
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    let resolveStatus!: (status: Awaited<ReturnType<typeof getAssertionJobStatus>>) => void;
+    const pendingStatus = new Promise<Awaited<ReturnType<typeof getAssertionJobStatus>>>(
+      (resolve) => {
+        resolveStatus = resolve;
+      },
+    );
+
+    vi.mocked(addEvalAssertions).mockResolvedValue({
+      data: { jobId: 'job-serial', total: 1 },
+    });
+    vi.mocked(getAssertionJobStatus).mockReturnValue(pendingStatus);
+
+    const { unmount } = renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-serial',
+      availableScopes: ['results'],
+      defaultScope: 'results',
+      resultId: 'result-serial',
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText('Contains text'));
+    await user.type(screen.getByPlaceholderText('Text to search for...'), 'serial');
+    await user.click(screen.getByRole('button', { name: /Run 1 on 1/ }));
+
+    await waitFor(() => {
+      expect(getAssertionJobStatus).toHaveBeenCalledTimes(1);
+    });
+    expect(setIntervalSpy).not.toHaveBeenCalledWith(expect.any(Function), 500);
+
+    resolveStatus({
+      data: {
+        status: 'in-progress',
+        progress: 0,
+        total: 1,
+        completedResults: [],
+        updatedResults: 0,
+        skippedResults: 0,
+        skippedAssertions: 0,
+        errors: [],
+      },
+    });
+    await waitFor(() => {
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500);
+    });
+
+    unmount();
   });
 
   it('shows completed job errors and retries the failed result ids', async () => {

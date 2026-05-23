@@ -2,7 +2,11 @@ import async from 'async';
 import { Router } from 'express';
 import { z } from 'zod';
 import { AssertionsResult } from '../../assertions/assertionsResult';
-import { generateAssertionSuggestions } from '../../assertions/generateSuggestions';
+import {
+  generateAssertionSuggestions,
+  MAX_SUGGESTION_OUTPUTS,
+  MAX_SUGGESTION_PROMPTS,
+} from '../../assertions/generateSuggestions';
 import { renderMetricName, runAssertions } from '../../assertions/index';
 import { DEFAULT_MAX_CONCURRENCY, HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -72,6 +76,7 @@ export interface AssertionJob {
 }
 
 export const assertionJobs = new Map<string, AssertionJob>();
+export const activeEvalMutationsByEval = new Map<string, string>();
 
 const ASSERTION_JOB_RETENTION_MS = 5 * 60 * 1000;
 
@@ -80,6 +85,20 @@ function scheduleAssertionJobCleanup(jobId: string): void {
     assertionJobs.delete(jobId);
   }, ASSERTION_JOB_RETENTION_MS);
   timer.unref();
+}
+
+function reserveEvalMutation(evalId: string, operationId: string): boolean {
+  if (activeEvalMutationsByEval.has(evalId)) {
+    return false;
+  }
+  activeEvalMutationsByEval.set(evalId, operationId);
+  return true;
+}
+
+function releaseEvalMutation(evalId: string, operationId: string): void {
+  if (activeEvalMutationsByEval.get(evalId) === operationId) {
+    activeEvalMutationsByEval.delete(evalId);
+  }
 }
 
 function assertionKey(assertion: AssertionOrSet): string {
@@ -878,8 +897,14 @@ evalRouter.post(
       return;
     }
 
+    const { evalId, id } = paramsResult.data;
+    const operationId = `rating:${crypto.randomUUID()}`;
+    if (!reserveEvalMutation(evalId, operationId)) {
+      res.status(409).json({ error: 'An update is already running for this evaluation' });
+      return;
+    }
+
     try {
-      const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const gradingResult = bodyResult.data as unknown as GradingResult;
       const result = await EvalResult.findById(id);
@@ -956,6 +981,8 @@ evalRouter.post(
       res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
+    } finally {
+      releaseEvalMutation(evalId, operationId);
     }
   },
 );
@@ -1044,6 +1071,14 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
   }
 
   const jobId = crypto.randomUUID();
+  if (!reserveEvalMutation(evalId, jobId)) {
+    res.status(409).json({
+      success: false,
+      error: 'An update is already running for this evaluation. Retry when it completes.',
+    });
+    return;
+  }
+
   const job: AssertionJob = {
     evalId,
     status: 'in-progress',
@@ -1168,20 +1203,21 @@ evalRouter.post('/:evalId/assertions', async (req: Request, res: Response): Prom
         job.progress++;
       });
 
-      if (job.updatedResults > 0) {
+      if (job.updatedResults > 0 || job.skippedAssertions > 0) {
         await recalculatePromptMetrics(eval_);
       }
 
       job.status = 'complete';
-      scheduleAssertionJobCleanup(jobId);
     } catch (error) {
       job.status = 'error';
-      scheduleAssertionJobCleanup(jobId);
       logger.error('[POST /:evalId/assertions] Assertion job failed', {
         evalId,
         jobId,
         error,
       });
+    } finally {
+      releaseEvalMutation(evalId, jobId);
+      scheduleAssertionJobCleanup(jobId);
     }
   })();
 });
@@ -1298,9 +1334,11 @@ evalRouter.post(
         numAssertions,
       });
 
+      const analyzedPrompts = prompts.slice(0, MAX_SUGGESTION_PROMPTS);
+      const analyzedOutputs = outputs.slice(0, MAX_SUGGESTION_OUTPUTS);
       const suggestions = await generateAssertionSuggestions({
-        prompts,
-        outputs,
+        prompts: analyzedPrompts,
+        outputs: analyzedOutputs,
         existingAssertions,
         numAssertions,
         type,
@@ -1318,8 +1356,8 @@ evalRouter.post(
         data: {
           assertions: suggestions,
           context: {
-            numPromptsAnalyzed: prompts.length,
-            numOutputsAnalyzed: outputs.length,
+            numPromptsAnalyzed: analyzedPrompts.length,
+            numOutputsAnalyzed: analyzedOutputs.length,
             existingAssertionCount: existingAssertions.length,
           },
         },

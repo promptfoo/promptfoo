@@ -9,10 +9,67 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
-import type { TokenUsage } from '../types/index';
+import type EvalResult from '../models/evalResult';
+import type { PromptMetrics } from '../types/index';
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results).
 const RECALCULATE_BATCH_SIZE = 1000;
+
+function createPromptMetrics(): PromptMetrics {
+  return {
+    score: 0,
+    testPassCount: 0,
+    testFailCount: 0,
+    testErrorCount: 0,
+    assertPassCount: 0,
+    assertFailCount: 0,
+    totalLatencyMs: 0,
+    tokenUsage: createEmptyTokenUsage(),
+    namedScores: {},
+    namedScoresCount: {},
+    namedScoreWeights: {},
+    cost: 0,
+  };
+}
+
+function accumulateResultMetrics(metrics: PromptMetrics, result: EvalResult): void {
+  if (result.success) {
+    metrics.testPassCount++;
+  } else if (result.failureReason === ResultFailureReason.ERROR) {
+    metrics.testErrorCount++;
+  } else {
+    metrics.testFailCount++;
+  }
+
+  metrics.score += result.score ?? 0;
+  metrics.totalLatencyMs += result.latencyMs || 0;
+  metrics.cost += result.cost || 0;
+
+  for (const [key, value] of Object.entries(result.namedScores || {})) {
+    accumulateNamedMetric(metrics, {
+      metricName: key,
+      metricValue: value,
+      gradingResult: result.gradingResult,
+      testVars: result.testCase?.vars || {},
+    });
+  }
+
+  if (result.gradingResult?.componentResults) {
+    metrics.assertPassCount += result.gradingResult.componentResults.filter((r) => r.pass).length;
+    metrics.assertFailCount += result.gradingResult.componentResults.filter((r) => !r.pass).length;
+  }
+
+  if (result.response?.tokenUsage) {
+    accumulateResponseTokenUsage(metrics.tokenUsage, {
+      tokenUsage: result.response.tokenUsage,
+    });
+  }
+
+  if (result.gradingResult?.tokensUsed) {
+    metrics.tokenUsage.assertions ||= createEmptyAssertions();
+    accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
+  }
+}
 
 /**
  * Recalculate prompt metrics based on current results in the database.
@@ -25,41 +82,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
   let batchNumber = 0;
   let totalProcessed = 0;
 
-  // Create a map to track metrics by promptIdx
-  const promptMetricsMap = new Map<
-    number,
-    {
-      score: number;
-      testPassCount: number;
-      testFailCount: number;
-      testErrorCount: number;
-      assertPassCount: number;
-      assertFailCount: number;
-      totalLatencyMs: number;
-      tokenUsage: TokenUsage;
-      namedScores: Record<string, number>;
-      namedScoresCount: Record<string, number>;
-      namedScoreWeights?: Record<string, number>;
-      cost: number;
-    }
-  >();
+  const promptMetricsMap = new Map<number, PromptMetrics>();
 
-  // Initialize metrics for each prompt
   for (const [promptIdx] of evalRecord.prompts.entries()) {
-    promptMetricsMap.set(promptIdx, {
-      score: 0,
-      testPassCount: 0,
-      testFailCount: 0,
-      testErrorCount: 0,
-      assertPassCount: 0,
-      assertFailCount: 0,
-      totalLatencyMs: 0,
-      tokenUsage: createEmptyTokenUsage(),
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-      cost: 0,
-    });
+    promptMetricsMap.set(promptIdx, createPromptMetrics());
   }
 
   let currentResultId: string | undefined;
@@ -79,57 +105,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
           continue;
         }
 
-        // Update test counts
-        if (result.success) {
-          metrics.testPassCount++;
-        } else if (result.failureReason === ResultFailureReason.ERROR) {
-          metrics.testErrorCount++;
-        } else {
-          metrics.testFailCount++;
-        }
-
-        // Update scores and other metrics
-        metrics.score += result.score ?? 0;
-        metrics.totalLatencyMs += result.latencyMs || 0;
-        metrics.cost += result.cost || 0;
-
-        // Update named scores
-        for (const [key, value] of Object.entries(result.namedScores || {})) {
-          accumulateNamedMetric(metrics, {
-            metricName: key,
-            metricValue: value,
-            gradingResult: result.gradingResult,
-            testVars: result.testCase?.vars || {},
-          });
-        }
-
-        // Update assertion counts
-        if (result.gradingResult?.componentResults) {
-          metrics.assertPassCount += result.gradingResult.componentResults.filter(
-            (r) => r.pass,
-          ).length;
-          metrics.assertFailCount += result.gradingResult.componentResults.filter(
-            (r) => !r.pass,
-          ).length;
-        }
-
-        // Update token usage
-        if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
-        }
-
-        // Update assertion token usage
-        if (result.gradingResult?.tokensUsed) {
-          if (!metrics.tokenUsage.assertions) {
-            metrics.tokenUsage.assertions = createEmptyAssertions();
-          }
-          accumulateAssertionTokenUsage(
-            metrics.tokenUsage.assertions,
-            result.gradingResult.tokensUsed,
-          );
-        }
+        accumulateResultMetrics(metrics, result);
       }
 
       totalProcessed += batch.length;

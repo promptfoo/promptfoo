@@ -80,24 +80,24 @@ const OpenApiEvalAssertionJobParamsSchema = OpenApiEvalAssertionsParamsSchema.ex
 });
 
 const OpenApiPosthocResultsFilterSchema = z.object({
-  type: z.string(),
-  operator: z.string(),
-  value: z.string().optional(),
-  field: z.string().optional(),
+  type: z.string().min(1).max(64),
+  operator: z.string().min(1).max(64),
+  value: z.string().max(10000).optional(),
+  field: z.string().max(256).optional(),
   logicOperator: z.enum(['and', 'or']).optional(),
 });
 
 const OpenApiPosthocAssertionsScopeSchema = z.object({
   type: z.enum(['results', 'tests', 'filtered']),
-  resultIds: z.array(z.string()).optional(),
-  testIndices: z.array(z.number()).optional(),
-  filters: z.array(OpenApiPosthocResultsFilterSchema).optional(),
+  resultIds: z.array(z.string().min(1).max(256)).max(10000).optional(),
+  testIndices: z.array(z.number().int().nonnegative()).max(10000).optional(),
+  filters: z.array(OpenApiPosthocResultsFilterSchema).max(100).optional(),
   filterMode: EvalResultsFilterMode.optional(),
-  searchText: z.string().optional(),
+  searchText: z.string().max(10000).optional(),
 });
 
 const OpenApiPosthocAssertionsRequestSchema = z.object({
-  assertions: z.array(OpenApiLooseObjectSchema).min(1),
+  assertions: z.array(OpenApiLooseObjectSchema).min(1).max(100),
   scope: OpenApiPosthocAssertionsScopeSchema,
 });
 
@@ -143,10 +143,10 @@ const OpenApiAssertionJobStatusResponseSchema = z.object({
 const OpenApiGenerateAssertionsRequestSchema = z.object({
   type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
   numAssertions: z.number().int().min(1).max(20).default(5),
-  instructions: z.string().optional(),
-  provider: z.string().optional(),
-  testIndices: z.array(z.number()).optional(),
-  resultIds: z.array(z.string()).optional(),
+  instructions: z.string().max(4000).optional(),
+  provider: z.string().min(1).max(512).optional(),
+  testIndices: z.array(z.number().int().nonnegative()).max(10000).optional(),
+  resultIds: z.array(z.string().min(1).max(256)).max(10000).optional(),
 });
 
 const OpenApiGenerateAssertionsResponseSchema = z.object({

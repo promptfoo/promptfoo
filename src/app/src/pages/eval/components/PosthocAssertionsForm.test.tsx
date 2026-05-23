@@ -123,18 +123,20 @@ describe('PosthocAssertionsForm', () => {
     expect(screen.getByText('Contains text')).toBeInTheDocument();
   });
 
-  it('shows LLM cost warning when LLM assertions are added with targetCount', () => {
+  it('shows a minimum model-request warning when model assertions have targets', () => {
     render(
       <PosthocAssertionsForm
         assertions={[{ type: 'llm-rubric', value: 'test criteria' }]}
         onChange={onChange}
         targetCount={50}
+        targetLabel="test case"
+        mayIncludeMultipleOutputs
       />,
     );
 
-    // Should show the LLM API call warning
-    expect(screen.getByText(/1 LLM assertion × 50 test cases/)).toBeInTheDocument();
-    expect(screen.getByText(/50 API calls/)).toBeInTheDocument();
+    expect(screen.getByText(/1 model-based assertion × 50 test cases/)).toBeInTheDocument();
+    expect(screen.getByText(/at least 50 model requests/)).toBeInTheDocument();
+    expect(screen.getByText(/each output is scored separately/)).toBeInTheDocument();
   });
 
   it('does not show LLM cost warning without LLM assertions', () => {
@@ -146,8 +148,7 @@ describe('PosthocAssertionsForm', () => {
       />,
     );
 
-    // Should not show the LLM API call warning
-    expect(screen.queryByText(/API calls/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/model request/)).not.toBeInTheDocument();
   });
 
   it('updates advanced assertion settings', async () => {

@@ -23,7 +23,12 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { useToast } from '@app/hooks/useToast';
-import { type AssertionJobStatus, addEvalAssertions, getAssertionJobStatus } from '@app/utils/api';
+import {
+  type AddAssertionsResponse,
+  type AssertionJobStatus,
+  addEvalAssertions,
+  getAssertionJobStatus,
+} from '@app/utils/api';
 import {
   AlertTriangle,
   CheckCircle,
@@ -84,6 +89,33 @@ const SCOPE_LABELS: Record<AssertionScope, string> = {
   filtered: 'Filtered test cases',
 };
 
+function formatCompletionMessage(
+  data: Pick<AddAssertionsResponse, 'updatedResults' | 'skippedResults' | 'skippedAssertions'>,
+  prefix = '',
+): string {
+  const updatedResults = data.updatedResults ?? 0;
+  const skippedResults = data.skippedResults ?? 0;
+  const skippedAssertions = data.skippedAssertions ?? 0;
+  return `${prefix}Added assertions to ${updatedResults} result${updatedResults === 1 ? '' : 's'}${skippedResults ? ` (${skippedResults} skipped)` : ''}${skippedAssertions ? `, ${skippedAssertions} duplicate assertion${skippedAssertions === 1 ? '' : 's'} skipped` : ''}.`;
+}
+
+function createRunningJobStatus(
+  data: AddAssertionsResponse,
+  fallbackTotal = 0,
+): AssertionJobStatus {
+  return {
+    status: 'in-progress',
+    progress: 0,
+    total: data.total ?? fallbackTotal,
+    completedResults: [],
+    updatedResults: 0,
+    skippedResults: 0,
+    skippedAssertions: 0,
+    errors: [],
+    matchedTestCount: data.matchedTestCount,
+  };
+}
+
 interface AddAssertionsDialogProps {
   open: boolean;
   onClose: () => void;
@@ -124,17 +156,20 @@ export default function AddAssertionsDialog({
   const [errorsExpanded, setErrorsExpanded] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Clean up polling on unmount or close
-  useEffect(() => {
-    return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
-    };
+  const stopPolling = useCallback(() => {
+    activeJobIdRef.current = null;
+    if (pollingRef.current) {
+      clearTimeout(pollingRef.current);
+      pollingRef.current = null;
+    }
   }, []);
+
+  useEffect(() => {
+    return stopPolling;
+  }, [stopPolling]);
 
   useEffect(() => {
     if (open) {
@@ -146,13 +181,9 @@ export default function AddAssertionsDialog({
       setErrorsExpanded(false);
       setShowConfirmation(false);
     } else {
-      // Stop polling when dialog closes
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      stopPolling();
     }
-  }, [open, defaultScope]);
+  }, [open, defaultScope, stopPolling]);
 
   const scopeOptions = useMemo(
     () =>
@@ -192,6 +223,8 @@ export default function AddAssertionsDialog({
     [assertions],
   );
   const totalApiCalls = llmAssertionCount * targetCount;
+  const targetLabel = scope === 'results' ? 'output' : 'test case';
+  const mayIncludeMultipleOutputs = scope !== 'results';
 
   // Determine if this is a large run requiring confirmation
   const isLargeRun = targetCount > LARGE_RUN_THRESHOLD;
@@ -208,60 +241,94 @@ export default function AddAssertionsDialog({
     return parts.length > 0 ? parts.join(', ') : null;
   }, [filters, searchText]);
 
+  const handleImmediateCompletion = useCallback(
+    (data: AddAssertionsResponse, prefix = '') => {
+      showToast(
+        formatCompletionMessage(data, prefix),
+        (data.skippedResults ?? 0) > 0 ? 'warning' : 'success',
+      );
+      setIsSubmitting(false);
+      onApplied?.();
+      setAssertions([]);
+      onClose();
+    },
+    [onApplied, onClose, showToast],
+  );
+
+  const handleTerminalJobStatus = useCallback(
+    (status: AssertionJobStatus) => {
+      stopPolling();
+      setIsSubmitting(false);
+
+      if (status.status === 'error') {
+        if (status.updatedResults > 0) {
+          onApplied?.();
+          showToast(
+            'Some results were updated, but metrics could not be finalized. Retry to repair metrics.',
+            'error',
+          );
+        } else {
+          showToast('Failed to process assertions', 'error');
+        }
+        return;
+      }
+
+      onApplied?.();
+      if (status.errors.length > 0) {
+        setShowCompletedWithErrors(true);
+        return;
+      }
+
+      showToast(formatCompletionMessage(status), status.skippedResults > 0 ? 'warning' : 'success');
+      setAssertions([]);
+      onClose();
+    },
+    [onApplied, onClose, showToast, stopPolling],
+  );
+
   const pollJobStatus = useCallback(
     async (jobId: string) => {
-      if (!evalId) {
+      if (!evalId || activeJobIdRef.current !== jobId) {
         return;
       }
 
       try {
-        const response = await getAssertionJobStatus(evalId, jobId);
-        const status = response.data;
+        const status = (await getAssertionJobStatus(evalId, jobId)).data;
+        if (activeJobIdRef.current !== jobId) {
+          return;
+        }
+
         setJobStatus(status);
-
-        if (status.status === 'complete' || status.status === 'error') {
-          // Stop polling
-          if (pollingRef.current) {
-            clearInterval(pollingRef.current);
-            pollingRef.current = null;
-          }
-
-          setIsSubmitting(false);
-
-          if (status.status === 'complete') {
-            const { updatedResults, skippedResults, skippedAssertions, errors } = status;
-            const hasErrors = errors.length > 0;
-
-            // Always refresh results for successful ones
-            onApplied?.();
-
-            if (hasErrors) {
-              // Show retry UI instead of closing
-              setShowCompletedWithErrors(true);
-            } else {
-              // All success - close dialog
-              showToast(
-                `Added assertions to ${updatedResults} result${updatedResults === 1 ? '' : 's'}${skippedResults ? ` (${skippedResults} skipped)` : ''}${skippedAssertions ? `, ${skippedAssertions} duplicate assertion${skippedAssertions === 1 ? '' : 's'} skipped` : ''}.`,
-                skippedResults > 0 ? 'warning' : 'success',
-              );
-              setAssertions([]);
-              onClose();
-            }
-          } else {
-            showToast('Failed to process assertions', 'error');
-          }
+        if (status.status !== 'in-progress') {
+          handleTerminalJobStatus(status);
+          return;
         }
+
+        pollingRef.current = setTimeout(() => {
+          void pollJobStatus(jobId);
+        }, 500);
       } catch (error) {
-        // Stop polling on error
-        if (pollingRef.current) {
-          clearInterval(pollingRef.current);
-          pollingRef.current = null;
+        if (activeJobIdRef.current !== jobId) {
+          return;
         }
+        stopPolling();
         setIsSubmitting(false);
         showToast(error instanceof Error ? error.message : 'Failed to get job status', 'error');
       }
     },
-    [evalId, showToast, onApplied, onClose],
+    [evalId, handleTerminalJobStatus, showToast, stopPolling],
+  );
+
+  const startPolling = useCallback(
+    (data: AddAssertionsResponse, fallbackTotal = 0) => {
+      if (!data.jobId) {
+        return;
+      }
+      activeJobIdRef.current = data.jobId;
+      setJobStatus(createRunningJobStatus(data, fallbackTotal));
+      void pollJobStatus(data.jobId);
+    },
+    [pollJobStatus],
   );
 
   const executeSubmit = useCallback(async () => {
@@ -306,42 +373,11 @@ export default function AddAssertionsDialog({
 
       // If no job was created (e.g., no assertions to add), handle immediately
       if (!data?.jobId) {
-        const updatedResults = data?.updatedResults ?? 0;
-        const skippedResults = data?.skippedResults ?? 0;
-        const skippedAssertions = data?.skippedAssertions ?? 0;
-
-        showToast(
-          `Added assertions to ${updatedResults} result${updatedResults === 1 ? '' : 's'}${skippedResults ? ` (${skippedResults} skipped)` : ''}${skippedAssertions ? `, ${skippedAssertions} duplicate assertion${skippedAssertions === 1 ? '' : 's'} skipped` : ''}.`,
-          skippedResults > 0 ? 'warning' : 'success',
-        );
-
-        setIsSubmitting(false);
-        onApplied?.();
-        setAssertions([]);
-        onClose();
+        handleImmediateCompletion(data ?? { jobId: null });
         return;
       }
 
-      // Initialize job status for progress display
-      setJobStatus({
-        status: 'in-progress',
-        progress: 0,
-        total: data.total ?? 0,
-        completedResults: [],
-        updatedResults: 0,
-        skippedResults: 0,
-        skippedAssertions: 0,
-        errors: [],
-        matchedTestCount: data.matchedTestCount,
-      });
-
-      // Start polling for job status
-      pollingRef.current = setInterval(() => {
-        pollJobStatus(data.jobId!);
-      }, 500);
-
-      // Also poll immediately
-      await pollJobStatus(data.jobId);
+      startPolling(data);
     } catch (error) {
       setIsSubmitting(false);
       showToast(error instanceof Error ? error.message : 'Failed to add assertions', 'error');
@@ -357,9 +393,8 @@ export default function AddAssertionsDialog({
     filters,
     filterMode,
     searchText,
-    onApplied,
-    onClose,
-    pollJobStatus,
+    handleImmediateCompletion,
+    startPolling,
   ]);
 
   const handleSubmitClick = useCallback(() => {
@@ -415,41 +450,11 @@ export default function AddAssertionsDialog({
 
       // If no job was created, handle immediately
       if (!data?.jobId) {
-        const updatedResults = data?.updatedResults ?? 0;
-        const skippedResults = data?.skippedResults ?? 0;
-        const skippedAssertions = data?.skippedAssertions ?? 0;
-
-        showToast(
-          `Retry: Added assertions to ${updatedResults} result${updatedResults === 1 ? '' : 's'}${skippedResults ? ` (${skippedResults} skipped)` : ''}${skippedAssertions ? `, ${skippedAssertions} duplicate assertion${skippedAssertions === 1 ? '' : 's'} skipped` : ''}.`,
-          skippedResults > 0 ? 'warning' : 'success',
-        );
-
-        setIsSubmitting(false);
-        onApplied?.();
-        setAssertions([]);
-        onClose();
+        handleImmediateCompletion(data ?? { jobId: null }, 'Retry: ');
         return;
       }
 
-      // Initialize job status for progress display
-      setJobStatus({
-        status: 'in-progress',
-        progress: 0,
-        total: data.total ?? failedResultIds.length,
-        completedResults: [],
-        updatedResults: 0,
-        skippedResults: 0,
-        skippedAssertions: 0,
-        errors: [],
-      });
-
-      // Start polling for job status
-      pollingRef.current = setInterval(() => {
-        pollJobStatus(data.jobId!);
-      }, 500);
-
-      // Also poll immediately
-      await pollJobStatus(data.jobId);
+      startPolling(data, failedResultIds.length);
     } catch (error) {
       setIsSubmitting(false);
       showToast(error instanceof Error ? error.message : 'Failed to retry assertions', 'error');
@@ -500,7 +505,7 @@ export default function AddAssertionsDialog({
                       </strong>{' '}
                       on{' '}
                       <strong>
-                        {targetCount.toLocaleString()} test case
+                        {targetCount.toLocaleString()} {targetLabel}
                         {targetCount > 1 ? 's' : ''}
                       </strong>
                       .
@@ -528,7 +533,11 @@ export default function AddAssertionsDialog({
                       <span>
                         {llmAssertionCount} LLM assertion{llmAssertionCount > 1 ? 's' : ''} ×{' '}
                         {targetCount.toLocaleString()} ={' '}
-                        <strong>{totalApiCalls.toLocaleString()} API calls</strong>
+                        <strong>
+                          at least {totalApiCalls.toLocaleString()} model request
+                          {totalApiCalls === 1 ? '' : 's'}
+                        </strong>
+                        {mayIncludeMultipleOutputs && '; each output is scored separately'}
                       </span>
                     </div>
                   )}
@@ -670,6 +679,8 @@ export default function AddAssertionsDialog({
               assertions={assertions}
               onChange={setAssertions}
               targetCount={targetCount}
+              targetLabel={targetLabel}
+              mayIncludeMultipleOutputs={mayIncludeMultipleOutputs}
             />
           )}
         </div>
