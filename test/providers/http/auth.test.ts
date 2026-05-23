@@ -1746,6 +1746,52 @@ describe('HttpProvider - File Auth', () => {
     expect(cachedTokens).toContain('token-for-user-259');
   });
 
+  it('should return refreshed file auth tokens when concurrent keys exceed the cache limit', async () => {
+    let releaseRefreshes!: () => void;
+    const refreshesBlocked = new Promise<void>((resolve) => {
+      releaseRefreshes = resolve;
+    });
+    const authFn = vi.fn(async (authContext: any) => {
+      await refreshesBlocked;
+      return {
+        token: `token-for-${authContext.vars.userId}`,
+      };
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    const requests = Array.from({ length: 257 }, (_, index) =>
+      provider.callApi('same prompt', {
+        prompt: { raw: 'same prompt', label: 'same prompt' },
+        vars: { userId: `user-${index}` },
+      }),
+    );
+
+    await vi.waitFor(() => expect(authFn).toHaveBeenCalledTimes(257));
+    releaseRefreshes();
+
+    await expect(Promise.all(requests)).resolves.toHaveLength(257);
+    const authHeaders = new Set(
+      vi
+        .mocked(fetchWithCache)
+        .mock.calls.map((call) => (call[1]?.headers as Record<string, string>).authorization),
+    );
+    expect(authHeaders.size).toBe(257);
+    expect((provider as any).authTokenCache.size).toBe(256);
+  });
+
   it('should refresh a file auth token when it is within the oauth refresh buffer', async () => {
     const authFn = vi
       .fn()
