@@ -532,43 +532,35 @@ ${exampleRequest}`;
 
   const handleConfigAgentDiscovered = useCallback(
     (discoveredConfig: DiscoveredConfig, baseUrl: string) => {
-      // Apply the discovered configuration
-      resetState(false);
-
-      // Build the URL from baseUrl + path
       const fullUrl = discoveredConfig.path
         ? `${baseUrl.replace(/\/$/, '')}${discoveredConfig.path}`
         : baseUrl;
+      const headers = discoveredConfig.headers ?? {};
+      const body = discoveredConfig.body ?? '';
 
-      updateCustomTarget('url', fullUrl);
-      updateCustomTarget('method', discoveredConfig.method);
-
-      if (discoveredConfig.headers) {
-        updateCustomTarget('headers', discoveredConfig.headers);
-        setHeaders(
-          Object.entries(discoveredConfig.headers).map(([key, value]) => ({
-            key,
-            value: String(value),
-          })),
-        );
-      }
-
-      if (discoveredConfig.body) {
-        const formattedBody =
-          typeof discoveredConfig.body === 'string'
-            ? discoveredConfig.body
-            : JSON.stringify(discoveredConfig.body, null, 2);
-        setRequestBody(formattedBody);
-        updateCustomTarget('body', discoveredConfig.body);
-      }
-
-      if (discoveredConfig.transformResponse) {
-        updateCustomTarget('transformResponse', discoveredConfig.transformResponse);
-      }
+      setBodyError(null);
+      setUrlError(null);
+      setHeaders(
+        Object.entries(headers).map(([key, value]) => ({
+          key,
+          value: String(value),
+        })),
+      );
+      setRequestBody(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+      updateCustomTarget('config', {
+        ...selectedTarget.config,
+        request: undefined,
+        url: fullUrl,
+        method: discoveredConfig.method,
+        headers,
+        body,
+        transformResponse: discoveredConfig.transformResponse,
+        useHttps: false,
+      });
 
       setConfigAgentOpen(false);
     },
-    [resetState, updateCustomTarget],
+    [selectedTarget.config, setBodyError, setUrlError, updateCustomTarget],
   );
 
   return (

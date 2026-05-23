@@ -123,8 +123,10 @@ describe('config agent discovery strategies', () => {
       confidence: 0.9,
       discoveredConfig: {
         apiType: 'azure_openai',
-        path: '/openai/deployments/{{model}}/chat/completions',
+        path: '/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21',
+        defaultModel: 'gpt-4',
         transformResponse: 'json.choices[0].message.content',
+        headers: { 'Content-Type': 'application/json' },
       },
     });
   });

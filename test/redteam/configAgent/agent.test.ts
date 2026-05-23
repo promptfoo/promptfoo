@@ -316,6 +316,38 @@ describe('ConfigurationAgent', () => {
       );
     });
 
+    it('discovers and verifies Azure using the concrete deployment path it probed', async () => {
+      mockedFetchWithProxy.mockImplementation(async (url, options) => {
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 204 });
+        }
+        if (
+          String(url).endsWith('/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21')
+        ) {
+          return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
+        }
+        return jsonResponse({ error: 'not found' }, { status: 404 });
+      });
+
+      const agent = new ConfigurationAgent('https://azure.example.com');
+      await agent.startDiscovery();
+
+      expect(agent.isComplete()).toBe(true);
+      expect(agent.getFinalConfig()).toMatchObject({
+        apiType: 'azure_openai',
+        path: '/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21',
+        defaultModel: 'gpt-4',
+      });
+      expect(
+        mockedFetchWithProxy.mock.calls.filter(([url]) =>
+          String(url).endsWith('/openai/deployments/gpt-4/chat/completions?api-version=2024-10-21'),
+        ),
+      ).toHaveLength(2);
+      expect(
+        mockedFetchWithProxy.mock.calls.some(([url]) => String(url).includes('{{model}}')),
+      ).toBe(false);
+    });
+
     it('falls back from HEAD to GET before probing and asks for manual help when nothing matches', async () => {
       mockedFetchWithProxy.mockImplementation(async (url, options) => {
         if (String(url) === 'https://api.example.com' && options?.method === 'HEAD') {

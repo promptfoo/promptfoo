@@ -168,7 +168,7 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(footer).toHaveClass('shrink-0');
   });
 
-  it('applies the URL discovered inside the config agent drawer', async () => {
+  it('applies the discovered HTTP config atomically', async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <HttpEndpointConfiguration
@@ -182,13 +182,18 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
 
     await user.click(screen.getByRole('button', { name: 'Apply ConfigAgent result' }));
 
+    expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
-      'url',
-      'https://edited.example.com/v1/chat/completions',
-    );
-    expect(mockUpdateCustomTarget).not.toHaveBeenCalledWith(
-      'url',
-      'https://api.example.com/chat/v1/chat/completions',
+      'config',
+      expect.objectContaining({
+        request: undefined,
+        url: 'https://edited.example.com/v1/chat/completions',
+        method: 'POST',
+        headers: { Authorization: 'Bearer edited-token' },
+        body: { messages: [{ role: 'user', content: '{{prompt}}' }] },
+        transformResponse: 'json.choices[0].message.content',
+        useHttps: false,
+      }),
     );
   });
 

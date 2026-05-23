@@ -9,6 +9,10 @@ import { randomUUID } from 'crypto';
 
 import type { DiscoveredConfig, DiscoveryStrategy, ProbeResult, StrategyMatch } from './types';
 
+const AZURE_API_VERSION = '2024-10-21';
+const AZURE_DEFAULT_DEPLOYMENT = 'gpt-4';
+const AZURE_CHAT_COMPLETIONS_PATH = `/openai/deployments/${AZURE_DEFAULT_DEPLOYMENT}/chat/completions?api-version=${AZURE_API_VERSION}`;
+
 /**
  * Helper to create a probe with a unique ID
  */
@@ -87,7 +91,7 @@ export const azureOpenaiStrategy: DiscoveryStrategy = {
   probes: [
     probe(
       'POST',
-      '/openai/deployments/gpt-4/chat/completions',
+      AZURE_CHAT_COMPLETIONS_PATH,
       {
         messages: [{ role: 'user', content: 'Say "hello" and nothing else.' }],
         max_tokens: 10,
@@ -267,12 +271,13 @@ export function getBaseConfigForStrategy(strategyId: string): DiscoveredConfig {
       return {
         apiType: 'azure_openai',
         method: 'POST',
-        path: '/openai/deployments/{{model}}/chat/completions',
+        path: AZURE_CHAT_COMPLETIONS_PATH,
         headers: { 'Content-Type': 'application/json' },
         body: {
           messages: [{ role: 'user', content: '{{prompt}}' }],
         },
         transformResponse: 'json.choices[0].message.content',
+        defaultModel: AZURE_DEFAULT_DEPLOYMENT,
       };
     default:
       return {
@@ -415,12 +420,13 @@ function analyzeAzureResults(successfulResults: ProbeResult[]): StrategyMatch | 
     discoveredConfig: {
       apiType: 'azure_openai',
       method: 'POST',
-      path: '/openai/deployments/{{model}}/chat/completions',
-      headers: { 'Content-Type': 'application/json', 'api-version': '2024-02-01' },
+      path: AZURE_CHAT_COMPLETIONS_PATH,
+      headers: { 'Content-Type': 'application/json' },
       body: {
         messages: [{ role: 'user', content: '{{prompt}}' }],
       },
       transformResponse: 'json.choices[0].message.content',
+      defaultModel: AZURE_DEFAULT_DEPLOYMENT,
     },
     evidence,
   };
