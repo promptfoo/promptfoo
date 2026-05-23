@@ -1132,7 +1132,7 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 2. If not cached, fetches from AWS Pricing API (~500ms)
 3. Caches pricing data
 4. Subsequent evals use cached pricing (0ms overhead)
-5. Omits automatic cost reporting when regional pricing cannot be retrieved; use an explicit `cost` override when deterministic offline cost reporting is required
+5. Does not add an estimated automatic charge when regional pricing cannot be retrieved; use an explicit `cost` override when deterministic offline cost reporting is required
 
 **Requirements:**
 
@@ -1140,25 +1140,21 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 - Pricing API requires IAM authentication
 - Promptfoo attempts explicit credentials or the AWS default credential chain for pricing lookups, even when Bedrock inference itself uses API-key authentication
 
-No configuration is needed. When IAM pricing credentials are unavailable or AWS does not return standard token pricing for a model, Promptfoo omits automatic cost reporting rather than estimate a charge. Configure `cost` when deterministic cost reporting is required without Pricing API access.
+No configuration is needed. When IAM pricing credentials are unavailable or AWS does not return standard token pricing for a model, Promptfoo does not add an estimated automatic charge. Evaluation totals may therefore show zero cost for those calls. Configure `cost` when deterministic cost reporting is required without Pricing API access.
 
 Automatic pricing can identify direct Bedrock model IDs and system-defined inference profile ARNs because those identifiers include the underlying model ID. Application inference profile ARNs are opaque profile resources, so Promptfoo does not infer pricing from their names. Add a `cost` override when you need deterministic cost reporting for application inference profile calls.
 
-### Supported Models
+### Model Coverage
 
-Real-time pricing supports Bedrock models returned by the AWS Pricing API, including:
+Real-time pricing works only when the AWS Pricing API returns regional standard input
+and output text-token prices for the selected model. Models available for Bedrock
+inference are not necessarily represented in that pricing catalog, and catalog
+coverage may change independently of model availability. Configure `cost` for a
+model when automatic cost cannot be computed.
 
-- **Amazon**: Nova (Micro, Lite, Pro), Titan
-- **Anthropic**: Claude (3.x, 4.x, Haiku, Sonnet, Opus)
-- **Meta**: Llama (2, 3.x, 3.1, 3.2, 3.3, 4)
-- **Mistral**: All variants
-- **AI21**: Jamba
-- **Cohere**: Command series
-- **DeepSeek**: R1
-- **OpenAI**: GPT-OSS (via Bedrock)
-- **Alibaba**: Qwen
-
-Automatic pricing uses AWS regional standard input/output token prices only. Batch, flex, priority-tier, and prompt-cache rates are not substituted for standard request pricing.
+Automatic pricing uses AWS regional standard input/output token prices only. Batch,
+flex, priority-tier, and prompt-cache rates are not substituted for standard request
+pricing.
 
 ### Custom Pricing Override
 

@@ -319,7 +319,6 @@ describe('pricingFetcher', () => {
     });
 
     it('should fetch from API when cache is expired', async () => {
-      // Use a unique region to avoid module-level cache interference
       const testRegion = 'eu-west-1';
 
       // Cache data from 5 hours ago (beyond 4-hour TTL)
@@ -618,7 +617,6 @@ describe('pricingFetcher', () => {
     });
 
     it('should return null when cache is disabled and API fails', async () => {
-      // Use a unique region to avoid module-level cache interference
       const testRegion = 'ap-southeast-1';
 
       const mockCache = {
@@ -644,89 +642,107 @@ describe('pricingFetcher', () => {
       expect(mockGetCache).not.toHaveBeenCalled();
     });
 
-    it('should handle concurrent requests to same region', async () => {
+    it('should not share an in-flight credential failure with a valid caller', async () => {
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn(),
       };
 
       mockGetCache.mockResolvedValue(mockCache as any);
-      mockIsCacheEnabled.mockReturnValue(true);
+      mockIsCacheEnabled.mockReturnValue(false);
 
-      // Mock API response with a delay
-      const mockSend = vi.fn().mockImplementation(
-        () =>
-          new Promise((resolve) => {
-            setTimeout(() => {
-              resolve({
-                PriceList: [
-                  JSON.stringify({
-                    product: {
-                      attributes: {
-                        model: 'Nova Micro',
-                        inferenceType: 'Input tokens',
-                        feature: 'On-demand Inference',
-                      },
+      const validResponse = {
+        PriceList: [
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Input tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.000035' },
                     },
-                    terms: {
-                      OnDemand: {
-                        term1: {
-                          priceDimensions: {
-                            dim1: {
-                              pricePerUnit: { USD: '0.000035' },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  }),
-                  JSON.stringify({
-                    product: {
-                      attributes: {
-                        model: 'Nova Micro',
-                        inferenceType: 'Output tokens',
-                        feature: 'On-demand Inference',
-                      },
-                    },
-                    terms: {
-                      OnDemand: {
-                        term1: {
-                          priceDimensions: {
-                            dim1: {
-                              pricePerUnit: { USD: '0.00014' },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  }),
-                ],
-                NextToken: undefined,
-              });
-            }, 50);
+                  },
+                },
+              },
+            },
           }),
-      );
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Output tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.00014' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        ],
+        NextToken: undefined,
+      };
 
-      MockPricingClient.mockImplementation(function () {
+      let rejectInvalidFetch!: (error: Error) => void;
+      let markInvalidFetchStarted!: () => void;
+      const invalidFetchStarted = new Promise<void>((resolve) => {
+        markInvalidFetchStarted = resolve;
+      });
+
+      MockPricingClient.mockImplementation(function (options: {
+        credentials?: { accessKeyId?: string };
+      }) {
+        const credentials = options.credentials;
         return {
-          send: mockSend,
-        };
+          send:
+            credentials?.accessKeyId === 'invalid'
+              ? vi.fn().mockImplementation(
+                  () =>
+                    new Promise((_, reject) => {
+                      rejectInvalidFetch = reject;
+                      markInvalidFetchStarted();
+                    }),
+                )
+              : vi.fn().mockResolvedValue(validResponse),
+        } as unknown as InstanceType<typeof PricingClient>;
       } as any);
 
-      // Make concurrent requests
-      const promise1 = getPricingData('us-west-2');
-      const promise2 = getPricingData('us-west-2');
-      const promise3 = getPricingData('us-west-2');
+      const invalidCredentials = { accessKeyId: 'invalid', secretAccessKey: 'invalid' };
+      const validCredentials = { accessKeyId: 'valid', secretAccessKey: 'valid' };
+      const failedPricingPromise = getPricingData('us-west-2', invalidCredentials);
+      await invalidFetchStarted;
+      const validPricingPromise = getPricingData('us-west-2', validCredentials);
+      rejectInvalidFetch(new Error('Invalid credentials'));
+      const [failedResult, validResult] = await Promise.all([
+        failedPricingPromise,
+        validPricingPromise,
+      ]);
 
-      const [result1, result2, result3] = await Promise.all([promise1, promise2, promise3]);
-
-      // All results should be the same
-      expect(result1).toBe(result2);
-      expect(result2).toBe(result3);
-
-      // API should only be called once due to deduplication
-      // (PricingClient is instantiated once per concurrent batch)
-      expect(MockPricingClient).toHaveBeenCalledTimes(1);
+      expect(
+        MockPricingClient.mock.calls.map(
+          ([options]) =>
+            (options as { credentials?: { accessKeyId?: string } }).credentials?.accessKeyId,
+        ),
+      ).toEqual(expect.arrayContaining(['invalid', 'valid']));
+      expect(failedResult).toBeNull();
+      expect(validResult).not.toBeNull();
+      expect(validResult?.models.get('Nova Micro')?.input).toBeCloseTo(0.000000035);
+      expect(validResult?.models.get('Nova Micro')?.output).toBeCloseTo(0.00000014);
+      expect(MockPricingClient).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -8,16 +8,16 @@ prompts:
     Question: {{question}}
 
 providers:
-  - id: bedrock:writer.palmyra-x4-v1:0
+  - id: bedrock:converse:us.writer.palmyra-x4-v1:0
     label: Writer Palmyra X4
     config:
-      region: us-west-2
+      region: us-east-1
       max_tokens: 1024
       temperature: 0.7
-  - id: bedrock:writer.palmyra-x5-v1:0
+  - id: bedrock:converse:us.writer.palmyra-x5-v1:0
     label: Writer Palmyra X5
     config:
-      region: us-west-2
+      region: us-east-1
       max_tokens: 1024
       temperature: 0.7
 

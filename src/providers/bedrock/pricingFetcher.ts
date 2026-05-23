@@ -1,10 +1,10 @@
-import {
-  GetProductsCommand,
-  type GetProductsCommandOutput,
-  PricingClient,
-} from '@aws-sdk/client-pricing';
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import type {
+  GetProductsCommand,
+  GetProductsCommandOutput,
+  PricingClient,
+} from '@aws-sdk/client-pricing';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
 /**
@@ -23,19 +23,6 @@ export interface BedrockModelPricing {
   input: number;
   output: number;
 }
-
-/**
- * Module-level cache of pricing fetch promises by region.
- * This ensures only ONE fetch happens per region, even with concurrent requests.
- *
- * Example scenario:
- * - 10 concurrent requests start with no cache
- * - All 10 call getPricingData('us-east-1')
- * - First request creates a fetch promise and stores it in the map
- * - Requests 2-10 reuse the same promise
- * - Result: 1 API call instead of 10
- */
-const pricingFetchPromises = new Map<string, Promise<BedrockPricingData | null>>();
 
 /**
  * Maps Bedrock model IDs to their pricing API model names.
@@ -160,15 +147,13 @@ export function mapBedrockModelIdToApiName(modelId: string): string {
 }
 
 /**
- * Gets pricing data for a region, with caching and coordinated concurrent fetches.
- * This function ensures only ONE fetch happens per region, even with concurrent requests.
+ * Gets pricing data for a region, caching only successfully fetched public price data.
  *
  * Flow:
  * 1. Check persistent cache (file-based cache via getCache())
  * 2. If cached, return cached data
- * 3. If not cached, check if a fetch is in progress for this region
- * 4. If fetch in progress, wait for it
- * 5. If no fetch in progress, start one and cache the result
+ * 3. If not cached, fetch using this caller's credential context
+ * 4. Cache the successful result for other callers
  *
  * @param region - AWS region for Bedrock models (e.g., 'us-east-1')
  * @param credentials - AWS credentials for Pricing API access (identity or provider)
@@ -223,26 +208,10 @@ export async function getPricingData(
     }
   }
 
-  // No cached data, check if there's already a fetch in progress for this region
-  let fetchPromise = pricingFetchPromises.get(region);
-
-  if (fetchPromise === undefined) {
-    // No fetch in progress, start a new one
-    logger.debug('[Bedrock Pricing]: Starting new pricing fetch', { region });
-    fetchPromise = fetchBedrockPricing(region, credentials);
-    pricingFetchPromises.set(region, fetchPromise);
-
-    // Clean up the promise after it completes (success or failure)
-    fetchPromise.finally(() => {
-      pricingFetchPromises.delete(region);
-      logger.debug('[Bedrock Pricing]: Cleared fetch promise from cache', { region });
-    });
-  } else {
-    logger.debug('[Bedrock Pricing]: Reusing in-flight pricing fetch', { region });
-  }
-
-  // Wait for the fetch (either the one we started or one already in progress)
-  const pricingData = await fetchPromise;
+  // Fetches are not shared while in flight: separate credential contexts must not
+  // inherit another caller's authentication failure.
+  logger.debug('[Bedrock Pricing]: Starting new pricing fetch', { region });
+  const pricingData = await fetchBedrockPricing(region, credentials);
 
   // Cache the result if successful
   if (pricingData && isCacheEnabled()) {
@@ -267,7 +236,7 @@ export async function getPricingData(
 
 /**
  * Fetches current Bedrock pricing from AWS Pricing API.
- * Internal function - use getPricingData() instead to get coordinated fetching.
+ * Internal function - use getPricingData() instead to reuse successful cached data.
  *
  * @param region - AWS region for Bedrock models (e.g., 'us-east-1')
  * @param credentials - AWS credentials for Pricing API access (identity or provider)
@@ -294,6 +263,7 @@ async function sendPricingCommandWithTimeout(
 }
 
 async function fetchAllPriceItems(pricingClient: PricingClient, region: string): Promise<string[]> {
+  const { GetProductsCommand } = await import('@aws-sdk/client-pricing');
   const allPriceItems: string[] = [];
   let nextToken: string | undefined;
 
@@ -431,6 +401,8 @@ async function fetchBedrockPricing(
     logger.debug('[Bedrock Pricing]: Fetching pricing from AWS Pricing API', {
       region,
     });
+
+    const { PricingClient } = await import('@aws-sdk/client-pricing');
 
     // Create Pricing client (always use us-east-1 for Pricing API)
     const pricingClient = new PricingClient({
