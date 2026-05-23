@@ -124,6 +124,10 @@ function getRootVariableName(variableName: string): string | undefined {
   return /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
   return extractVariablesFromTemplate(template).some((variableName) => {
     const rootVariableName = getRootVariableName(variableName);
@@ -138,13 +142,25 @@ function referencesSkippedVariables(
   skipRenderVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): boolean {
-  return extractVariablesFromTemplate(template).some((variableName) => {
-    const rootVariableName = getRootVariableName(variableName);
-    return Boolean(
-      rootVariableName &&
-        (skipRenderVars?.includes(rootVariableName) ||
-          varsResolvedFromSkipped?.has(rootVariableName)),
+  const skippedRootVars = new Set([...(skipRenderVars ?? []), ...(varsResolvedFromSkipped ?? [])]);
+  if (skippedRootVars.size === 0) {
+    return false;
+  }
+
+  if (
+    extractVariablesFromTemplate(template).some((variableName) => {
+      const rootVariableName = getRootVariableName(variableName);
+      return Boolean(rootVariableName && skippedRootVars.has(rootVariableName));
+    })
+  ) {
+    return true;
+  }
+
+  return [...skippedRootVars].some((rootVariableName) => {
+    const rootReference = new RegExp(
+      `(^|[^A-Za-z0-9_])${escapeRegExp(rootVariableName)}(\\b|\\s*[.\\[])`,
     );
+    return rootReference.test(template);
   });
 }
 
@@ -472,7 +488,7 @@ async function loadNestedVariableFiles(
       return existing;
     }
 
-    const resolved = createContainerShell(value) as VarValue[];
+    const resolved = createContainerShell(value as VarValue[]) as VarValue[];
     resolvedObjects.set(value, resolved);
     publishResolvedValue?.(resolved);
     assignRootContainer(vars, varPath, value, resolved);
@@ -612,6 +628,255 @@ function renderNestedTemplates(
   return resolved as VarValue;
 }
 
+function shouldLoadNestedVariableFiles(value: VarValue): boolean {
+  return (Array.isArray(value) || isPlainObject(value)) && containsFileReference(value);
+}
+
+async function loadPackageVariable(
+  varName: string,
+  value: string,
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<string> {
+  const basePath = cliState.basePath || '';
+  const requiredModule = await loadFromPackage(value, basePath);
+  if (typeof requiredModule !== 'function') {
+    throw new Error(
+      `Variable source malformed: ${value} must export a function. Received: ${typeof requiredModule}`,
+    );
+  }
+
+  const javascriptOutput = (await requiredModule(varName, basePrompt, vars, provider)) as {
+    output?: string;
+    error?: string;
+  };
+  if (javascriptOutput.error) {
+    throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
+  }
+  if (javascriptOutput.output === undefined) {
+    throw new Error(`Expected ${value} to return { output: string } but got ${javascriptOutput}`);
+  }
+  invariant(
+    typeof javascriptOutput.output === 'string',
+    `javascriptOutput.output must be a string. Received: ${typeof javascriptOutput.output}`,
+  );
+  return javascriptOutput.output;
+}
+
+async function loadFileBackedVariables({
+  basePrompt,
+  nestedFileValuePaths,
+  provider,
+  skipRenderVars,
+  vars,
+}: {
+  basePrompt: string;
+  nestedFileValuePaths: Set<string>;
+  provider?: ApiProvider;
+  skipRenderVars?: string[];
+  vars: Record<string, VarValue>;
+}): Promise<Set<string>> {
+  const nestedFileVarNames = new Set<string>();
+
+  for (const [varName, value] of Object.entries(vars)) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      assignVarValue(
+        vars,
+        varName,
+        await loadVariableFile(varName, value, basePrompt, vars, provider),
+      );
+    } else if (isPackagePath(value)) {
+      assignVarValue(
+        vars,
+        varName,
+        await loadPackageVariable(varName, value, basePrompt, vars, provider),
+      );
+    } else if (shouldLoadNestedVariableFiles(value)) {
+      const resolved = await loadNestedVariableFiles(
+        value,
+        varName,
+        basePrompt,
+        vars,
+        provider,
+        nestedFileValuePaths,
+      );
+      if (resolved !== value) {
+        assignVarValue(vars, varName, resolved);
+        nestedFileVarNames.add(varName);
+      }
+    }
+  }
+
+  return nestedFileVarNames;
+}
+
+async function applyPromptFunctionIfNeeded(
+  prompt: Prompt,
+  vars: Record<string, VarValue>,
+  provider?: ApiProvider,
+): Promise<string | undefined> {
+  if (!prompt.function) {
+    return undefined;
+  }
+
+  const result = await prompt.function({ vars, provider });
+  if (typeof result === 'string') {
+    return result;
+  }
+  if (typeof result !== 'object') {
+    throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
+  }
+
+  if ('prompt' in result) {
+    if (result.config) {
+      prompt.config = {
+        ...(prompt.config || {}),
+        ...result.config,
+      };
+    }
+    return typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
+  }
+
+  return JSON.stringify(result);
+}
+
+function renderNestedFileBackedTemplates({
+  nestedFileValuePaths,
+  nestedFileVarNames,
+  nunjucks,
+  skipRenderVars,
+  vars,
+  varsResolvedFromSkipped,
+}: {
+  nestedFileValuePaths: Set<string>;
+  nestedFileVarNames: Set<string>;
+  nunjucks: ReturnType<typeof getNunjucksEngine>;
+  skipRenderVars?: string[];
+  vars: Record<string, VarValue>;
+  varsResolvedFromSkipped: Set<string>;
+}) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return;
+  }
+
+  for (const varName of nestedFileVarNames) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+    assignVarValue(
+      vars,
+      varName,
+      renderNestedTemplates(
+        vars[varName],
+        varName,
+        vars,
+        nunjucks,
+        nestedFileValuePaths,
+        skipRenderVars,
+        varsResolvedFromSkipped,
+      ),
+    );
+  }
+}
+
+function parseLangfusePromptReference(langfusePrompt: string): {
+  helper: string;
+  label?: string;
+  promptType: 'text' | 'chat';
+  version?: string;
+} {
+  let helper: string;
+  let version: string | undefined;
+  let label: string | undefined;
+  let promptType: 'text' | 'chat' | undefined = 'text';
+
+  // More robust parsing that handles @ in prompt IDs
+  // Look for the last @ that's followed by a label pattern
+  const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
+  const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
+
+  if (labelMatch) {
+    // Label-based syntax: prompt-id@label or prompt-id@label:type
+    helper = labelMatch[1];
+    label = labelMatch[2];
+    if (labelMatch[3]) {
+      promptType = labelMatch[3] as 'text' | 'chat';
+    }
+  } else if (versionMatch) {
+    // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
+    helper = versionMatch[1];
+    const versionOrLabel = versionMatch[2];
+
+    // Auto-detect if it's a version (numeric) or label (string)
+    if (/^\d+$/.test(versionOrLabel)) {
+      // It's a numeric version
+      version = versionOrLabel;
+    } else {
+      // It's a string, treat as label
+      label = versionOrLabel;
+      if (label === 'latest') {
+        // 'latest' is always treated as a label, even though it could be ambiguous
+        version = undefined;
+      }
+    }
+
+    if (versionMatch[3]) {
+      promptType = versionMatch[3] as 'text' | 'chat';
+    }
+  } else {
+    // Simple prompt-id only
+    helper = langfusePrompt;
+  }
+
+  if (promptType !== 'text' && promptType !== 'chat') {
+    throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
+  }
+
+  return { helper, label, promptType, version };
+}
+
+async function renderExternalPromptIfNeeded(
+  prompt: Prompt,
+  vars: Record<string, VarValue>,
+): Promise<string | undefined> {
+  if (prompt.raw.startsWith('portkey://')) {
+    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
+    return JSON.stringify(portKeyResult.messages);
+  }
+
+  if (prompt.raw.startsWith('langfuse://')) {
+    const langfusePrompt = prompt.raw.slice('langfuse://'.length);
+    const { helper, label, promptType, version } = parseLangfusePromptReference(langfusePrompt);
+
+    return getLangfusePrompt(
+      helper,
+      vars,
+      promptType,
+      version === undefined || version === 'latest' ? undefined : Number(version),
+      label,
+    );
+  }
+
+  if (prompt.raw.startsWith('helicone://')) {
+    const heliconePrompt = prompt.raw.slice('helicone://'.length);
+    const [id, version] = heliconePrompt.split(':');
+    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
+    return getHeliconePrompt(
+      id,
+      vars,
+      majorVersion === undefined ? undefined : Number(majorVersion),
+      minorVersion === undefined ? undefined : Number(minorVersion),
+    );
+  }
+
+  return undefined;
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -635,99 +900,16 @@ export async function renderPrompt(
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
   let basePrompt = prompt.raw;
-  const nestedFileVarNames = new Set<string>();
   const nestedFileValuePaths = new Set<string>();
+  const nestedFileVarNames = await loadFileBackedVariables({
+    basePrompt,
+    nestedFileValuePaths,
+    provider,
+    skipRenderVars,
+    vars,
+  });
 
-  for (const [varName, value] of Object.entries(vars)) {
-    if (
-      skipRenderVars?.includes(varName) ||
-      (!Array.isArray(value) && !isPlainObject(value)) ||
-      !containsFileReference(value)
-    ) {
-      continue;
-    }
-
-    const resolved = await loadNestedVariableFiles(
-      value,
-      varName,
-      basePrompt,
-      vars,
-      provider,
-      nestedFileValuePaths,
-    );
-    if (resolved !== value) {
-      assignVarValue(vars, varName, resolved);
-      nestedFileVarNames.add(varName);
-    }
-  }
-
-  // Load files
-  for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
-      continue;
-    }
-
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      assignVarValue(
-        vars,
-        varName,
-        await loadVariableFile(varName, value, basePrompt, vars, provider),
-      );
-    } else if (isPackagePath(value)) {
-      const basePath = cliState.basePath || '';
-      const requiredModule = await loadFromPackage(value, basePath);
-      if (typeof requiredModule !== 'function') {
-        throw new Error(
-          `Variable source malformed: ${value} must export a function. Received: ${typeof requiredModule}`,
-        );
-      }
-
-      const javascriptOutput = (await requiredModule(varName, basePrompt, vars, provider)) as {
-        output?: string;
-        error?: string;
-      };
-      if (javascriptOutput.error) {
-        throw new Error(`Error running ${value}: ${javascriptOutput.error}`);
-      }
-      if (javascriptOutput.output === undefined) {
-        throw new Error(
-          `Expected ${value} to return { output: string } but got ${javascriptOutput}`,
-        );
-      }
-      invariant(
-        typeof javascriptOutput.output === 'string',
-        `javascriptOutput.output must be a string. Received: ${typeof javascriptOutput.output}`,
-      );
-      assignVarValue(vars, varName, javascriptOutput.output);
-    }
-  }
-
-  // Apply prompt functions
-  if (prompt.function) {
-    const result = await prompt.function({ vars, provider });
-    if (typeof result === 'string') {
-      basePrompt = result;
-    } else if (typeof result === 'object') {
-      // Check if it's using the structured PromptFunctionResult format
-      if ('prompt' in result) {
-        basePrompt =
-          typeof result.prompt === 'string' ? result.prompt : JSON.stringify(result.prompt);
-
-        // Merge config if provided
-        if (result.config) {
-          prompt.config = {
-            ...(prompt.config || {}),
-            ...result.config,
-          };
-        }
-      } else {
-        // Direct object/array format
-        basePrompt = JSON.stringify(result);
-      }
-    } else {
-      throw new Error(`Prompt function must return a string or object, got ${typeof result}`);
-    }
-  }
+  basePrompt = (await applyPromptFunctionIfNeeded(prompt, vars, provider)) ?? basePrompt;
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
@@ -739,100 +921,20 @@ export async function renderPrompt(
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
 
-  if (!getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
-    for (const varName of nestedFileVarNames) {
-      if (skipRenderVars?.includes(varName)) {
-        continue;
-      }
-      assignVarValue(
-        vars,
-        varName,
-        renderNestedTemplates(
-          vars[varName],
-          varName,
-          vars,
-          nunjucks,
-          nestedFileValuePaths,
-          skipRenderVars,
-          varsResolvedFromSkipped,
-        ),
-      );
-    }
-  }
+  renderNestedFileBackedTemplates({
+    nestedFileValuePaths,
+    nestedFileVarNames,
+    nunjucks,
+    skipRenderVars,
+    vars,
+    varsResolvedFromSkipped,
+  });
   // Third party integrations
-  if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
-    return JSON.stringify(portKeyResult.messages);
-  } else if (prompt.raw.startsWith('langfuse://')) {
-    const langfusePrompt = prompt.raw.slice('langfuse://'.length);
-
-    let helper: string;
-    let version: string | undefined;
-    let label: string | undefined;
-    let promptType: 'text' | 'chat' | undefined = 'text';
-
-    // More robust parsing that handles @ in prompt IDs
-    // Look for the last @ that's followed by a label pattern
-    const labelMatch = langfusePrompt.match(/^(.+)@([^:@]+)(?::(.+))?$/);
-    const versionMatch = langfusePrompt.match(/^([^:]+):([^:]+)(?::(.+))?$/);
-
-    if (labelMatch) {
-      // Label-based syntax: prompt-id@label or prompt-id@label:type
-      helper = labelMatch[1];
-      label = labelMatch[2];
-      if (labelMatch[3]) {
-        promptType = labelMatch[3] as 'text' | 'chat';
-      }
-    } else if (versionMatch) {
-      // Version/label syntax: prompt-id:version-or-label or prompt-id:version-or-label:type
-      helper = versionMatch[1];
-      const versionOrLabel = versionMatch[2];
-
-      // Auto-detect if it's a version (numeric) or label (string)
-      if (/^\d+$/.test(versionOrLabel)) {
-        // It's a numeric version
-        version = versionOrLabel;
-      } else {
-        // It's a string, treat as label
-        label = versionOrLabel;
-        if (label === 'latest') {
-          // 'latest' is always treated as a label, even though it could be ambiguous
-          version = undefined;
-        }
-      }
-
-      if (versionMatch[3]) {
-        promptType = versionMatch[3] as 'text' | 'chat';
-      }
-    } else {
-      // Simple prompt-id only
-      helper = langfusePrompt;
-    }
-
-    if (promptType !== 'text' && promptType !== 'chat') {
-      throw new Error(`Invalid Langfuse prompt type: ${promptType}. Must be 'text' or 'chat'.`);
-    }
-
-    const langfuseResult = await getLangfusePrompt(
-      helper,
-      vars,
-      promptType,
-      version === undefined || version === 'latest' ? undefined : Number(version),
-      label,
-    );
-    return langfuseResult;
-  } else if (prompt.raw.startsWith('helicone://')) {
-    const heliconePrompt = prompt.raw.slice('helicone://'.length);
-    const [id, version] = heliconePrompt.split(':');
-    const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
-    const heliconeResult = await getHeliconePrompt(
-      id,
-      vars,
-      majorVersion === undefined ? undefined : Number(majorVersion),
-      minorVersion === undefined ? undefined : Number(minorVersion),
-    );
-    return heliconeResult;
+  const externalPrompt = await renderExternalPromptIfNeeded(prompt, vars);
+  if (externalPrompt !== undefined) {
+    return externalPrompt;
   }
+
   // Render prompt
   try {
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {

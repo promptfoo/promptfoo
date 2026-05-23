@@ -531,10 +531,13 @@ describe('evaluatorHelpers', () => {
       };
 
       vi.mocked(fs.promises.readFile).mockResolvedValueOnce('loaded document');
-      mockDynamicModule('/path/to/context.js', (_varName: string, _rawPrompt: string, allVars) => {
-        expect((allVars as typeof vars).payload.document).toBe('loaded document');
-        return { output: `saw ${(allVars as typeof vars).payload.document}` };
-      });
+      mockDynamicModule(
+        '/path/to/context.js',
+        (_varName: string, _rawPrompt: string, allVars: unknown) => {
+          expect((allVars as typeof vars).payload.document).toBe('loaded document');
+          return { output: `saw ${(allVars as typeof vars).payload.document}` };
+        },
+      );
 
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
@@ -553,14 +556,40 @@ describe('evaluatorHelpers', () => {
       };
 
       vi.mocked(fs.promises.readFile).mockResolvedValueOnce('deep document');
-      mockDynamicModule('/path/to/context.js', (_varName: string, _rawPrompt: string, allVars) => {
-        expect((allVars as typeof vars).payload.inner.document).toBe('deep document');
-        return { output: `saw ${(allVars as typeof vars).payload.inner.document}` };
-      });
+      mockDynamicModule(
+        '/path/to/context.js',
+        (_varName: string, _rawPrompt: string, allVars: unknown) => {
+          expect((allVars as typeof vars).payload.inner.document).toBe('deep document');
+          return { output: `saw ${(allVars as typeof vars).payload.inner.document}` };
+        },
+      );
 
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(renderedPrompt).toBe('Context: saw deep document');
+    });
+
+    it('should expose previously resolved top-level files to nested JavaScript file variables', async () => {
+      const prompt = toPrompt('Context: {{ payload.context }}');
+      const vars = {
+        document: 'file://document.txt',
+        payload: {
+          context: 'file:///path/to/context.js',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('top-level document');
+      mockDynamicModule(
+        '/path/to/context.js',
+        (_varName: string, _rawPrompt: string, allVars: unknown) => {
+          expect((allVars as typeof vars).document).toBe('top-level document');
+          return { output: `saw ${(allVars as typeof vars).document}` };
+        },
+      );
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Context: saw top-level document');
     });
 
     it('should pass variable context to nested Python file variables', async () => {
@@ -632,6 +661,26 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['attack']);
 
       expect(renderedPrompt).toBe('Attack: {{ attack.payload }}');
+    });
+
+    it('should not render skipped variables from nested file-backed control templates', async () => {
+      const prompt = toPrompt('{{ payload.report }}');
+      const vars = {
+        attack: {
+          payload: ['do not render'],
+        },
+        payload: {
+          report: 'file://report.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+        '{% for item in attack.payload %}{{ item }}{% endfor %}',
+      );
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['attack']);
+
+      expect(renderedPrompt).toBe('{% for item in attack.payload %}{{ item }}{% endfor %}');
     });
 
     it('should preserve non-plain nested variable values', async () => {
