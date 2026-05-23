@@ -182,9 +182,9 @@ describe('NovaSonicConnection', () => {
     await commit;
     expect(nova.session.queue.length).toBeGreaterThan(initialQueueLength + 40);
 
-    const response = connection.requestResponse();
-    await vi.advanceTimersByTimeAsync(600);
-    await response;
+    const queueLengthAfterCommit = nova.session.queue.length;
+    connection.requestResponse();
+    expect(nova.session.queue.length).toBe(queueLengthAfterCommit);
 
     nova.session.audioContentActive = false;
     await connection.commitAudio();
@@ -192,7 +192,16 @@ describe('NovaSonicConnection', () => {
     connection.sendAudio(audioChunk());
     expect(nova.session.audioContentActive).toBe(true);
 
+    const session = nova.session;
     connection.disconnect();
+    const closingEventTypes = session.queue.map(
+      (event: { event: Record<string, unknown> }) => Object.keys(event.event)[0],
+    );
+    expect(closingEventTypes.slice(-3)).toEqual(['contentEnd', 'promptEnd', 'sessionEnd']);
+    expect(closingEventTypes).toContain('promptEnd');
+    expect(closingEventTypes).toContain('sessionEnd');
+    expect(session.audioContentActive).toBe(false);
+    expect(session.promptEnded).toBe(true);
     expect(connection.isConnected()).toBe(false);
     expect(connection.getSessionId()).toBeNull();
     expect(closed).toHaveBeenCalled();
@@ -216,7 +225,7 @@ describe('NovaSonicConnection', () => {
 
     connection.sendAudio(audioChunk());
     await connection.commitAudio();
-    await connection.requestResponse();
+    connection.requestResponse();
 
     nova.handleNovaEvent({});
     nova.handleNovaEvent({ event: { textOutput: { role: 'ASSISTANT', content: 'assistant' } } });
@@ -273,9 +282,14 @@ describe('NovaSonicConnection', () => {
     const second = await keepalive;
     expect(new TextDecoder().decode(second.value?.chunk.bytes)).toContain('audioInput');
 
+    nova.session.queue.push({ event: { promptEnd: {} } }, { event: { sessionEnd: {} } });
     nova.session.isActive = false;
-    nova.sendEvent({ event: { promptEnd: {} } });
-    await iterator.next();
+    nova.session.queueSignal.next();
+    const promptEnd = await iterator.next();
+    const sessionEnd = await iterator.next();
+    expect(new TextDecoder().decode(promptEnd.value?.chunk.bytes)).toContain('promptEnd');
+    expect(new TextDecoder().decode(sessionEnd.value?.chunk.bytes)).toContain('sessionEnd');
+    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined });
 
     const timeout = new NovaSonicConnection(config);
     const timeoutErrors = vi.fn();

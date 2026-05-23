@@ -391,7 +391,7 @@ export class NovaSonicConnection extends EventEmitter {
       this.session.audioContentActive = true;
     }
 
-    // Resample from 24kHz to 8kHz
+    // Resample from the routed audio sample rate to Nova Sonic's 16kHz input.
     const inputBuffer = base64ToBuffer(chunk.data);
     const resampledBuffer = resampleAudio(
       inputBuffer,
@@ -469,14 +469,11 @@ export class NovaSonicConnection extends EventEmitter {
 
   /**
    * Request a response from the provider.
-   * Nova Sonic requires actual audio input with VAD detection to trigger responses.
-   * It does not support "agent speaks first" mode without user audio.
-   *
-   * Unlike other providers, we DON'T end the content here - Nova Sonic uses VAD
-   * to detect when the user stops speaking and triggers the response automatically.
-   * We just send silence to help trigger the VAD detection.
+   * Nova Sonic generates a response after commitAudio sends the VAD silence.
+   * Unlike providers with an explicit response request, there is no second
+   * request message to send here.
    */
-  async requestResponse(): Promise<void> {
+  requestResponse(): void {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot request response: not ready');
       return;
@@ -491,13 +488,7 @@ export class NovaSonicConnection extends EventEmitter {
       return;
     }
 
-    // Send silence to trigger VAD - Nova Sonic will detect end of speech
-    // and generate a response. We don't end the content here.
-    if (this.session.audioContentActive) {
-      await this.sendSilenceForVAD();
-    }
-
-    logger.debug('[NovaSonic] Response requested via VAD silence');
+    logger.debug('[NovaSonic] Response follows committed audio input');
   }
 
   /**
@@ -507,9 +498,18 @@ export class NovaSonicConnection extends EventEmitter {
     this.clearConnectionTimeout();
 
     if (this.session?.isActive) {
-      this.session.isActive = false;
+      if (this.session.audioContentActive) {
+        this.sendEvent({
+          event: {
+            contentEnd: {
+              promptName: this.session.promptName,
+              contentName: this.session.audioContentId,
+            },
+          },
+        });
+        this.session.audioContentActive = false;
+      }
 
-      // Only send promptEnd if it hasn't been sent yet
       if (!this.session.promptEnded) {
         this.sendEvent({
           event: {
@@ -518,6 +518,7 @@ export class NovaSonicConnection extends EventEmitter {
             },
           },
         });
+        this.session.promptEnded = true;
       }
 
       this.sendEvent({
@@ -526,6 +527,9 @@ export class NovaSonicConnection extends EventEmitter {
         },
       });
 
+      // Keep terminal events queued for the request iterator to drain before ending.
+      this.session.isActive = false;
+      this.session.queueSignal.next();
       this.session.closeSignal.next();
     }
 
@@ -613,9 +617,9 @@ export class NovaSonicConnection extends EventEmitter {
         let lastKeepAlive = Date.now();
         const KEEP_ALIVE_INTERVAL_MS = 100; // Send keep-alive every 100ms if idle
 
-        while (session.isActive) {
-          // Yield all queued events first
-          while (session.queue.length > 0 && session.isActive) {
+        while (session.isActive || session.queue.length > 0) {
+          // Drain queued terminal events even after the session is marked inactive.
+          while (session.queue.length > 0) {
             const nextEvent = session.queue.shift();
             if (nextEvent) {
               yield {
@@ -704,7 +708,7 @@ export class NovaSonicConnection extends EventEmitter {
    */
   private handleNovaEvent(data: { event?: Record<string, unknown> }): void {
     if (!data.event) {
-      logger.debug('[NovaSonic] Received non-event data:', { data });
+      logger.debug('[NovaSonic] Received non-event data');
       return;
     }
 

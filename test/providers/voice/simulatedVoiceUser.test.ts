@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 
 const { providerMocks } = vi.hoisted(() => {
   class MockOrchestrator {
@@ -57,6 +58,13 @@ import type {
 } from '../../../src/providers/voice/types';
 
 type VoiceConfigBuilder = {
+  buildTurnDetectionConfig: () => {
+    silenceThresholdMs: number;
+    vadThreshold: number;
+    minTurnDurationMs: number;
+    maxTurnDurationMs: number;
+    prefixPaddingMs: number;
+  };
   buildTargetConfig: (instructions: string) => VoiceProviderConfig;
   buildSimulatedUserConfig: (instructions: string) => VoiceProviderConfig;
 };
@@ -76,6 +84,7 @@ describe('SimulatedVoiceUser', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -100,6 +109,8 @@ describe('SimulatedVoiceUser', () => {
 
     expect(targetConfig.apiKey).toBeUndefined();
     expect(simulatedUserConfig.apiKey).toBeUndefined();
+    expect(targetConfig.voice).toBeUndefined();
+    expect(simulatedUserConfig.voice).toBeUndefined();
     expect(targetConfig.turnDetection).toBeUndefined();
     expect(simulatedUserConfig.turnDetection).toBeUndefined();
   });
@@ -114,10 +125,32 @@ describe('SimulatedVoiceUser', () => {
     expect(builder.buildSimulatedUserConfig('caller goal').apiKey).toBe('caller-key');
   });
 
+  it('preserves zero-valued turn detection settings', () => {
+    const builder = createConfigBuilder({
+      silenceThresholdMs: 0,
+      vadThreshold: 0,
+      minTurnDurationMs: 0,
+      maxTurnDurationMs: 0,
+      prefixPaddingMs: 0,
+    });
+
+    expect(builder.buildTurnDetectionConfig()).toEqual(
+      expect.objectContaining({
+        silenceThresholdMs: 0,
+        vadThreshold: 0,
+        minTurnDurationMs: 0,
+        maxTurnDurationMs: 0,
+        prefixPaddingMs: 0,
+      }),
+    );
+  });
+
   it('runs local orchestrated conversations and formats stereo audio output', async () => {
+    const debug = vi.spyOn(logger, 'debug');
+    const callerGoal = 'private account 0000111122223333 for {{ name }}';
     providerMocks.start.mockImplementation((orchestrator) => {
       orchestrator.emit('state_change', 'active');
-      orchestrator.emit('turn_complete', { speaker: 'agent', text: 'hello'.repeat(30) });
+      orchestrator.emit('turn_complete', { speaker: 'agent', text: 'sensitive transcript 5555' });
       orchestrator.emit('error', new Error('logged only'));
       return {
         combinedAudio: Buffer.from('stereo'),
@@ -141,7 +174,7 @@ describe('SimulatedVoiceUser', () => {
 
     const provider = new SimulatedVoiceUser({
       config: {
-        instructions: 'Caller goal for {{ name }}',
+        instructions: callerGoal,
         simulatedUserProvider: 'google',
         targetModel: 'gpt-realtime',
         targetProvider: 'openai',
@@ -155,7 +188,7 @@ describe('SimulatedVoiceUser', () => {
     expect(providerMocks.MockOrchestrator.instances[0].config).toEqual(
       expect.objectContaining({
         simulatedUserConfig: expect.objectContaining({
-          instructions: expect.stringContaining('Caller goal for Ari'),
+          instructions: expect.stringContaining('private account 0000111122223333 for Ari'),
           provider: 'google',
         }),
         targetConfig: expect.objectContaining({
@@ -178,6 +211,8 @@ describe('SimulatedVoiceUser', () => {
         output: 'Assistant: Hello\n---\nUser: Thanks',
       }),
     );
+    expect(JSON.stringify(debug.mock.calls)).not.toContain('0000111122223333');
+    expect(JSON.stringify(debug.mock.calls)).not.toContain('sensitive transcript 5555');
   });
 
   it('uses the instructions test variable for caller goals by default', async () => {

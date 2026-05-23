@@ -228,7 +228,7 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
     try {
       msg = JSON.parse(msgString);
     } catch {
-      logger.warn('[OpenAIRealtime] Failed to parse message:', { data: msgString.slice(0, 100) });
+      logger.warn('[OpenAIRealtime] Failed to parse message:', { messageLength: msgString.length });
       return;
     }
 

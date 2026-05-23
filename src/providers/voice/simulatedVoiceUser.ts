@@ -91,12 +91,12 @@ export class SimulatedVoiceUser implements ApiProvider {
    */
   private buildTurnDetectionConfig(): TurnDetectionConfig {
     return {
-      mode: this.voiceConfig.turnDetectionMode || 'server_vad',
-      silenceThresholdMs: this.voiceConfig.silenceThresholdMs || 500,
-      vadThreshold: this.voiceConfig.vadThreshold || 0.5,
-      minTurnDurationMs: this.voiceConfig.minTurnDurationMs || 100,
-      maxTurnDurationMs: this.voiceConfig.maxTurnDurationMs || 30000,
-      prefixPaddingMs: this.voiceConfig.prefixPaddingMs || 300,
+      mode: this.voiceConfig.turnDetectionMode ?? 'server_vad',
+      silenceThresholdMs: this.voiceConfig.silenceThresholdMs ?? 500,
+      vadThreshold: this.voiceConfig.vadThreshold ?? 0.5,
+      minTurnDurationMs: this.voiceConfig.minTurnDurationMs ?? 100,
+      maxTurnDurationMs: this.voiceConfig.maxTurnDurationMs ?? 30000,
+      prefixPaddingMs: this.voiceConfig.prefixPaddingMs ?? 300,
     };
   }
 
@@ -104,11 +104,12 @@ export class SimulatedVoiceUser implements ApiProvider {
    * Build the target voice provider config.
    */
   private buildTargetConfig(instructions: string): VoiceProviderConfig {
+    const provider = this.voiceConfig.targetProvider || 'openai';
     return {
-      provider: this.voiceConfig.targetProvider || 'openai',
+      provider,
       model: this.voiceConfig.targetModel,
       apiKey: this.voiceConfig.targetApiKey,
-      voice: this.voiceConfig.targetVoice || 'alloy',
+      voice: this.voiceConfig.targetVoice ?? (provider === 'openai' ? 'alloy' : undefined),
       instructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
@@ -124,12 +125,13 @@ export class SimulatedVoiceUser implements ApiProvider {
   private buildSimulatedUserConfig(instructions: string): VoiceProviderConfig {
     // Build the simulated user instructions with the goal
     const simulatedUserInstructions = this.buildSimulatedUserInstructions(instructions);
+    const provider = this.voiceConfig.simulatedUserProvider || 'openai';
 
     return {
-      provider: this.voiceConfig.simulatedUserProvider || 'openai',
+      provider,
       model: this.voiceConfig.simulatedUserModel,
       apiKey: this.voiceConfig.simulatedUserApiKey,
-      voice: this.voiceConfig.simulatedUserVoice || 'echo',
+      voice: this.voiceConfig.simulatedUserVoice ?? (provider === 'openai' ? 'echo' : undefined),
       instructions: simulatedUserInstructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
@@ -176,7 +178,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     const instructions = getNunjucksEngine().renderString(rawInstructions, context?.vars || {});
 
     logger.debug('[SimulatedVoiceUser] Starting voice conversation:', {
-      instructions: instructions.substring(0, 100),
+      instructionLength: instructions.length,
       maxTurns: this.voiceConfig.maxTurns,
       targetProvider: this.voiceConfig.targetProvider,
       simulatedUserProvider: this.voiceConfig.simulatedUserProvider,
@@ -340,7 +342,7 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
     orchestrator.on('turn_complete', ({ speaker, text }) => {
       logger.debug('[SimulatedVoiceUser] Turn complete:', {
         speaker,
-        text: text.substring(0, 100),
+        textLength: text.length,
       });
     });
 

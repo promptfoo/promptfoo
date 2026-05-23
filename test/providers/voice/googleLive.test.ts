@@ -79,7 +79,7 @@ describe('GoogleLiveConnection', () => {
 
     config = {
       provider: 'google',
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-3.1-flash-live-preview',
       voice: 'Puck',
       instructions: 'You are a helpful assistant.',
       audioFormat: 'pcm16',
@@ -91,6 +91,7 @@ describe('GoogleLiveConnection', () => {
 
   afterEach(() => {
     connection.disconnect();
+    vi.useRealTimers();
     vi.unstubAllEnvs();
   });
 
@@ -167,6 +168,44 @@ describe('GoogleLiveConnection', () => {
     });
   });
 
+  describe('configureSession', () => {
+    it('uses the documented Live API WebSocket setup shape', async () => {
+      (connection as any).state = 'connected';
+      const sendSpy = vi.spyOn(connection as any, 'send');
+
+      const configurePromise = connection.configureSession();
+
+      expect(sendSpy).toHaveBeenCalledWith({
+        setup: {
+          model: 'models/gemini-3.1-flash-live-preview',
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: 'Puck',
+                },
+              },
+            },
+          },
+          systemInstruction: {
+            parts: [{ text: 'You are a helpful assistant.' }],
+          },
+          outputAudioTranscription: {},
+          inputAudioTranscription: {},
+          realtimeInputConfig: {
+            automaticActivityDetection: {
+              disabled: true,
+            },
+          },
+        },
+      });
+
+      connection.emit('session_configured');
+      await configurePromise;
+    });
+  });
+
   describe('sendText', () => {
     it('should not send text if not ready', () => {
       const sendSpy = vi.spyOn(connection as any, 'send');
@@ -238,9 +277,7 @@ describe('GoogleLiveConnection', () => {
       );
       (connection as any).handleMessage(
         JSON.stringify({
-          realtimeInput: {
-            mediaChunks: [{ mimeType: 'audio/pcm', data: audioData }],
-          },
+          realtimeInput: { audio: { mimeType: 'audio/pcm;rate=24000', data: audioData } },
         }),
       );
 
@@ -286,7 +323,8 @@ describe('GoogleLiveConnection', () => {
       expect(handler).toHaveBeenCalledWith('Model said this');
     });
 
-    it('should emit a completed transcript at the end of a turn', () => {
+    it('should emit a completed transcript at the end of a turn', async () => {
+      vi.useFakeTimers();
       const handler = vi.fn();
       connection.on('transcript_done', handler);
 
@@ -305,7 +343,29 @@ describe('GoogleLiveConnection', () => {
         }),
       );
 
+      await vi.advanceTimersByTimeAsync(250);
       expect(handler).toHaveBeenCalledWith('Model said this');
+    });
+
+    it('waits for transcription that arrives after turnComplete', async () => {
+      vi.useFakeTimers();
+      const transcript = vi.fn();
+      const audioDone = vi.fn();
+      connection.on('transcript_done', transcript);
+      connection.on('audio_done', audioDone);
+
+      (connection as any).handleMessage(JSON.stringify({ serverContent: { turnComplete: true } }));
+      await vi.advanceTimersByTimeAsync(100);
+      (connection as any).handleMessage(
+        JSON.stringify({ serverContent: { outputTranscription: { text: 'late text' } } }),
+      );
+      await vi.advanceTimersByTimeAsync(249);
+      expect(transcript).not.toHaveBeenCalled();
+      expect(audioDone).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(transcript).toHaveBeenCalledWith('late text');
+      expect(audioDone).toHaveBeenCalledTimes(1);
     });
 
     it('should emit input_transcript for input transcription', () => {
@@ -323,7 +383,8 @@ describe('GoogleLiveConnection', () => {
       expect(handler).toHaveBeenCalledWith('User said this');
     });
 
-    it('should emit audio_done on turnComplete', () => {
+    it('should emit audio_done on turnComplete', async () => {
+      vi.useFakeTimers();
       const audioDoneHandler = vi.fn();
       const speechStoppedHandler = vi.fn();
       connection.on('audio_done', audioDoneHandler);
@@ -337,11 +398,13 @@ describe('GoogleLiveConnection', () => {
         }),
       );
 
+      await vi.advanceTimersByTimeAsync(250);
       expect(audioDoneHandler).toHaveBeenCalledTimes(1);
       expect(speechStoppedHandler).toHaveBeenCalledTimes(1);
     });
 
-    it('should emit audio_done on generationComplete', () => {
+    it('waits for turnComplete instead of ending a turn at generationComplete', async () => {
+      vi.useFakeTimers();
       const handler = vi.fn();
       connection.on('audio_done', handler);
 
@@ -353,6 +416,17 @@ describe('GoogleLiveConnection', () => {
         }),
       );
 
+      expect(handler).not.toHaveBeenCalled();
+
+      (connection as any).handleMessage(
+        JSON.stringify({
+          serverContent: {
+            turnComplete: true,
+          },
+        }),
+      );
+
+      await vi.advanceTimersByTimeAsync(250);
       expect(handler).toHaveBeenCalledTimes(1);
     });
 
@@ -413,28 +487,52 @@ describe('GoogleLiveConnection', () => {
       );
     });
 
-    it('should handle realtimeInput media chunks', () => {
+    it('should handle echoed realtimeInput audio', () => {
       const handler = vi.fn();
       connection.on('audio_delta', handler);
 
       (connection as any).handleMessage(
         JSON.stringify({
           realtimeInput: {
-            mediaChunks: [
-              {
-                mimeType: 'audio/pcm',
-                data: 'chunk1data',
-              },
-              {
-                mimeType: 'audio/pcm',
-                data: 'chunk2data',
-              },
-            ],
+            audio: {
+              mimeType: 'audio/pcm;rate=24000',
+              data: 'chunkdata',
+            },
           },
         }),
       );
 
-      expect(handler).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('ready client messages', () => {
+    it('uses manual activity boundaries for routed audio and a kickoff for speak-first turns', () => {
+      const sendSpy = vi.spyOn(connection as any, 'send');
+      (connection as any).setReady();
+
+      connection.requestResponse();
+      connection.sendAudio({
+        data: 'base64audio',
+        timestamp: 0,
+        format: 'pcm16',
+        sampleRate: 16000,
+      });
+      connection.commitAudio();
+      connection.requestResponse();
+      connection.sendText('Hello');
+
+      expect(sendSpy.mock.calls.map(([message]) => message)).toEqual([
+        { realtimeInput: { text: 'Begin the conversation now.' } },
+        { realtimeInput: { activityStart: {} } },
+        {
+          realtimeInput: {
+            audio: { data: 'base64audio', mimeType: 'audio/pcm;rate=16000' },
+          },
+        },
+        { realtimeInput: { activityEnd: {} } },
+        { realtimeInput: { text: 'Hello' } },
+      ]);
     });
   });
 

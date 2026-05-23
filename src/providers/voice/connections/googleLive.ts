@@ -14,11 +14,13 @@ import { BaseVoiceConnection, waitForEvent } from './base';
 import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
 
 const GOOGLE_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws';
-const DEFAULT_MODEL = 'gemini-2.0-flash-exp';
-const DEFAULT_API_VERSION = 'v1alpha';
+const DEFAULT_MODEL = 'gemini-3.1-flash-live-preview';
+const DEFAULT_API_VERSION = 'v1beta';
 const DEFAULT_AUDIO_FORMAT: AudioFormat = 'pcm16';
-const DEFAULT_SAMPLE_RATE = 24000;
+const GOOGLE_OUTPUT_SAMPLE_RATE = 24000;
 const CONNECTION_TIMEOUT_MS = 15000;
+const INITIAL_RESPONSE_PROMPT = 'Begin the conversation now.';
+const TRANSCRIPT_SETTLE_DELAY_MS = 250;
 
 type GoogleServerContent = {
   modelTurn?: {
@@ -31,7 +33,7 @@ type GoogleServerContent = {
 };
 
 type GoogleRealtimeInput = {
-  mediaChunks?: Array<{ mimeType?: string; data?: string }>;
+  audio?: { mimeType?: string; data?: string };
 };
 
 /**
@@ -45,6 +47,9 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
   private apiVersion: string;
   private cumulativeAudioPositionMs = 0;
   private accumulatedTranscript = '';
+  private inputActivityActive = false;
+  private responseTriggeredByInput = false;
+  private turnCompletionTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -104,9 +109,9 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     // Build speech config if voice is specified
     const speechConfig = this.config.voice
       ? {
-          voice_config: {
-            prebuilt_voice_config: {
-              voice_name: this.config.voice,
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: this.config.voice,
             },
           },
         }
@@ -115,15 +120,29 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     const setupMessage = {
       setup: {
         model: `models/${this.model}`,
-        generation_config: {
-          response_modalities: ['audio'],
-          speech_config: speechConfig,
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          ...(speechConfig ? { speechConfig } : {}),
         },
-        ...(this.config.instructions ? { systemInstruction: this.config.instructions } : {}),
-        output_audio_transcription: { model: 'gemini-1.5-flash' },
-        input_audio_transcription: { model: 'gemini-1.5-flash' },
+        ...(this.config.instructions
+          ? {
+              systemInstruction: {
+                parts: [{ text: this.config.instructions }],
+              },
+            }
+          : {}),
+        outputAudioTranscription: {},
+        inputAudioTranscription: {},
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: true,
+          },
+        },
       },
     };
+
+    this.inputActivityActive = false;
+    this.responseTriggeredByInput = false;
 
     logger.debug('[GoogleLive] Configuring session:', {
       model: this.model,
@@ -147,22 +166,25 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    // Google Live uses realtimeInput.mediaChunks format
+    const inputSampleRate = chunk.sampleRate || GOOGLE_OUTPUT_SAMPLE_RATE;
+    if (!this.inputActivityActive) {
+      this.send({ realtimeInput: { activityStart: {} } });
+      this.inputActivityActive = true;
+    }
+
     this.send({
       realtimeInput: {
-        mediaChunks: [
-          {
-            mimeType: 'audio/pcm',
-            data: chunk.data,
-          },
-        ],
+        audio: {
+          mimeType: `audio/pcm;rate=${inputSampleRate}`,
+          data: chunk.data,
+        },
       },
     });
   }
 
   /**
    * Commit the audio buffer (signal end of input).
-   * Google Live handles turn completion differently - we send end_of_turn flag.
+   * End the manually bounded activity after the routed input audio completes.
    */
   commitAudio(): void {
     if (!this.isReady()) {
@@ -170,27 +192,34 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
       return;
     }
 
-    // Google Live uses client_content with turn_complete flag
-    this.send({
-      client_content: {
-        turn_complete: true,
-      },
-    });
+    if (!this.inputActivityActive) {
+      logger.debug('[GoogleLive] No active input audio to commit');
+      return;
+    }
+
+    this.send({ realtimeInput: { activityEnd: {} } });
+    this.inputActivityActive = false;
+    this.responseTriggeredByInput = true;
   }
 
   /**
    * Request a response from the API.
-   * Google Live automatically generates responses after turn completion.
+   * Google Live responds to activityEnd after routed audio. For an initial
+   * speak-first request there is no audio to close, so provide a text kickoff.
    */
   requestResponse(): void {
-    // Google Live automatically responds after turn_complete
-    // No explicit request needed, but we can send an empty turn to trigger
     if (!this.isReady()) {
       logger.warn('[GoogleLive] Cannot request response: not ready');
       return;
     }
 
-    logger.debug('[GoogleLive] Response will be generated after turn completion');
+    if (this.responseTriggeredByInput) {
+      this.responseTriggeredByInput = false;
+      logger.debug('[GoogleLive] Response triggered by completed audio activity');
+      return;
+    }
+
+    this.send({ realtimeInput: { text: INITIAL_RESPONSE_PROMPT } });
   }
 
   /**
@@ -221,14 +250,8 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     }
 
     this.send({
-      client_content: {
-        turns: [
-          {
-            role: 'user',
-            parts: [{ text }],
-          },
-        ],
-        turn_complete: true,
+      realtimeInput: {
+        text,
       },
     });
   }
@@ -263,7 +286,7 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
     try {
       msg = JSON.parse(msgString);
     } catch {
-      logger.warn('[GoogleLive] Failed to parse message:', { data: msgString.slice(0, 100) });
+      logger.warn('[GoogleLive] Failed to parse message:', { messageLength: msgString.length });
       return;
     }
 
@@ -335,29 +358,25 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
 
     if (serverContent.turnComplete) {
       logger.debug('[GoogleLive] Turn complete');
-      this.finishTranscript();
-      this.emit('audio_done');
-      this.emit('speech_stopped');
+      this.scheduleTurnCompletion();
     }
 
     if (serverContent.generationComplete) {
       logger.debug('[GoogleLive] Generation complete');
-      this.finishTranscript();
-      this.emit('audio_done');
     }
   }
 
   private handleRealtimeInput(realtimeInput?: GoogleRealtimeInput): void {
-    for (const chunk of realtimeInput?.mediaChunks || []) {
-      if (chunk.mimeType?.includes('audio') && chunk.data) {
-        this.emitAudioDelta(chunk.data);
-      }
+    const audio = realtimeInput?.audio;
+    if (audio?.mimeType?.includes('audio') && audio.data) {
+      this.emitAudioDelta(audio.data);
     }
   }
 
   private emitAudioDelta(data: string): void {
     const format = this.config.audioFormat || DEFAULT_AUDIO_FORMAT;
-    const sampleRate = this.config.sampleRate || DEFAULT_SAMPLE_RATE;
+    // Google Live outputs PCM audio at 24kHz regardless of accepted input rate.
+    const sampleRate = GOOGLE_OUTPUT_SAMPLE_RATE;
     const duration = calculateDuration(Buffer.from(data, 'base64').length, sampleRate, format);
 
     this.emit('audio_delta', {
@@ -373,6 +392,10 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
   private appendTranscript(delta: string): void {
     this.accumulatedTranscript += delta;
     this.emit('transcript_delta', delta);
+
+    if (this.turnCompletionTimer) {
+      this.scheduleTurnCompletion();
+    }
   }
 
   private finishTranscript(): void {
@@ -382,6 +405,30 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
 
     this.emit('transcript_done', this.accumulatedTranscript);
     this.accumulatedTranscript = '';
+  }
+
+  private scheduleTurnCompletion(): void {
+    this.clearTurnCompletionTimer();
+    this.turnCompletionTimer = setTimeout(() => {
+      this.turnCompletionTimer = null;
+      this.finishTranscript();
+      this.emit('audio_done');
+      this.emit('speech_stopped');
+    }, TRANSCRIPT_SETTLE_DELAY_MS);
+  }
+
+  private clearTurnCompletionTimer(): void {
+    if (this.turnCompletionTimer) {
+      clearTimeout(this.turnCompletionTimer);
+      this.turnCompletionTimer = null;
+    }
+  }
+
+  override disconnect(): void {
+    this.clearTurnCompletionTimer();
+    this.inputActivityActive = false;
+    this.responseTriggeredByInput = false;
+    super.disconnect();
   }
 
   /**
