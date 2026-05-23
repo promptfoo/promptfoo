@@ -2612,10 +2612,12 @@ async function filterCompletedResumeSteps(runEvalOptions: RunEvalOptions[], eval
 function adjustConcurrencyForSerialFeatures({
   concurrency,
   prompts,
+  providers,
   tests,
 }: {
   concurrency: number;
   prompts: CompletedPrompt[];
+  providers: ApiProvider[];
   tests: AtomicTestCase[];
 }) {
   const usesConversationVar = prompts.some(promptUsesConversationVariable);
@@ -2624,6 +2626,9 @@ function adjustConcurrencyForSerialFeatures({
   }
 
   const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
+  const usesPersistentBrowserSession = providers.some(
+    (provider) => provider.id() === 'browser-provider' && provider.config?.persistSession === true,
+  );
   if (usesConversationVar) {
     logger.info(
       `Setting concurrency to 1 because the ${chalk.cyan(CONVERSATION_VAR_NAME)} variable is used.`,
@@ -2632,6 +2637,10 @@ function adjustConcurrencyForSerialFeatures({
   }
   if (usesStoreOutputAs) {
     logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
+    return { concurrency: 1, usesConversationVar };
+  }
+  if (usesPersistentBrowserSession) {
+    logger.info(`Setting concurrency to 1 because browser persistSession is enabled.`);
     return { concurrency: 1, usesConversationVar };
   }
   return { concurrency, usesConversationVar };
@@ -4389,6 +4398,7 @@ class Evaluator {
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
       prompts,
+      providers: runEvalOptions.map((evalOption) => evalOption.provider),
       tests,
     });
     concurrency = concurrencySettings.concurrency;
