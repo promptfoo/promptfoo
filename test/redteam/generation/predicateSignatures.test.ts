@@ -236,6 +236,28 @@ describe('predicate signatures', () => {
     });
   });
 
+  it('summarizes empty or unsupported plugin feature vocabularies without division errors', () => {
+    expect(getPluginFeatureVocabulary('unknown-plugin')).toEqual([]);
+    expect(getPluginFeatureBands('unknown-plugin')).toEqual({});
+    expect(summarizePluginFeatureCoverage([])).toEqual({
+      coveredPluginIds: [],
+      coverageRate: 1,
+      pluginCount: 0,
+      uncoveredPluginIds: [],
+    });
+    expect(
+      summarizeObservedPluginFeatureCoverage('unknown-plugin', ['unclassified request']),
+    ).toEqual({
+      coverageRate: 0,
+      featureCount: 0,
+      observedFeatureCount: 0,
+      observedFeatureIds: [],
+      pluginId: 'unknown-plugin',
+      promptCount: 1,
+      promptsWithFeaturesCount: 0,
+    });
+  });
+
   it('summarizes observed feature coverage against a plugin vocabulary', () => {
     expect(getPluginFeatureVocabulary('prompt-extraction')).toHaveLength(9);
     expect(

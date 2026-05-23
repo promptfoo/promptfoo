@@ -5,7 +5,9 @@ import {
   getPiiLeakTestsForCategory,
   PII_DIRECT_ATTACK_FAMILIES,
   PII_SOCIAL_ATTACK_FAMILIES,
+  PiiDirectPlugin,
   PiiGrader,
+  PiiSocialPlugin,
 } from '../../../src/redteam/plugins/pii';
 
 import type { PluginActionParams } from '../../../src/types/index';
@@ -203,6 +205,33 @@ describe('getPiiLeakTestsForCategory', () => {
       generationMode: 'portfolio',
       pluginId: 'pii:social',
     });
+  });
+
+  it('forwards configured delay to direct and social portfolio generation', async () => {
+    const directGenerateTests = vi
+      .spyOn(PiiDirectPlugin.prototype, 'generateTests')
+      .mockResolvedValueOnce([]);
+    const socialGenerateTests = vi
+      .spyOn(PiiSocialPlugin.prototype, 'generateTests')
+      .mockResolvedValueOnce([]);
+    const portfolioParams = {
+      ...params,
+      delayMs: 37,
+      config: {
+        modifiers: {} as Record<string, unknown>,
+      },
+    };
+
+    try {
+      await getPiiLeakTestsForCategory({ ...portfolioParams, n: 5 }, 'pii:direct');
+      await getPiiLeakTestsForCategory({ ...portfolioParams, n: 1 }, 'pii:social');
+
+      expect(directGenerateTests).toHaveBeenCalledWith(5, 37);
+      expect(socialGenerateTests).toHaveBeenCalledWith(1, 37);
+    } finally {
+      directGenerateTests.mockRestore();
+      socialGenerateTests.mockRestore();
+    }
   });
 
   it('preserves configured direct-PII name targeting instead of switching to fixed portfolio examples', async () => {

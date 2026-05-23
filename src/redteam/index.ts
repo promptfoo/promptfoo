@@ -83,8 +83,13 @@ function trackGenerationTokenUsage(provider: ApiProvider, tokenUsage: TokenUsage
   trackedCallApi.label = provider.callApi.label;
 
   return new Proxy(provider, {
-    get(target, property, receiver) {
-      return property === 'callApi' ? trackedCallApi : Reflect.get(target, property, receiver);
+    get(target, property) {
+      if (property === 'callApi') {
+        return trackedCallApi;
+      }
+
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
     },
   });
 }

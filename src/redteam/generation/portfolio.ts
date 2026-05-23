@@ -4,6 +4,7 @@ import { type GeneratedPrompt, RedteamPluginBase } from '../plugins/base';
 import { getShortPluginId } from '../util';
 import {
   buildBalancedAttackPlan,
+  normalizePrompt,
   type SemanticBandSelectionConfig,
   selectCoverageAwareCandidates,
   selectSemanticBandAwareCandidates,
@@ -149,6 +150,19 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       const plannedCount = Math.max(1, family.count);
       const familyCandidates: AttackCandidate[] = [];
       const validFamilyCandidates: AttackCandidate[] = [];
+      const validFamilyPromptKeys = new Set<string>();
+      const appendValidFamilyCandidates = (generatedCandidates: readonly AttackCandidate[]) => {
+        for (const candidate of generatedCandidates) {
+          const promptKey = normalizePrompt(candidate.prompt);
+          if (
+            this.matchesRequiredPredicates(candidate, family) &&
+            !validFamilyPromptKeys.has(promptKey)
+          ) {
+            validFamilyPromptKeys.add(promptKey);
+            validFamilyCandidates.push(candidate);
+          }
+        }
+      };
 
       for (
         let attempt = 0;
@@ -166,11 +180,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'initial');
         familyCandidates.push(...generatedCandidates);
-        validFamilyCandidates.push(
-          ...generatedCandidates.filter((candidate) =>
-            this.matchesRequiredPredicates(candidate, family),
-          ),
-        );
+        appendValidFamilyCandidates(generatedCandidates);
       }
 
       for (
@@ -197,11 +207,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'repair');
         familyCandidates.push(...generatedCandidates);
-        validFamilyCandidates.push(
-          ...generatedCandidates.filter((candidate) =>
-            this.matchesRequiredPredicates(candidate, family),
-          ),
-        );
+        appendValidFamilyCandidates(generatedCandidates);
       }
 
       if (family.requiredPredicates && validFamilyCandidates.length < plannedCount) {

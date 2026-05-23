@@ -51,8 +51,8 @@ describe('diffActivePredicates', () => {
     expect(
       diffActivePredicates(['usesBooleanBypass', 'usesStackedQuery'], ['usesBooleanBypass']),
     ).toEqual({
-      currentPredicates: ['usesBooleanBypass', 'usesStackedQuery'],
-      legacyPredicates: ['usesBooleanBypass'],
+      expectedPredicates: ['usesBooleanBypass', 'usesStackedQuery'],
+      observedPredicates: ['usesBooleanBypass'],
       lostPredicates: ['usesStackedQuery'],
     });
   });
