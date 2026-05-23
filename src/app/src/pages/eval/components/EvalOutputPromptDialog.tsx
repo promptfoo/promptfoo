@@ -327,7 +327,8 @@ export default function EvalOutputPromptDialog({
   let parsedMessages: Message[] = [];
   try {
     const messagesValue = metadata?.messages;
-    parsedMessages = JSON.parse(typeof messagesValue === 'string' ? messagesValue : '[]');
+    const messages = typeof messagesValue === 'string' ? JSON.parse(messagesValue) : messagesValue;
+    parsedMessages = Array.isArray(messages) ? (messages as Message[]) : [];
   } catch {}
 
   const citationsData = metadata?.citations as Citation | Citation[] | undefined;

@@ -6,7 +6,7 @@ description: 'Use OpenAI Codex SDK for evals with thread management, structured 
 
 # OpenAI Codex SDK
 
-This provider makes OpenAI's Codex SDK available for agent evals in promptfoo. It can evaluate Codex's final response text, token usage, thread/session IDs, heuristic skill usage, and traced shell/MCP/search/file steps. It accepts plain text prompts and JSON-encoded Codex input arrays with `text` and `local_image` items, but it does not expose embeddings, moderation, image generation, or realtime APIs.
+This provider makes OpenAI's Codex SDK available for agent evals in promptfoo. It can evaluate Codex's final response text, the current-turn conversation shown in the eval UI, token usage, thread/session IDs, heuristic skill usage, and traced shell/MCP/search/file steps. It accepts plain text prompts and JSON-encoded Codex input arrays with `text` and `local_image` items, but it does not expose embeddings, moderation, image generation, or realtime APIs.
 
 The provider runs Codex with an explicit working directory, sandbox policy, approval policy, network/search settings, and a controlled CLI environment. The model output returned to promptfoo is the final Codex text response; if you request JSON schema output, `output` is still a string and your assertions should parse it with `is-json` or `JSON.parse(output)`.
 
@@ -28,6 +28,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Eval surface                       | Supported? | Notes                                                                                                                                                                                                                                                                                                                                                             |
 | ---------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                                                                                                        |
+| Prompt/assistant transcript        | Yes        | Successful rows include `metadata.messages`, which is rendered in the eval details **Messages** tab. With streaming enabled, emitted intermediate assistant messages are also included.                                                                                                                                                                           |
 | Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                                                                                                                 |
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                            |
 | Token usage and estimated cost     | Yes        | `tokenUsage` is returned when the SDK reports usage, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Cost is estimated only when `config.model` is known to promptfoo's pricing table. Codex's own instruction preamble and tool schemas are included in prompt tokens, so tiny prompts can still report high `input_tokens`. |
@@ -114,6 +115,31 @@ prompts:
 ```
 
 The provider creates an ephemeral thread for each eval test case.
+
+## Inspecting the Transcript and Trajectory
+
+Every successful Codex SDK row includes the current prompt and final assistant response in `metadata.messages`. Open a row in the web UI and select **Messages** to inspect that exchange.
+
+For emitted intermediate assistant messages, command/file/tool activity, and any emitted reasoning events, enable streaming and tracing:
+
+```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.5
+      enable_streaming: true
+      deep_tracing: true
+```
+
+`response.raw` includes Codex items and, when streaming is enabled, the accumulated `conversationMessages` and `reasoningTexts`. The **Traces** tab exposes the captured item spans when tracing is configured.
+
+Reasoning items are summaries/events emitted by Codex. They do not expose hidden model chain of thought, and they are intentionally kept in raw/tracing evidence instead of being displayed as assistant messages.
 
 ### With Custom Model
 

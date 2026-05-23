@@ -360,6 +360,10 @@ describe('OpenAICodexAppServerProvider', () => {
       itemCounts: { agentMessage: 1 },
       notificationCount: 5,
     });
+    expect(result.metadata?.messages).toEqual([
+      { role: 'user', content: 'Summarize this repo' },
+      { role: 'assistant', content: 'Final response' },
+    ]);
     expect(JSON.parse(result.raw as string)).toMatchObject({
       output: 'Final response',
       tokenUsage: {
@@ -4000,6 +4004,10 @@ describe('OpenAICodexAppServerProvider', () => {
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
+    expect(result.metadata?.messages).toEqual([
+      { role: 'user', content: 'Inspect raw evidence' },
+      { role: 'assistant', content: 'Done' },
+    ]);
   });
 
   it('counts notifications without retaining raw notification payloads by default', async () => {

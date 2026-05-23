@@ -155,6 +155,11 @@ type CodexAppServerUserInput =
       path: string;
     };
 
+type CodexConversationMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 type CodexAppServerThreadCleanup = 'unsubscribe' | 'archive' | 'none';
 type CodexAppServerUserInputPolicy = 'empty' | 'first-option' | Record<string, string | string[]>;
 
@@ -2733,7 +2738,13 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { notifications: this.sanitizeForMetadata(state.notifications) }
         : {}),
     };
-    const metadata = this.buildResponseMetadata(state, threadHandle, config, normalizedItems);
+    const metadata = this.buildResponseMetadata(
+      state,
+      threadHandle,
+      config,
+      output,
+      normalizedItems,
+    );
 
     return {
       output,
@@ -2766,6 +2777,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     state: CodexAppServerTurnState,
     threadHandle: ThreadHandle,
     config: CodexAppServerConfig,
+    output: string,
     normalizedItems: Record<string, unknown>[],
   ): ProviderResponse['metadata'] {
     const skillMetadata = this.buildSkillMetadata(
@@ -2773,6 +2785,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       this.getSkillRootPrefixes(config, state.appServerEnv),
     );
     return {
+      messages: this.buildConversationMessages(state, output),
       codexAppServer: {
         threadId: threadHandle.threadId,
         turnId: state.turnId,
@@ -2792,6 +2805,25 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
         : {}),
     };
+  }
+
+  private buildConversationMessages(
+    state: CodexAppServerTurnState,
+    output: string,
+  ): CodexConversationMessage[] {
+    const messages: CodexConversationMessage[] = [
+      { role: 'user', content: this.formatPromptInputForTrace(state.promptInput) },
+    ];
+    const assistantTexts = state.items
+      .filter((item) => item?.type === 'agentMessage' && typeof item.text === 'string')
+      .map((item) => item.text as string);
+
+    messages.push(...assistantTexts.map((content) => ({ role: 'assistant' as const, content })));
+    if (output && assistantTexts[assistantTexts.length - 1] !== output) {
+      messages.push({ role: 'assistant', content: output });
+    }
+
+    return messages;
   }
 
   private normalizeItemForMetadata(item: any): Record<string, unknown> {
