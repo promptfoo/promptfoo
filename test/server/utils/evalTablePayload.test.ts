@@ -137,6 +137,16 @@ describe('trimEvalTableForApi', () => {
               id: 'result-1',
               prompt: 'rendered prompt',
               audio: { data: 'short-audio', format: 'wav' },
+              metadata: {
+                redteamHistory: [
+                  { prompt: huge, output: huge },
+                  {
+                    prompt: huge,
+                    output: huge,
+                    outputAudio: { data: 'short-response-audio', format: 'wav' },
+                  },
+                ],
+              },
               video: { url: 'https://example.test/video.mp4', thumbnail: 'short-thumb' },
               images: [
                 { data: 'short-image', mimeType: 'image/png' },
@@ -154,6 +164,11 @@ describe('trimEvalTableForApi', () => {
     expect(cell.prompt).toBe('');
     expect(cell.detail?.omittedFields).toEqual(['prompt', 'response', 'testCase', 'metadata']);
     expect(cell.audio?.data).toBe('short-audio');
+    expect(cell.metadata?.redteamHistory).toEqual([
+      {
+        outputAudio: expect.objectContaining({ data: 'short-response-audio', format: 'wav' }),
+      },
+    ]);
     expect(cell.video?.url).toBe('https://example.test/video.mp4');
     expect(cell.video?.thumbnail).toBe('short-thumb');
     expect(cell.images?.map((image) => image.data)).toEqual(['short-image', 'blobref:image-1']);

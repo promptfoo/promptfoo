@@ -252,7 +252,7 @@ describe('DownloadMenu', () => {
       table: {
         head: {
           vars: ['prompt'],
-          prompts: [{ provider: 'provider1', label: 'label1' }],
+          prompts: [{ provider: 'provider1', raw: '[content omitted: 120000 characters]' }],
         },
         body: [
           {
@@ -266,6 +266,9 @@ describe('DownloadMenu', () => {
       },
       config: mockConfig,
       evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({
+      config: { ...mockConfig, prompts: 'full prompt template' },
     });
     fetchEvalResultDetailMock.mockResolvedValueOnce({
       testCase: { vars: { prompt: 'full prompt from detail' } },
@@ -289,7 +292,7 @@ describe('DownloadMenu', () => {
         rejected: ['full output from detail'],
         vars: { prompt: 'full prompt from detail' },
         providers: ['provider1'],
-        prompts: ['label1'],
+        prompts: ['full prompt template'],
       },
     ]);
   });
@@ -348,23 +351,28 @@ describe('DownloadMenu', () => {
     );
   });
 
-  it('skips detail fetches during DPO export when lean table rows are intact', async () => {
+  it('hydrates typed DPO vars even when displayed output text is intact', async () => {
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
         head: {
-          vars: ['prompt'],
+          vars: ['count', 'enabled'],
           prompts: [{ provider: 'provider1', label: 'label1' }],
         },
         body: [
           {
-            test: { vars: { prompt: 'lean prompt' } },
-            vars: ['lean prompt'],
+            test: {},
+            vars: ['7', 'true'],
             outputs: [{ id: 'output-1', pass: false, text: 'full lean output' }],
           },
         ],
       },
       config: mockConfig,
       evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      testCase: { vars: { count: 7, enabled: true } },
+      text: 'detail output that is not needed for intact text',
+      metadata: {},
     });
 
     renderDownloadDialog();
@@ -373,7 +381,7 @@ describe('DownloadMenu', () => {
     await waitFor(() => {
       expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), `${mockEvalId}-dpo.json`);
     });
-    expect(fetchEvalResultDetailMock).not.toHaveBeenCalled();
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'output-1');
 
     const blob = downloadBlobMock.mock.calls[0][0] as Blob;
     const exported = JSON.parse(await blob.text());
@@ -381,7 +389,7 @@ describe('DownloadMenu', () => {
       {
         chosen: [],
         rejected: ['full lean output'],
-        vars: { prompt: 'lean prompt' },
+        vars: { count: 7, enabled: true },
         providers: ['provider1'],
         prompts: ['label1'],
       },

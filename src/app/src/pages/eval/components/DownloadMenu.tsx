@@ -32,6 +32,23 @@ function hasPlaceholder(value: unknown): boolean {
   return false;
 }
 
+function getConfigPromptDisplayValue(prompt: unknown): string | undefined {
+  if (typeof prompt === 'string') {
+    return prompt;
+  }
+  if (!prompt || typeof prompt !== 'object' || Array.isArray(prompt)) {
+    return undefined;
+  }
+
+  const value = prompt as Record<string, unknown>;
+  for (const field of ['label', 'display', 'raw']) {
+    if (typeof value[field] === 'string') {
+      return value[field];
+    }
+  }
+  return undefined;
+}
+
 type AdvancedExportName = 'failed-tests' | 'dpo' | 'human-eval' | 'burp';
 
 async function mapWithConcurrency<T, U>(
@@ -285,10 +302,16 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const getRowVars = (
     row: EvaluateTableRow,
     detail?: EvalResultDetailResponse | null,
+    fullConfig?: Partial<UnifiedConfig>,
   ): Record<string, unknown> => {
     const detailVars = detail?.testCase?.vars;
     if (detailVars && typeof detailVars === 'object' && !Array.isArray(detailVars)) {
       return detailVars as Record<string, unknown>;
+    }
+
+    const fullConfigVars = fullConfig ? getFullConfigTest(fullConfig, row)?.vars : undefined;
+    if (fullConfigVars && typeof fullConfigVars === 'object' && !Array.isArray(fullConfigVars)) {
+      return fullConfigVars as Record<string, unknown>;
     }
 
     if (row.test?.vars) {
@@ -415,19 +438,33 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     await runAdvancedExport('dpo', async () => {
       setExportProgressTotal(table.body.reduce((total, row) => total + row.outputs.length, 0));
+      const { config: fullConfig } = await fetchEvalConfig(evalId);
+      const fullConfigPrompts = Array.isArray(fullConfig.prompts)
+        ? fullConfig.prompts
+        : typeof fullConfig.prompts === 'string'
+          ? [fullConfig.prompts]
+          : fullConfig.prompts
+            ? Object.values(fullConfig.prompts)
+            : [];
+      const prompts = table.head.prompts.map((prompt, idx) => {
+        const leanValue = prompt.label || prompt.display || prompt.raw;
+        return hasPlaceholder(leanValue)
+          ? (getConfigPromptDisplayValue(fullConfigPrompts[idx]) ?? leanValue)
+          : leanValue;
+      });
 
       const formattedData = await mapWithConcurrency(
         table.body,
         DETAIL_EXPORT_CONCURRENCY,
         async (row) => {
-          // Only hit the detail endpoint for cells where the lean payload was
-          // trimmed (oversized text or var value) — otherwise the table data
-          // is already the full value.
-          const rowNeedsDetail = hasPlaceholder(row.vars);
+          // Row vars in the table are display strings. Hydrate one result per
+          // row to preserve typed values, then hydrate additional cells only
+          // where their exported output text was trimmed.
+          const rowDetailIndex = row.outputs.findIndex(Boolean);
           const details = await Promise.all(
-            row.outputs.map(async (output) => {
+            row.outputs.map(async (output, idx) => {
               try {
-                if (!rowNeedsDetail && !hasPlaceholder(output?.text)) {
+                if (idx !== rowDetailIndex && !hasPlaceholder(output?.text)) {
                   return null;
                 }
                 return await getOutputDetail(output);
@@ -437,8 +474,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             }),
           );
           const getOutputText = (output: EvaluateTableOutput, idx: number) =>
-            details[idx]?.text ?? output.text ?? '';
-          const firstDetail = details.find(Boolean);
+            hasPlaceholder(output.text) ? (details[idx]?.text ?? output.text ?? '') : output.text;
+          const rowDetail = rowDetailIndex >= 0 ? details[rowDetailIndex] : null;
 
           return {
             chosen: row.outputs
@@ -447,11 +484,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             rejected: row.outputs
               .map((output, idx) => (output && !output.pass ? getOutputText(output, idx) : null))
               .filter((text): text is string => text != null),
-            vars: getRowVars(row, firstDetail),
+            vars: getRowVars(row, rowDetail, fullConfig),
             providers: table.head.prompts.map((prompt) => prompt.provider),
-            prompts: table.head.prompts.map(
-              (prompt) => prompt.label || prompt.display || prompt.raw,
-            ),
+            prompts,
           };
         },
       );

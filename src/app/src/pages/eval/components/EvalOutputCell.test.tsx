@@ -316,6 +316,7 @@ describe('EvalOutputCell', () => {
         expect.any(AbortSignal),
       );
     });
+    expect(fetchEvalResultDetail).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
       'data-prompt',
       'Hydrated hash prompt',
@@ -373,8 +374,7 @@ describe('EvalOutputCell', () => {
     ]);
   });
 
-  it('keeps stripped prompt details user-driven when inline prompts are shown', async () => {
-    const user = userEvent.setup();
+  it('hydrates stripped prompt detail when inline prompts are shown', async () => {
     vi.mocked(fetchEvalResultDetail).mockResolvedValue({
       evalId: 'eval-1',
       resultId: 'test-id',
@@ -399,11 +399,6 @@ describe('EvalOutputCell', () => {
       />,
     );
 
-    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
-    expect(screen.queryByText('Full prompt from detail')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
-
     await waitFor(() => {
       expect(fetchEvalResultDetail).toHaveBeenCalledWith(
         'eval-1',
@@ -411,10 +406,8 @@ describe('EvalOutputCell', () => {
         expect.any(AbortSignal),
       );
     });
-    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
-      'data-prompt',
-      'Full prompt from detail',
-    );
+    expect(await screen.findByText('Full prompt from detail')).toBeInTheDocument();
+    expect(screen.queryByTestId('dialog-component')).not.toBeInTheDocument();
   });
 
   it('does not auto-load details when the table already includes a prompt', () => {

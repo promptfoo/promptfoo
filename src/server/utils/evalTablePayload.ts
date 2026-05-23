@@ -135,6 +135,20 @@ function trimMetadataForTable(
 
   const leanMetadata: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(metadata)) {
+    if (key === 'redteamHistory' || key === 'redteamTreeHistory') {
+      if (Array.isArray(value)) {
+        const lastTurn = value[value.length - 1];
+        const outputAudio =
+          lastTurn && typeof lastTurn === 'object'
+            ? (lastTurn as { outputAudio?: NonNullable<ProviderResponse['audio']> }).outputAudio
+            : undefined;
+        const audio = trimAudioForTable(outputAudio, maxStringLength);
+        if (audio.value) {
+          leanMetadata[key] = [{ outputAudio: audio.value }];
+        }
+      }
+      continue;
+    }
     if (DETAIL_ONLY_METADATA_KEYS.has(key)) {
       continue;
     }
