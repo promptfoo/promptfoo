@@ -236,7 +236,8 @@ describe('predicate signatures', () => {
     });
   });
 
-  it('summarizes empty or unsupported plugin feature vocabularies without division errors', () => {
+  it('returns empty coverage for plugins without semantic feature instrumentation', () => {
+    expect(extractPluginFeatures('unknown-plugin', 'unclassified request')).toEqual([]);
     expect(getPluginFeatureVocabulary('unknown-plugin')).toEqual([]);
     expect(getPluginFeatureBands('unknown-plugin')).toEqual({});
     expect(summarizePluginFeatureCoverage([])).toEqual({
