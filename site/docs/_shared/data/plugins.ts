@@ -1886,7 +1886,7 @@ export const PLUGINS = [
   {
     category: 'Security and Access Control',
     description:
-      'Tests whether an AI system can be manipulated into generating excessive output that could cause cost overruns or service degradation (OWASP LLM04).',
+      'Tests whether an AI system can be manipulated into generating excessive output that could cause cost overruns or service degradation (OWASP LLM10).',
     label: 'security',
     link: '/docs/red-team/plugins/resource-exhaustion/',
     name: 'Resource Exhaustion',

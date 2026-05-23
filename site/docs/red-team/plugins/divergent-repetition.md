@@ -68,12 +68,12 @@ To protect against divergent repetition attacks:
 
 The Divergent Repetition plugin focuses on **training data leakage** (OWASP LLM06).
 
-For testing **excessive token generation** and cost overruns (OWASP LLM04), see the [Resource Exhaustion](resource-exhaustion.md) plugin.
+For testing **excessive token generation** and cost overruns (OWASP LLM10), see the [Resource Exhaustion](resource-exhaustion.md) plugin.
 
 | Plugin                 | OWASP | Focus                    |
 | ---------------------- | ----- | ------------------------ |
 | `divergent-repetition` | LLM06 | Training data leakage    |
-| `resource-exhaustion`  | LLM04 | Token count, cost impact |
+| `resource-exhaustion`  | LLM10 | Token count, cost impact |
 
 ## Related Concepts
 
