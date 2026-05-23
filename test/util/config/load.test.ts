@@ -1182,6 +1182,39 @@ describe('combineConfigs', () => {
     // When no defaultTest is provided, combineConfigs returns undefined
     expect(result.defaultTest).toBeUndefined();
   });
+
+  it('merges defaultColumnVisibility from multiple configs with later settings overriding earlier ones', async () => {
+    const config1 = {
+      prompts: ['prompt1'],
+      providers: ['provider1'],
+      defaultColumnVisibility: {
+        variables: 'hidden',
+        prompts: 'visible',
+        hideColumns: ['context'],
+      },
+    };
+    const config2 = {
+      prompts: ['prompt2'],
+      providers: ['provider2'],
+      defaultColumnVisibility: {
+        variables: 'visible',
+        showColumns: ['question'],
+      },
+    };
+
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(config1))
+      .mockReturnValueOnce(JSON.stringify(config2));
+
+    const result = await combineConfigs(['config1.json', 'config2.json']);
+
+    expect(result.defaultColumnVisibility).toEqual({
+      variables: 'visible',
+      prompts: 'visible',
+      hideColumns: ['context'],
+      showColumns: ['question'],
+    });
+  });
 });
 
 describe('dereferenceConfig', () => {

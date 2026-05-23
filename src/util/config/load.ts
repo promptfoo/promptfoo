@@ -573,6 +573,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts.push(...Array.from(seenPrompts));
   }
 
+  const defaultColumnVisibility = configs.reduce<UnifiedConfig['defaultColumnVisibility']>(
+    (prev, curr) =>
+      curr.defaultColumnVisibility === undefined
+        ? prev
+        : { ...(prev ?? {}), ...curr.defaultColumnVisibility },
+    undefined,
+  );
+
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -638,8 +646,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       return sharingConfig ? sharingConfig.sharing : undefined;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
-    defaultColumnVisibility: configs.find((config) => config.defaultColumnVisibility)
-      ?.defaultColumnVisibility,
+    defaultColumnVisibility,
   };
 
   return combinedConfig;
