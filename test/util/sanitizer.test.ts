@@ -863,6 +863,24 @@ describe('sanitizeObject', () => {
       expect(result.expires_in).toBe(3600);
     });
 
+    it('should sanitize OAuth device authorization credentials in logged JSON responses', () => {
+      const deviceResponse = JSON.stringify({
+        device_code: 'device-code-value',
+        user_code: 'ABCD-EFGH',
+        verification_uri: 'https://example.com/device',
+        verification_uri_complete: 'https://example.com/device?code=ABCD-EFGH',
+        expires_in: 300,
+      });
+
+      const result = JSON.parse(sanitizeObject(deviceResponse));
+
+      expect(result.device_code).toBe('[REDACTED]');
+      expect(result.user_code).toBe('[REDACTED]');
+      expect(result.verification_uri_complete).toBe('[REDACTED]');
+      expect(result.verification_uri).toBe('https://example.com/device');
+      expect(result.expires_in).toBe(300);
+    });
+
     it('should sanitize AWS credentials', () => {
       const awsConfig = {
         region: 'us-east-1',

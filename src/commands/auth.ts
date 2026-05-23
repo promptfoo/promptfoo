@@ -52,6 +52,8 @@ type DeviceTokenResponse = DeviceTokenSuccessResponse | DeviceTokenErrorResponse
 const DEVICE_CLIENT_ID = 'promptfoo-cli';
 const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getRequestTimeoutMs() ?? 300_000;
+const DEFAULT_DEVICE_POLL_INTERVAL_SECONDS = 5;
+const DEVICE_POLL_SLOW_DOWN_SECONDS = 5;
 
 function getOrganizationTeams(
   teams: UserTeam[],
@@ -304,7 +306,29 @@ async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
     throw new Error(`Failed to request device code: ${error || response.statusText}`);
   }
 
-  return response.json();
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Failed to request device code: invalid JSON response from server');
+  }
+
+  if (
+    !data ||
+    typeof data !== 'object' ||
+    typeof (data as DeviceCodeResponse).device_code !== 'string' ||
+    typeof (data as DeviceCodeResponse).user_code !== 'string' ||
+    typeof (data as DeviceCodeResponse).verification_uri !== 'string' ||
+    typeof (data as DeviceCodeResponse).verification_uri_complete !== 'string' ||
+    !Number.isFinite((data as DeviceCodeResponse).expires_in) ||
+    (data as DeviceCodeResponse).expires_in <= 0 ||
+    ((data as DeviceCodeResponse).interval !== undefined &&
+      !Number.isFinite((data as DeviceCodeResponse).interval))
+  ) {
+    throw new Error('Failed to request device code: invalid response from server');
+  }
+
+  return data as DeviceCodeResponse;
 }
 
 async function pollForDeviceToken(
@@ -314,10 +338,19 @@ async function pollForDeviceToken(
   expiresInSeconds: number,
 ): Promise<DeviceTokenSuccessResponse> {
   const expiresAtMs = Date.now() + expiresInSeconds * 1000;
-  let pollIntervalMs = (intervalSeconds ?? 5) * 1000;
+  let pollIntervalMs =
+    Math.max(
+      intervalSeconds ?? DEFAULT_DEVICE_POLL_INTERVAL_SECONDS,
+      DEFAULT_DEVICE_POLL_INTERVAL_SECONDS,
+    ) * 1000;
 
   while (Date.now() < expiresAtMs) {
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    const remainingMs = expiresAtMs - Date.now();
+    await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)));
+
+    if (Date.now() >= expiresAtMs) {
+      break;
+    }
 
     const response = await fetchWithTimeout(
       `${apiHost}/api/v1/auth/device/token`,
@@ -333,31 +366,46 @@ async function pollForDeviceToken(
       DEVICE_AUTH_REQUEST_TIMEOUT_MS,
     );
 
-    const data = (await response.json()) as DeviceTokenResponse;
+    let rawData: unknown;
+    try {
+      rawData = await response.json();
+    } catch {
+      throw new Error(
+        `Device authorization failed: invalid JSON response from server (${response.status} ${response.statusText})`,
+      );
+    }
 
-    if ('access_token' in data) {
+    if (!rawData || typeof rawData !== 'object') {
+      throw new Error(
+        `Device authorization failed: invalid response from server (${response.status} ${response.statusText})`,
+      );
+    }
+
+    const data = rawData as DeviceTokenResponse;
+
+    if (response.ok && 'access_token' in data && typeof data.access_token === 'string') {
       return data;
     }
 
-    if (data.error === 'authorization_pending') {
+    if ('error' in data && data.error === 'authorization_pending') {
       continue;
     }
 
-    if (data.error === 'slow_down') {
-      pollIntervalMs += 5000;
+    if ('error' in data && data.error === 'slow_down') {
+      pollIntervalMs += DEVICE_POLL_SLOW_DOWN_SECONDS * 1000;
       continue;
     }
 
-    if (data.error === 'expired_token') {
+    if ('error' in data && data.error === 'expired_token') {
       throw new Error('Device code expired. Please try again.');
     }
 
-    if (data.error === 'access_denied') {
+    if ('error' in data && data.error === 'access_denied') {
       throw new Error('Authorization was denied.');
     }
 
     throw new Error(
-      data.error_description ||
+      ('error_description' in data && data.error_description) ||
         `Device authorization failed: ${response.status} ${response.statusText}`,
     );
   }
@@ -367,29 +415,54 @@ async function pollForDeviceToken(
 
 async function openDeviceVerificationUrl(url: string): Promise<void> {
   try {
-    logger.info(`Opening ${url} in your browser...`);
+    logger.info('Opening device authorization page in your browser...');
     await opener(url);
   } catch (error) {
     logger.debug(`Failed to open browser automatically: ${String(error)}`);
   }
 }
 
+function displayDeviceVerificationDetails(deviceCode: DeviceCodeResponse): void {
+  // Device codes are short-lived credentials: display them to the user without persisting them in run logs.
+  process.stdout.write(
+    [
+      '',
+      chalk.bold('To complete login, visit:'),
+      chalk.cyan.bold(`  ${deviceCode.verification_uri_complete}`),
+      '',
+      `Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`,
+      chalk.yellow.bold(`  ${deviceCode.user_code}`),
+      '',
+    ].join('\n') + '\n',
+  );
+}
+
+function normalizeApiHost(value: string): string {
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error('Host must be an HTTP or HTTPS URL');
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error('Host URL must not include credentials, query parameters, or a fragment');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
+
 function validateHttpUrl(value: string): true | string {
   try {
-    const url = new URL(value);
-    if (!['http:', 'https:'].includes(url.protocol)) {
-      return 'Please enter an HTTP or HTTPS URL';
-    }
+    normalizeApiHost(value);
     return true;
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'Invalid URL') {
+      return error.message;
+    }
     return 'Please enter a valid URL (e.g., https://promptfoo.yourcompany.com)';
   }
 }
 
 async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<string> {
   if (cmdObj.host) {
-    const url = new URL(cmdObj.host);
-    return url.origin;
+    return normalizeApiHost(cmdObj.host);
   }
 
   const instanceType = await select({
@@ -417,7 +490,7 @@ async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<st
     validate: validateHttpUrl,
   });
 
-  return new URL(enterpriseUrl).origin;
+  return normalizeApiHost(enterpriseUrl);
 }
 
 async function loginWithDeviceCode(cmdObj: LoginCommandOptions): Promise<void> {
@@ -444,13 +517,7 @@ async function loginWithDeviceCode(cmdObj: LoginCommandOptions): Promise<void> {
     throw error;
   }
 
-  logger.info('');
-  logger.info(chalk.bold('To complete login, visit:'));
-  logger.info(chalk.cyan.bold(`  ${deviceCode.verification_uri_complete}`));
-  logger.info('');
-  logger.info(`Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`);
-  logger.info(chalk.yellow.bold(`  ${deviceCode.user_code}`));
-  logger.info('');
+  displayDeviceVerificationDetails(deviceCode);
 
   await openDeviceVerificationUrl(deviceCode.verification_uri_complete);
 
@@ -490,10 +557,9 @@ export function authCommand(program: Command) {
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
     .action(async (cmdObj: LoginCommandOptions) => {
-      const apiHost = cmdObj.host || cloudConfig.getApiHost();
-
       try {
         if (cmdObj.apiKey) {
+          const apiHost = cmdObj.host ? normalizeApiHost(cmdObj.host) : cloudConfig.getApiHost();
           await loginWithApiKey(cmdObj, apiHost);
           return;
         }
