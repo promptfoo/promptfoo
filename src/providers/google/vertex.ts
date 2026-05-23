@@ -93,9 +93,11 @@ function getVertexApiHost(
   );
 }
 
-function getVertexBodyCacheKey(prefix: string, body: unknown): string {
+function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): string {
   const serialized = typeof body === 'string' ? body : JSON.stringify(body);
   return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
+    .update(apiHost)
+    .update('\0')
     .update(serialized ?? String(body))
     .digest('hex')}`;
 }
@@ -329,9 +331,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const showThinking = this.config.showThinking ?? isThinkingEnabled;
 
     const cache = await getCache();
+    const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(
       `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
       body,
+      apiHost,
     );
 
     let cachedResponse;
@@ -355,7 +359,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
-      const url = `https://${this.getApiHost()}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
+      const url = `https://${apiHost}/v1/projects/${projectId}/locations/${this.getRegion()}/publishers/anthropic/models/${this.modelName}:rawPredict`;
 
       const res = await client.request({
         url,
@@ -539,7 +543,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body);
+    const apiHost = this.getApiHost();
+    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body, apiHost);
 
     let response;
     let cachedResponse;
@@ -570,7 +575,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         // Check if we should use express mode (API key without OAuth)
         if (this.isExpressMode()) {
           // Express mode: use simplified endpoint with API key in header
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+          const url = `https://${apiHost}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
           const res = await fetchWithProxy(url, {
             method: 'POST',
@@ -592,7 +597,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           // Standard mode: use OAuth and full endpoint
           const client = await this.getClientWithCredentials();
           const projectId = await this.getProjectId();
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+          const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
           const res = await client.request({
@@ -878,7 +883,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     };
 
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body);
+    const apiHost = this.getApiHost();
+    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body, apiHost);
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -901,7 +907,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
-      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+      const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
       const res = await client.request({
@@ -1008,7 +1014,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
     };
 
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body);
+    const apiHost = `${this.getRegion()}-aiplatform.googleapis.com`;
+    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,
       region: this.getRegion(),
@@ -1058,7 +1065,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
       // Llama models use a different endpoint format
-      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
+      const url = `https://${apiHost}/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
       const res = await client.request({
         url,

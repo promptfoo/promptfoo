@@ -706,6 +706,41 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
   });
 
+  it('should not reuse cached responses across effective API hosts', async () => {
+    const cachedResponses = new Map<string, string>();
+    mockCacheGet.mockImplementation(async (key: string) => cachedResponses.get(key) ?? null);
+    mockCacheSet.mockImplementation(async (key: string, value: string) => {
+      cachedResponses.set(key, value);
+    });
+
+    const mockRequest = mockVertexRequest({
+      candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+      usageMetadata: {
+        totalTokenCount: 10,
+        promptTokenCount: 5,
+        candidatesTokenCount: 5,
+      },
+    });
+    const publicProvider = new VertexChatProvider('gemini-pro', {
+      config: { region: 'global' },
+    });
+    const proxyProvider = new VertexChatProvider('gemini-pro', {
+      config: { region: 'global' },
+      env: { VERTEX_API_HOST: 'vertex-proxy.example.test' },
+    });
+
+    await publicProvider.callGeminiApi('same prompt');
+    await proxyProvider.callGeminiApi('same prompt');
+
+    const [publicCacheKey, proxyCacheKey] = mockCacheGet.mock.calls.map(([key]) => key as string);
+    expect(publicCacheKey).not.toBe(proxyCacheKey);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+    expect(mockRequest.mock.calls.map(([request]) => request.url)).toEqual([
+      expect.stringContaining('https://aiplatform.googleapis.com/'),
+      expect.stringContaining('https://vertex-proxy.example.test/'),
+    ]);
+  });
+
   it('should handle function tool callbacks correctly', async () => {
     const mockCachedResponse = {
       cached: true,
