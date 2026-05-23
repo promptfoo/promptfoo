@@ -76,4 +76,33 @@ describe('ProductModal', () => {
     await userEvent.setup().click(button);
     expect(addToCart).toHaveBeenCalledWith('var-1', 1);
   });
+
+  it('selects a purchasable variant when the first variant is unavailable', async () => {
+    const addToCart = vi.fn().mockResolvedValue(undefined);
+    renderModal(
+      {
+        ...mockProduct,
+        variants: [
+          {
+            ...mockProduct.variants[0],
+            stock: { type: 'LIMITED', inStock: 0 },
+          },
+          {
+            ...mockProduct.variants[0],
+            id: 'var-2',
+            name: 'Available option',
+            sku: 'TEST-002',
+            stock: { type: 'LIMITED', inStock: 2 },
+          },
+        ],
+      },
+      addToCart,
+    );
+
+    const button = await screen.findByRole('button', { name: 'Add to Cart' });
+    expect(button).toBeEnabled();
+
+    await userEvent.setup().click(button);
+    expect(addToCart).toHaveBeenCalledWith('var-2', 1);
+  });
 });

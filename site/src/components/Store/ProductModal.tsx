@@ -42,7 +42,11 @@ export function ProductModal() {
   useEffect(() => {
     if (selectedProduct) {
       setCurrentImageIndex(0);
-      setSelectedVariantId(selectedProduct.variants[0]?.id || '');
+      const firstPurchasableVariant =
+        selectedProduct.state.type === 'AVAILABLE'
+          ? selectedProduct.variants.find((variant) => isInStock(variant.stock))
+          : undefined;
+      setSelectedVariantId((firstPurchasableVariant ?? selectedProduct.variants[0])?.id || '');
     }
   }, [selectedProduct]);
 
