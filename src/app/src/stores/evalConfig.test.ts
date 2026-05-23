@@ -3,6 +3,7 @@ import { DEFAULT_CONFIG, useStore } from './evalConfig';
 
 describe('evalConfig store', () => {
   beforeEach(() => {
+    localStorage.clear();
     // Reset the store state before each test
     useStore.getState().reset();
   });
@@ -55,6 +56,149 @@ describe('evalConfig store', () => {
 
       const { config } = useStore.getState();
       expect(config).toEqual(DEFAULT_CONFIG);
+    });
+
+    it('does not persist sensitive environment values used for the current evaluation', () => {
+      useStore.getState().updateConfig({
+        description: 'Session config',
+        env: {
+          OPENAI_API_KEY: 'session-only-key',
+          OPENAI_API_HOST: 'https://api.example.com',
+          AWS_BEDROCK_REGION: 'us-east-1',
+        },
+      });
+
+      expect(useStore.getState().config.env).toEqual({
+        OPENAI_API_KEY: 'session-only-key',
+        OPENAI_API_HOST: 'https://api.example.com',
+        AWS_BEDROCK_REGION: 'us-east-1',
+      });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.description).toBe('Session config');
+      // Sensitive keys (API keys/secrets/tokens) are stripped; non-sensitive
+      // configuration values like hostnames and region names are preserved.
+      expect(persistedState.state.config.env).toEqual({
+        OPENAI_API_HOST: 'https://api.example.com',
+        AWS_BEDROCK_REGION: 'us-east-1',
+      });
+    });
+
+    it('does not persist inline provider API keys used for the current evaluation', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'openai:gpt-4o',
+            config: {
+              apiKey: 'inline-session-key',
+              headers: { Authorization: 'Bearer temporary-token', 'x-request-id': 'visible-id' },
+              temperature: 0.2,
+            },
+          },
+        ],
+      });
+
+      const currentProviders = useStore.getState().config.providers;
+      expect(Array.isArray(currentProviders)).toBe(true);
+      if (!Array.isArray(currentProviders)) {
+        throw new Error('Expected providers to be stored as an array');
+      }
+      expect((currentProviders[0] as { config: { apiKey?: string } }).config.apiKey).toBe(
+        'inline-session-key',
+      );
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        headers: { 'x-request-id': 'visible-id' },
+        temperature: 0.2,
+      });
+    });
+
+    it('removes sensitive environment values from previously persisted browser state on rehydrate', async () => {
+      localStorage.setItem(
+        'promptfoo',
+        JSON.stringify({
+          state: {
+            config: {
+              description: 'Previously saved config',
+              env: {
+                OPENAI_API_KEY: 'old-persisted-key',
+                OPENAI_API_HOST: 'https://api.example.com',
+              },
+              providers: [
+                {
+                  id: 'openai:gpt-4o',
+                  config: {
+                    apiKey: 'old-inline-key',
+                    headers: { Authorization: 'Bearer old-token' },
+                    temperature: 0.4,
+                  },
+                },
+              ],
+            },
+          },
+          version: 0,
+        }),
+      );
+
+      await useStore.persist.rehydrate();
+
+      expect(useStore.getState().config.description).toBe('Previously saved config');
+      expect(useStore.getState().config.env).toEqual({
+        OPENAI_API_HOST: 'https://api.example.com',
+      });
+      const rehydratedProviders = useStore.getState().config.providers;
+      expect(Array.isArray(rehydratedProviders)).toBe(true);
+      if (!Array.isArray(rehydratedProviders)) {
+        throw new Error('Expected providers to rehydrate as an array');
+      }
+      expect((rehydratedProviders[0] as { config: Record<string, unknown> }).config).toEqual({
+        headers: {},
+        temperature: 0.4,
+      });
+    });
+
+    it('strips credentials regardless of casing convention', () => {
+      useStore.getState().updateConfig({
+        providers: [
+          {
+            id: 'http',
+            config: {
+              bearerToken: 'a',
+              access_token: 'b',
+              refreshToken: 'c',
+              privateKey: 'd',
+              pfxPassword: 'e',
+              keystorePassphrase: 'f',
+              'x-api-key': 'g',
+              signature: 'h',
+              cookie: 'i',
+              endpoint: 'https://example.com',
+              timeoutMs: 5000,
+            } as any,
+          },
+        ],
+        env: {
+          BEARER_TOKEN: 'a',
+          ACCESS_TOKEN: 'b',
+          REFRESH_TOKEN: 'c',
+          AWS_SECRET_ACCESS_KEY: 'd',
+          GITHUB_TOKEN: 'e',
+          DATABASE_PASSWORD: 'f',
+          API_BASE_URL: 'https://api.example.com',
+          MAX_RETRIES: '3',
+        } as any,
+      });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        endpoint: 'https://example.com',
+        timeoutMs: 5000,
+      });
+      expect(persistedState.state.config.env).toEqual({
+        API_BASE_URL: 'https://api.example.com',
+        MAX_RETRIES: '3',
+      });
     });
   });
 
