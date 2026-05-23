@@ -51,7 +51,10 @@ const mockApp = {
   url: 'https://app.example.com',
 };
 
-vi.mock('../../src/envars');
+vi.mock('../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/envars')>()),
+  isNonInteractive: vi.fn(),
+}));
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud');
 vi.mock('../../src/logger');
