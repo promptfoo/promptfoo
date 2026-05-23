@@ -35,14 +35,27 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
 // acronyms that lose their casing boundary on normalization (SSHKey,
 // IDToken, JWTToken, XAPIKey). The trailing `s?` matches plural names
 // (secrets, passwords, accessTokens, cookies). Used for both provider
-// config fields and env-var keys; over-redaction (e.g. passphraseStrength,
-// tokenCount) is acceptable here — false positives only suppress non-secret
-// config; false negatives leak credentials.
+// config fields and env-var keys. A few runtime selectors contain these words
+// without storing secret material, so they are allowlisted below.
 const CREDENTIAL_TOKEN_PATTERN =
   /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
 
-const looksLikeCredential = (name: string): boolean => {
-  const normalized = name
+const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
+  /(?:^|_)api_key_envar$/,
+  /(?:^|_)key_alias$/,
+  /(?:^|_)key_name$/,
+  /(?:^|_)key_path$/,
+  /(?:^|_)private_key_path$/,
+  /(?:^|_)session_key$/,
+  /(?:^|_)token_estimation$/,
+  /(?:^|_)token_url$/,
+  /(?:^|_)azure_token_scope$/,
+  /(?:^|_)max(?:_output|_completion)?_tokens?$/,
+  /(?:^|_)signature_(?:algorithm|validity_ms|data_template|refresh_buffer_ms)$/,
+];
+
+const normalizeCredentialName = (name: string): string =>
+  name
     // Split camelCase boundaries (`abcDef` → `abc_Def`).
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     // Split adjacent-uppercase → trailing-mixed (`SSHKey` → `SSH_Key`,
@@ -50,6 +63,12 @@ const looksLikeCredential = (name: string): boolean => {
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .replace(/-/g, '_')
     .toLowerCase();
+
+const looksLikeCredential = (name: string): boolean => {
+  const normalized = normalizeCredentialName(name);
+  if (NON_SECRET_CREDENTIAL_NAME_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
   return CREDENTIAL_TOKEN_PATTERN.test(normalized);
 };
 
