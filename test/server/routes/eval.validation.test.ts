@@ -10,6 +10,7 @@ vi.mock('../../../src/globalConfig/accounts');
 import Eval, { EvalQueries } from '../../../src/models/eval';
 // Import after mocking
 import { createApp } from '../../../src/server/server';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '../../../src/types/api/eval';
 
 const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
@@ -171,8 +172,9 @@ describe('Eval Routes - Zod Validation', () => {
     it.each([
       ['format', { format: 'xml' }],
       ['limit', { limit: '1.5' }],
+      ['limit', { limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1) }],
       ['offset', { offset: '1.5' }],
-    ])('should return 400 when %s query param is invalid', async (field, query) => {
+    ])('should return 400 if %s query param is invalid', async (field, query) => {
       const response = await api.get('/api/eval/test-id/table').query(query);
 
       expect(response.status).toBe(400);
