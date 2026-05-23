@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 
@@ -211,7 +212,6 @@ export class N8nProvider implements ApiProvider {
   private webhookUrl: string;
   config: N8nProviderConfig;
   private providerId: string;
-  private currentSessionId?: string;
 
   constructor(webhookUrl: string, options: ProviderOptions = {}) {
     this.webhookUrl = webhookUrl;
@@ -239,9 +239,7 @@ export class N8nProvider implements ApiProvider {
 
   private getRequestSessionId(context?: CallApiContextParams): string | undefined {
     const vars = context?.vars || {};
-    return typeof vars.sessionId === 'string' && vars.sessionId
-      ? vars.sessionId
-      : this.currentSessionId;
+    return typeof vars.sessionId === 'string' && vars.sessionId ? vars.sessionId : undefined;
   }
 
   private getTemplateVars(prompt: string, context?: CallApiContextParams): Record<string, any> {
@@ -396,8 +394,10 @@ export class N8nProvider implements ApiProvider {
       fetchOptions.body = renderedBody;
     }
 
-    logger.debug(`[n8n] Calling ${method} ${url}`, {
-      body: method === 'GET' ? undefined : renderedBody,
+    logger.debug(`[n8n] Calling ${method} ${sanitizeUrl(url)}`, {
+      hasBody: method !== 'GET',
+      hasCustomHeaders: Object.keys(this.config.headers ?? {}).length > 0,
+      hasSessionId: Boolean(this.getRequestSessionId(context)),
     });
 
     let data: any;
@@ -414,8 +414,17 @@ export class N8nProvider implements ApiProvider {
       cached = response.cached;
       latencyMs = response.latencyMs;
 
+      if (response.status < 200 || response.status >= 300) {
+        return {
+          error: `n8n webhook call error: HTTP ${response.status} ${response.statusText}`,
+        };
+      }
+
       if (data && typeof data === 'object' && 'error' in data) {
         await response.deleteFromCache?.();
+        return {
+          error: `n8n webhook response error: ${String(data.error)}`,
+        };
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -425,11 +434,8 @@ export class N8nProvider implements ApiProvider {
       };
     }
 
-    // Extract session ID for future requests
+    // Return session IDs so each eval/strategy can scope subsequent turns itself.
     const sessionId = this.extractSessionId(data);
-    if (sessionId) {
-      this.currentSessionId = sessionId;
-    }
 
     // Parse the response
     const output = this.parseResponse(data, rawText);
@@ -457,35 +463,13 @@ export class N8nProvider implements ApiProvider {
     }
 
     logger.debug(`[n8n] Response received`, {
-      output:
-        typeof output === 'string' ? output.slice(0, 200) : JSON.stringify(output).slice(0, 200),
       cached,
       latencyMs,
       hasToolCalls: !!toolCalls,
+      hasSessionId: !!sessionId,
     });
 
     return response;
-  }
-
-  /**
-   * Get the current session ID (for multi-turn conversations)
-   */
-  getSessionId(): string {
-    return this.currentSessionId ?? '';
-  }
-
-  /**
-   * Set the session ID (for resuming conversations)
-   */
-  setSessionId(sessionId: string): void {
-    this.currentSessionId = sessionId;
-  }
-
-  /**
-   * Clear the session ID (for starting new conversations)
-   */
-  clearSession(): void {
-    this.currentSessionId = undefined;
   }
 }
 

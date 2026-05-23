@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import { createN8nProvider, N8nProvider } from '../../src/providers/n8n';
 
 vi.mock('../../src/cache');
@@ -317,7 +318,7 @@ describe('N8nProvider', () => {
       ]);
     });
 
-    it('should extract and store session ID from response', async () => {
+    it('should return a session ID extracted from the response', async () => {
       const mockResponse = createMockResponse({
         output: 'Hello!',
         sessionId: 'session-abc-123',
@@ -328,10 +329,9 @@ describe('N8nProvider', () => {
       const result = await provider.callApi('Hello');
 
       expect(result.sessionId).toBe('session-abc-123');
-      expect(provider.getSessionId()).toBe('session-abc-123');
     });
 
-    it('should include session ID in subsequent requests', async () => {
+    it('should not reuse a returned session ID for an unrelated call', async () => {
       const mockResponse1 = createMockResponse({ output: 'Hello!', sessionId: 'session-abc-123' });
       const mockResponse2 = createMockResponse({ output: 'Follow-up response' });
 
@@ -341,10 +341,7 @@ describe('N8nProvider', () => {
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
 
-      // First call - session is established
       await provider.callApi('Hello');
-
-      // Second call - should include session ID
       await provider.callApi('Follow-up');
 
       expect(fetchWithCache).toHaveBeenLastCalledWith(
@@ -352,7 +349,6 @@ describe('N8nProvider', () => {
         expect.objectContaining({
           body: JSON.stringify({
             prompt: 'Follow-up',
-            sessionId: 'session-abc-123',
           }),
         }),
         expect.any(Number),
@@ -360,7 +356,7 @@ describe('N8nProvider', () => {
       );
     });
 
-    it('should use session header when configured', async () => {
+    it('should send an explicit session ID in the configured header and body', async () => {
       const mockResponse = createMockResponse({ output: 'Hello!' });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -368,8 +364,10 @@ describe('N8nProvider', () => {
         config: { sessionHeader: 'X-Session-ID' },
       });
 
-      provider.setSessionId('my-session-123');
-      await provider.callApi('Hello');
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'my-session-123' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
@@ -377,21 +375,26 @@ describe('N8nProvider', () => {
           headers: expect.objectContaining({
             'X-Session-ID': 'my-session-123',
           }),
+          body: JSON.stringify({
+            prompt: 'Hello',
+            sessionId: 'my-session-123',
+          }),
         }),
         expect.any(Number),
         'text',
       );
     });
 
-    it('should prefer explicit session IDs from context over stored sessions', async () => {
-      const mockResponse = createMockResponse({ output: 'Hello!' });
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    it('should send an explicit session ID after a response exposes a different session', async () => {
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(createMockResponse({ output: 'First', sessionId: 'server-session' }))
+        .mockResolvedValueOnce(createMockResponse({ output: 'Hello!' }));
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: { sessionHeader: 'X-Session-ID' },
       });
 
-      provider.setSessionId('stale-session');
+      await provider.callApi('First');
       await provider.callApi('Hello', {
         vars: { sessionId: 'fresh-session' },
         prompt: { raw: 'Hello', label: 'test' },
@@ -411,6 +414,54 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
       );
+    });
+
+    it('should treat non-success HTTP responses as provider errors', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockResponse('unauthorized'),
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Hello');
+
+      expect(result).toEqual({
+        error: 'n8n webhook call error: HTTP 401 Unauthorized',
+      });
+    });
+
+    it('should treat n8n error payloads as provider errors and evict them from cache', async () => {
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockResponse({ error: 'Workflow failed' }),
+        deleteFromCache,
+      });
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Hello');
+
+      expect(result).toEqual({
+        error: 'n8n webhook response error: Workflow failed',
+      });
+      expect(deleteFromCache).toHaveBeenCalledTimes(1);
+    });
+
+    it('should avoid putting webhook credentials or rendered prompt content in provider logs', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockResponse({ output: 'sensitive reply' }),
+      );
+
+      const provider = new N8nProvider(
+        'https://n8n.example.com/webhook/agent?token=webhook-secret-token',
+      );
+      await provider.callApi('private customer content');
+
+      const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(debugLogs).toContain('token=%5BREDACTED%5D');
+      expect(debugLogs).not.toContain('webhook-secret-token');
+      expect(debugLogs).not.toContain('private customer content');
+      expect(debugLogs).not.toContain('sensitive reply');
     });
 
     it('should handle fetch errors', async () => {
@@ -448,23 +499,6 @@ describe('N8nProvider', () => {
         expect.any(Number),
         'text',
       );
-    });
-  });
-
-  describe('session management', () => {
-    it('should allow setting session ID manually', () => {
-      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      provider.setSessionId('manual-session-id');
-      expect(provider.getSessionId()).toBe('manual-session-id');
-    });
-
-    it('should allow clearing session', () => {
-      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      provider.setSessionId('session-to-clear');
-      expect(provider.getSessionId()).toBe('session-to-clear');
-
-      provider.clearSession();
-      expect(provider.getSessionId()).toBe('');
     });
   });
 });

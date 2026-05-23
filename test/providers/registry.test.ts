@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isFoundationModelProvider } from '../../src/providers/constants';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';
@@ -265,6 +266,7 @@ describe('Provider Registry', () => {
       await expect(factory!.create('n8n', n8nOptions, mockContext)).rejects.toThrow(
         'n8n provider requires a webhook URL',
       );
+      expect(isFoundationModelProvider('n8n:https://example.com/webhook/agent')).toBe(false);
     });
 
     it('dispatches a representative redteam path through getProviderFactories', async () => {
