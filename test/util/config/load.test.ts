@@ -1228,6 +1228,24 @@ describe('combineConfigs', () => {
 
     expect(result.providers).toHaveLength(2);
   });
+
+  it('does not dedupe provider objects that contain nested function fields', async () => {
+    const transformA = (output: string) => `${output}-a`;
+    const transformB = (output: string) => `${output}-b`;
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [
+        { id: 'openai:gpt-4', config: { transform: transformA } },
+        { id: 'openai:gpt-4', config: { transform: transformB } },
+      ],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toHaveLength(2);
+  });
 });
 
 describe('dereferenceConfig', () => {

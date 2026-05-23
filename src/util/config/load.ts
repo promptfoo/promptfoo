@@ -415,7 +415,9 @@ function hasFunctionValue(value: unknown, seen: WeakSet<object> = new WeakSet())
     return false;
   }
   seen.add(value);
-  return Object.values(value).some((v) => hasFunctionValue(v, seen));
+  return Reflect.ownKeys(value).some((key) =>
+    hasFunctionValue((value as Record<PropertyKey, unknown>)[key], seen),
+  );
 }
 
 /**
@@ -430,7 +432,11 @@ function providerDedupeKey(provider: unknown): string | undefined {
   if (hasFunctionValue(provider)) {
     return undefined;
   }
-  return JSON.stringify(provider);
+  try {
+    return JSON.stringify(provider);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
