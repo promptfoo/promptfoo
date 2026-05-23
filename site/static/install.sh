@@ -10,6 +10,7 @@
 #   PROMPTFOO_INSTALL_DIR  - Installation directory (default: ~/.promptfoo)
 #   PROMPTFOO_VERSION      - Version to install (default: latest)
 #   PROMPTFOO_NO_MODIFY_PATH - Skip PATH modification if set
+#   PROMPTFOO_DISABLE_TELEMETRY - Skip anonymous installation telemetry if set
 #
 # Requirements:
 #   - curl or wget
@@ -27,6 +28,7 @@ readonly GITHUB_RELEASES="https://github.com/${GITHUB_REPO}/releases"
 INSTALL_DIR="${PROMPTFOO_INSTALL_DIR:-$HOME/.promptfoo}"
 BIN_DIR="$INSTALL_DIR/bin"
 VERSION="${PROMPTFOO_VERSION:-${1:-latest}}"
+INSTALLED_VERSION=""
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
 
@@ -95,6 +97,7 @@ ${BOLD}ENVIRONMENT VARIABLES${NC}
     PROMPTFOO_INSTALL_DIR     Installation directory
     PROMPTFOO_VERSION         Version to install
     PROMPTFOO_NO_MODIFY_PATH  Skip PATH modification if set
+    PROMPTFOO_DISABLE_TELEMETRY  Skip anonymous installation telemetry if set
 
 ${BOLD}EXAMPLES${NC}
     # Install latest version
@@ -185,7 +188,7 @@ detect_platform() {
   # Detect Rosetta 2 on macOS
   if [[ "$os" == "darwin" && "$arch" == "x64" ]]; then
     if [[ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" == "1" ]]; then
-      info "Rosetta 2 detected, installing native arm64 binary"
+      info "Rosetta 2 detected, installing native arm64 binary" >&2
       arch="arm64"
     fi
   fi
@@ -199,7 +202,8 @@ resolve_version() {
   local version="$1"
 
   if [[ "$version" == "latest" ]]; then
-    info "Fetching latest version..."
+    # This function is used in command substitution; keep progress off stdout.
+    info "Fetching latest version..." >&2
 
     # Try to get latest release from GitHub API
     if command -v curl &>/dev/null; then
@@ -215,6 +219,10 @@ resolve_version() {
 
   # Strip 'v' prefix if present
   version="${version#v}"
+
+  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+    error "Invalid version: $version"
+  fi
 
   echo "$version"
 }
@@ -256,7 +264,9 @@ install_npm() {
   fi
 
   # Install promptfoo globally in the install directory
-  npm install -g promptfoo@"$version" --prefix "$INSTALL_DIR"
+  if ! npm install -g promptfoo@"$version" --prefix "$INSTALL_DIR" --registry=https://registry.npmjs.org/; then
+    return 1
+  fi
 
   # Create symlinks in bin directory
   if [[ -f "$INSTALL_DIR/lib/node_modules/promptfoo/dist/src/main.js" ]]; then
@@ -276,9 +286,19 @@ install_binary() {
   local platform="$2"
   local archive_name download_url temp_file
 
+  case "$platform" in
+  linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64) ;;
+  *)
+    warn "No bundled binary is published for $platform."
+    warn "Falling back to npm installation, which requires Node.js."
+    install_npm "$version"
+    return $?
+    ;;
+  esac
+
   archive_name="promptfoo-${version}-${platform}.tar.gz"
   download_url="${GITHUB_RELEASES}/download/v${version}/${archive_name}"
-  temp_file="/tmp/${archive_name}"
+  temp_file=$(mktemp "${TMPDIR:-/tmp}/promptfoo-download.XXXXXXXX")
 
   info "Installing promptfoo v$version for $platform..."
   info "Downloading from $download_url"
@@ -310,12 +330,26 @@ install_binary() {
 }
 
 verify_installation() {
-  if [[ -x "$BIN_DIR/promptfoo" ]]; then
-    # Try to run version check
-    if "$BIN_DIR/promptfoo" --version &>/dev/null; then
-      return 0
-    fi
+  local verify_dir installed_version
+  if ! verify_dir=$(mktemp -d "${TMPDIR:-/tmp}/promptfoo-verify.XXXXXXXX"); then
+    return 1
   fi
+
+  if [[ -x "$BIN_DIR/promptfoo" ]] &&
+    installed_version=$(
+      PROMPTFOO_CONFIG_DIR="$verify_dir/state" \
+        PROMPTFOO_CACHE_PATH="$verify_dir/cache" \
+        PROMPTFOO_DISABLE_SHARING=true \
+        PROMPTFOO_DISABLE_TELEMETRY=true \
+        PROMPTFOO_DISABLE_UPDATE=true \
+        "$BIN_DIR/promptfoo" --version 2>/dev/null
+    ); then
+    INSTALLED_VERSION="$installed_version"
+    rm -rf "$verify_dir"
+    return 0
+  fi
+
+  rm -rf "$verify_dir"
   return 1
 }
 
@@ -413,6 +447,10 @@ send_install_telemetry() {
   local platform="$1"
   local version="$2"
 
+  if [[ -n "${PROMPTFOO_DISABLE_TELEMETRY:-}" ]]; then
+    return 0
+  fi
+
   (
     if command -v curl &>/dev/null; then
       curl -fsSL -X POST "https://r.promptfoo.app/" \
@@ -460,9 +498,7 @@ main() {
 
   # Verify installation
   if verify_installation; then
-    local installed_version
-    installed_version=$("$BIN_DIR/promptfoo" --version 2>/dev/null || echo "unknown")
-    success "promptfoo v$installed_version installed successfully"
+    success "promptfoo v${INSTALLED_VERSION:-unknown} installed successfully"
   else
     warn "Installation completed but verification failed."
     warn "You may need to check your Node.js installation."
