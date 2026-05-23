@@ -937,6 +937,28 @@ describe('trajectory assertions', () => {
       );
     });
 
+    it('rejects unknown sequence modes instead of relaxing exact matching', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-sequence',
+        assertion: {
+          type: 'trajectory:tool-sequence',
+          value: {
+            mode: 'exct' as unknown as 'exact',
+            steps: ['search_orders', 'compose_reply'],
+          },
+        },
+        renderedValue: {
+          mode: 'exct' as unknown as 'exact',
+          steps: ['search_orders', 'compose_reply'],
+        },
+      };
+
+      expect(() => handleTrajectoryToolSequence(params)).toThrow(
+        'trajectory:tool-sequence assertion mode must be "in_order" or "exact"',
+      );
+    });
+
     it('rejects empty sequence objects', () => {
       const params: AssertionParams = {
         ...defaultParams,
