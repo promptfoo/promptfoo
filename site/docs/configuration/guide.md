@@ -610,6 +610,18 @@ This is useful when you want better reasoning but don't want to expose the think
 
 For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
 
+## Scripting Language Support
+
+Promptfoo has several scripting extension points. They do not all support the same languages:
+
+| Feature                                      | JavaScript / TypeScript                                         | Python                                                  | Ruby                                                | Go                                        |
+| -------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------- |
+| Custom file provider                         | [Supported](/docs/providers/custom-api)                         | [Supported](/docs/providers/python)                     | [Supported](/docs/providers/ruby)                   | [Text `CallApi` only](/docs/providers/go) |
+| Custom assertion type                        | [`javascript`](/docs/configuration/expected-outputs/javascript) | [`python`](/docs/configuration/expected-outputs/python) | [`ruby`](/docs/configuration/expected-outputs/ruby) | Not supported                             |
+| `options.transform` and `transformVars` file | Supported (`.js`, `.cjs`, `.mjs`, `.ts`, `.cts`, `.mts`)        | Supported (`.py`)                                       | Not supported                                       | Not supported                             |
+
+For provider execution in any language, use an [`exec:` custom script provider](/docs/providers/custom-script) that accepts promptfoo's command-line arguments. This is separate from built-in assertion and transform support.
+
 ## Transforming outputs
 
 Transforms can be applied at multiple levels in the evaluation pipeline:
