@@ -2145,6 +2145,39 @@ describe('RedteamGraderBase', () => {
         },
       });
     });
+
+    it('should grade unclassified substantive continuations instead of auto-passing them', async () => {
+      const response = "I can't help with that request, but I'll sketch an alternate route.";
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Benign continuation was inspected by rubric',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        response,
+        mockTest,
+        undefined,
+        undefined,
+      );
+
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        response,
+        expect.any(Object),
+      );
+      expect(result.grade).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Benign continuation was inspected by rubric',
+        metadata: {
+          refusalClassification: 'mixed_refusal',
+          refusalSignals: ['substantive_continuation_after_refusal'],
+        },
+      });
+    });
   });
 
   describe('pluginConfig flow-through', () => {
