@@ -127,6 +127,10 @@ export const useStore = create<EvalConfigState>()(
           }),
         };
       },
+      onRehydrateStorage: () => (state) => {
+        // Purge credentials persisted by earlier app versions after sanitizing the loaded state.
+        state?.setConfig(state.config);
+      },
     },
   ),
 );

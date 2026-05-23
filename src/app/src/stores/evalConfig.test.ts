@@ -156,6 +156,18 @@ describe('evalConfig store', () => {
         headers: {},
         temperature: 0.4,
       });
+
+      const persistedState = JSON.parse(localStorage.getItem('promptfoo') || '{}');
+      expect(persistedState.state.config.env).toEqual({
+        OPENAI_API_HOST: 'https://api.example.com',
+      });
+      expect(persistedState.state.config.providers[0].config).toEqual({
+        headers: {},
+        temperature: 0.4,
+      });
+      expect(JSON.stringify(persistedState)).not.toContain('old-persisted-key');
+      expect(JSON.stringify(persistedState)).not.toContain('old-inline-key');
+      expect(JSON.stringify(persistedState)).not.toContain('Bearer old-token');
     });
 
     it('strips credentials regardless of casing convention', () => {
