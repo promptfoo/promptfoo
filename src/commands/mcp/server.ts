@@ -1,9 +1,7 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { registerResources } from './resources';
 import { registerCompareProvidersTool } from './tools/compareProviders';
 import { registerGenerateDatasetTool } from './tools/generateDataset';
@@ -23,10 +21,54 @@ function setMcpTransport(transport: 'http' | 'stdio'): void {
   Object.assign(process.env, { MCP_TRANSPORT: transport });
 }
 
+function createMcpSdkDependencyError(): Error {
+  return new Error(
+    'The @modelcontextprotocol/sdk package is required for MCP server support. Install it with: npm install @modelcontextprotocol/sdk',
+  );
+}
+
+async function loadMcpServerSdk(): Promise<typeof import('@modelcontextprotocol/sdk/server/mcp.js')> {
+  try {
+    return await import('@modelcontextprotocol/sdk/server/mcp.js');
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw createMcpSdkDependencyError();
+    }
+    throw error;
+  }
+}
+
+async function loadMcpHttpTransport(): Promise<
+  typeof import('@modelcontextprotocol/sdk/server/streamableHttp.js')
+> {
+  try {
+    return await import('@modelcontextprotocol/sdk/server/streamableHttp.js');
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw createMcpSdkDependencyError();
+    }
+    throw error;
+  }
+}
+
+async function loadMcpStdioTransport(): Promise<
+  typeof import('@modelcontextprotocol/sdk/server/stdio.js')
+> {
+  try {
+    return await import('@modelcontextprotocol/sdk/server/stdio.js');
+  } catch (error) {
+    if (isMissingPackageImportError(error, '@modelcontextprotocol/sdk')) {
+      throw createMcpSdkDependencyError();
+    }
+    throw error;
+  }
+}
+
 /**
  * Creates an MCP server with tools for interacting with promptfoo
  */
 export async function createMcpServer() {
+  const { McpServer } = await loadMcpServerSdk();
   const server = new McpServer({
     name: 'Promptfoo MCP',
     version: '1.0.0',
@@ -88,6 +130,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   const mcpServer = await createMcpServer();
 
   // Set up HTTP transport for MCP
+  const { StreamableHTTPServerTransport } = await loadMcpHttpTransport();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
   });
@@ -172,62 +215,78 @@ export async function startStdioMcpServer(): Promise<void> {
   // Set transport type for telemetry
   setMcpTransport('stdio');
 
-  // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
-  logger.transports.forEach((transport) => {
-    // Winston Console transport constructor name check
-    if (transport.constructor.name === 'Console' || (transport as any).name === 'console') {
-      transport.silent = true;
-    }
+  // Resolve optional SDK imports before muting console output so startup
+  // dependency failures remain visible to CLI users.
+  await loadMcpServerSdk();
+  const { StdioServerTransport } = await loadMcpStdioTransport();
+
+  const consoleTransports = logger.transports
+    .filter(
+      (transport) =>
+        transport.constructor.name === 'Console' || (transport as any).name === 'console',
+    )
+    .map((transport) => ({ transport, silent: transport.silent }));
+
+  // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication.
+  consoleTransports.forEach(({ transport }) => {
+    transport.silent = true;
   });
 
-  const server = await createMcpServer();
+  try {
+    const server = await createMcpServer();
 
-  // Set up stdio transport
-  const transport = new StdioServerTransport();
+    // Set up stdio transport
+    const transport = new StdioServerTransport();
 
-  // Connect the server to the stdio transport
-  await server.connect(transport);
+    // Connect the server to the stdio transport
+    await server.connect(transport);
 
-  // Track server start
-  telemetry.record('feature_used', {
-    feature: 'mcp_server_started',
-    transport: 'stdio',
-  });
+    // Track server start
+    telemetry.record('feature_used', {
+      feature: 'mcp_server_started',
+      transport: 'stdio',
+    });
 
-  // Return a Promise that only resolves when the server shuts down
-  // This matches the pattern used in startHttpMcpServer
-  return new Promise<void>((resolve) => {
-    let isShuttingDown = false;
+    // Return a Promise that only resolves when the server shuts down
+    // This matches the pattern used in startHttpMcpServer
+    return new Promise<void>((resolve) => {
+      let isShuttingDown = false;
 
-    const shutdown = () => {
-      if (isShuttingDown) {
-        return;
-      }
-      isShuttingDown = true;
+      const shutdown = () => {
+        if (isShuttingDown) {
+          return;
+        }
+        isShuttingDown = true;
 
-      // Add timeout to prevent indefinite hangs, matching HTTP server pattern
-      const SHUTDOWN_TIMEOUT_MS = 5000;
-      const forceCloseTimeout = setTimeout(() => {
-        resolve();
-      }, SHUTDOWN_TIMEOUT_MS);
-
-      // Clean up the server and transport properly
-      server
-        .close()
-        .catch(() => {
-          // Ignore close errors during shutdown
-        })
-        .finally(() => {
-          clearTimeout(forceCloseTimeout);
+        // Add timeout to prevent indefinite hangs, matching HTTP server pattern
+        const SHUTDOWN_TIMEOUT_MS = 5000;
+        const forceCloseTimeout = setTimeout(() => {
           resolve();
-        });
-    };
+        }, SHUTDOWN_TIMEOUT_MS);
 
-    // Register shutdown handlers for signals
-    process.once('SIGINT', shutdown);
-    process.once('SIGTERM', shutdown);
+        // Clean up the server and transport properly
+        server
+          .close()
+          .catch(() => {
+            // Ignore close errors during shutdown
+          })
+          .finally(() => {
+            clearTimeout(forceCloseTimeout);
+            resolve();
+          });
+      };
 
-    // Handle client disconnect (stdin close)
-    process.stdin.once('end', shutdown);
-  });
+      // Register shutdown handlers for signals
+      process.once('SIGINT', shutdown);
+      process.once('SIGTERM', shutdown);
+
+      // Handle client disconnect (stdin close)
+      process.stdin.once('end', shutdown);
+    });
+  } catch (error) {
+    consoleTransports.forEach(({ transport, silent }) => {
+      transport.silent = silent;
+    });
+    throw error;
+  }
 }
