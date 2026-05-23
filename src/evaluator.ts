@@ -646,6 +646,16 @@ function createRunEvalState({
   };
 }
 
+/**
+ * Reserved keys for eval-step runtime vars. `EvalRuntimeVars` below is keyed by
+ * this tuple, so adding a new key to {@link getEvalRuntimeVars} fails to
+ * type-check until the key is added here too — keeping the omit list and the
+ * producer in lockstep.
+ */
+const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
+const EVAL_RUNTIME_VAR_KEY_SET: ReadonlySet<string> = new Set(EVAL_RUNTIME_VAR_KEYS);
+type EvalRuntimeVars = Partial<Record<(typeof EVAL_RUNTIME_VAR_KEYS)[number], Vars[string]>>;
+
 function getEvalRuntimeVars({
   evalId,
   promptIndex,
@@ -656,16 +666,13 @@ function getEvalRuntimeVars({
   promptIndex: number;
   repeatIndex: number;
   testIndex: number;
-}): Vars {
+}): EvalRuntimeVars {
   return {
     ...(evalId ? { __evalId: evalId } : {}),
     __evalStepId: `test-${testIndex}-prompt-${promptIndex}-repeat-${repeatIndex}`,
     __repeatIndex: repeatIndex,
   };
 }
-
-/** Keys injected by {@link getEvalRuntimeVars}; keep in sync with it. */
-const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'];
 
 /**
  * Returns a copy of `vars` without the reserved `__eval*` runtime vars. They are
@@ -679,7 +686,7 @@ const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'];
 function omitEvalRuntimeVars(vars: Vars): Vars {
   const result: Vars = {};
   for (const [key, value] of Object.entries(vars)) {
-    if (!EVAL_RUNTIME_VAR_KEYS.includes(key)) {
+    if (!EVAL_RUNTIME_VAR_KEY_SET.has(key)) {
       result[key] = value;
     }
   }
