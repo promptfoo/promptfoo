@@ -848,13 +848,15 @@ tests:
 
 ### Troubleshooting
 
-If you encounter this error when using reasoning models:
+If you encounter this error with `azure:chat` or `azure:completion`:
 
 ```
 API response error: unsupported_parameter Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
 ```
 
-This means you're using a reasoning model without setting the `isReasoningModel` flag. Update your config as shown above.
+For a custom or aliased reasoning deployment, this commonly means Promptfoo is not
+treating it as a reasoning model because `isReasoningModel: true` is missing. Update
+your config as shown above.
 
 For `azure:responses`, use `max_output_tokens`, not `max_completion_tokens`. If you
 request a reasoning summary and only see a final answer or a reasoning token count,
