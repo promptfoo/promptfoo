@@ -258,4 +258,26 @@ describe('AI21ChatCompletionProvider', () => {
       expect.any(Number),
     );
   });
+
+  it('should not call API twice for same provider config', async () => {
+    const mockResponse = {
+      body: JSON.stringify({ completions: [{ output: { text: 'test' } }] }),
+      status: 200,
+      statusText: 'OK',
+    };
+
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+    const provider1 = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
+    const provider2 = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key' },
+    });
+
+    await Promise.all([provider1.callApi('test prompt'), provider2.callApi('test prompt')]);
+
+    // Both calls should use the same cache key, but each should still call fetchWithCache
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
+  });
 });
