@@ -15,8 +15,8 @@ const mockProduct: FourthwallProduct = {
   state: { type: 'AVAILABLE' },
   access: { type: 'PUBLIC' },
   images: [
-    { id: 'img-1', url: 'https://example.com/image1.jpg', width: 800, height: 800 },
-    { id: 'img-2', url: 'https://example.com/image2.jpg', width: 800, height: 800 },
+    { url: 'https://example.com/image1.jpg', width: 800, height: 800 },
+    { url: 'https://example.com/image2.jpg', width: 800, height: 800 },
   ],
   variants: [
     {
