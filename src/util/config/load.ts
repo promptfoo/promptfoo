@@ -36,6 +36,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
+import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -429,7 +430,7 @@ function providerDedupeKey(provider: unknown): string | undefined {
   if (typeof provider === 'string') {
     return provider;
   }
-  if (hasFunctionValue(provider)) {
+  if (isApiProvider(provider) || hasFunctionValue(provider)) {
     return undefined;
   }
   try {

@@ -1246,6 +1246,33 @@ describe('combineConfigs', () => {
 
     expect(result.providers).toHaveLength(2);
   });
+
+  it('does not dedupe ApiProvider instances with prototype methods', async () => {
+    class TestProvider {
+      constructor(private readonly label: string) {}
+
+      id() {
+        return `test-provider-${this.label}`;
+      }
+
+      async callApi(prompt: string) {
+        return { output: `${this.label}: ${prompt}` };
+      }
+    }
+
+    const providerA = new TestProvider('a');
+    const providerB = new TestProvider('b');
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [providerA, providerB],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([providerA, providerB]);
+  });
 });
 
 describe('dereferenceConfig', () => {
