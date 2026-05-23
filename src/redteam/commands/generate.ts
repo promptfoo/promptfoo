@@ -38,10 +38,11 @@ import {
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
-import { printBorder, renderVarsInObject, setupEnv } from '../../util/index';
+import { printBorder, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
+import { getNunjucksEngine } from '../../util/templates';
 import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
@@ -123,7 +124,7 @@ function renderPurposeTemplate(purpose: string | undefined, vars: Record<string,
     return '';
   }
 
-  return renderVarsInObject(purpose, vars as Record<string, any>);
+  return getNunjucksEngine().renderString(purpose, vars);
 }
 
 function appendPurposeDetails(purpose: string, extraDetails: string): string {

@@ -216,13 +216,17 @@ function preprocessSignatureAuthConfig(signatureAuth: any): any {
 function renderJsonTemplate(template: string, vars: Record<string, any>): any {
   // First attempt: try normal rendering and parsing
   const rendered = renderVarsInObject(template, vars);
+  if (typeof rendered !== 'string') {
+    return rendered;
+  }
+
   try {
     return JSON.parse(rendered);
   } catch {
     // Second attempt: re-render with JSON-escaped variables
     const escapedVars = escapeJsonVariables(vars);
     const reRendered = renderVarsInObject(template, escapedVars);
-    return JSON.parse(reRendered); // This will throw if still invalid
+    return typeof reRendered === 'string' ? JSON.parse(reRendered) : reRendered;
   }
 }
 
@@ -1280,7 +1284,7 @@ export function processTextBody(body: string, vars: Record<string, any>): string
     'Expected body to be a string when content type is not application/json',
   );
   try {
-    return renderVarsInObject(body, vars);
+    return getNunjucksEngine().renderString(body, vars);
   } catch (err) {
     logger.warn(`Error rendering body template: ${err}`);
     return body;

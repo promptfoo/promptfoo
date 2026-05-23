@@ -906,6 +906,13 @@ describe('HttpProvider', () => {
       });
     });
 
+    it('should preserve a direct structured variable in a JSON body', () => {
+      const schema = { type: 'object', properties: { query: { type: 'string' } } };
+      const result = processJsonBody('{{ schema }}', { schema });
+
+      expect(result).toEqual(schema);
+    });
+
     it('should process deeply nested objects and arrays', () => {
       const body = {
         key: '{{var1}}',
@@ -1364,6 +1371,13 @@ describe('HttpProvider', () => {
       const body = 'Hello {{name}}!';
       const vars = { name: 'World' };
       expect(processTextBody(body, vars)).toBe('Hello World!');
+    });
+
+    it('should preserve Nunjucks serialization filters in text bodies', () => {
+      const schema = { type: 'object', properties: {} };
+      expect(processTextBody('{{ schema | dump | safe }}', { schema })).toBe(
+        JSON.stringify(schema),
+      );
     });
 
     it('should handle rendering errors gracefully', () => {

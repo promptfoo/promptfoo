@@ -705,6 +705,50 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 
+    it.each([
+      '{{ schema }}',
+      '{{ schema | dump | safe }}',
+    ])('should preserve object-valued tool parameter templates: %s', async (schemaTemplate) => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Schema accepted' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const schema = {
+        type: 'object' as const,
+        properties: { order_id: { type: 'string' } },
+        required: ['order_id'],
+      };
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'extract_order',
+                parameters: schemaTemplate as unknown as typeof schema,
+              },
+            },
+          ],
+        },
+      });
+
+      await provider.callApi('Extract an order identifier', {
+        vars: { schema },
+        prompt: { raw: 'Extract an order identifier', label: 'Extract an order identifier' },
+      });
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.tools[0].function.parameters).toEqual(schema);
+    });
+
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = {
         data: {

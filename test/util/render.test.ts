@@ -193,7 +193,7 @@ describe('renderVarsInObject', () => {
       expect(rendered).toEqual(schema);
     });
 
-    it('should directly substitute object variables with pass-through filters', async () => {
+    it('should preserve the documented dump-safe schema substitution form', async () => {
       const schema = {
         type: 'object',
         properties: {
@@ -202,6 +202,12 @@ describe('renderVarsInObject', () => {
       };
       const rendered = renderVarsInObject('{{ schema | dump | safe }}', { schema });
       expect(rendered).toEqual(schema);
+    });
+
+    it('should still serialize object variables with dump unless safe marks schema injection', async () => {
+      const schema = { type: 'object', properties: { name: { type: 'string' } } };
+      const rendered = renderVarsInObject('{{ schema | dump }}', { schema });
+      expect(rendered).toBe(JSON.stringify(schema));
     });
 
     it('should directly substitute array variables', async () => {
@@ -284,6 +290,12 @@ describe('renderVarsInObject', () => {
       const date = new Date('2026-04-21T00:00:00.000Z');
       const rendered = renderVarsInObject('{{ date }}', { date });
       expect(rendered).toBe(date.toString());
+    });
+
+    it('should not directly return inherited prototype object properties', async () => {
+      const rendered = renderVarsInObject('{{ __proto__ }}', {});
+      expect(rendered).not.toBe(Object.prototype);
+      expect(typeof rendered).toBe('string');
     });
   });
 });

@@ -5,8 +5,10 @@ import { getNunjucksEngine } from './templates';
 import type { VarValue } from '../types';
 import type { EnvOverrides } from '../types/env';
 
+// `dump | safe` is the schema-injection form originally requested in #2266.
+// Other filters must still execute through Nunjucks rather than be ignored.
 const DIRECT_OBJECT_REFERENCE_PATTERN =
-  /^\{\{\s*([A-Za-z_]\w*)((?:\s*\|\s*(?:dump|safe))*)\s*\}\}$/;
+  /^\{\{\s*([A-Za-z_]\w*)\s*(?:\|\s*dump\s*\|\s*safe\s*)?\}\}$/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -20,9 +22,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function getDirectObjectReferenceValue(
   template: string,
   vars: Record<string, VarValue>,
-): VarValue | undefined {
+): object | undefined {
   const match = DIRECT_OBJECT_REFERENCE_PATTERN.exec(template);
-  if (!match) {
+  if (!match || !Object.prototype.hasOwnProperty.call(vars, match[1])) {
     return undefined;
   }
 
@@ -139,7 +141,9 @@ export function renderEnvOnlyInObject<T>(
   return obj;
 }
 
-export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
+export function renderVarsInObject(obj: string, vars?: Record<string, VarValue>): string | object;
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T;
+export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T | object {
   // Renders nunjucks template strings with context variables
   if (!vars || getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
