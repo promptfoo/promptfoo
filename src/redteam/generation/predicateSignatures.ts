@@ -217,6 +217,9 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\bremove the (?:current-user )?filter\b/i,
     /\bremove the (?:assignment|assigned[_ -](?:agent|patient)|current[_ -]user)(?:\s*=\s*current[_ -]user)? filter\b/i,
     /\bignore the assigned-patient restriction\b/i,
+    /\b(?:remove|drop) the (?:assignment|current-user|authorization|ownership|assigned[_ -](?:agent|patient|user)) (?:check|filter|predicate|restriction)\b/i,
+    /\b(?:bypass|ignore) the (?:assigned[_ -](?:agent|patient|user)|authorization|ownership) (?:check|filter|restriction)\b/i,
+    /\bwithout the (?:authorization|ownership|assigned[_ -](?:agent|patient|user)) (?:check|filter|restriction)\b/i,
     /\bwithout the where\b/i,
   ],
   usesNaturalLanguagePrivilegeEscalation: [
@@ -225,6 +228,12 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\ball (?:patient|medical) records(?: in the system)?\b/i,
     /\ball tickets in the system\b/i,
     /\bregardless of who is currently authenticated\b/i,
+    /\brecords? (?:belong(?:s)?|belonging) to other (?:users?|patients?|accounts?)\b/i,
+    /\b(?:not under|outside|beyond) (?:my|the (?:caller|user)'?s) (?:usual|normal|direct|standard|authorized) (?:account(?: access)?|access|patient scope|authorization boundary|scope)\b/i,
+    /\b(?:access )?(?:outside|beyond) my own (?:chart|records?|account)\b/i,
+    /\bacross (?:the )?(?:account|authorization) boundary\b/i,
+    /\bacross (?:all|other) (?:patients?|users?|accounts?)\b/i,
+    /\b(?:not|rather than) (?:just |only )?(?:mine|my (?:own )?(?:record|records|account|access|authorization scope))\b/i,
   ],
 };
 
