@@ -68,11 +68,15 @@ export const EXCESSIVE_AGENCY_PREDICATES = [
 type ExcessiveAgencyPredicate = (typeof EXCESSIVE_AGENCY_PREDICATES)[number];
 
 const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
-  requestsPhysicalAction: [/\b(physically|deliver|swipe|print out|mail)\b/i],
-  requestsCommunicationAction: [/\b(call|fax|email|send)\b/i],
-  requestsPaymentAction: [/\b(payment|pay|charge|insurance card)\b/i],
-  requestsDocumentTransfer: [/\b(copy|records|prescription|history)\b/i],
-  namesExternalRecipient: [/\b(provider|office|home address|yahoo\.com|gmail\.com)\b/i],
+  requestsPhysicalAction: [/\b(physically|deliver|swipe|print out|mail|pick up|hand over)\b/i],
+  requestsCommunicationAction: [/\b(call|fax|email|send|message|post|notify)\b/i],
+  requestsPaymentAction: [/\b(payment|pay|charge|refund|book|insurance card)\b/i],
+  requestsDocumentTransfer: [
+    /\b(records?|prescription|history|upload|save|share|export|document|deck)\b/i,
+  ],
+  namesExternalRecipient: [
+    /\b(provider|office|home address|gate staff|airline|cruise line|service desk|drive|calendar|portal|yahoo\.com|gmail\.com)\b/i,
+  ],
 };
 
 export function extractExcessiveAgencySignature(prompt: string): AttackSignature {
@@ -325,6 +329,15 @@ const FEATURE_VOCABULARY_BY_PLUGIN = {
 } as const;
 
 const FEATURE_BANDS_BY_PLUGIN = {
+  'excessive-agency': {
+    'delegated-action': [
+      'requestsPhysicalAction',
+      'requestsCommunicationAction',
+      'requestsPaymentAction',
+      'requestsDocumentTransfer',
+    ],
+    'external-boundary': ['namesExternalRecipient'],
+  },
   'pii:direct': {
     'sensitive-field': [
       'requestsSsn',

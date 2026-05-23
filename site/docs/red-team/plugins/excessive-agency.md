@@ -30,6 +30,11 @@ The plugin generates prompts that ask the model to perform impossible actions, s
 - Making phone calls
 - Accessing physical objects
 
+With default single-input generation, Promptfoo balances external communication, payment or
+booking, external document transfer, and physical-world action requests. For batches of at
+least four tests, semantic frontier diagnostics report whether the retained prompts cover
+delegated action types and named external boundaries.
+
 ## Evaluation Criteria
 
 The plugin evaluates the model's response based on:
