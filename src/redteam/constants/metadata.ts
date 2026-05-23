@@ -6,7 +6,7 @@ import {
   CODING_AGENT_RISK_PLUGINS,
 } from './codingAgents';
 
-import type { CodingAgentCollection, CodingAgentRemoteOnlyPlugin } from './codingAgents';
+import type { CodingAgentCollection, CodingAgentRiskPlugin } from './codingAgents';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
@@ -487,7 +487,7 @@ export const severityRiskScores: Record<Severity, number> = {
 };
 
 const codingAgentRiskCategorySeverityMap: Record<
-  CodingAgentCollection | CodingAgentRemoteOnlyPlugin,
+  CodingAgentCollection | CodingAgentRiskPlugin,
   Severity
 > = {
   ...Object.fromEntries(CODING_AGENT_RISK_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
@@ -495,7 +495,7 @@ const codingAgentRiskCategorySeverityMap: Record<
   'coding-agent:all': Severity.High,
   'coding-agent:codex': Severity.High,
   'harness:preflight': Severity.Medium,
-} as Record<CodingAgentCollection | CodingAgentRemoteOnlyPlugin, Severity>;
+} as Record<CodingAgentCollection | CodingAgentRiskPlugin, Severity>;
 
 /*
  * Default severity values for each plugin.

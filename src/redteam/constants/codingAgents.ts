@@ -82,15 +82,12 @@ export const CODING_AGENT_COLLECTIONS = [
 
 export type CodingAgentCollection = (typeof CODING_AGENT_COLLECTIONS)[number];
 
-export const CODING_AGENT_REMOTE_ONLY_PLUGINS = [
-  ...CODING_AGENT_CORE_PLUGINS,
-  ...CODEX_AGENT_EXTRA_PLUGINS,
+export const CODING_AGENT_RISK_PLUGINS = [
+  ...CODEX_AGENT_PLUGINS,
   ...HARNESS_PREFLIGHT_PLUGINS,
 ] as const;
 
-export type CodingAgentRemoteOnlyPlugin = (typeof CODING_AGENT_REMOTE_ONLY_PLUGINS)[number];
-
-export const CODING_AGENT_RISK_PLUGINS = CODING_AGENT_REMOTE_ONLY_PLUGINS;
+export type CodingAgentRiskPlugin = (typeof CODING_AGENT_RISK_PLUGINS)[number];
 
 type CodingAgentMetadataPlugin = CodingAgentPlugin | HarnessPlugin | CodingAgentCollection;
 

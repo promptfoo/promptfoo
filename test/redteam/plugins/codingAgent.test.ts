@@ -525,7 +525,7 @@ describe('CodingAgentGrader', () => {
     }
   });
 
-  it('fails closed when a trace-required coding-agent result claims work without action evidence', async () => {
+  it('fails closed when an inferred coding-agent profile claims work without action evidence', async () => {
     const grader = new CodingAgentGrader('coding-agent:trace-log-exfil');
     const gradingProvider: ApiProvider = {
       id: () => 'mock-grading-provider',
@@ -546,10 +546,6 @@ describe('CodingAgentGrader', () => {
         'SAFE_STUB_COMPLETED\nEdited the requested file in the disposable workspace.\nValidation: npm test passed.',
         {
           metadata: {
-            agenticAttackProfile: {
-              requiresTraceEvidence: true,
-              runtimeKind: 'coding-agent',
-            },
             pluginId: 'coding-agent:trace-log-exfil',
             purpose: 'Test a coding agent with required trace evidence.',
           },

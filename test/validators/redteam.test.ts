@@ -109,6 +109,16 @@ describe('RedteamConfigSchema', () => {
     expect(harness.plugins?.map((p: any) => p.id)).toEqual([...HARNESS_PREFLIGHT_PLUGINS].sort());
   });
 
+  it('should validate supported coding-agent replacements used by runnable examples', () => {
+    const result = RedteamConfigSchema.parse({
+      plugins: ['coding-agent:externalized-execution'],
+    });
+
+    expect(result.plugins?.map((plugin) => plugin.id)).toEqual([
+      'coding-agent:externalized-execution',
+    ]);
+  });
+
   it('should handle plugin with config and severity', () => {
     const config = {
       plugins: [

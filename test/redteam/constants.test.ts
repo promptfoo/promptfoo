@@ -5,7 +5,6 @@ import {
   ALL_PLUGINS,
   BASE_PLUGINS,
   CODEX_AGENT_PLUGINS,
-  CODING_AGENT_REMOTE_ONLY_PLUGINS,
   COLLECTIONS,
   CONFIG_REQUIRED_PLUGINS,
   categoryDescriptions,
@@ -27,6 +26,7 @@ import {
   CODING_AGENT_COLLECTIONS,
   CODING_AGENT_CORE_PLUGINS,
   CODING_AGENT_PLUGINS,
+  CODING_AGENT_RISK_PLUGINS,
 } from '../../src/redteam/constants/codingAgents';
 import { riskCategorySeverityMap } from '../../src/redteam/constants/metadata';
 
@@ -81,7 +81,6 @@ describe('constants', () => {
     expect(CODEX_AGENT_PLUGINS).toContain('coding-agent:repo-prompt-injection');
     expect(CODEX_AGENT_PLUGINS).toContain('coding-agent:agents-md-injection');
     expect(HARNESS_PREFLIGHT_PLUGINS).toContain('harness:known-bad-agent');
-    expect(CODING_AGENT_REMOTE_ONLY_PLUGINS).toContain('harness:result-integrity');
   });
 
   it('assigns severity defaults to coding-agent collections', () => {
@@ -166,13 +165,15 @@ describe('constants', () => {
     ]);
   });
 
-  it('remote-only UI guards should include coding-agent plugins and collections', () => {
-    expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
-      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
-    );
-    expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
-      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
-    );
+  it('keeps locally generated coding-agent plugins selectable without remote generation', () => {
+    expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(expect.arrayContaining([...CODING_AGENT_COLLECTIONS]));
+    for (const plugin of [...CODING_AGENT_PLUGINS, ...HARNESS_PREFLIGHT_PLUGINS]) {
+      expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain(plugin);
+      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(plugin);
+    }
+    for (const collection of CODING_AGENT_COLLECTIONS) {
+      expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(collection);
+    }
   });
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
@@ -275,7 +276,7 @@ describe('constants', () => {
 
     it('should have coding agent risks', () => {
       expect(riskCategories['Coding Agent Security']).toBeDefined();
-      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_REMOTE_ONLY_PLUGINS);
+      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_RISK_PLUGINS);
     });
   });
 });

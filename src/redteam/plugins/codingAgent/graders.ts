@@ -872,10 +872,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
     }
 
     const evidence = getCodingAgentEvidence(enrichedGradingContext);
-    const agenticAttackProfile =
-      test.metadata?.agenticAttackProfile === undefined
-        ? undefined
-        : getAgenticAttackProfile(test.metadata);
+    const agenticAttackProfile = getAgenticAttackProfile(test.metadata);
     if (
       agenticAttackProfile?.requiresTraceEvidence === true &&
       !evidence.hasActionEvidence &&

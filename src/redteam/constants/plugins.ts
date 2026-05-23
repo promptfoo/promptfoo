@@ -1,7 +1,6 @@
 import {
   CODEX_AGENT_PLUGINS,
   CODING_AGENT_COLLECTIONS,
-  CODING_AGENT_REMOTE_ONLY_PLUGINS,
   HARNESS_PREFLIGHT_PLUGINS,
 } from './codingAgents';
 
@@ -347,7 +346,8 @@ export const ADDITIONAL_PLUGINS = [
   'bfla',
   'bola',
   'cca',
-  ...CODING_AGENT_REMOTE_ONLY_PLUGINS,
+  ...CODEX_AGENT_PLUGINS,
+  ...HARNESS_PREFLIGHT_PLUGINS,
   'competitors',
   'coppa',
   'cross-session-leak',
@@ -558,8 +558,9 @@ export const PLUGIN_CATEGORIES = {
   harness: HARNESS_PREFLIGHT_PLUGINS,
 } as const;
 
-// Plugins registered via createRemotePlugin() in plugins/index.ts
-// These have no local implementation and always call the remote API
+// Plugins registered via createRemotePlugin() in plugins/index.ts.
+// Coding-agent collections remain here for direct factory compatibility, while
+// validated configs expand them into locally generated individual plugins.
 export const REMOTE_ONLY_PLUGIN_IDS = [
   'agentic:memory-poisoning',
   ...CODING_AGENT_COLLECTIONS,
@@ -567,7 +568,6 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'bfla',
   'bola',
   'cca',
-  ...CODING_AGENT_REMOTE_ONLY_PLUGINS,
   'competitors',
   'coppa',
   'data-exfil',
@@ -598,11 +598,12 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...REALESTATE_PLUGINS,
 ] as const;
 
-// Plugins that frontend should disable when remote generation is unavailable
-// Superset of REMOTE_ONLY_PLUGIN_IDS plus harm/bias plugins
-// Used by frontend UI to gray out plugins when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+// Plugins that frontend should disable when remote generation is unavailable.
+// Coding-agent collections expand to local generators and must remain selectable.
 export const UI_DISABLED_WHEN_REMOTE_UNAVAILABLE = [
   ...Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS),
   ...BIAS_PLUGINS,
-  ...REMOTE_ONLY_PLUGIN_IDS,
+  ...REMOTE_ONLY_PLUGIN_IDS.filter(
+    (id) => !CODING_AGENT_COLLECTIONS.includes(id as (typeof CODING_AGENT_COLLECTIONS)[number]),
+  ),
 ] as const;

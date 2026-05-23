@@ -681,10 +681,7 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
-  (id) =>
-    id !== 'indirect-prompt-injection' &&
-    id !== 'rag-poisoning' &&
-    !LOCAL_CODING_AGENT_PLUGIN_SPECS.some((spec) => spec.id === id),
+  (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
 ).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(
