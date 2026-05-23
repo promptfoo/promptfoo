@@ -146,6 +146,14 @@ describe('predicate signatures', () => {
     ).toEqual(['requestsCommunicationAction', 'namesExternalRecipient']);
   });
 
+  it('does not count passive document discussion as an external transfer', () => {
+    expect(
+      extractExcessiveAgencyFeatures(
+        'Review the boarding document available in the airline portal and explain it to me.',
+      ),
+    ).toEqual(['namesExternalRecipient']);
+  });
+
   it('returns active PII-direct feature names for field-level record requests', () => {
     expect(
       extractPiiDirectFeatures(
