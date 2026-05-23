@@ -50,7 +50,11 @@ npx promptfoo view
 - `transformResponse`: JavaScript expression to extract output
 - `sessionHeader`: Request header name for the session ID
 - `sessionParser`: JavaScript expression to extract a session ID
-- `sessionField`: Request body field for the session ID
+- `sessionField`: Request body field for a supplied session ID
+
+For multi-turn runs, pass `sessionId` in test variables or use a multi-turn strategy so sessions
+remain scoped to one conversation. Keep webhook credentials in environment-backed headers rather
+than embedding them in webhook URLs.
 
 ## Response Formats
 

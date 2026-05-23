@@ -2,7 +2,7 @@
 sidebar_label: n8n
 sidebar_position: 42
 title: n8n Provider
-description: Evaluate n8n AI agents and workflows by calling webhook endpoints with support for tool calls and sessions
+description: Evaluate n8n AI agents and webhook workflows in Promptfoo with templated requests, normalized responses, tool-call metadata, and scoped multi-turn sessions.
 ---
 
 # n8n
@@ -56,7 +56,7 @@ providers:
 | `transformResponse` | string        | -           | JavaScript expression to extract output             |
 | `sessionHeader`     | string        | -           | Request header name for the session ID              |
 | `sessionParser`     | string        | -           | JavaScript expression to extract a session ID       |
-| `sessionField`      | string        | `sessionId` | Body field name for session ID                      |
+| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID           |
 
 ## Response Formats
 
@@ -80,7 +80,7 @@ tests:
     assert:
       - type: javascript
         value: |
-          const toolCalls = context.metadata?.toolCalls || [];
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
           return toolCalls.some(tc => tc.name === 'order_lookup');
 ```
 
@@ -100,11 +100,20 @@ providers:
   - id: n8n:https://n8n.example.com/webhook/agent
     config:
       sessionField: conversationId
+      sessionParser: 'data.sessionId'
 ```
 
-The provider extracts session IDs from responses and includes them in subsequent requests. When a
-call already supplies `sessionId`, that explicit value takes precedence over a previously extracted
-session.
+The provider returns extracted session IDs as `response.sessionId`. Promptfoo's multi-turn
+strategies scope that value to the current conversation and supply it to subsequent turns as
+`{{sessionId}}`; the provider does not share one implicit session between independent test cases.
+For client-generated sessions, supply `sessionId` in test variables or through `transformVars`.
+
+:::warning
+
+Webhook URLs and responses can contain sensitive workflow data. Put authentication values in
+templated headers rather than URL query strings, and treat local eval result exports as sensitive.
+
+:::
 
 ## n8n Variable Conversion
 

@@ -30,7 +30,7 @@ tests:
     assert:
       - type: javascript
         value: |
-          const toolCalls = context.metadata?.toolCalls || [];
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
           return toolCalls.some(tc => tc.name === 'order_lookup');
       - type: contains
         value: '12345'
