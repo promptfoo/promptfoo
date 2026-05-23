@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from '../../util/utils';
 
 const { mockRandomUUID } = vi.hoisted(() => ({
   mockRandomUUID: vi.fn(() => 'secure-mcp-session-id'),
@@ -285,6 +286,7 @@ describe('MCP Server', () => {
 
   describe('startHttpMcpServer', () => {
     it('creates cryptographically random session identifiers', async () => {
+      const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
       let shutdown: (() => void) | undefined;
       vi.spyOn(process, 'once').mockImplementation(((event: string, listener: () => void) => {
         if (event === 'SIGINT') {
@@ -293,21 +295,27 @@ describe('MCP Server', () => {
         return process;
       }) as typeof process.once);
 
-      const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
-      const serverPromise = startHttpMcpServer(3100);
+      let serverPromise: Promise<void> | undefined;
+      try {
+        const { startHttpMcpServer } = await import('../../../src/commands/mcp/server');
+        serverPromise = startHttpMcpServer(3100);
 
-      await vi.waitFor(() => {
-        expect(streamableHttpMocks.constructor).toHaveBeenCalledOnce();
-      });
+        await vi.waitFor(() => {
+          expect(streamableHttpMocks.constructor).toHaveBeenCalledOnce();
+        });
 
-      const transportOptions = streamableHttpMocks.constructor.mock.calls[0][0] as {
-        sessionIdGenerator: () => string;
-      };
-      expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
-      expect(mockRandomUUID).toHaveBeenCalledOnce();
-
-      shutdown?.();
-      await serverPromise;
+        const transportOptions = streamableHttpMocks.constructor.mock.calls[0][0] as {
+          sessionIdGenerator: () => string;
+        };
+        expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');
+        expect(mockRandomUUID).toHaveBeenCalledOnce();
+      } finally {
+        if (shutdown) {
+          shutdown();
+          await serverPromise;
+        }
+        restoreEnv();
+      }
     });
   });
 });
