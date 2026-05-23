@@ -31,8 +31,10 @@ vi.mock('../../../src/logger', () => ({
  * is attached. Tests that need to invoke the attached handler synchronously
  * after callApi() must wait for all of those hops to settle.
  */
+const MICROTASK_FLUSH_ITERATIONS = 8;
+
 const flushMicrotasks = async () => {
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < MICROTASK_FLUSH_ITERATIONS; i++) {
     await Promise.resolve();
   }
 };
@@ -849,9 +851,9 @@ describe('OpenAI Realtime Provider', () => {
                 type: 'response.done',
                 response: {
                   usage: {
-                    total_tokens: responseText.length * 2,
-                    prompt_tokens: responseText.length,
-                    completion_tokens: responseText.length,
+                    total_tokens: 24,
+                    prompt_tokens: 12,
+                    completion_tokens: 12,
                   },
                 },
               }),
@@ -2265,18 +2267,39 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should reuse existing connection for subsequent requests', async () => {
-      // Skip this test since it's difficult to mock properly and causes flakey results
-      // The functionality is tested in other tests
-
-      // Create basic provider
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { maintainContext: true },
+        config: { modalities: ['text'], maintainContext: true },
       });
+      const persistentConnection = createPersistentMockWebSocket(provider);
+      provider.persistentConnection = persistentConnection;
+      const context = { test: { metadata: { conversationId: 'reuse-connection' } } } as any;
 
-      // Add a basic assertion to pass the test
-      expect(provider.config.maintainContext).toBe(true);
+      const completeTurn = async (output: string) => {
+        await flushMicrotasks();
+        const handler = lastMessageHandler();
+        emitUserItem(handler, `item-${output}`);
+        emitOutputTextDone(handler, output);
+        emitResponseDone(handler);
+      };
 
-      // Clean up
+      (MockWebSocket as any).mockClear();
+
+      const firstTurn = provider.callApi('first', context);
+      await completeTurn('first');
+      await expect(firstTurn).resolves.toMatchObject({ output: 'first' });
+
+      const secondTurn = provider.callApi('second', context);
+      await completeTurn('second');
+      await expect(secondTurn).resolves.toMatchObject({ output: 'second' });
+
+      expect(MockWebSocket).not.toHaveBeenCalled();
+      expect(provider.persistentConnection).toBe(persistentConnection);
+      expect(
+        sentWebSocketEvents(persistentConnection).filter(
+          (event) => event.type === 'conversation.item.create',
+        ),
+      ).toHaveLength(2);
+
       provider.cleanup();
     });
 
@@ -2476,6 +2499,97 @@ describe('OpenAI Realtime Provider', () => {
       // tearDown must run so the next turn reconnects.
       expect(provider.persistentConnection).toBeNull();
       expect((provider as any).connectionReady).toBeNull();
+    });
+
+    it('rejects the in-flight turn and tears down state when the response times out', async () => {
+      // Regression: the websocketTimeout callback rejected the turn but — unlike
+      // every other abort path — never detached the message handler or tore
+      // down the persistent connection. The stale handler kept firing for later
+      // turns' events (recreating the event-interleaving bug the provider was
+      // hardened against) and connectionReady stayed cached so the next turn
+      // skipped reconnection.
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: { modalities: ['text'], maintainContext: true, websocketTimeout: 50 },
+        });
+
+        const ws = {
+          on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+          once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+          readyState: 1,
+        } as unknown as WebSocket;
+        provider.persistentConnection = ws;
+
+        const ctx = { test: { metadata: { conversationId: 'timeout-turn' } } } as any;
+        const turnPromise = provider.callApi('no response please', ctx);
+
+        // Let setup register the request timeout, then advance past it without
+        // ever delivering a server response.
+        await vi.advanceTimersByTimeAsync(0);
+        emitRealtimeEvent(lastMessageHandler(), {
+          type: 'conversation.item.added',
+          item: { id: 'assistant-timeout', role: 'assistant' },
+        });
+        expect(provider.previousItemId).toBe('assistant-timeout');
+        expect(provider.assistantMessageIds).toEqual(['assistant-timeout']);
+        await vi.advanceTimersByTimeAsync(100);
+
+        const result = await turnPromise;
+        expect(result.error).toMatch(/timed out/i);
+        // The fix: the timeout path must detach the stale message handler and
+        // drop the socket so the next turn reconnects cleanly.
+        expect(ws.removeListener).toHaveBeenCalledWith('message', expect.any(Function));
+        expect(ws.close).toHaveBeenCalled();
+        expect(provider.persistentConnection).toBeNull();
+        expect((provider as any).connectionReady).toBeNull();
+        expect(provider.previousItemId).toBeNull();
+        expect(provider.assistantMessageIds).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears a failed setup timeout before a later persistent turn', async () => {
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: { modalities: ['text'], maintainContext: true, websocketTimeout: 50 },
+        });
+        const ctx = { test: { metadata: { conversationId: 'failed-setup' } } } as any;
+
+        const firstWs = createPersistentMockWebSocket();
+        vi.mocked(firstWs.send as Mock).mockImplementationOnce(() => {
+          throw new Error('session update send failed');
+        });
+        provider.persistentConnection = firstWs;
+
+        const failedTurn = await provider.callApi('fail during setup', ctx);
+        expect(failedTurn.error).toMatch(/session update send failed/i);
+        provider.cleanup();
+
+        const nextWs = createPersistentMockWebSocket();
+        provider.persistentConnection = nextWs;
+
+        const laterTurn = provider.callApi('succeed after setup failure', ctx);
+        await flushMicrotasks();
+        const handler = lastMessageHandler();
+        emitUserItem(handler, 'u-later');
+        emitOutputTextDone(handler, 'later turn succeeded');
+        emitResponseDone(handler);
+
+        const result = await laterTurn;
+        expect(result.output).toBe('later turn succeeded');
+
+        await vi.advanceTimersByTimeAsync(100);
+        expect(nextWs.close).not.toHaveBeenCalled();
+        provider.cleanup();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('rejects connectionReady and clears state when the socket closes before OPEN', async () => {
@@ -2994,17 +3108,25 @@ describe('OpenAI Realtime Provider', () => {
       expect(mockWs.close).toHaveBeenCalled();
     });
 
-    it('handles direct WebSocket tool config preload rejections before open', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: { tools: 'file://missing-tools.yaml' as any },
-      });
+    describe('direct WebSocket tool config preload rejection handling', () => {
       const unhandledRejections: unknown[] = [];
       const onUnhandledRejection = (reason: unknown) => {
         unhandledRejections.push(reason);
       };
-      process.on('unhandledRejection', onUnhandledRejection);
 
-      try {
+      beforeEach(() => {
+        unhandledRejections.length = 0;
+        process.on('unhandledRejection', onUnhandledRejection);
+      });
+
+      afterEach(() => {
+        process.off('unhandledRejection', onUnhandledRejection);
+      });
+
+      it('handles direct WebSocket tool config preload rejections before open', async () => {
+        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+          config: { tools: 'file://missing-tools.yaml' as any },
+        });
         const promise = provider.directWebSocketRequest('hi');
 
         await flushMicrotasks();
@@ -3013,9 +3135,7 @@ describe('OpenAI Realtime Provider', () => {
 
         mockHandlers.open.forEach((handler) => handler());
         await expect(promise).rejects.toThrow('File does not exist');
-      } finally {
-        process.off('unhandledRejection', onUnhandledRejection);
-      }
+      });
     });
 
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {

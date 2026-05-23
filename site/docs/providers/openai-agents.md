@@ -26,7 +26,7 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ## Prerequisites
 
-- Install SDK: `npm install @openai/agents`
+- Install the optional JavaScript SDK in the project that defines or runs the agent: `npm install @openai/agents`
 - Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
 
