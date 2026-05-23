@@ -211,6 +211,7 @@ export function tableRowToCsvValues(
  *
  * Column structure per prompt:
  * - Output: Pure LLM output text (no pass/fail prefix)
+ * - Reasoning: Native reasoning/thinking content, with redacted blocks shown as [Redacted]
  * - Status: PASS | FAIL | ERROR
  * - Score: Numeric score (e.g., "1.00")
  * - Named Scores: JSON object with per-assertion scores (e.g., {"clarity": 0.90, "accuracy": 0.85})

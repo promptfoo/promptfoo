@@ -857,14 +857,14 @@ type ReasoningContent =
   | { type: 'thinking'; thinking: string; signature?: string }
   | { type: 'redacted_thinking'; data: string }
   | { type: 'reasoning'; content: string }
-  | { type: 'thought'; thought: string }
+  | { type: 'thought'; thought: string; signature?: string }
   | { type: 'think'; content: string };
 ```
 
 - `thinking` - Claude extended thinking blocks with cryptographic signature
 - `redacted_thinking` - Encrypted thinking content flagged by safety systems
 - `reasoning` - Generic reasoning content (OpenAI, OpenAI-compatible providers, OpenRouter, xAI)
-- `thought` - Provider-specific thought content
+- `thought` - Google Gemini thinking mode content, optionally with an opaque thought signature
 - `think` - Thinking extracted from `<think>` tags
 
 ### ProviderEmbeddingResponse
