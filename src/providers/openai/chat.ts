@@ -81,6 +81,9 @@ type OpenAiStreamingChoice = {
   index: number;
   content: string;
   refusal: string;
+  reasoning: string;
+  reasoningContent: string;
+  logProbs: number[];
   finishReason: string | null;
   functionCall: OpenAiStreamingFunctionCall | null;
   toolCalls: Map<number, OpenAiStreamingToolCall>;
@@ -94,15 +97,18 @@ type OpenAiStreamingState = {
   malformed: boolean;
 };
 
-const OPENAI_STREAMING_CACHE_HMAC_KEY = crypto.randomBytes(32);
+const OPENAI_STREAMING_CACHE_HASH_KEY = 'promptfoo:openai-streaming-cache-key:v1';
 
-function fingerprintOpenAiStreamingCacheValue(value: string): string {
+function hashOpenAiStreamingCacheValue(value: unknown): string {
+  const serialized = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
   return crypto
-    .createHmac('sha256', OPENAI_STREAMING_CACHE_HMAC_KEY)
-    .update('promptfoo:openai-streaming-cache-key:v1')
-    .update('\0')
-    .update(value)
+    .createHmac('sha256', OPENAI_STREAMING_CACHE_HASH_KEY)
+    .update(serialized)
     .digest('hex');
+}
+
+function getOpenAiStreamingAuthCacheNamespace(apiKey: string): string {
+  return crypto.createHmac('sha256', apiKey).update(OPENAI_STREAMING_CACHE_HASH_KEY).digest('hex');
 }
 
 function getStreamingPassthroughOptions(body: Record<string, any>): Record<string, unknown> {
@@ -171,6 +177,9 @@ function getOpenAiStreamingChoice(
       index,
       content: '',
       refusal: '',
+      reasoning: '',
+      reasoningContent: '',
+      logProbs: [],
       finishReason: null,
       functionCall: null,
       toolCalls: new Map(),
@@ -187,6 +196,8 @@ function appendStreamingChoice(
     delta?: {
       content?: string;
       refusal?: string;
+      reasoning?: string;
+      reasoning_content?: string;
       function_call?: { name?: string; arguments?: string };
       tool_calls?: Array<{
         index: number;
@@ -194,6 +205,9 @@ function appendStreamingChoice(
         function?: { name?: string; arguments?: string };
       }>;
     };
+    logprobs?: {
+      content?: Array<{ token?: string; logprob?: number }>;
+    } | null;
     finish_reason?: string | null;
   },
 ) {
@@ -203,6 +217,13 @@ function appendStreamingChoice(
   const streamingChoice = getOpenAiStreamingChoice(state, choice.index ?? 0);
   streamingChoice.content += choice.delta?.content || '';
   streamingChoice.refusal += choice.delta?.refusal || '';
+  streamingChoice.reasoning += choice.delta?.reasoning || '';
+  streamingChoice.reasoningContent += choice.delta?.reasoning_content || '';
+  for (const logProb of choice.logprobs?.content ?? []) {
+    if (typeof logProb.logprob === 'number') {
+      streamingChoice.logProbs.push(logProb.logprob);
+    }
+  }
   if (choice.delta?.function_call) {
     appendFunctionCall(streamingChoice, choice.delta.function_call);
   }
@@ -295,11 +316,8 @@ function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string 
   if (state.malformed) {
     return 'API returned malformed SSE data during streaming request';
   }
-  if (
-    !state.completed &&
-    !Array.from(state.choices.values()).some((choice) => choice.finishReason)
-  ) {
-    return 'Streaming response ended before a completion marker was received';
+  if (!state.completed) {
+    return 'Streaming response ended before the [DONE] completion marker was received';
   }
   if (!state.choices.has(0)) {
     return 'Streaming response did not include a primary choice';
@@ -334,6 +352,14 @@ async function getCachedOpenAiStreamingResponse(
   }
 }
 
+async function maybeGetCachedOpenAiStreamingResponse(
+  cache: ReturnType<typeof getCache> | undefined,
+  cacheKey: string,
+  modelName: string,
+): Promise<ProviderResponse | undefined> {
+  return cache ? getCachedOpenAiStreamingResponse(cache, cacheKey, modelName) : undefined;
+}
+
 function getOpenAiStreamingToolCalls(choice: OpenAiStreamingChoice): OpenAiStreamingToolCall[] {
   return Array.from(choice.toolCalls.entries())
     .sort(([left], [right]) => left - right)
@@ -365,6 +391,8 @@ function getOpenAiStreamingChoiceMetadata(choice: OpenAiStreamingChoice) {
       role: 'assistant',
       content: choice.content,
       ...(choice.refusal ? { refusal: choice.refusal } : {}),
+      ...(choice.reasoning ? { reasoning: choice.reasoning } : {}),
+      ...(choice.reasoningContent ? { reasoning_content: choice.reasoningContent } : {}),
       ...(choice.functionCall?.name ? { function_call: choice.functionCall } : {}),
       ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     },
@@ -382,6 +410,18 @@ function parseStructuredStreamingOutput(output: any, config: OpenAiCompletionOpt
     logger.error(`Failed to parse JSON output: ${error}`);
     return output;
   }
+}
+
+function maybePrependOpenAiStreamingReasoning(
+  output: any,
+  choice: OpenAiStreamingChoice,
+  showThinking: boolean,
+): any {
+  const reasoning = choice.reasoning || choice.reasoningContent;
+  if (!showThinking || !reasoning || typeof output !== 'string') {
+    return output;
+  }
+  return `Thinking: ${reasoning}\n\n${output}`;
 }
 
 function getOpenAiStreamingTokenUsage(
@@ -408,16 +448,24 @@ function buildOpenAiStreamingResponse(
     output = primaryChoice.refusal;
   } else if (contentFiltered && output === '') {
     output = 'Content filtered by provider';
+  } else if (!contentFiltered) {
+    output = maybePrependOpenAiStreamingReasoning(
+      output,
+      primaryChoice,
+      config.showThinking ?? true,
+    );
   }
   const choices = Array.from(state.choices.values()).sort(
     (left, right) => left.index - right.index,
   );
+  const logProbs = primaryChoice.logProbs.length > 0 ? primaryChoice.logProbs : undefined;
 
   return {
     output,
     tokenUsage: getOpenAiStreamingTokenUsage(state.usage),
     cached: false,
     latencyMs,
+    ...(logProbs ? { logProbs } : {}),
     ...(normalizedFinishReason && { finishReason: normalizedFinishReason }),
     cost: calculateOpenAIUsageCost(billingModelName, config, state.usage, {
       cachedResponse: false,
@@ -428,6 +476,33 @@ function buildOpenAiStreamingResponse(
     ...(choices.length > 1 && {
       metadata: { choices: choices.map(getOpenAiStreamingChoiceMetadata) },
     }),
+  };
+}
+
+function createOpenAiStreamingAbortSignal(
+  requestTimeoutMs: number,
+  abortSignal?: AbortSignal,
+): { signal: AbortSignal; cleanup: () => void } {
+  const timeoutSignal = AbortSignal.timeout(requestTimeoutMs);
+  if (!abortSignal) {
+    return { signal: timeoutSignal, cleanup: () => undefined };
+  }
+  if (abortSignal.aborted) {
+    return { signal: abortSignal, cleanup: () => undefined };
+  }
+
+  const controller = new AbortController();
+  const abortFromTimeout = () => controller.abort(timeoutSignal.reason);
+  const abortFromCaller = () => controller.abort(abortSignal.reason);
+  timeoutSignal.addEventListener('abort', abortFromTimeout, { once: true });
+  abortSignal.addEventListener('abort', abortFromCaller, { once: true });
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      timeoutSignal.removeEventListener('abort', abortFromTimeout);
+      abortSignal.removeEventListener('abort', abortFromCaller);
+    },
   };
 }
 
@@ -444,6 +519,16 @@ async function cacheOpenAiStreamingResponse(
     await cache.set(cacheKey, JSON.stringify(providerResponse));
   } catch (err) {
     logger.error(`Failed to cache streaming response: ${String(err)}`);
+  }
+}
+
+async function maybeCacheOpenAiStreamingResponse(
+  cache: ReturnType<typeof getCache> | undefined,
+  cacheKey: string,
+  providerResponse: ProviderResponse,
+) {
+  if (cache) {
+    await cacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
   }
 }
 
@@ -472,17 +557,17 @@ function getOpenAiStreamingCacheKey(identity: {
   const canonicalBody = canonicalizeOpenAiStreamingCacheValue(identity.body);
   const cacheIdentity = {
     providerId: identity.providerId,
-    apiUrl: fingerprintOpenAiStreamingCacheValue(identity.apiUrl),
-    body: fingerprintOpenAiStreamingCacheValue(JSON.stringify(canonicalBody)),
-    apiKey: identity.apiKey ? fingerprintOpenAiStreamingCacheValue(identity.apiKey) : undefined,
+    apiUrl: hashOpenAiStreamingCacheValue(identity.apiUrl),
+    body: hashOpenAiStreamingCacheValue(canonicalBody),
+    apiKey: identity.apiKey ? getOpenAiStreamingAuthCacheNamespace(identity.apiKey) : 'no-api-key',
     organization: identity.organization
-      ? fingerprintOpenAiStreamingCacheValue(identity.organization)
+      ? hashOpenAiStreamingCacheValue(identity.organization)
       : undefined,
     headers: identity.headers
       ? Object.fromEntries(
           Object.entries(identity.headers).map(([name, value]) => [
             name,
-            fingerprintOpenAiStreamingCacheValue(value),
+            hashOpenAiStreamingCacheValue(value),
           ]),
         )
       : undefined,
@@ -526,6 +611,65 @@ async function getOpenAiStreamingApiErrorResponse(
     // Non-JSON API errors remain ordinary transport failures.
   }
   return { error: errorMessage, metadata };
+}
+
+async function getOpenAiStreamingReader(
+  response: Response,
+  metadata: ProviderResponse['metadata'],
+): Promise<{
+  reader?: ReadableStreamDefaultReader<Uint8Array>;
+  errorResponse?: ProviderResponse;
+}> {
+  const apiErrorResponse = await getOpenAiStreamingApiErrorResponse(response, metadata);
+  if (apiErrorResponse) {
+    return { errorResponse: apiErrorResponse };
+  }
+
+  if (!response.body) {
+    return { errorResponse: { error: 'No response body for streaming request', metadata } };
+  }
+
+  return { reader: response.body.getReader() };
+}
+
+function getOpenAiStreamingTransportErrorResponse(
+  err: unknown,
+  requestTimeoutMs: number,
+  metadata: ProviderResponse['metadata'] | undefined,
+  abortSignal?: AbortSignal,
+): ProviderResponse {
+  if (err instanceof HttpRateLimitError) {
+    return {
+      error: formatRateLimitErrorMessage(err),
+      metadata: {
+        rateLimitKind: err.kind,
+        http: {
+          status: err.status,
+          statusText: err.statusText,
+          headers: err.headers ?? {},
+        },
+      },
+    };
+  }
+
+  if (err instanceof Error && err.name === 'TimeoutError') {
+    return {
+      error: `API call timed out after ${requestTimeoutMs}ms`,
+      ...(metadata ? { metadata } : {}),
+    };
+  }
+
+  if (abortSignal?.aborted) {
+    return {
+      error: `API call aborted: ${String(abortSignal.reason ?? err)}`,
+      ...(metadata ? { metadata } : {}),
+    };
+  }
+
+  return {
+    error: `API call error: ${String(err)}`,
+    ...(metadata ? { metadata } : {}),
+  };
 }
 
 function normalizeMcpContent(content: any): string {
@@ -1048,7 +1192,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     // Streaming helps prevent 504 gateway timeouts for long-running requests
     const shouldStream = config.stream ?? false;
     if (shouldStream) {
-      return this.callApiStreaming(body, config, context);
+      return this.callApiStreaming(body, config, context, callApiOptions);
     }
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
@@ -1377,6 +1521,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     body: Record<string, any>,
     config: OpenAiCompletionOptions,
     context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
     let metadata: ProviderResponse['metadata'];
@@ -1389,8 +1534,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const apiKey = this.getApiKey();
     const organization = this.getOrganization();
     const hasLocalToolExecution = Boolean(config.functionToolCallbacks) || Boolean(this.mcpClient);
-    const shouldUseCache =
-      isCacheEnabled() && !context?.bustCache && !context?.debug && !hasLocalToolExecution;
+    const shouldBustCache = context?.bustCache ?? context?.debug;
+    const shouldUseCache = isCacheEnabled() && !shouldBustCache && !hasLocalToolExecution;
     const cacheKey = getOpenAiStreamingCacheKey({
       providerId: this.id(),
       apiUrl: this.getApiUrl(),
@@ -1401,18 +1546,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     });
     const cache = shouldUseCache ? getCache() : undefined;
 
-    if (cache) {
-      const cachedResponse = await getCachedOpenAiStreamingResponse(
-        cache,
-        cacheKey,
-        this.modelName,
-      );
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+    const cachedResponse = await maybeGetCachedOpenAiStreamingResponse(
+      cache,
+      cacheKey,
+      this.modelName,
+    );
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     const requestTimeoutMs = getRequestTimeoutMs();
+    const streamingAbort = createOpenAiStreamingAbortSignal(
+      requestTimeoutMs,
+      callApiOptions?.abortSignal,
+    );
 
     try {
       // Build streaming request body
@@ -1440,24 +1587,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             ...config.headers,
           },
           body: JSON.stringify(streamBody),
-          signal: AbortSignal.timeout(requestTimeoutMs),
+          signal: streamingAbort.signal,
         },
         requestTimeoutMs,
         this.config.maxRetries,
       );
       metadata = getOpenAiStreamingHttpMetadata(response);
 
-      const apiErrorResponse = await getOpenAiStreamingApiErrorResponse(response, metadata);
-      if (apiErrorResponse) {
-        return apiErrorResponse;
-      }
-
-      if (!response.body) {
-        return { error: 'No response body for streaming request', metadata };
+      const streamingReader = await getOpenAiStreamingReader(response, metadata);
+      if (streamingReader.errorResponse) {
+        return streamingReader.errorResponse;
       }
 
       // Parse SSE stream
-      const streamingState = await readOpenAiStreamingResponse(response.body.getReader());
+      const streamingState = await readOpenAiStreamingResponse(streamingReader.reader!);
       const validationError = getOpenAiStreamingValidationError(streamingState);
       if (validationError) {
         return { error: validationError, metadata };
@@ -1488,42 +1631,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       providerResponse.metadata = { ...providerResponse.metadata, ...metadata };
 
-      // Cache the successful response
-      if (cache) {
-        await cacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
-      }
+      await maybeCacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
 
       return providerResponse;
     } catch (err) {
       const latencyMs = Date.now() - startTime;
       logger.error(`Streaming API call error after ${latencyMs}ms: ${String(err)}`);
-
-      if (err instanceof HttpRateLimitError) {
-        return {
-          error: formatRateLimitErrorMessage(err),
-          metadata: {
-            rateLimitKind: err.kind,
-            http: {
-              status: err.status,
-              statusText: err.statusText,
-              headers: err.headers ?? {},
-            },
-          },
-        };
-      }
-
-      // Check for timeout errors
-      if (err instanceof Error && err.name === 'TimeoutError') {
-        return {
-          error: `API call timed out after ${requestTimeoutMs}ms`,
-          ...(metadata ? { metadata } : {}),
-        };
-      }
-
-      return {
-        error: `API call error: ${String(err)}`,
-        ...(metadata ? { metadata } : {}),
-      };
+      return getOpenAiStreamingTransportErrorResponse(
+        err,
+        requestTimeoutMs,
+        metadata,
+        callApiOptions?.abortSignal,
+      );
+    } finally {
+      streamingAbort.cleanup();
     }
   }
 }

@@ -2798,6 +2798,61 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
     });
 
+    it('should preserve streamed logprobs when requested', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Hello"},"logprobs":{"content":[{"token":"Hello","logprob":-0.1}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"!"},"logprobs":{"content":[{"token":"!","logprob":-0.2}]},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithRetries.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Say hello' }]),
+        undefined,
+        { includeLogProbs: true },
+      );
+
+      expect(result.output).toBe('Hello!');
+      expect(result.logProbs).toEqual([-0.1, -0.2]);
+      const requestBody = JSON.parse(mockFetchWithRetries.mock.calls[0]?.[1]?.body as string);
+      expect(requestBody.logprobs).toBe(true);
+    });
+
+    it('should preserve streamed reasoning content when showThinking is enabled', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"reasoning_content":"Let me reason. "}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Final answer"},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithRetries.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true, showThinking: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Explain briefly' }]),
+      );
+
+      expect(result.output).toBe('Thinking: Let me reason. \n\nFinal answer');
+    });
+
     it('should preserve multiple streamed choices in response metadata', async () => {
       const sseChunks = [
         'data: {"choices":[{"index":0,"delta":{"content":"First"}},{"index":1,"delta":{"content":"Second"}}]}\n\n',
@@ -3230,6 +3285,36 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(callArgs[1]?.signal).toBeInstanceOf(AbortSignal);
     });
 
+    it('should connect caller abort signals to streaming requests', async () => {
+      const abortController = new AbortController();
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Test"},"finish_reason":"stop"}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithRetries.mockImplementation(async (_url, requestInit) => {
+        const requestSignal = requestInit?.signal as AbortSignal;
+        expect(requestSignal.aborted).toBe(false);
+        abortController.abort('caller cancelled');
+        expect(requestSignal.aborted).toBe(true);
+        return {
+          ok: true,
+          body: createMockSSEStream(sseChunks),
+        } as unknown as Response;
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test' }]),
+        undefined,
+        { abortSignal: abortController.signal },
+      );
+
+      expect(result.output).toBe('Test');
+    });
+
     it('should reject streaming audio output rather than returning incomplete media', async () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4o-audio-preview', {
         config: { stream: true },
@@ -3403,7 +3488,38 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
       const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
 
-      expect(result.error).toBe('Streaming response ended before a completion marker was received');
+      expect(result.error).toBe(
+        'Streaming response ended before the [DONE] completion marker was received',
+      );
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+
+    it('should reject a stream that closes after finish_reason but before DONE', async () => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(undefined),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetCache.mockReturnValue(mockCache as any);
+      mockFetchWithRetries.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        body: createMockSSEStream([
+          'data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n',
+          'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":3,"total_tokens":13}}\n\n',
+        ]),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toBe(
+        'Streaming response ended before the [DONE] completion marker was received',
+      );
       expect(mockCache.set).not.toHaveBeenCalled();
     });
 
@@ -3480,6 +3596,33 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // tokenUsage.cached should equal total to indicate all tokens came from cache
       expect(result.tokenUsage).toEqual({ total: 15, cached: 15 });
       expect(result.cost).toBe(0);
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+    });
+
+    it('should let explicit bustCache false override debug for streaming cache reads', async () => {
+      const cachedResponse = {
+        output: 'Debug cache hit',
+        tokenUsage: { total: 8 },
+      };
+
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetCache.mockReturnValue(mockCache as any);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]), {
+        debug: true,
+        bustCache: false,
+      } as any);
+
+      expect(result.output).toBe('Debug cache hit');
+      expect(result.cached).toBe(true);
+      expect(mockCache.get).toHaveBeenCalledTimes(1);
       expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
@@ -3612,6 +3755,46 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       }).callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
 
       expect(mockCache.get.mock.calls[0]?.[0]).toBe(mockCache.get.mock.calls[1]?.[0]);
+    });
+
+    it('should keep streaming cache keys stable across module reloads', async () => {
+      async function getCacheKeyFromFreshModule() {
+        vi.resetModules();
+        const cacheModule = await import('../../../src/cache');
+        const fetchModule = await import('../../../src/util/fetch/index');
+        const openAiModule = await import('../../../src/providers/openai/chat');
+        const mockCache = {
+          get: vi.fn().mockResolvedValue(undefined),
+          set: vi.fn().mockResolvedValue(undefined),
+        };
+
+        vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+        vi.mocked(cacheModule.getCache).mockReturnValue(mockCache as any);
+        vi.mocked(fetchModule.fetchWithRetries).mockResolvedValue({
+          ok: true,
+          body: createMockSSEStream([
+            'data: {"choices":[{"delta":{"content":"Response"},"finish_reason":"stop"}]}\n\n',
+            'data: [DONE]\n\n',
+          ]),
+        } as unknown as Response);
+
+        await new openAiModule.OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            stream: true,
+            apiKey: 'sk-stable-module-key',
+            passthrough: { nested: { z: 2, a: 1 } },
+          },
+        }).callApi(JSON.stringify([{ role: 'user', content: 'Stable prompt' }]));
+
+        return mockCache.get.mock.calls[0]?.[0];
+      }
+
+      const firstKey = await getCacheKeyFromFreshModule();
+      const secondKey = await getCacheKeyFromFreshModule();
+
+      expect(firstKey).toBe(secondKey);
+      expect(firstKey).not.toContain('sk-stable-module-key');
+      expect(firstKey).not.toContain('Stable prompt');
     });
 
     it('should not cache content-filtered responses', async () => {
