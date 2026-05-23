@@ -468,10 +468,13 @@ const SHELL_TOOL_NAMES = new Set([
   'command',
   'command-execution',
   'exec',
+  'exec-command',
+  'execute-command',
   'fish',
   'powershell',
   'pwsh',
   'run-command',
+  'run-shell-command',
   'shell',
   'shell-command',
   'sh',
@@ -647,6 +650,77 @@ function coerceFirstToolPayload(...values: unknown[]): string | undefined {
   return undefined;
 }
 
+const FILE_WRITE_TOOL_SEGMENT_PATTERN = /(?:^|[_:-])(?:edit|editor|patch|write)(?:[_:-]|$)/;
+
+function isFileWriteToolName(toolName: string): boolean {
+  const normalized = toolName
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase();
+  return FILE_WRITE_TOOL_SEGMENT_PATTERN.test(normalized);
+}
+
+const AUTHORED_FILE_CONTENT_KEYS = [
+  'content',
+  'text',
+  'file_text',
+  'fileText',
+  'new_string',
+  'newString',
+  'new_text',
+  'newText',
+  'replacement',
+  'replacement_text',
+  'replacementText',
+] as const;
+const FILE_PATCH_KEYS = ['patch', 'diff'] as const;
+
+function addedPatchPayload(value: unknown): string | undefined {
+  const patch = getString(value);
+  if (!patch) {
+    return undefined;
+  }
+
+  const lines = patch.split(/\r?\n/);
+  const hasPatchLines = lines.some(
+    (line) =>
+      (line.startsWith('+') && !line.startsWith('+++')) ||
+      (line.startsWith('-') && !line.startsWith('---')),
+  );
+  if (!hasPatchLines) {
+    return patch;
+  }
+
+  const additions = lines
+    .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
+    .map((line) => line.slice(1))
+    .join('\n')
+    .trim();
+  return additions || undefined;
+}
+
+function authoredFilePayload(value: unknown): string | undefined {
+  const parsed = parseProviderRaw(value);
+  const object = getObject(parsed);
+  if (!object) {
+    return coerceToolPayload(parsed);
+  }
+
+  const authoredParts = AUTHORED_FILE_CONTENT_KEYS.flatMap((key) => {
+    const content = coerceToolPayload(object[key]);
+    return content ? [content] : [];
+  });
+  for (const key of FILE_PATCH_KEYS) {
+    const additions = addedPatchPayload(object[key]);
+    if (additions) {
+      authoredParts.push(additions);
+    }
+  }
+
+  const authoredText = authoredParts.join('\n').trim();
+  return authoredText || undefined;
+}
+
 function toolNameFromItem(item: Record<string, unknown>): string {
   const functionObject = getObject(item.function);
   return getString(item.tool) ?? getString(item.name) ?? getString(functionObject?.name) ?? 'tool';
@@ -783,8 +857,12 @@ function targetEvidenceFromItem(
   return text ? [{ evidenceSource, location, text }] : [];
 }
 
-function providerRawItemLocation(index: number, label: string): string {
-  return `provider raw item ${index + 1} ${label}`;
+function providerRawItemLocation(
+  index: number,
+  label: string,
+  prefix = 'provider raw item',
+): string {
+  return `${prefix} ${index + 1} ${label}`;
 }
 
 function toolInputPayload(itemObject: Record<string, unknown>): string | undefined {
@@ -797,6 +875,22 @@ function toolInputPayload(itemObject: Record<string, unknown>): string | undefin
     itemObject.content,
     itemObject.text,
   );
+}
+
+function authoredFileToolInputPayload(itemObject: Record<string, unknown>): string | undefined {
+  const functionObject = getObject(itemObject.function);
+  for (const input of [
+    itemObject.input,
+    itemObject.arguments,
+    itemObject.args,
+    functionObject?.arguments,
+  ]) {
+    const text = authoredFilePayload(input);
+    if (text) {
+      return text;
+    }
+  }
+  return undefined;
 }
 
 function toolOutputPayload(itemObject: Record<string, unknown>): string | undefined {
@@ -948,10 +1042,11 @@ async function evidenceFromConfiguredFiles(
 function evidenceFromAgentMessageRawItem(
   itemObject: Record<string, unknown>,
   index: number,
+  locationPrefix: string,
 ): TargetEvidence[] {
   return targetEvidenceFromItem(
     'agent-response',
-    providerRawItemLocation(index, 'agent message'),
+    providerRawItemLocation(index, 'agent message', locationPrefix),
     getString(itemObject.text),
   );
 }
@@ -959,6 +1054,7 @@ function evidenceFromAgentMessageRawItem(
 function evidenceFromCommandExecutionRawItem(
   itemObject: Record<string, unknown>,
   index: number,
+  locationPrefix: string,
 ): TargetEvidence[] {
   const evidence: TargetEvidence[] = [];
   const command = getString(itemObject.command);
@@ -971,14 +1067,14 @@ function evidenceFromCommandExecutionRawItem(
   if (command) {
     evidence.push({
       evidenceSource: 'command',
-      location: providerRawItemLocation(index, 'command'),
+      location: providerRawItemLocation(index, 'command', locationPrefix),
       text: command,
     });
   }
   if (commandOutput) {
     evidence.push({
       evidenceSource: 'command-output',
-      location: providerRawItemLocation(index, 'command output'),
+      location: providerRawItemLocation(index, 'command output', locationPrefix),
       text: commandOutput,
     });
   }
@@ -988,6 +1084,7 @@ function evidenceFromCommandExecutionRawItem(
 function evidenceFromToolUseRawItem(
   itemObject: Record<string, unknown>,
   index: number,
+  locationPrefix: string,
 ): TargetEvidence[] {
   const toolName = toolNameFromItem(itemObject);
   const toolInput = toolInputPayload(itemObject);
@@ -998,7 +1095,7 @@ function evidenceFromToolUseRawItem(
   if (isShellToolName(toolName)) {
     return targetEvidenceFromItem(
       'command',
-      providerRawItemLocation(index, `${toolName} input`),
+      providerRawItemLocation(index, `${toolName} input`, locationPrefix),
       shellCommandFromToolInput(itemObject) ?? toolInput,
     );
   }
@@ -1015,28 +1112,32 @@ function evidenceFromToolUseRawItem(
       return [
         {
           evidenceSource: 'command',
-          location: providerRawItemLocation(index, `${toolName} input`),
+          location: providerRawItemLocation(index, `${toolName} input`, locationPrefix),
           text: `cat ${filePath}`,
         },
       ];
     }
   }
 
+  const authoredToolInput = isFileWriteToolName(toolName)
+    ? authoredFileToolInputPayload(itemObject)
+    : toolInput;
   return targetEvidenceFromItem(
     'artifact-file',
-    providerRawItemLocation(index, `${toolName} input`),
-    toolInput,
+    providerRawItemLocation(index, `${toolName} input`, locationPrefix),
+    authoredToolInput,
   );
 }
 
 function evidenceFromToolResultRawItem(
   itemObject: Record<string, unknown>,
   index: number,
+  locationPrefix: string,
 ): TargetEvidence[] {
   const toolName = toolNameFromItem(itemObject);
   return targetEvidenceFromItem(
     'command-output',
-    providerRawItemLocation(index, `${toolName} output`),
+    providerRawItemLocation(index, `${toolName} output`, locationPrefix),
     toolOutputPayload(itemObject),
   );
 }
@@ -1044,15 +1145,16 @@ function evidenceFromToolResultRawItem(
 function evidenceFromFileChangeRawItem(
   itemObject: Record<string, unknown>,
   index: number,
+  locationPrefix: string,
 ): TargetEvidence[] {
   const changes = Array.isArray(itemObject.changes) ? itemObject.changes : [];
   if (!changes.length) {
     return targetEvidenceFromItem(
       'artifact-file',
-      providerRawItemLocation(index, 'file change'),
+      providerRawItemLocation(index, 'file change', locationPrefix),
       coerceFirstToolPayload(
-        itemObject.diff,
-        itemObject.patch,
+        addedPatchPayload(itemObject.diff),
+        addedPatchPayload(itemObject.patch),
         itemObject.content,
         itemObject.text,
       ),
@@ -1079,10 +1181,10 @@ function evidenceFromFileChangeRawItem(
     evidence.push(
       ...targetEvidenceFromItem(
         'artifact-file',
-        providerRawItemLocation(index, label),
+        providerRawItemLocation(index, label, locationPrefix),
         coerceFirstToolPayload(
-          changeObject.diff,
-          changeObject.patch,
+          addedPatchPayload(changeObject.diff),
+          addedPatchPayload(changeObject.patch),
           changeObject.content,
           changeObject.text,
         ),
@@ -1096,18 +1198,19 @@ function evidenceFromFileChangeRawItem(
 function evidenceFromProviderRawItem(
   itemObject: Record<string, unknown>,
   index: number,
+  locationPrefix = 'provider raw item',
 ): TargetEvidence[] {
   const type = normalizedProviderRawItemType(itemObject);
   if (type === 'agent_message') {
-    return evidenceFromAgentMessageRawItem(itemObject, index);
+    return evidenceFromAgentMessageRawItem(itemObject, index, locationPrefix);
   }
   if (type === 'command_execution') {
-    return evidenceFromCommandExecutionRawItem(itemObject, index);
+    return evidenceFromCommandExecutionRawItem(itemObject, index, locationPrefix);
   }
-  if (type === 'mcp_tool_call' || type === 'dynamic_tool_call') {
+  if (type === 'mcp_call' || type === 'mcp_tool_call' || type === 'dynamic_tool_call') {
     return [
-      ...evidenceFromToolUseRawItem(itemObject, index),
-      ...evidenceFromToolResultRawItem(itemObject, index),
+      ...evidenceFromToolUseRawItem(itemObject, index, locationPrefix),
+      ...evidenceFromToolResultRawItem(itemObject, index, locationPrefix),
     ];
   }
   // `function_call` / `function_call_output` are the OpenAI Responses API
@@ -1119,7 +1222,7 @@ function evidenceFromProviderRawItem(
     type === 'function_call' ||
     type === 'custom_tool_call'
   ) {
-    return evidenceFromToolUseRawItem(itemObject, index);
+    return evidenceFromToolUseRawItem(itemObject, index, locationPrefix);
   }
   if (
     type === 'tool_result' ||
@@ -1127,10 +1230,10 @@ function evidenceFromProviderRawItem(
     type === 'function_call_output' ||
     type === 'custom_tool_call_output'
   ) {
-    return evidenceFromToolResultRawItem(itemObject, index);
+    return evidenceFromToolResultRawItem(itemObject, index, locationPrefix);
   }
   if (type === 'file_change') {
-    return evidenceFromFileChangeRawItem(itemObject, index);
+    return evidenceFromFileChangeRawItem(itemObject, index, locationPrefix);
   }
   return [];
 }
@@ -1152,14 +1255,35 @@ function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
     });
   }
 
-  const items = Array.isArray(object.items) ? object.items : [];
-  items.forEach((item, index) => {
-    const itemObject = getObject(item);
-    if (!itemObject) {
+  for (const [key, prefix] of [
+    ['items', 'provider raw item'],
+    ['output', 'provider raw output item'],
+  ] as const) {
+    const items = Array.isArray(object[key]) ? object[key] : [];
+    items.forEach((item, index) => {
+      const itemObject = getObject(item);
+      if (itemObject) {
+        evidence.push(...evidenceFromProviderRawItem(itemObject, index, prefix));
+      }
+    });
+  }
+
+  return evidence;
+}
+
+function evidenceFromProviderMetadata(metadata: unknown): TargetEvidence[] {
+  const metadataObject = getObject(metadata);
+  const toolCalls = Array.isArray(metadataObject?.toolCalls) ? metadataObject.toolCalls : [];
+  const evidence: TargetEvidence[] = [];
+
+  toolCalls.forEach((toolCall, index) => {
+    const toolCallObject = getObject(toolCall);
+    if (!toolCallObject) {
       return;
     }
-
-    evidence.push(...evidenceFromProviderRawItem(itemObject, index));
+    const locationPrefix = 'provider metadata tool call';
+    evidence.push(...evidenceFromToolUseRawItem(toolCallObject, index, locationPrefix));
+    evidence.push(...evidenceFromToolResultRawItem(toolCallObject, index, locationPrefix));
   });
 
   return evidence;
@@ -1244,6 +1368,7 @@ function targetEvidence(
           : '',
     },
     ...evidenceFromProviderRaw(gradingContext?.providerResponse?.raw),
+    ...evidenceFromProviderMetadata(gradingContext?.providerResponse?.metadata),
     ...evidenceFromTraceData(gradingContext?.traceData),
     ...evidenceFromTraceData(gradingContext?.traceContext),
   ];
