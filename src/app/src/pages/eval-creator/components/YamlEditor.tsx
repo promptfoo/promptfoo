@@ -71,8 +71,7 @@ const YamlEditorComponent = ({
       const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
 
       if (isFullYamlConfig(parsedConfig)) {
-        // Merge rather than replace so fields not surfaced by getTestSuite() —
-        // e.g. redteam, sharing, outputPath — survive a YAML save.
+        // Merge so fields not surfaced by getTestSuite() (redteam, sharing, outputPath, …) survive.
         updateConfig(parsedConfig);
 
         setParseError(null);

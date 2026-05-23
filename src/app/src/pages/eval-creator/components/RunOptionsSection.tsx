@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from 'react';
 
 import { Card } from '@app/components/ui/card';
 import {
@@ -49,6 +49,27 @@ const getMaxConcurrencyError = (value: string): string | undefined => {
   return undefined;
 };
 
+function useNumericPropToDraftSync(
+  prop: number | undefined,
+  setDraft: Dispatch<SetStateAction<string>>,
+  getError: (value: string) => string | undefined,
+) {
+  const lastPropRef = useRef(prop);
+  useEffect(() => {
+    if (prop === lastPropRef.current) {
+      return;
+    }
+    lastPropRef.current = prop;
+    setDraft((current) => {
+      if (getError(current)) {
+        return current;
+      }
+      const parsed = current === '' ? undefined : Number(current);
+      return parsed === prop ? current : prop?.toString() || '';
+    });
+  }, [prop, setDraft, getError]);
+}
+
 export function RunOptionsSection({
   description,
   delay,
@@ -75,41 +96,9 @@ export function RunOptionsSection({
     setShowOptionalSettings(open);
   };
 
-  // Sync the local drafts to parent props on actual prop changes — including
-  // changes the user initiated (committed via onChange) and changes from
-  // outside (reset, YAML import, cross-field reconciliation). Skip when the
-  // draft already represents the prop value to avoid redundant work, and
-  // preserve invalid in-progress drafts so a parent re-render mid-edit does
-  // not wipe what the user is typing.
-  const lastDelayPropRef = useRef(delay);
-  useEffect(() => {
-    if (delay === lastDelayPropRef.current) {
-      return;
-    }
-    lastDelayPropRef.current = delay;
-    setDelayDraft((current) => {
-      if (getDelayError(current)) {
-        return current;
-      }
-      const parsed = current === '' ? undefined : Number(current);
-      return parsed === delay ? current : delay?.toString() || '';
-    });
-  }, [delay]);
-
-  const lastMaxConcurrencyPropRef = useRef(maxConcurrency);
-  useEffect(() => {
-    if (maxConcurrency === lastMaxConcurrencyPropRef.current) {
-      return;
-    }
-    lastMaxConcurrencyPropRef.current = maxConcurrency;
-    setMaxConcurrencyDraft((current) => {
-      if (getMaxConcurrencyError(current)) {
-        return current;
-      }
-      const parsed = current === '' ? undefined : Number(current);
-      return parsed === maxConcurrency ? current : maxConcurrency?.toString() || '';
-    });
-  }, [maxConcurrency]);
+  // Preserve invalid in-progress drafts so a parent re-render mid-edit does not wipe user input.
+  useNumericPropToDraftSync(delay, setDelayDraft, getDelayError);
+  useNumericPropToDraftSync(maxConcurrency, setMaxConcurrencyDraft, getMaxConcurrencyError);
 
   const handleDelayChange = (value: string) => {
     setDelayDraft(value);

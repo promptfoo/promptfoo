@@ -66,11 +66,8 @@ function isInlineTestCase(obj: unknown): obj is TestCase {
   return isValidTestCase(obj) && !isTestGeneratorConfig(obj);
 }
 
-// The dialog only edits description/vars/assert, but it preserves the remaining
-// schema-recognized fields verbatim, so test cases with options/metadata/threshold/
-// etc. round-trip through the form without losing their advanced configuration.
-// assert-set assertions still need the YAML editor — the form's assertion editor
-// doesn't render them.
+// Route assert-set to YAML — the form's assertion editor cannot render it. Schema-recognized
+// fields the dialog does not edit (options, metadata, threshold, …) round-trip via spread.
 function isFormEditableTestCase(obj: unknown): obj is TestCase {
   return (
     isInlineTestCase(obj) &&

@@ -39,8 +39,7 @@ const CREDENTIAL_FIELD_NAMES = new Set([
   'token',
 ]);
 
-// Matches env-var names that look like credentials regardless of vendor prefix —
-// covers e.g. OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY, GITHUB_TOKEN, …_PASSWORD.
+// Matches credential-looking env keys across vendors (e.g. OPENAI_API_KEY, AWS_SECRET_ACCESS_KEY).
 const SENSITIVE_ENV_KEY_PATTERN =
   /(?:^|_)(api_key|key|secret|token|password|credential|auth)(?:_|$)/i;
 

@@ -108,8 +108,7 @@ const TestCaseForm = ({
 
     onAdd(
       {
-        // Preserve any fields the dialog does not edit (options, metadata, threshold, …)
-        // so that test cases with advanced configuration survive an edit round-trip.
+        // Preserve fields the dialog does not edit (options, metadata, threshold, …).
         ...(initialValues ?? {}),
         description,
         vars,

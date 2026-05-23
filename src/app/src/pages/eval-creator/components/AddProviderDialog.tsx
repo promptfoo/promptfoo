@@ -147,9 +147,7 @@ export default function AddProviderDialog({
         setDiscardDialogOpen(true);
         return;
       }
-      // Only clear the validator once we actually leave the configure step —
-      // clearing it before opening the discard dialog would silently disable
-      // Save if the user picked "Continue editing".
+      // Clear only after committing to leaving — otherwise "Continue editing" would lose Save.
       validateProviderRef.current = null;
       setStep('select');
     } else {
