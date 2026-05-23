@@ -245,10 +245,11 @@ export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, stri
 
     if (requiresKey && !apiKey) {
       const envVar = p.config?.apiKeyEnvar || getDefaultEnvVar(provider.id());
+      const providerLabel = getProviderDescription(provider);
       if (!missingApiKeys.has(envVar)) {
         missingApiKeys.set(envVar, []);
       }
-      missingApiKeys.get(envVar)!.push(provider.id());
+      missingApiKeys.get(envVar)!.push(providerLabel);
     }
   }
 
