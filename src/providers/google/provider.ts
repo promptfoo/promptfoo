@@ -102,8 +102,9 @@ export class GoogleProvider extends GoogleGenericProvider {
    * Get the API version.
    *
    * For Vertex AI: Uses config.apiVersion, env vars, or defaults to 'v1'.
-   * For AI Studio: Uses config.apiVersion if set, otherwise auto-detects
-   * based on model (v1alpha for thinking/gemini-3 models, v1beta for others).
+   * For AI Studio: Uses config.apiVersion if set, otherwise defaults to
+   * v1beta (including the Gemini 3.x family). The legacy
+   * gemini-2.0-flash-thinking-exp model only responds on v1alpha.
    */
   private getApiVersion(): string {
     if (this.isVertexMode) {
@@ -118,11 +119,9 @@ export class GoogleProvider extends GoogleGenericProvider {
       if (this.config.apiVersion) {
         return this.config.apiVersion;
       }
-      // Auto-detect: v1alpha for thinking models and gemini-3, v1beta for others
-      return this.modelName === 'gemini-2.0-flash-thinking-exp' ||
-        this.modelName.startsWith('gemini-3-')
-        ? 'v1alpha'
-        : 'v1beta';
+      // gemini-2.0-flash-thinking-exp only responds on v1alpha; everything
+      // else (including Gemini 3.x) uses the stable v1beta endpoint.
+      return this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
     }
   }
 

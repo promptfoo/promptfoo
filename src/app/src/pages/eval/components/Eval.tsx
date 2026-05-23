@@ -9,7 +9,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -19,7 +19,11 @@ import './Eval.css';
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
-import { buildEvalUrlWithSearchParams, setEvalDetailsHash } from './utils';
+import {
+  buildEvalUrlWithSearchParams,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+} from './utils';
 
 interface EvalOptions {
   /**
@@ -44,7 +48,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const location = useLocation();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
 
   const {
@@ -133,13 +136,19 @@ export default function Eval({ fetchId }: EvalOptions) {
    * Updates the URL with the selected eval id, triggering a re-render of the Eval component.
    */
   const handleRecentEvalSelection = useCallback(
-    async (id: string) => {
-      navigate({
-        pathname: EVAL_ROUTES.DETAIL(id),
-        search: searchParams.toString(),
-      });
+    (id: string) => {
+      // A selected eval has a different result set, so row-scoped deep links from the
+      // previous eval must not carry into the destination URL.
+      navigate(
+        buildEvalUrlWithSearchParams(
+          { pathname: EVAL_ROUTES.DETAIL(id), search: location.search, hash: '' },
+          (params) => {
+            params.delete('rowId');
+          },
+        ),
+      );
     },
-    [searchParams, navigate],
+    [location.search, navigate],
   );
 
   const replaceSearchParams = useCallback(
@@ -171,7 +180,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   useEffect(() => {
     const unsubscribe = useTableStore.subscribe(
       (state) => state.filters,
-      (_filters) => {
+      (_filters, previousFilters) => {
         if (isHydratingFiltersRef.current) {
           return;
         }
@@ -181,7 +190,16 @@ export default function Eval({ fetchId }: EvalOptions) {
 
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
-          if (_searchParams.has('filter')) {
+          const didClearAppliedFilters = previousFilters.appliedCount > 0;
+          // `replaceSearchParams` also drops `rowId` and the details hash, so it must
+          // still run when those are present after a filter clear even if there is no
+          // `filter` param.
+          if (
+            didClearAppliedFilters &&
+            (_searchParams.has('filter') ||
+              _searchParams.has('rowId') ||
+              parseEvalOutputPromptHash(window.location.hash) !== null)
+          ) {
             replaceSearchParams((params) => {
               params.delete('filter');
             });
