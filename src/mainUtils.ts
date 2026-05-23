@@ -91,6 +91,8 @@ export function setupEnvFilesFromArgv(argv: string[] = process.argv.slice(2)): v
 }
 
 export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.slice(2)): boolean {
+  const commandPath: string[] = [];
+
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
 
@@ -112,7 +114,17 @@ export function shouldSkipDefaultConfigLoading(argv: string[] = process.argv.sli
       continue;
     }
 
-    return arg === 'code-scans';
+    if (arg.startsWith('-')) {
+      continue;
+    }
+
+    commandPath.push(arg);
+    if (commandPath[0] === 'code-scans') {
+      return true;
+    }
+    if (commandPath[0] === 'redteam' && commandPath[1] === 'recon') {
+      return true;
+    }
   }
 
   return false;

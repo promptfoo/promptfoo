@@ -133,8 +133,17 @@ describe('shouldSkipDefaultConfigLoading', () => {
     );
   });
 
+  it('skips unrelated default config discovery for redteam recon commands', () => {
+    expect(shouldSkipDefaultConfigLoading(['redteam', 'recon', '--dir', './app'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-file', '.env.local', 'redteam', 'recon'])).toBe(
+      true,
+    );
+    expect(shouldSkipDefaultConfigLoading(['redteam', '--verbose', 'recon'])).toBe(true);
+  });
+
   it('keeps default config discovery for other commands and post-separator arguments', () => {
     expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
+    expect(shouldSkipDefaultConfigLoading(['redteam', 'run'])).toBe(false);
     expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
   });
 });

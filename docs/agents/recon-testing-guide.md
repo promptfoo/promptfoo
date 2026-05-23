@@ -137,11 +137,11 @@ Maps recon findings to appropriate plugins.
 
 ### Exclude Patterns
 
-| Scenario                 | Expected Behavior      |
-| ------------------------ | ---------------------- |
-| `--exclude node_modules` | Excludes node_modules  |
-| Multiple excludes        | All patterns respected |
-| Invalid glob pattern     | Clear error message    |
+| Scenario                 | Expected Behavior                                             |
+| ------------------------ | ------------------------------------------------------------- |
+| `--exclude node_modules` | Snapshot omits node_modules before provider tools are created |
+| Multiple excludes        | All patterns respected in the snapshot                        |
+| Invalid glob pattern     | Clear error message                                           |
 
 ## Browser Handoff Edge Cases
 
@@ -159,7 +159,7 @@ Maps recon findings to appropriate plugins.
 
 | Scenario                 | Expected Behavior                             |
 | ------------------------ | --------------------------------------------- |
-| Server not running       | User sees instructions to start               |
+| Server not running       | CLI starts the local server before opening    |
 | Wrong port               | URL shows wrong port, user navigates manually |
 | Server on different host | Not supported (localhost only)                |
 
@@ -237,19 +237,17 @@ npm run build
 ### Happy Path Test
 
 ```bash
-# 1. Start dev server (if not running)
-npm run dev
-
-# 2. Navigate to a test codebase (in another terminal)
+# 1. Navigate to a test codebase
 cd /path/to/test-codebase
 
-# 3. Run recon (using medical-agent example)
+# 2. Run recon (using medical-agent example)
 npm run local -- redteam recon --dir examples/redteam-medical-agent
 
 # Expected:
 # - Spinner shows progress updates
 # - Analysis completes with results displayed
 # - Prompted to write config file
+# - Local server starts if it was not already running
 # - Browser opens to redteam setup page with ?source=recon&token=<one-time-token>
 # - Loading overlay appears briefly
 # - ReconSummaryBanner shows on Application Details page

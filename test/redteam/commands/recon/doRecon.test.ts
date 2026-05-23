@@ -20,7 +20,10 @@ import {
   selectProvider,
 } from '../../../../src/redteam/commands/recon/providers';
 import { createScratchpad } from '../../../../src/redteam/commands/recon/scratchpad';
+import { prepareReconTarget } from '../../../../src/redteam/commands/recon/target';
+import { startServer } from '../../../../src/server/server';
 import { writePromptfooConfig } from '../../../../src/util/config/writer';
+import { checkServerRunning } from '../../../../src/util/server';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => true),
@@ -53,6 +56,7 @@ vi.mock('ora', () => ({
 }));
 
 vi.mock('../../../../src/constants', () => ({
+  getDefaultPort: vi.fn(() => 15500),
   getLocalAppUrl: vi.fn(
     () => 'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
   ),
@@ -103,11 +107,33 @@ vi.mock('../../../../src/redteam/commands/recon/scratchpad', () => ({
   })),
 }));
 
+vi.mock('../../../../src/redteam/commands/recon/target', () => ({
+  prepareReconTarget: vi.fn((directory: string) => ({
+    directory: `${directory}/.promptfoo-recon-snapshot`,
+    excludedPatterns: ['.env*'],
+    copiedFiles: 2,
+    skippedEntries: 1,
+  })),
+}));
+
+vi.mock('../../../../src/util/server', () => ({
+  BrowserBehavior: {
+    SKIP: 2,
+  },
+  checkServerRunning: vi.fn(),
+}));
+
+vi.mock('../../../../src/server/server', () => ({
+  startServer: vi.fn(),
+}));
+
 describe('doRecon', () => {
   const mockedConfirm = vi.mocked(confirm);
   const mockedOpener = vi.mocked(opener);
   const mockedSelectProvider = vi.mocked(selectProvider);
   const mockedCreateScratchpad = vi.mocked(createScratchpad);
+  const mockedCheckServerRunning = vi.mocked(checkServerRunning);
+  const mockedStartServer = vi.mocked(startServer);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -121,6 +147,8 @@ describe('doRecon', () => {
     mockedConfirm.mockResolvedValue(true);
     mockedOpener.mockResolvedValue({} as ChildProcess);
     mockedSelectProvider.mockReturnValue({ type: 'openai', model: 'gpt-test' });
+    mockedCheckServerRunning.mockResolvedValue(true);
+    mockedStartServer.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -147,10 +175,20 @@ describe('doRecon', () => {
     });
 
     expect(result.purpose).toBe('Target app');
-    expect(createOpenAIReconProvider).toHaveBeenCalled();
-    expect(buildReconPrompt).toHaveBeenCalledWith(directory, '/tmp/recon-notes/notes.md', [
+    expect(prepareReconTarget).toHaveBeenCalledWith(directory, '/tmp/recon-notes', [
       'node_modules',
     ]);
+    expect(createOpenAIReconProvider).toHaveBeenCalledWith(
+      `${directory}/.promptfoo-recon-snapshot`,
+      expect.objectContaining({ dir: '/tmp/recon-notes' }),
+      'gpt-test',
+      expect.any(Function),
+    );
+    expect(buildReconPrompt).toHaveBeenCalledWith(
+      `${directory}/.promptfoo-recon-snapshot`,
+      '/tmp/recon-notes/notes.md',
+      ['node_modules'],
+    );
     expect(displayResults).toHaveBeenCalledWith(result, true);
     expect(buildRedteamConfig).toHaveBeenCalledWith(result, directory);
     expect(writePromptfooConfig).toHaveBeenCalledWith(
@@ -172,7 +210,12 @@ describe('doRecon', () => {
 
     await doRecon({ dir: '/repo', yes: true });
 
-    expect(createAnthropicReconProvider).toHaveBeenCalled();
+    expect(createAnthropicReconProvider).toHaveBeenCalledWith(
+      `${path.resolve('/repo')}/.promptfoo-recon-snapshot`,
+      expect.objectContaining({ dir: '/tmp/recon-notes' }),
+      'opus',
+      expect.any(Function),
+    );
     expect(buildPendingConfig).toHaveBeenCalledWith(
       { description: 'generated config' },
       expect.objectContaining({ purpose: 'Target app' }),
@@ -186,6 +229,17 @@ describe('doRecon', () => {
     );
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining('Open this URL in your browser:'),
+    );
+  });
+
+  it('starts the local server before opening recon handoff when none is running', async () => {
+    mockedCheckServerRunning.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await doRecon({ dir: '/repo', yes: true });
+
+    expect(startServer).toHaveBeenCalledWith(15500, 2);
+    expect(opener).toHaveBeenCalledWith(
+      'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
     );
   });
 

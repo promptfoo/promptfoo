@@ -5,9 +5,11 @@ import confirm from '@inquirer/confirm';
 import chalk from 'chalk';
 import opener from 'opener';
 import ora from 'ora';
-import { getLocalAppUrl } from '../../../constants';
+import { getDefaultPort, getLocalAppUrl } from '../../../constants';
 import logger from '../../../logger';
+import { startServer } from '../../../server/server';
 import { writePromptfooConfig } from '../../../util/config/writer';
+import { BrowserBehavior, checkServerRunning } from '../../../util/server';
 import { buildRedteamConfig } from './config';
 import { displayResults } from './output';
 import { buildPendingConfig, createReconHandoffToken, writePendingReconConfig } from './pending';
@@ -19,9 +21,21 @@ import {
   selectProvider,
 } from './providers';
 import { createScratchpad } from './scratchpad';
+import { prepareReconTarget } from './target';
 
 import type { ReconResult } from '../../../validators/recon';
 import type { ReconOptions } from './types';
+
+const SERVER_START_TIMEOUT_MS = 10_000;
+const SERVER_START_POLL_MS = 250;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pluralize(count: number, singular: string): string {
+  return count === 1 ? singular : `${singular}s`;
+}
 
 /**
  * Opens the web UI with the recon source parameter
@@ -36,6 +50,49 @@ async function openBrowserWithRecon(handoffToken: string): Promise<void> {
     logger.debug('Failed to open browser automatically', { error });
     logger.info(`\nOpen this URL in your browser: ${chalk.cyan(url)}`);
   }
+}
+
+async function waitForServer(port: number, getServerError: () => unknown): Promise<void> {
+  const deadline = Date.now() + SERVER_START_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const serverError = getServerError();
+    if (serverError) {
+      throw serverError;
+    }
+
+    if (await checkServerRunning(port)) {
+      return;
+    }
+
+    await delay(SERVER_START_POLL_MS);
+  }
+
+  throw new Error(`Timed out waiting for promptfoo server on port ${port}`);
+}
+
+async function openReconHandoff(handoffToken: string): Promise<void> {
+  const port = getDefaultPort();
+  if (await checkServerRunning(port)) {
+    await openBrowserWithRecon(handoffToken);
+    return;
+  }
+
+  let serverError: unknown;
+  let handoffOpened = false;
+  const serverPromise = startServer(port, BrowserBehavior.SKIP).catch((error: unknown) => {
+    serverError = error;
+    if (handoffOpened) {
+      logger.error(
+        `Local promptfoo server stopped unexpectedly: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+  });
+  void serverPromise;
+
+  await waitForServer(port, () => serverError);
+  await openBrowserWithRecon(handoffToken);
+  handoffOpened = true;
+  logger.info(chalk.dim('Press Ctrl+C to stop the local promptfoo server when you are done.'));
 }
 
 /**
@@ -60,6 +117,16 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
   let spinner: ReturnType<typeof ora> | undefined;
 
   try {
+    const reconTarget = prepareReconTarget(directory, scratchpad.dir, options.exclude);
+    logger.info(
+      chalk.dim(
+        `Prepared filtered analysis snapshot with ${reconTarget.copiedFiles} ${pluralize(
+          reconTarget.copiedFiles,
+          'file',
+        )} (${reconTarget.skippedEntries} ${pluralize(reconTarget.skippedEntries, 'entry')} excluded).`,
+      ),
+    );
+
     // Select provider based on available authentication or a forced choice.
     const providerChoice = selectProvider(options.provider);
     logger.info(`Provider: ${chalk.cyan(providerChoice.type)} (${providerChoice.model})`);
@@ -77,13 +144,23 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
 
     const provider =
       providerChoice.type === 'openai'
-        ? await createOpenAIReconProvider(directory, scratchpad, modelOverride, onProgress)
-        : await createAnthropicReconProvider(directory, scratchpad, modelOverride, onProgress);
+        ? await createOpenAIReconProvider(
+            reconTarget.directory,
+            scratchpad,
+            modelOverride,
+            onProgress,
+          )
+        : await createAnthropicReconProvider(
+            reconTarget.directory,
+            scratchpad,
+            modelOverride,
+            onProgress,
+          );
 
     // Build the analysis prompt
-    const prompt = buildReconPrompt(directory, scratchpad.path, options.exclude);
+    const prompt = buildReconPrompt(reconTarget.directory, scratchpad.path, options.exclude);
 
-    const result = await provider.analyze(directory, prompt);
+    const result = await provider.analyze(reconTarget.directory, prompt);
     spinner.succeed('Analysis complete');
 
     // Display summary of findings
@@ -125,7 +202,7 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
       const handoffToken = createReconHandoffToken();
       const pendingConfig = buildPendingConfig(config, result, directory, handoffToken);
       writePendingReconConfig(pendingConfig);
-      await openBrowserWithRecon(handoffToken);
+      await openReconHandoff(handoffToken);
       logger.info('');
       logger.info(chalk.dim('In the browser:'));
       logger.info(chalk.dim('  1. Review the populated application context'));

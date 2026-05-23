@@ -44,9 +44,9 @@ export function buildReconPrompt(
 
     ## Target Codebase
 
-    Analyze the target application rooted at: ${targetDirectory}
-    Begin by reading files within that directory. Your isolated execution workspace below is not the
-    target application and must not be used as evidence about the application's behavior.
+    Analyze the target application snapshot rooted at: ${targetDirectory}
+    This snapshot contains only files allowed by the exclusion filters. Begin by reading files within
+    that directory. Your isolated execution workspace below is not the target application and must not be used as evidence about the application's behavior.
 
     ## Your Goal
 

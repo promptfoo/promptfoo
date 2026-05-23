@@ -247,8 +247,20 @@ describe('buildRedteamConfig', () => {
     expect(hydraStrategy).toBeDefined();
     expect(crescendoStrategy).toBeDefined();
     expect(goatStrategy).toBeDefined();
-    expect((hydraStrategy as { config: { maxTurns: number } }).config.maxTurns).toBe(5);
-    expect((crescendoStrategy as { config: { maxTurns: number } }).config.maxTurns).toBe(10);
+    expect((hydraStrategy as { config: { maxTurns: number; stateful: boolean } }).config).toEqual({
+      maxTurns: 5,
+      stateful: true,
+    });
+    expect(
+      (crescendoStrategy as { config: { maxTurns: number; stateful: boolean } }).config,
+    ).toEqual({
+      maxTurns: 10,
+      stateful: true,
+    });
+    expect((goatStrategy as { config: { maxTurns: number; stateful: boolean } }).config).toEqual({
+      maxTurns: 5,
+      stateful: true,
+    });
   });
 
   it('should default to single-turn strategies when stateful is undefined', () => {

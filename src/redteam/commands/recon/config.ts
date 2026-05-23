@@ -598,6 +598,7 @@ function buildStrategies(stateful: boolean): RedteamStrategyObject[] {
         config: {
           // Hydra uses multi-turn conversation to build trust then attack
           maxTurns: 5,
+          stateful: true,
         },
       },
       {
@@ -605,6 +606,7 @@ function buildStrategies(stateful: boolean): RedteamStrategyObject[] {
         config: {
           // Crescendo gradually escalates requests across turns
           maxTurns: 10,
+          stateful: true,
         },
       },
       {
@@ -612,6 +614,7 @@ function buildStrategies(stateful: boolean): RedteamStrategyObject[] {
         config: {
           // GOAT (Generative Offensive Agent Tester) for agentic attacks
           maxTurns: 5,
+          stateful: true,
         },
       },
     );

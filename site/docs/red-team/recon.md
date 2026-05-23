@@ -33,6 +33,9 @@ Recon sends portions of your source code to AI model providers for analysis. Und
 - Configuration files (`package.json`, `README.md`, entry points)
 - Never reads `.env` files (excluded by default)
 
+Recon first builds an isolated analysis snapshot and gives the agent access only
+to files that pass the default and custom exclusion filters.
+
 ### What Gets Sent to Providers
 
 The AI agent reads file contents and sends relevant excerpts to the configured model provider (OpenAI or Anthropic) for analysis. This includes:
@@ -65,23 +68,17 @@ Before running recon on sensitive codebases:
 
 **Goal**: Generate a red team config and open the UI with it pre-populated.
 
-1. **Start the server** (enables browser handoff):
-
-   ```bash
-   promptfoo view
-   ```
-
-2. **Run recon** on your application:
+1. **Run recon** on your application:
 
    ```bash
    promptfoo redteam recon --dir ./my-llm-app
    ```
 
-3. **Review in browser** — recon automatically opens the setup page with discovered context
+2. **Review in browser** — recon starts the local server if needed, then opens the setup page with discovered context
 
-4. **Configure target endpoint** — edit the `TODO` placeholder URL
+3. **Configure target endpoint** — edit the `TODO` placeholder URL
 
-5. **Run red team**:
+4. **Run red team**:
    ```bash
    promptfoo redteam run
    ```
@@ -115,7 +112,7 @@ The recon agent has limited, read-only access to your codebase:
 | Web search        | Yes       | Can search web for API docs and library documentation                |
 | Web fetch         | Yes       | Can fetch web content for context                                    |
 
-The agent cannot modify your code. The OpenAI provider runs under a read-only sandbox with non-interactive approvals disabled; the Claude provider receives read-only workspace tools. Web access is limited to documentation lookups.
+The agent cannot modify your code. The OpenAI provider runs under a read-only sandbox with non-interactive approvals disabled; the Claude provider receives read-only workspace tools. Both providers analyze the filtered snapshot, not your original checkout, so excluded files are not reachable by file tools. Web access is limited to documentation lookups.
 
 :::note Cost Consideration
 Recon uses advanced AI models for code analysis. Large codebases may incur significant API costs. Use `--exclude` patterns to limit scope.
@@ -174,12 +171,15 @@ redteam:
     - id: jailbreak:hydra
       config:
         maxTurns: 5
+        stateful: true
     - id: crescendo
       config:
         maxTurns: 10
+        stateful: true
     - id: goat
       config:
         maxTurns: 5
+        stateful: true
 
   # Real entities for realistic social engineering scenarios
   entities:
@@ -228,7 +228,7 @@ promptfoo redteam recon --dir ./app --yes --no-open
 
 ### Excluding Files
 
-By default, recon excludes:
+By default, recon excludes these files before the agent receives filesystem access:
 
 - `node_modules/`, `.git/`, `dist/`, `build/`
 - `.env*` files (to avoid scanning secrets)
@@ -276,10 +276,10 @@ From here:
 
 ### Server Not Running
 
-If the promptfoo server isn't running when recon completes:
+If the promptfoo server isn't running when recon completes, recon starts it on the configured local port before opening the handoff URL. The command keeps running so the setup page and local API stay available.
 
 - Config file is still written to disk
-- Browser may open to an error page; start the server and refresh that generated URL
+- Browser opens after the server is reachable
 - If the URL is no longer available, run recon again to create a fresh one-time handoff
 
 ### Custom Port
@@ -291,7 +291,7 @@ By default, recon opens `http://localhost:15500`. If you're running the server o
 API_PORT=3000 promptfoo redteam recon --dir ./my-app
 ```
 
-Or ensure your server is running on port 15500 with `promptfoo view`.
+Or ensure an existing promptfoo server is already running on that port.
 
 ---
 
