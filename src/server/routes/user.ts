@@ -12,7 +12,7 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { UserSchemas } from '../../types/api/user';
-import { replyValidationError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -111,10 +111,7 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
   }
 });
 
-/**
- * Determines if a URL represents an enterprise deployment by checking
- * if it's a custom domain (not the standard promptfoo.app domain)
- */
+/** Returns an app URL only when it is safe to expose as a browser navigation target. */
 function getHttpAppUrl(url: string | null): string | null {
   if (!url) {
     return null;
@@ -135,44 +132,15 @@ function getHttpAppUrl(url: string | null): string | null {
 }
 
 function isEnterpriseUrl(url: string | null): boolean {
-  const appUrl = getHttpAppUrl(url);
-  if (!appUrl) {
+  if (!url) {
     return false;
   }
 
-  const hostname = new URL(appUrl).hostname.toLowerCase();
+  const hostname = new URL(url).hostname.toLowerCase();
   const standardDomains = ['promptfoo.app', 'www.promptfoo.app', 'app.promptfoo.app'];
 
   return !standardDomains.includes(hostname);
 }
-
-userRouter.get('/cloud/status', async (_req: Request, res: Response): Promise<void> => {
-  try {
-    const isAuthenticated = cloudConfig.isEnabled();
-    const apiKey = cloudConfig.getApiKey();
-    const appUrl = getHttpAppUrl(cloudConfig.getAppUrl());
-
-    // Determine enterprise status based on URL domain
-    const isEnterprise = isEnterpriseUrl(appUrl);
-
-    const responseData = {
-      isAuthenticated,
-      hasApiKey: !!apiKey,
-      appUrl: isAuthenticated ? appUrl : null,
-      isEnterprise,
-    };
-
-    res.json(UserSchemas.CloudStatus.Response.parse(responseData));
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      logger.error(`Cloud status validation error: ${z.prettifyError(error)}`);
-      res.status(500).json({ error: 'Invalid cloud status data' });
-    } else {
-      logger.error(`Error checking cloud status: ${error}`);
-      res.status(500).json({ error: 'Failed to check cloud status' });
-    }
-  }
-});
 
 // New API key authentication endpoint that mirrors CLI behavior
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
@@ -260,14 +228,16 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
  */
 userRouter.get('/cloud-config', async (_req: Request, res: Response): Promise<void> => {
   try {
+    const appUrl = getHttpAppUrl(cloudConfig.getAppUrl());
+
     res.json(
       UserSchemas.CloudConfig.Response.parse({
-        appUrl: cloudConfig.getAppUrl(),
+        appUrl,
         isEnabled: cloudConfig.isEnabled(),
+        isEnterprise: isEnterpriseUrl(appUrl),
       }),
     );
   } catch (error) {
-    logger.error(`Error getting cloud config: ${error}`);
-    res.status(500).json({ error: 'Failed to get cloud config' });
+    sendError(res, 500, 'Failed to get cloud config', error);
   }
 });
