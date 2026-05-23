@@ -131,17 +131,22 @@ describe('Eval Routes - Sharing behavior', () => {
     const createResponse = await postJob(minimalTestSuite);
     const jobId = createResponse.body.id;
 
+    await vi.waitFor(() => {
+      expect(resolveSummary).toBeDefined();
+    });
+
     const inProgressResponse = await api.get(`/api/eval/job/${jobId}`);
     expect(inProgressResponse.body.status).toBe('in-progress');
     expect(inProgressResponse.body.evalId).toBeUndefined();
 
-    resolveSummary?.({ results: [] });
+    resolveSummary!({ results: [] });
 
     await vi.waitFor(async () => {
       const completedResponse = await api.get(`/api/eval/job/${jobId}`);
       expect(completedResponse.body).toMatchObject({
         status: 'complete',
         evalId: 'eval-result-id',
+        result: { results: [] },
       });
     });
   });
