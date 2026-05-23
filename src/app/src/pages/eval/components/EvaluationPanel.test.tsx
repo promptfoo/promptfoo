@@ -415,4 +415,54 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('1 nested assertion')).toBeInTheDocument();
     expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
   });
+
+  it('renders a JSON diff for a failed equals assertion with complete JSON output', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Objects do not match',
+        assertion: { type: 'equals', value: { name: 'Jane' } },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} actualOutput='{"name":"John"}' />);
+
+    expect(screen.getByText('1 difference found')).toBeInTheDocument();
+    expect(screen.getByText('expected: "Jane"')).toBeInTheDocument();
+    expect(screen.getByText('actual: "John"')).toBeInTheDocument();
+  });
+
+  it('does not show a misleading JSON diff for output with surrounding text', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Output includes surrounding text',
+        assertion: { type: 'equals', value: { name: 'Jane' } },
+      },
+    ];
+
+    render(
+      <EvaluationPanel gradingResults={gradingResults} actualOutput='Result: {"name":"John"}' />,
+    );
+
+    expect(screen.queryByText(/difference found/)).not.toBeInTheDocument();
+  });
+
+  it('shows a root-level change when the complete JSON output is null', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Object did not equal null',
+        assertion: { type: 'equals', value: { name: 'Jane' } },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} actualOutput="null" />);
+
+    expect(screen.getByText('(root)')).toBeInTheDocument();
+    expect(screen.getByText('actual: null')).toBeInTheDocument();
+  });
 });

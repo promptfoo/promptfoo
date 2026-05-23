@@ -25,9 +25,8 @@ describe('JsonDiffView', () => {
     expect(screen.getByText('expected: "Jane"')).toBeInTheDocument();
     expect(screen.getByText('actual: "John"')).toBeInTheDocument();
 
-    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
-    await user.click(copyButtons[0]);
-    await user.click(copyButtons[1]);
+    await user.click(screen.getByRole('button', { name: 'Copy expected JSON' }));
+    await user.click(screen.getByRole('button', { name: 'Copy actual JSON' }));
 
     expect(writeText).toHaveBeenNthCalledWith(1, JSON.stringify({ name: 'Jane' }, null, 2));
     expect(writeText).toHaveBeenNthCalledWith(2, JSON.stringify({ name: 'John' }, null, 2));
@@ -87,7 +86,7 @@ describe('JsonDiffView', () => {
   it('shows a fallback for objects that are too large to diff', () => {
     render(<JsonDiffView expected={{ value: 'x'.repeat(50_001) }} actual={{ value: 'small' }} />);
 
-    expect(screen.getByText(/Objects too large for diff view/)).toBeInTheDocument();
+    expect(screen.getByText(/JSON values exceed the diff view size limit/)).toBeInTheDocument();
   });
 
   it('shows a fallback when diff inputs cannot be stringified', () => {
@@ -96,6 +95,6 @@ describe('JsonDiffView', () => {
 
     render(<JsonDiffView expected={circular} actual={{ value: 'small' }} />);
 
-    expect(screen.getByText(/Objects too large for diff view/)).toBeInTheDocument();
+    expect(screen.getByText(/values that cannot be serialized/)).toBeInTheDocument();
   });
 });

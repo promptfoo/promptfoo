@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { JsonDiffView } from '@app/components/JsonDiffView';
 import { Button } from '@app/components/ui/button';
@@ -268,14 +268,22 @@ function AssertionResults({
   const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
   const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
 
+  const assertionRows = useMemo(
+    () => (gradingResults ? buildAssertionRows(gradingResults) : []),
+    [gradingResults],
+  );
+  const shouldParseActualOutput = assertionRows.some(
+    ({ result }) => !result.pass && isJsonAssertion(result),
+  );
+  const parsedActualOutput = useMemo(
+    () => (shouldParseActualOutput ? tryParseJson(actualOutput) : undefined),
+    [actualOutput, shouldParseActualOutput],
+  );
+
   if (!gradingResults) {
     return null;
   }
 
-  // Parse actual output once for JSON diff comparisons
-  const parsedActualOutput = tryParseJson(actualOutput);
-
-  const assertionRows = buildAssertionRows(gradingResults);
   const hasMetrics = assertionRows.some(({ result }) => getMetric(result));
 
   const toggleExpand = (rowId: string) => {
@@ -432,7 +440,7 @@ function AssertionResults({
                   {/* JSON diff view for failed JSON assertions */}
                   {!result.pass &&
                     isJsonAssertion(result) &&
-                    parsedActualOutput !== null &&
+                    parsedActualOutput !== undefined &&
                     result.assertion?.value !== undefined && (
                       <JsonDiffView
                         expected={result.assertion.value}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -9,7 +9,7 @@ import {
 import { CopyButton } from '@app/components/ui/copy-button';
 import { cn } from '@app/lib/utils';
 import {
-  buildUnifiedJsonDiff,
+  buildUnifiedJsonTextDiff,
   computeJsonDiff,
   formatDiffValue,
   type JsonDiff,
@@ -25,6 +25,10 @@ interface JsonDiffViewProps {
 const MAX_DIFFS_SHOWN = 10;
 const MAX_OBJECT_SIZE = 50_000; // 50KB limit for diff computation
 
+type DiffResult =
+  | { status: 'ready'; diffs: JsonDiff[]; expectedJson: string; actualJson: string }
+  | { status: 'too-large' | 'unsupported' };
+
 /**
  * Renders a path-based summary of JSON differences with expandable full diff
  */
@@ -32,28 +36,35 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
   const [showFullDiff, setShowFullDiff] = useState(false);
   const [showAllDiffs, setShowAllDiffs] = useState(false);
 
-  const { diffs, tooLarge } = useMemo(() => {
+  const diffResult = useMemo<DiffResult>(() => {
     try {
-      // Size guard for very large objects
-      const expectedStr = JSON.stringify(expected);
-      const actualStr = JSON.stringify(actual);
+      const expectedJson = JSON.stringify(expected, null, 2);
+      const actualJson = JSON.stringify(actual, null, 2);
 
-      if (expectedStr.length > MAX_OBJECT_SIZE || actualStr.length > MAX_OBJECT_SIZE) {
-        return { diffs: [], tooLarge: true };
+      if (expectedJson === undefined || actualJson === undefined) {
+        return { status: 'unsupported' };
       }
 
-      return { diffs: computeJsonDiff(expected, actual), tooLarge: false };
+      if (expectedJson.length > MAX_OBJECT_SIZE || actualJson.length > MAX_OBJECT_SIZE) {
+        return { status: 'too-large' };
+      }
+
+      return {
+        status: 'ready',
+        diffs: computeJsonDiff(expected, actual),
+        expectedJson,
+        actualJson,
+      };
     } catch {
-      // Handle circular references or other stringify errors
-      return { diffs: [], tooLarge: true };
+      return { status: 'unsupported' };
     }
   }, [expected, actual]);
 
-  // Don't render if no differences found or objects are identical
-  if (!tooLarge && diffs.length === 0) {
+  if (diffResult.status === 'ready' && diffResult.diffs.length === 0) {
     return null;
   }
 
+  const diffs = diffResult.status === 'ready' ? diffResult.diffs : [];
   const displayedDiffs = showAllDiffs ? diffs : diffs.slice(0, MAX_DIFFS_SHOWN);
   const hiddenCount = diffs.length - MAX_DIFFS_SHOWN;
 
@@ -64,11 +75,7 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
         className,
       )}
     >
-      {tooLarge ? (
-        <div className="text-sm text-muted-foreground">
-          Objects too large for diff view. Compare the expected and actual values manually.
-        </div>
-      ) : (
+      {diffResult.status === 'ready' ? (
         <>
           {/* Summary header */}
           <div className="flex items-center justify-between mb-2">
@@ -78,15 +85,17 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
             <div className="flex items-center gap-1">
               <span className="text-xs text-muted-foreground mr-1">Copy:</span>
               <CopyButton
-                value={JSON.stringify(expected, null, 2)}
+                value={diffResult.expectedJson}
                 className="text-xs"
                 iconSize="h-3 w-3"
+                aria-label="Copy expected JSON"
               />
               <span className="text-xs text-muted-foreground">expected</span>
               <CopyButton
-                value={JSON.stringify(actual, null, 2)}
+                value={diffResult.actualJson}
                 className="text-xs"
                 iconSize="h-3 w-3"
+                aria-label="Copy actual JSON"
               />
               <span className="text-xs text-muted-foreground">actual</span>
             </div>
@@ -133,12 +142,21 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
             <CollapsibleContent>
               <div className="mt-2 rounded border border-border bg-muted/30 p-3 overflow-auto max-h-80">
                 <pre className="text-xs font-mono whitespace-pre-wrap break-words m-0">
-                  <UnifiedDiff expected={expected} actual={actual} />
+                  <UnifiedDiff
+                    expectedJson={diffResult.expectedJson}
+                    actualJson={diffResult.actualJson}
+                  />
                 </pre>
               </div>
             </CollapsibleContent>
           </Collapsible>
         </>
+      ) : (
+        <div className="text-sm text-muted-foreground">
+          {diffResult.status === 'too-large'
+            ? 'JSON values exceed the diff view size limit. Compare the expected and actual values manually.'
+            : 'JSON diff view is unavailable for values that cannot be serialized.'}
+        </div>
       )}
     </div>
   );
@@ -174,8 +192,17 @@ function DiffRow({ diff }: { diff: JsonDiff }) {
 /**
  * Renders a unified diff view showing the full JSON with highlighted changes
  */
-function UnifiedDiff({ expected, actual }: { expected: unknown; actual: unknown }) {
-  const unifiedLines = buildUnifiedJsonDiff(expected, actual);
+const UnifiedDiff = memo(function UnifiedDiff({
+  expectedJson,
+  actualJson,
+}: {
+  expectedJson: string;
+  actualJson: string;
+}) {
+  const unifiedLines = useMemo(
+    () => buildUnifiedJsonTextDiff(expectedJson, actualJson),
+    [expectedJson, actualJson],
+  );
 
   return (
     <>
@@ -198,4 +225,4 @@ function UnifiedDiff({ expected, actual }: { expected: unknown; actual: unknown 
       ))}
     </>
   );
-}
+});

@@ -29,6 +29,16 @@ function createDiff(
   return { path: getDiffPath(path), expected, actual, type };
 }
 
+function appendObjectPath(path: string, key: string): string {
+  const segment = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : `[${JSON.stringify(key)}]`;
+
+  if (!path) {
+    return segment;
+  }
+
+  return segment.startsWith('[') ? `${path}${segment}` : `${path}.${segment}`;
+}
+
 function computeArrayDiff(expected: unknown[], actual: unknown[], path: string): JsonDiff[] {
   const diffs: JsonDiff[] = [];
   const maxLength = Math.max(expected.length, actual.length);
@@ -56,7 +66,7 @@ function computeObjectDiff(
   const allKeys = new Set([...Object.keys(expected), ...Object.keys(actual)]);
 
   for (const key of allKeys) {
-    const keyPath = path ? `${path}.${key}` : key;
+    const keyPath = appendObjectPath(path, key);
     if (!(key in expected)) {
       diffs.push(createDiff(keyPath, undefined, actual[key], 'added'));
     } else if (key in actual) {
@@ -78,14 +88,16 @@ function isRecordValue(value: unknown): value is Record<string, unknown> {
  * Returns an array of path-based differences
  */
 export function computeJsonDiff(expected: unknown, actual: unknown, path: string = ''): JsonDiff[] {
-  if (expected === null || expected === undefined) {
-    return actual === null || actual === undefined
-      ? []
-      : [createDiff(path, expected, actual, 'added')];
+  if (expected === undefined) {
+    return actual === undefined ? [] : [createDiff(path, expected, actual, 'added')];
   }
 
-  if (actual === null || actual === undefined) {
+  if (actual === undefined) {
     return [createDiff(path, expected, actual, 'removed')];
+  }
+
+  if (expected === null || actual === null) {
+    return expected === actual ? [] : [createDiff(path, expected, actual, 'changed')];
   }
 
   if (typeof expected !== typeof actual) {
@@ -129,26 +141,17 @@ export function isJsonAssertion(result: GradingResult): boolean {
 }
 
 /**
- * Safely parse JSON from a string, returning null if invalid
+ * Safely parse complete JSON output, returning undefined if invalid.
  */
-export function tryParseJson(str: string | undefined | null): unknown | null {
+export function tryParseJson(str: string | undefined | null): unknown | undefined {
   if (!str || typeof str !== 'string') {
-    return null;
+    return undefined;
   }
 
   try {
     return JSON.parse(str);
   } catch {
-    // Try to extract JSON from the string (for contains-json cases)
-    const jsonMatch = str.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    return undefined;
   }
 }
 
@@ -163,15 +166,22 @@ export function formatDiffValue(value: unknown): string {
     return 'null';
   }
   if (typeof value === 'string') {
-    return `"${value}"`;
+    return JSON.stringify(value) ?? '""';
   }
   if (typeof value === 'object') {
-    const str = JSON.stringify(value);
-    // Truncate long objects
-    if (str.length > 50) {
-      return str.slice(0, 47) + '...';
+    try {
+      const str = JSON.stringify(value);
+      if (str === undefined) {
+        return String(value);
+      }
+      // Truncate long objects
+      if (str.length > 50) {
+        return str.slice(0, 47) + '...';
+      }
+      return str;
+    } catch {
+      return '[unserializable value]';
     }
-    return str;
   }
   return String(value);
 }
@@ -185,9 +195,13 @@ function splitDiffLines(value: string): string[] {
   return withoutTrailingNewline.split('\n');
 }
 
-export function buildUnifiedJsonDiff(expected: unknown, actual: unknown): JsonDiffLine[] {
-  return diffLines(stringifyJson(expected), stringifyJson(actual)).flatMap((change) => {
+export function buildUnifiedJsonTextDiff(expectedJson: string, actualJson: string): JsonDiffLine[] {
+  return diffLines(expectedJson, actualJson).flatMap((change) => {
     const type = change.added ? 'added' : change.removed ? 'removed' : 'same';
     return splitDiffLines(change.value).map((content) => ({ type, content }));
   });
+}
+
+export function buildUnifiedJsonDiff(expected: unknown, actual: unknown): JsonDiffLine[] {
+  return buildUnifiedJsonTextDiff(stringifyJson(expected), stringifyJson(actual));
 }

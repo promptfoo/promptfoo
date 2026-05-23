@@ -103,6 +103,17 @@ describe('computeJsonDiff', () => {
     });
   });
 
+  it('treats array and object values as a changed value rather than matching indexed keys', () => {
+    expect(computeJsonDiff([1, 2], { '0': 1, '1': 2 })).toEqual([
+      {
+        path: '(root)',
+        expected: [1, 2],
+        actual: { '0': 1, '1': 2 },
+        type: 'changed',
+      },
+    ]);
+  });
+
   it('handles null values', () => {
     const expected = { value: null };
     const actual = { value: 'something' };
@@ -113,8 +124,21 @@ describe('computeJsonDiff', () => {
       path: 'value',
       expected: null,
       actual: 'something',
-      type: 'added',
+      type: 'changed',
     });
+  });
+
+  it('quotes object keys that could be mistaken for nested or array paths', () => {
+    const diffs = computeJsonDiff(
+      { 'user.name': 'Jane', '0': 'first', user: { 'first[name]': 'Jane' } },
+      { 'user.name': 'John', '0': 'second', user: { 'first[name]': 'John' } },
+    );
+
+    expect(diffs.map((diff) => diff.path)).toEqual([
+      '["0"]',
+      '["user.name"]',
+      'user["first[name]"]',
+    ]);
   });
 
   it('handles type mismatches', () => {
@@ -279,26 +303,25 @@ describe('tryParseJson', () => {
     expect(tryParseJson(json)).toEqual([1, 2, 3]);
   });
 
-  it('returns null for invalid JSON', () => {
-    expect(tryParseJson('not json')).toBeNull();
+  it('parses JSON null distinctly from invalid input', () => {
+    expect(tryParseJson('null')).toBeNull();
   });
 
-  it('returns null for undefined', () => {
-    expect(tryParseJson(undefined)).toBeNull();
+  it('returns undefined for invalid JSON', () => {
+    expect(tryParseJson('not json')).toBeUndefined();
   });
 
-  it('returns null for null', () => {
-    expect(tryParseJson(null)).toBeNull();
+  it('returns undefined for undefined', () => {
+    expect(tryParseJson(undefined)).toBeUndefined();
   });
 
-  it('extracts JSON from text with surrounding content', () => {
+  it('returns undefined for null input', () => {
+    expect(tryParseJson(null)).toBeUndefined();
+  });
+
+  it('does not compare JSON embedded in surrounding text as the entire equals output', () => {
     const text = 'Here is the result: {"name": "John"} end of output';
-    expect(tryParseJson(text)).toEqual({ name: 'John' });
-  });
-
-  it('extracts JSON array from text', () => {
-    const text = 'The array is [1, 2, 3] here';
-    expect(tryParseJson(text)).toEqual([1, 2, 3]);
+    expect(tryParseJson(text)).toBeUndefined();
   });
 });
 
@@ -313,6 +336,7 @@ describe('formatDiffValue', () => {
 
   it('formats strings with quotes', () => {
     expect(formatDiffValue('hello')).toBe('"hello"');
+    expect(formatDiffValue('say "hello"\nnext')).toBe('"say \\"hello\\"\\nnext"');
   });
 
   it('formats numbers', () => {
