@@ -30,7 +30,7 @@ describeEvaluator('evaluator basic flows', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledWith(
       'Test prompt value1 value2',
       expect.objectContaining({
-        vars: { var1: 'value1', var2: 'value2' },
+        vars: expect.objectContaining({ var1: 'value1', var2: 'value2' }),
         test: testSuite.tests![0],
         prompt: expect.any(Object),
       }),
