@@ -13,6 +13,7 @@
  */
 
 import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -517,7 +518,11 @@ export class GoogleProvider extends GoogleGenericProvider {
             flaggedOutput: true,
             reason: finishReason,
           };
-          return { output: finishReason, tokenUsage, guardrails };
+          if (cliState.config?.redteam) {
+            // Refusals are successful outcomes during redteam evaluations.
+            return { output: finishReason, tokenUsage, guardrails };
+          }
+          return { error: finishReason, tokenUsage, guardrails };
         } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
           // MAX_TOKENS is treated as a successful completion
           if (candidate.content?.parts) {
