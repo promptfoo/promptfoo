@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import path from 'path';
 
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
@@ -12,7 +13,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { sha256 } from '../../util/createHash';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithRetries } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -76,14 +77,33 @@ type OpenAiFunctionCallLike = {
   };
 };
 
-type OpenAiStreamingState = {
+type OpenAiStreamingChoice = {
+  index: number;
   content: string;
+  refusal: string;
   finishReason: string | null;
+  functionCall: OpenAiStreamingFunctionCall | null;
+  toolCalls: Map<number, OpenAiStreamingToolCall>;
+};
+
+type OpenAiStreamingState = {
+  choices: Map<number, OpenAiStreamingChoice>;
   usage?: OpenAiStreamingUsage;
   serviceTier?: string | null;
-  functionCall: OpenAiStreamingFunctionCall | null;
-  toolCalls: OpenAiStreamingToolCall[];
+  completed: boolean;
+  malformed: boolean;
 };
+
+const OPENAI_STREAMING_CACHE_HMAC_KEY = crypto.randomBytes(32);
+
+function fingerprintOpenAiStreamingCacheValue(value: string): string {
+  return crypto
+    .createHmac('sha256', OPENAI_STREAMING_CACHE_HMAC_KEY)
+    .update('promptfoo:openai-streaming-cache-key:v1')
+    .update('\0')
+    .update(value)
+    .digest('hex');
+}
 
 function getStreamingPassthroughOptions(body: Record<string, any>): Record<string, unknown> {
   if (
@@ -105,16 +125,16 @@ function getSseData(line: string): string | undefined {
 }
 
 function appendFunctionCall(
-  state: OpenAiStreamingState,
+  choice: OpenAiStreamingChoice,
   functionCallDelta: { name?: string; arguments?: string },
 ) {
-  state.functionCall ??= { name: '', arguments: '' };
-  state.functionCall.name += functionCallDelta.name || '';
-  state.functionCall.arguments += functionCallDelta.arguments || '';
+  choice.functionCall ??= { name: '', arguments: '' };
+  choice.functionCall.name += functionCallDelta.name || '';
+  choice.functionCall.arguments += functionCallDelta.arguments || '';
 }
 
 function appendToolCalls(
-  state: OpenAiStreamingState,
+  choice: OpenAiStreamingChoice,
   toolCallDeltas: Array<{
     index: number;
     id?: string;
@@ -123,22 +143,50 @@ function appendToolCalls(
 ) {
   for (const toolCallDelta of toolCallDeltas) {
     const index = toolCallDelta.index;
-    state.toolCalls[index] ??= {
+    if (!Number.isSafeInteger(index) || index < 0) {
+      throw new Error('Invalid streaming tool call index');
+    }
+    const toolCall = choice.toolCalls.get(index) ?? {
       id: '',
       type: 'function',
       function: { name: '', arguments: '' },
     };
-    state.toolCalls[index].id = toolCallDelta.id || state.toolCalls[index].id;
-    state.toolCalls[index].function.name += toolCallDelta.function?.name || '';
-    state.toolCalls[index].function.arguments += toolCallDelta.function?.arguments || '';
+    toolCall.id = toolCallDelta.id || toolCall.id;
+    toolCall.function.name += toolCallDelta.function?.name || '';
+    toolCall.function.arguments += toolCallDelta.function?.arguments || '';
+    choice.toolCalls.set(index, toolCall);
   }
+}
+
+function getOpenAiStreamingChoice(
+  state: OpenAiStreamingState,
+  index: number,
+): OpenAiStreamingChoice {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new Error('Invalid streaming choice index');
+  }
+  let choice = state.choices.get(index);
+  if (!choice) {
+    choice = {
+      index,
+      content: '',
+      refusal: '',
+      finishReason: null,
+      functionCall: null,
+      toolCalls: new Map(),
+    };
+    state.choices.set(index, choice);
+  }
+  return choice;
 }
 
 function appendStreamingChoice(
   state: OpenAiStreamingState,
   choice?: {
+    index?: number;
     delta?: {
       content?: string;
+      refusal?: string;
       function_call?: { name?: string; arguments?: string };
       tool_calls?: Array<{
         index: number;
@@ -152,20 +200,23 @@ function appendStreamingChoice(
   if (!choice) {
     return;
   }
-  state.content += choice.delta?.content || '';
+  const streamingChoice = getOpenAiStreamingChoice(state, choice.index ?? 0);
+  streamingChoice.content += choice.delta?.content || '';
+  streamingChoice.refusal += choice.delta?.refusal || '';
   if (choice.delta?.function_call) {
-    appendFunctionCall(state, choice.delta.function_call);
+    appendFunctionCall(streamingChoice, choice.delta.function_call);
   }
   if (choice.delta?.tool_calls) {
-    appendToolCalls(state, choice.delta.tool_calls);
+    appendToolCalls(streamingChoice, choice.delta.tool_calls);
   }
   if (choice.finish_reason) {
-    state.finishReason = choice.finish_reason;
+    streamingChoice.finishReason = choice.finish_reason;
   }
 }
 
 function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string): boolean {
   if (data === '[DONE]') {
+    state.completed = true;
     return true;
   }
 
@@ -175,7 +226,12 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
       usage?: OpenAiStreamingUsage;
       service_tier?: string | null;
     };
-    appendStreamingChoice(state, chunk.choices?.[0]);
+    if (chunk.choices !== undefined && !Array.isArray(chunk.choices)) {
+      throw new Error('Invalid streaming choices');
+    }
+    for (const choice of chunk.choices ?? []) {
+      appendStreamingChoice(state, choice);
+    }
     if (chunk.usage) {
       state.usage = chunk.usage;
     }
@@ -183,7 +239,8 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
       state.serviceTier = chunk.service_tier;
     }
   } catch {
-    logger.debug(`Failed to parse SSE chunk: ${data}`);
+    state.malformed = true;
+    logger.debug('Failed to parse OpenAI SSE chunk');
   }
 
   return false;
@@ -204,10 +261,9 @@ async function readOpenAiStreamingResponse(
 ): Promise<OpenAiStreamingState> {
   const decoder = new TextDecoder();
   const state: OpenAiStreamingState = {
-    content: '',
-    finishReason: null,
-    functionCall: null,
-    toolCalls: [],
+    choices: new Map(),
+    completed: false,
+    malformed: false,
   };
   let buffer = '';
   let streamDone = false;
@@ -233,6 +289,22 @@ async function readOpenAiStreamingResponse(
   }
 
   return state;
+}
+
+function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string | undefined {
+  if (state.malformed) {
+    return 'API returned malformed SSE data during streaming request';
+  }
+  if (
+    !state.completed &&
+    !Array.from(state.choices.values()).some((choice) => choice.finishReason)
+  ) {
+    return 'Streaming response ended before a completion marker was received';
+  }
+  if (!state.choices.has(0)) {
+    return 'Streaming response did not include a primary choice';
+  }
+  return undefined;
 }
 
 async function getCachedOpenAiStreamingResponse(
@@ -262,17 +334,41 @@ async function getCachedOpenAiStreamingResponse(
   }
 }
 
-function getOpenAiStreamingOutput(state: OpenAiStreamingState): any {
-  if (state.functionCall?.name) {
-    return state.functionCall;
+function getOpenAiStreamingToolCalls(choice: OpenAiStreamingChoice): OpenAiStreamingToolCall[] {
+  return Array.from(choice.toolCalls.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([, toolCall]) => toolCall)
+    .filter((toolCall) => toolCall.function?.name);
+}
+
+function getOpenAiStreamingOutput(choice: OpenAiStreamingChoice): any {
+  if (choice.functionCall?.name) {
+    return choice.functionCall;
   }
 
-  const validToolCalls = state.toolCalls.filter((toolCall) => toolCall.function?.name);
+  const validToolCalls = getOpenAiStreamingToolCalls(choice);
   if (validToolCalls.length > 0) {
-    return state.content ? { content: state.content, tool_calls: validToolCalls } : validToolCalls;
+    return choice.content
+      ? { content: choice.content, tool_calls: validToolCalls }
+      : validToolCalls;
   }
 
-  return state.content;
+  return choice.content;
+}
+
+function getOpenAiStreamingChoiceMetadata(choice: OpenAiStreamingChoice) {
+  const toolCalls = getOpenAiStreamingToolCalls(choice);
+  return {
+    index: choice.index,
+    finish_reason: choice.finishReason,
+    message: {
+      role: 'assistant',
+      content: choice.content,
+      ...(choice.refusal ? { refusal: choice.refusal } : {}),
+      ...(choice.functionCall?.name ? { function_call: choice.functionCall } : {}),
+      ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+    },
+  };
 }
 
 function parseStructuredStreamingOutput(output: any, config: OpenAiCompletionOptions): any {
@@ -303,9 +399,19 @@ function buildOpenAiStreamingResponse(
   config: OpenAiCompletionOptions,
   latencyMs: number,
 ): ProviderResponse {
-  const output = parseStructuredStreamingOutput(getOpenAiStreamingOutput(state), config);
-  const normalizedFinishReason = normalizeFinishReason(state.finishReason);
+  const primaryChoice = state.choices.get(0)!;
+  let output = parseStructuredStreamingOutput(getOpenAiStreamingOutput(primaryChoice), config);
+  const normalizedFinishReason = normalizeFinishReason(primaryChoice.finishReason);
   const contentFiltered = normalizedFinishReason === FINISH_REASON_MAP.content_filter;
+  const refused = primaryChoice.refusal.length > 0;
+  if (refused) {
+    output = primaryChoice.refusal;
+  } else if (contentFiltered && output === '') {
+    output = 'Content filtered by provider';
+  }
+  const choices = Array.from(state.choices.values()).sort(
+    (left, right) => left.index - right.index,
+  );
 
   return {
     output,
@@ -317,7 +423,11 @@ function buildOpenAiStreamingResponse(
       cachedResponse: false,
       serviceTier: state.serviceTier ?? config.service_tier,
     }),
-    guardrails: { flagged: contentFiltered },
+    ...(refused || contentFiltered ? { isRefusal: true } : {}),
+    guardrails: { flagged: refused || contentFiltered },
+    ...(choices.length > 1 && {
+      metadata: { choices: choices.map(getOpenAiStreamingChoiceMetadata) },
+    }),
   };
 }
 
@@ -337,12 +447,49 @@ async function cacheOpenAiStreamingResponse(
   }
 }
 
-function getOpenAiStreamingCacheKey(
-  providerId: string,
-  apiUrl: string,
-  body: Record<string, any>,
-): string {
-  return `openai:stream:${sha256(JSON.stringify({ providerId, apiUrl, body }))}`;
+function canonicalizeOpenAiStreamingCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeOpenAiStreamingCacheValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, nestedValue]) => [key, canonicalizeOpenAiStreamingCacheValue(nestedValue)]),
+    );
+  }
+  return value;
+}
+
+function getOpenAiStreamingCacheKey(identity: {
+  providerId: string;
+  apiUrl: string;
+  body: Record<string, any>;
+  apiKey?: string;
+  organization?: string;
+  headers?: Record<string, string>;
+}): string {
+  const canonicalBody = canonicalizeOpenAiStreamingCacheValue(identity.body);
+  const cacheIdentity = {
+    providerId: identity.providerId,
+    apiUrl: fingerprintOpenAiStreamingCacheValue(identity.apiUrl),
+    body: fingerprintOpenAiStreamingCacheValue(JSON.stringify(canonicalBody)),
+    apiKey: identity.apiKey ? fingerprintOpenAiStreamingCacheValue(identity.apiKey) : undefined,
+    organization: identity.organization
+      ? fingerprintOpenAiStreamingCacheValue(identity.organization)
+      : undefined,
+    headers: identity.headers
+      ? Object.fromEntries(
+          Object.entries(identity.headers).map(([name, value]) => [
+            name,
+            fingerprintOpenAiStreamingCacheValue(value),
+          ]),
+        )
+      : undefined,
+  };
+  return `openai:stream:${sha256(
+    JSON.stringify(canonicalizeOpenAiStreamingCacheValue(cacheIdentity)),
+  )}`;
 }
 
 function getOpenAiStreamingHttpMetadata(response: Response): ProviderResponse['metadata'] {
@@ -353,6 +500,32 @@ function getOpenAiStreamingHttpMetadata(response: Response): ProviderResponse['m
       headers: response.headers ? Object.fromEntries(response.headers.entries()) : {},
     },
   };
+}
+
+async function getOpenAiStreamingApiErrorResponse(
+  response: Response,
+  metadata: ProviderResponse['metadata'],
+): Promise<ProviderResponse | undefined> {
+  if (response.ok) {
+    return undefined;
+  }
+
+  const errorText = await response.text();
+  const errorMessage = `API error: ${response.status} ${response.statusText}\n${errorText}`;
+  try {
+    const errorBody = JSON.parse(errorText) as { error?: { code?: string } };
+    if (errorBody.error?.code === 'invalid_prompt') {
+      return {
+        output: errorMessage,
+        isRefusal: true,
+        guardrails: { flagged: true, flaggedInput: true },
+        metadata,
+      };
+    }
+  } catch {
+    // Non-JSON API errors remain ordinary transport failures.
+  }
+  return { error: errorMessage, metadata };
 }
 
 function normalizeMcpContent(content: any): string {
@@ -1207,10 +1380,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
     let metadata: ProviderResponse['metadata'];
+    if (Array.isArray(body.modalities) && body.modalities.includes('audio')) {
+      return {
+        error:
+          'Streaming Chat Completions do not support audio output. Set stream: false when requesting the audio modality.',
+      };
+    }
+    const apiKey = this.getApiKey();
+    const organization = this.getOrganization();
     const hasLocalToolExecution = Boolean(config.functionToolCallbacks) || Boolean(this.mcpClient);
     const shouldUseCache =
       isCacheEnabled() && !context?.bustCache && !context?.debug && !hasLocalToolExecution;
-    const cacheKey = getOpenAiStreamingCacheKey(this.id(), this.getApiUrl(), body);
+    const cacheKey = getOpenAiStreamingCacheKey({
+      providerId: this.id(),
+      apiUrl: this.getApiUrl(),
+      body,
+      apiKey,
+      organization,
+      headers: config.headers,
+    });
     const cache = shouldUseCache ? getCache() : undefined;
 
     if (cache) {
@@ -1241,25 +1429,27 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const url = `${this.getApiUrl()}/chat/completions`;
       logger.debug(`Starting streaming request to ${url}`, { model: this.modelName });
 
-      const response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-          ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-          ...config.headers,
+      const response = await fetchWithRetries(
+        url,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            ...(organization ? { 'OpenAI-Organization': organization } : {}),
+            ...config.headers,
+          },
+          body: JSON.stringify(streamBody),
+          signal: AbortSignal.timeout(requestTimeoutMs),
         },
-        body: JSON.stringify(streamBody),
-        signal: AbortSignal.timeout(requestTimeoutMs),
-      });
+        requestTimeoutMs,
+        this.config.maxRetries,
+      );
       metadata = getOpenAiStreamingHttpMetadata(response);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        return {
-          error: `API error: ${response.status} ${response.statusText}\n${errorText}`,
-          metadata,
-        };
+      const apiErrorResponse = await getOpenAiStreamingApiErrorResponse(response, metadata);
+      if (apiErrorResponse) {
+        return apiErrorResponse;
       }
 
       if (!response.body) {
@@ -1268,12 +1458,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       // Parse SSE stream
       const streamingState = await readOpenAiStreamingResponse(response.body.getReader());
+      const validationError = getOpenAiStreamingValidationError(streamingState);
+      if (validationError) {
+        return { error: validationError, metadata };
+      }
+      const primaryChoice = streamingState.choices.get(0)!;
 
       const latencyMs = Date.now() - startTime;
       logger.debug(`Streaming request completed in ${latencyMs}ms`, {
         model: this.modelName,
-        contentLength: streamingState.content.length,
-        finishReason: streamingState.finishReason,
+        contentLength: primaryChoice.content.length,
+        finishReason: primaryChoice.finishReason,
       });
 
       const providerResponse = buildOpenAiStreamingResponse(
@@ -1283,13 +1478,15 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
       );
       const callbackOutput = await this.resolveFunctionToolCallbacks(
-        streamingState.functionCall ? [streamingState.functionCall] : streamingState.toolCalls,
+        primaryChoice.functionCall
+          ? [primaryChoice.functionCall]
+          : getOpenAiStreamingToolCalls(primaryChoice),
         config,
       );
       if (callbackOutput !== undefined) {
         providerResponse.output = callbackOutput;
       }
-      providerResponse.metadata = metadata;
+      providerResponse.metadata = { ...providerResponse.metadata, ...metadata };
 
       // Cache the successful response
       if (cache) {
@@ -1300,6 +1497,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       const latencyMs = Date.now() - startTime;
       logger.error(`Streaming API call error after ${latencyMs}ms: ${String(err)}`);
+
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? {},
+            },
+          },
+        };
+      }
 
       // Check for timeout errors
       if (err instanceof Error && err.name === 'TimeoutError') {
