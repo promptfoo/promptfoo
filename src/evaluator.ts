@@ -120,6 +120,7 @@ export class PromptSuggestionsRejectedError extends Error {
 
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
+const PROMPTS_FLUSH_INTERVAL_MS = 1000;
 const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
@@ -3422,6 +3423,7 @@ class Evaluator {
           isWebUI,
           processingContext,
           processedIndices,
+          prompts,
           serialRunEvalOptions,
         });
         await this.runConcurrentEvalSteps({
@@ -3480,10 +3482,20 @@ class Evaluator {
   }): Promise<void> {
     const providerCallQueue = new ProviderGroupedCallQueue();
     const groupedRows: GroupedRows[] = [];
+    let lastPromptsFlush = 0;
+    const flushPromptMetrics = async () => {
+      const now = Date.now();
+      if (now - lastPromptsFlush < PROMPTS_FLUSH_INTERVAL_MS) {
+        return;
+      }
+
+      lastPromptsFlush = now;
+      await this.evalRecord.addPrompts(prompts);
+    };
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
       await this.processEvalStep(evalStep, index, { precomputedRows: rows }, processingContext);
       processedIndices.add(index);
-      await this.evalRecord.addPrompts(prompts);
+      await flushPromptMetrics();
     };
     const flushGroupedRows = () =>
       runGroupedGradingForRows(groupedRows, providerCallQueue, processGroupedRows);
@@ -3512,6 +3524,7 @@ class Evaluator {
             idx,
             processGroupedRows,
             processedIndices,
+            flushPromptMetrics,
             rows,
             shouldDeferEvalStepGrading,
             processingContext,
@@ -3546,6 +3559,7 @@ class Evaluator {
     idx,
     processGroupedRows,
     processedIndices,
+    flushPromptMetrics,
     rows,
     shouldDeferEvalStepGrading,
     processingContext,
@@ -3555,12 +3569,14 @@ class Evaluator {
     idx: number;
     processGroupedRows: (entry: GroupedRows) => Promise<void>;
     processedIndices: Set<number>;
+    flushPromptMetrics: () => Promise<void>;
     rows: EvaluateResult[];
     shouldDeferEvalStepGrading: boolean;
     processingContext: EvalProcessingContext;
   }) {
     if (!shouldDeferEvalStepGrading) {
       processedIndices.add(idx);
+      await flushPromptMetrics();
       return processingContext.targetUnavailable;
     }
     if (rows.length === 0) {
@@ -3582,6 +3598,7 @@ class Evaluator {
     isWebUI,
     processingContext,
     processedIndices,
+    prompts,
     serialRunEvalOptions,
   }: {
     checkAbort: () => void;
@@ -3589,14 +3606,21 @@ class Evaluator {
     isWebUI: boolean;
     processingContext: EvalProcessingContext;
     processedIndices: Set<number>;
+    prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
   }) {
+    let lastPromptsFlush = 0;
     for (const evalStep of serialRunEvalOptions) {
       checkAbort();
       logWebUiEvalStepStart(isWebUI, processingContext, evalStep);
       const idx = evalStepIndexMap.get(evalStep)!;
       await this.processEvalStepWithTimeout(evalStep, idx, {}, processingContext);
       processedIndices.add(idx);
+      const now = Date.now();
+      if (now - lastPromptsFlush >= PROMPTS_FLUSH_INTERVAL_MS) {
+        lastPromptsFlush = now;
+        await this.evalRecord.addPrompts(prompts);
+      }
     }
   }
 
@@ -3616,7 +3640,6 @@ class Evaluator {
     prompts: CompletedPrompt[];
   }) {
     let lastPromptsFlush = 0;
-    const PROMPTS_FLUSH_INTERVAL_MS = 1000;
     await async.forEachOfLimit(
       concurrentRunEvalOptions,
       processingContext.concurrency,
