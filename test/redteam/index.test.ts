@@ -26,6 +26,7 @@ import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
 
+import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
@@ -287,6 +288,48 @@ describe('synthesize', () => {
         prompt: 17,
         total: 25,
       });
+    });
+
+    it('should preserve custom provider receivers while tracking generation usage', async () => {
+      class PrivateFieldProvider implements ApiProvider {
+        #providerId = 'private-generation-provider';
+
+        id() {
+          return this.#providerId;
+        }
+
+        async callApi() {
+          return { output: 'Prompt: generated test case' };
+        }
+      }
+
+      const provider = new PrivateFieldProvider();
+      const pluginAction = vi.fn().mockImplementation(async ({ provider: trackedProvider }) => {
+        expect(trackedProvider.id()).toBe('private-generation-provider');
+        await trackedProvider.callApi('generation prompt');
+        return [{ vars: { query: 'generated prompt' } }];
+      });
+      const findSpy = vi
+        .spyOn(Plugins, 'find')
+        .mockReturnValue({ action: pluginAction, key: 'private-provider-plugin' });
+
+      try {
+        const result = await synthesize({
+          entities: [],
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'private-provider-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          provider,
+          purpose: 'Test purpose',
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
+
+        expect(result.generationTokenUsage?.numRequests).toBe(1);
+      } finally {
+        findSpy.mockRestore();
+      }
     });
 
     it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {

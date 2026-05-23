@@ -11,8 +11,8 @@ export type PromptDriftSeverityInput = {
 };
 
 export type PredicateSignatureDelta = {
-  currentPredicates: string[];
-  legacyPredicates: string[];
+  expectedPredicates: string[];
+  observedPredicates: string[];
   lostPredicates: string[];
 };
 
@@ -40,14 +40,14 @@ export function classifyPromptDriftSeverity({
 }
 
 export function diffActivePredicates(
-  currentPredicates: readonly string[],
-  legacyPredicates: readonly string[],
+  expectedPredicates: readonly string[],
+  observedPredicates: readonly string[],
 ): PredicateSignatureDelta {
-  const currentPredicateSet = new Set(currentPredicates);
+  const observedPredicateSet = new Set(observedPredicates);
 
   return {
-    currentPredicates: [...currentPredicates],
-    legacyPredicates: [...legacyPredicates],
-    lostPredicates: legacyPredicates.filter((predicate) => !currentPredicateSet.has(predicate)),
+    expectedPredicates: [...expectedPredicates],
+    observedPredicates: [...observedPredicates],
+    lostPredicates: expectedPredicates.filter((predicate) => !observedPredicateSet.has(predicate)),
   };
 }

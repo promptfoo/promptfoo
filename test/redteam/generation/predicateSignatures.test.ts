@@ -273,7 +273,7 @@ describe('predicate signatures', () => {
   });
 
   it('returns empty coverage for plugins without semantic feature instrumentation', () => {
-    expect(extractPluginFeatures('unknown-plugin', 'hello')).toEqual([]);
+    expect(extractPluginFeatures('unknown-plugin', 'unclassified request')).toEqual([]);
     expect(getPluginFeatureVocabulary('unknown-plugin')).toEqual([]);
     expect(getPluginFeatureBands('unknown-plugin')).toEqual({});
     expect(summarizePluginFeatureCoverage([])).toEqual({
@@ -282,7 +282,9 @@ describe('predicate signatures', () => {
       pluginCount: 0,
       uncoveredPluginIds: [],
     });
-    expect(summarizeObservedPluginFeatureCoverage('unknown-plugin', ['hello'])).toEqual({
+    expect(
+      summarizeObservedPluginFeatureCoverage('unknown-plugin', ['unclassified request']),
+    ).toEqual({
       coverageRate: 0,
       featureCount: 0,
       observedFeatureCount: 0,
