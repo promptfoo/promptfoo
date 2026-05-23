@@ -7,6 +7,7 @@
  * @module redteam/commands/recon/pending
  */
 
+import crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -16,6 +17,29 @@ import { type PendingReconConfig, PendingReconConfigSchema } from '../../../vali
 
 /** Filename for pending recon config */
 export const PENDING_RECON_FILENAME = 'pending-recon.json';
+
+/**
+ * Generates the one-time capability used for the CLI-to-browser handoff.
+ */
+export function createReconHandoffToken(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+/**
+ * Compares a presented handoff token without leaking token bytes through timing.
+ */
+export function isValidReconHandoffToken(expected: string, provided: string | undefined): boolean {
+  if (!provided) {
+    return false;
+  }
+
+  const expectedBytes = Buffer.from(expected);
+  const providedBytes = Buffer.from(provided);
+  return (
+    expectedBytes.length === providedBytes.length &&
+    crypto.timingSafeEqual(expectedBytes, providedBytes)
+  );
+}
 
 /**
  * Gets the path to the pending recon config file.
@@ -35,7 +59,12 @@ export function getPendingReconPath(createDir = false): string {
  */
 export function writePendingReconConfig(config: PendingReconConfig): string {
   const pendingPath = getPendingReconPath(true);
-  fs.writeFileSync(pendingPath, JSON.stringify(config, null, 2));
+  fs.writeFileSync(pendingPath, JSON.stringify(config, null, 2), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  // `mode` only applies when a file is created; lock down previously-created handoff files too.
+  fs.chmodSync(pendingPath, 0o600);
   logger.debug(`Wrote pending recon config to ${pendingPath}`);
   return pendingPath;
 }
@@ -159,6 +188,7 @@ export function hasPendingReconConfig(): boolean {
  * @param config - The generated red team config
  * @param result - The recon analysis result
  * @param codebaseDirectory - Path to the analyzed codebase
+ * @param handoffToken - Capability required for the browser to consume the pending data
  */
 export function buildPendingConfig(
   config: Record<string, unknown>,
@@ -192,8 +222,10 @@ export function buildPendingConfig(
     suggestedPlugins?: string[];
   },
   codebaseDirectory: string,
+  handoffToken = createReconHandoffToken(),
 ): PendingReconConfig {
   return {
+    handoffToken,
     config,
     metadata: {
       source: 'recon-cli',

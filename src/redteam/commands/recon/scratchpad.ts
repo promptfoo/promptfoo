@@ -7,10 +7,10 @@ import dedent from 'dedent';
 import type { Scratchpad } from './types';
 
 /**
- * Creates a temporary scratchpad directory and notes file for the agent to use during analysis.
+ * Creates an isolated temporary working directory for the recon agent.
  *
- * The scratchpad provides a place for the agent to take notes while analyzing the codebase.
- * It is automatically cleaned up after the recon completes.
+ * The OpenAI provider applies a read-only sandbox to this directory and the
+ * target codebase; it is automatically cleaned up after recon completes.
  */
 export function createScratchpad(): Scratchpad {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-recon-'));
@@ -19,10 +19,10 @@ export function createScratchpad(): Scratchpad {
   fs.writeFileSync(
     scratchpadPath,
     dedent`
-      # Recon Scratchpad
+      # Recon Workspace
 
-      Use this file to keep notes during your analysis.
-      This file will be deleted after the recon completes.
+      Temporary workspace marker for a read-only reconnaissance run.
+      This directory will be deleted after the run completes.
 
       ---
 

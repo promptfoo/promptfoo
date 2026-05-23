@@ -1,15 +1,17 @@
 import dedent from 'dedent';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
+import { hasCodexDefaultCredentials } from '../../../providers/openai/codexDefaults';
 import { ReconResultSchema } from '../../../validators/recon';
 import { ReconOutputSchema } from './schema';
 
-import type { ProviderChoice, ReconResult, Scratchpad } from './types';
+import type { ReconResult } from '../../../validators/recon';
+import type { ProviderChoice, Scratchpad } from './types';
 
 /**
  * Default model for OpenAI Codex SDK
  */
-export const DEFAULT_OPENAI_MODEL = 'gpt-5.1-codex';
+export const DEFAULT_OPENAI_MODEL = 'gpt-5.5';
 
 /**
  * Default model for Claude Agent SDK
@@ -32,6 +34,23 @@ export type ReconProgressCallback = (event: { type: string; message: string }) =
  */
 export interface ReconProvider {
   analyze(directory: string, prompt: string): Promise<ReconResult>;
+}
+
+/**
+ * Converts structured-output null placeholders into the optional domain form.
+ */
+function omitNullValues(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(omitNullValues);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, entryValue]) => entryValue !== null)
+        .map(([key, entryValue]) => [key, omitNullValues(entryValue)]),
+    );
+  }
+  return value;
 }
 
 /**
@@ -88,15 +107,18 @@ export async function createOpenAIReconProvider(
     );
   }
 
-  // SECURITY: Use scratchpad as working_dir so agent can only write to temp directory.
-  // The target repo is mounted read-only via additional_directories.
-  // This prevents unintended modifications to user's source code during recon.
+  // SECURITY: Recon is observation-only. The read-only sandbox applies to both the
+  // temporary working directory and the analyzed repository in additional_directories.
   const provider = new OpenAICodexSDKProvider({
     config: {
       working_dir: scratchpad.dir,
       additional_directories: [directory],
       skip_git_repo_check: true,
       model: model || DEFAULT_OPENAI_MODEL,
+      sandbox_mode: 'read-only',
+      approval_policy: 'never',
+      network_access_enabled: true,
+      web_search_mode: 'live',
       output_schema: ReconOutputSchema,
       enable_streaming: !!onProgress,
       on_event: onProgress
@@ -172,18 +194,16 @@ export async function createAnthropicReconProvider(
       }
     : undefined;
 
-  // SECURITY: Use 'default' permission mode to require user confirmation for edits.
-  // The recon command is read-only reconnaissance - it should not modify the target repo.
-  // Only the scratchpad directory (a temp dir) is provided for note-taking.
-  // We explicitly do NOT use 'acceptEdits' to prevent unattended modifications.
+  // SECURITY: The default Claude workspace tools are read-only; only web lookup
+  // tools are appended. Never opt into editing tools for reconnaissance.
   const provider = new ClaudeCodeSDKProvider({
     config: {
-      working_dir: scratchpad.dir, // Agent writes only to temp scratchpad
-      additional_directories: [directory], // Target repo is read-only via additional_directories
+      working_dir: scratchpad.dir,
+      additional_directories: [directory],
       model: model || DEFAULT_ANTHROPIC_MODEL,
       max_budget_usd: DEFAULT_ANTHROPIC_BUDGET_USD,
       append_allowed_tools: ['WebFetch', 'WebSearch'],
-      permission_mode: 'default', // Require confirmation for any edits outside scratchpad
+      permission_mode: 'default',
       output_format: {
         type: 'json_schema',
         schema: ReconOutputSchema,
@@ -204,14 +224,20 @@ export async function createAnthropicReconProvider(
 }
 
 /**
- * Selects the appropriate provider based on available API keys
+ * Selects the appropriate provider based on available authentication.
  *
  * Priority: OpenAI first, then Anthropic
  */
 export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): ProviderChoice {
   if (forcedProvider === 'openai') {
-    if (!getEnvString('OPENAI_API_KEY') && !getEnvString('CODEX_API_KEY')) {
-      throw new Error('OPENAI_API_KEY or CODEX_API_KEY required for OpenAI provider');
+    if (
+      !getEnvString('OPENAI_API_KEY') &&
+      !getEnvString('CODEX_API_KEY') &&
+      !hasCodexDefaultCredentials()
+    ) {
+      throw new Error(
+        'OpenAI recon requires OPENAI_API_KEY, CODEX_API_KEY, or an authenticated Codex CLI session',
+      );
     }
     return { type: 'openai', model: DEFAULT_OPENAI_MODEL };
   }
@@ -223,9 +249,13 @@ export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): Provide
     return { type: 'anthropic', model: DEFAULT_ANTHROPIC_MODEL };
   }
 
-  // Auto-detect: prefer OpenAI
-  if (getEnvString('OPENAI_API_KEY') || getEnvString('CODEX_API_KEY')) {
-    logger.info('Using OpenAI Codex SDK (OPENAI_API_KEY detected)');
+  // Auto-detect: prefer OpenAI API credentials or an existing Codex/ChatGPT login.
+  if (
+    getEnvString('OPENAI_API_KEY') ||
+    getEnvString('CODEX_API_KEY') ||
+    hasCodexDefaultCredentials()
+  ) {
+    logger.info('Using OpenAI Codex SDK (credentials or Codex login detected)');
     return { type: 'openai', model: DEFAULT_OPENAI_MODEL };
   }
 
@@ -235,8 +265,8 @@ export function selectProvider(forcedProvider?: 'openai' | 'anthropic'): Provide
   }
 
   throw new Error(dedent`
-    No API key found. Please set one of:
-    - OPENAI_API_KEY or CODEX_API_KEY for OpenAI Codex SDK
+    No authentication found. Please configure one of:
+    - A Codex CLI login, OPENAI_API_KEY, or CODEX_API_KEY for OpenAI Codex SDK
     - ANTHROPIC_API_KEY for Claude Agent SDK
   `);
 }
@@ -259,6 +289,9 @@ export function parseReconOutput(output: unknown): ReconResult {
       return { purpose: output };
     }
   }
+
+  // Strict agent output schemas encode unknown optional values as null.
+  parsed = omitNullValues(parsed);
 
   // Validate against schema
   const result = ReconResultSchema.safeParse(parsed);

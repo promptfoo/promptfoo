@@ -37,6 +37,7 @@ describe('usePendingRecon', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSearchParams.delete('source');
+    mockSearchParams.delete('token');
   });
 
   afterEach(() => {
@@ -63,6 +64,7 @@ describe('usePendingRecon', () => {
   describe('when source=recon is present', () => {
     beforeEach(() => {
       mockSearchParams.set('source', 'recon');
+      mockSearchParams.set('token', 'browser-handoff-token');
     });
 
     it('should fetch pending recon config', async () => {
@@ -88,17 +90,12 @@ describe('usePendingRecon', () => {
           }),
       } as Response);
 
-      // Mock the DELETE call
-      mockCallApi.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve({ success: true }),
-      } as Response);
-
       renderHook(() => usePendingRecon());
 
       await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalledWith('/redteam/recon/pending');
+        expect(mockCallApi).toHaveBeenCalledWith(
+          '/redteam/recon/pending?token=browser-handoff-token',
+        );
       });
     });
 
@@ -126,17 +123,11 @@ describe('usePendingRecon', () => {
         },
       };
 
-      mockCallApi
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(mockData),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve({ success: true }),
-        } as Response);
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockData),
+      } as Response);
 
       const onReconApplied = vi.fn();
       const { result } = renderHook(() => usePendingRecon(onReconApplied));
@@ -150,9 +141,6 @@ describe('usePendingRecon', () => {
       const [appliedConfig] = mockSetFullConfig.mock.calls[0];
       expect(appliedConfig.plugins).toEqual(['pii:direct', 'sql-injection']);
       expect(appliedConfig.purpose).toBe('Healthcare app');
-
-      // Should have deleted the pending file
-      expect(mockCallApi).toHaveBeenCalledWith('/redteam/recon/pending', { method: 'DELETE' });
 
       // Should navigate to review tab
       expect(mockNavigate).toHaveBeenCalledWith('/redteam/setup#5', { replace: true });
@@ -189,6 +177,19 @@ describe('usePendingRecon', () => {
       expect(mockSetFullConfig).not.toHaveBeenCalled();
     });
 
+    it('should reject a manually constructed recon URL without a handoff token', async () => {
+      mockSearchParams.delete('token');
+
+      const { result } = renderHook(() => usePendingRecon());
+
+      await waitFor(() => {
+        expect(result.current.error).toContain('Missing recon handoff token');
+      });
+
+      expect(mockCallApi).not.toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/redteam/setup', { replace: true });
+    });
+
     it('should handle fetch errors gracefully', async () => {
       mockCallApi.mockRejectedValueOnce(new Error('Network error'));
 
@@ -219,17 +220,11 @@ describe('usePendingRecon', () => {
         },
       };
 
-      mockCallApi
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(mockData),
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve({ success: true }),
-        } as Response);
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockData),
+      } as Response);
 
       renderHook(() => usePendingRecon());
 
@@ -260,8 +255,7 @@ describe('usePendingRecon', () => {
       rerender();
 
       await waitFor(() => {
-        // Should only call API once for the GET request
-        expect(mockCallApi).toHaveBeenCalledTimes(2); // GET + DELETE
+        expect(mockCallApi).toHaveBeenCalledTimes(1);
       });
     });
   });

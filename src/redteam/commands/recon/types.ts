@@ -1,18 +1,8 @@
 /**
  * Types for the recon command
  *
- * Core domain types (DiscoveredTool, ReconResult, etc.) are imported from
- * the shared validators module to ensure consistency across CLI and server.
+ * Command-local types for configuring and running reconnaissance.
  */
-
-// Re-export core domain types from shared validators
-export type {
-  ApplicationDefinition,
-  DiscoveredTool,
-  PendingReconConfig,
-  ReconContext,
-  ReconResult,
-} from '../../../validators/recon';
 
 /**
  * Options passed to the recon command

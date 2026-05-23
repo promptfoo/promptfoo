@@ -7,8 +7,8 @@ This guide covers comprehensive testing for the `promptfoo redteam recon` comman
 The recon command has three main phases:
 
 1. **CLI Analysis Phase** - Agent analyzes codebase and produces `ReconResult`
-2. **Browser Handoff Phase** - Config written to `pending-recon.json`, browser opens with `?source=recon`
-3. **Frontend Display Phase** - Web UI reads pending config via `/api/redteam/recon/pending`, displays `ReconSummaryBanner`
+2. **Browser Handoff Phase** - Config written with restrictive permissions, browser opens with a one-time token
+3. **Frontend Display Phase** - Web UI presents the token to consume pending config, then displays `ReconSummaryBanner`
 
 ### Key Data Flow
 
@@ -22,16 +22,16 @@ doRecon()
   → writePendingReconConfig()
      (writes ~/.promptfoo/pending-recon.json)
   → openBrowserWithRecon()
-     (opens localhost:3000/redteam/setup?source=recon)
+     (opens localhost:3000/redteam/setup?source=recon&token=<one-time-token>)
                                                          usePendingRecon()
                                                            → Shows loading overlay
-                                                           → callApi('/redteam/recon/pending')
-                                 GET /api/redteam/recon/pending
+                                                           → callApi('/redteam/recon/pending?token=...')
+                                 GET /api/redteam/recon/pending?token=...
                                    → Reads pending-recon.json
-                                   → Returns PendingReconConfig
+                                   → Returns PendingReconConfig without token
                                                            → applyReconConfig()
                                                            → setFullConfig() to Zustand
-                                                           → callApi DELETE to clear file
+                                                           → GET consumes pending file
                                                            → Navigate to Review tab
                                                            → Show success toast
 ```
@@ -56,7 +56,7 @@ The function that parses raw agent output into a validated `ReconResult`.
 
 ### 2. `selectProvider` (providers.ts)
 
-Provider selection based on API keys.
+Provider selection based on API keys or an existing Codex login.
 
 **Tested scenarios:**
 
@@ -109,7 +109,8 @@ Maps recon findings to appropriate plugins.
 
 | Scenario              | Expected Behavior            |
 | --------------------- | ---------------------------- |
-| No API keys           | Error listing required keys  |
+| No provider auth      | Error listing auth options   |
+| Codex CLI login only  | Uses OpenAI Codex SDK        |
 | Invalid OpenAI key    | API error from provider      |
 | Invalid Anthropic key | API error from provider      |
 | Rate limited          | Retry or clear error message |
@@ -126,13 +127,13 @@ Maps recon findings to appropriate plugins.
 
 ### Output Options
 
-| Scenario                | Expected Behavior             |
-| ----------------------- | ----------------------------- |
-| `--output custom.yaml`  | Writes to custom.yaml         |
-| Output path with spaces | Handles correctly (quoted)    |
-| Output to read-only dir | Error with permission message |
-| `--yes` flag            | Skips confirmation prompts    |
-| `--no-open`             | Skips browser launch          |
+| Scenario                | Expected Behavior                           |
+| ----------------------- | ------------------------------------------- |
+| `--output custom.yaml`  | Writes to custom.yaml                       |
+| Output path with spaces | Handles correctly (quoted)                  |
+| Output to read-only dir | Error with permission message               |
+| `--yes` flag            | Skips confirmation prompts                  |
+| `--no-open`             | Skips browser launch and pending UI handoff |
 
 ### Exclude Patterns
 
@@ -146,13 +147,13 @@ Maps recon findings to appropriate plugins.
 
 ### pending-recon.json
 
-| Scenario                          | Expected Behavior                   |
-| --------------------------------- | ----------------------------------- |
-| Config dir doesn't exist          | Created automatically               |
-| File already exists               | Overwritten                         |
-| Invalid JSON written              | Frontend shows error                |
-| File deleted before browser opens | Frontend shows "no pending" message |
-| Stale file (hours old)            | Frontend should still load it       |
+| Scenario                          | Expected Behavior                     |
+| --------------------------------- | ------------------------------------- |
+| Config dir doesn't exist          | Created automatically                 |
+| File already exists               | Overwritten with mode `0600` on POSIX |
+| Invalid JSON written              | Frontend shows error                  |
+| File deleted before browser opens | Frontend shows "no pending" message   |
+| Stale file (hours old)            | Frontend should still load it         |
 
 ### Server State
 
@@ -174,15 +175,16 @@ Maps recon findings to appropriate plugins.
 
 ### usePendingRecon Hook
 
-| Scenario                    | Expected Behavior                                        |
-| --------------------------- | -------------------------------------------------------- |
-| URL has `?source=recon`     | Fetches `/api/redteam/recon/pending`                     |
-| URL without `?source=recon` | Hook does nothing                                        |
-| API returns 404             | Warning toast: "No pending recon configuration found..." |
-| API returns error           | Error toast with message                                 |
-| Loading state               | Shows full-page loading overlay with spinner             |
-| Success                     | Navigates to Review tab (#5), shows success toast        |
-| Multiple mounts             | Only fetches once (hasAttemptedLoad ref)                 |
+| Scenario                          | Expected Behavior                                        |
+| --------------------------------- | -------------------------------------------------------- |
+| URL has `?source=recon&token=...` | Fetches `/api/redteam/recon/pending?token=...`           |
+| URL omits handoff token           | Refuses import and prompts user to rerun recon           |
+| URL without `?source=recon`       | Hook does nothing                                        |
+| API returns 404                   | Warning toast: "No pending recon configuration found..." |
+| API returns error                 | Error toast with message                                 |
+| Loading state                     | Shows full-page loading overlay with spinner             |
+| Success                           | Navigates to Review tab (#5), shows success toast        |
+| Multiple mounts                   | Only fetches once (hasAttemptedLoad ref)                 |
 
 ### ReconSummaryBanner
 
@@ -223,7 +225,7 @@ Maps recon findings to appropriate plugins.
 ### Prerequisites
 
 ```bash
-# Ensure you have API keys configured
+# Ensure you have a Codex CLI login or API keys configured
 export OPENAI_API_KEY=your-key
 # OR
 export ANTHROPIC_API_KEY=your-key
@@ -248,7 +250,7 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent
 # - Spinner shows progress updates
 # - Analysis completes with results displayed
 # - Prompted to write config file
-# - Browser opens to redteam setup page with ?source=recon
+# - Browser opens to redteam setup page with ?source=recon&token=<one-time-token>
 # - Loading overlay appears briefly
 # - ReconSummaryBanner shows on Application Details page
 # - Navigates to Review tab automatically
@@ -259,7 +261,7 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent
 
 1. **CLI Output**
    - [ ] Progress spinner updates during analysis
-   - [ ] Provider and model shown (e.g., "Provider: openai (gpt-5.1-codex)")
+   - [ ] Provider and model shown (e.g., "Provider: openai (gpt-5.5)")
    - [ ] Purpose displayed after completion
    - [ ] Features listed (if discovered)
    - [ ] Discovered tools listed with descriptions
@@ -316,10 +318,10 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent
 npm run local -- redteam recon --dir /nonexistent
 # Expected: Error message about directory not found
 
-# Test: No API keys
+# Test: No authentication
 unset OPENAI_API_KEY ANTHROPIC_API_KEY
 npm run local -- redteam recon
-# Expected: Error listing required API keys
+# Expected: Error listing available authentication options
 
 # Test: Abort at confirmation
 npm run local -- redteam recon
@@ -330,7 +332,7 @@ npm run local -- redteam recon
 # 1. Navigate directly to URL without running recon first
 open http://localhost:3000/redteam/setup?source=recon
 # Expected:
-# - Warning toast: "No pending recon configuration found. Run `promptfoo redteam recon` first."
+# - Error toast indicates that the one-time handoff token is missing
 # - URL cleaned up to /redteam/setup (without ?source=recon)
 # - No loading overlay stuck on screen
 ```
@@ -383,7 +385,7 @@ it('should complete recon and write config', async () => {
         features: 'Feature list',
       }),
     }),
-    selectProvider: () => ({ type: 'openai', model: 'gpt-5.1-codex' }),
+    selectProvider: () => ({ type: 'openai', model: 'gpt-5.5' }),
   }));
 
   // Run recon with --yes flag
@@ -395,7 +397,7 @@ it('should complete recon and write config', async () => {
 
   expect(result.purpose).toBe('Test app');
   // Verify config file written
-  // Verify pending-recon.json created
+  // Verify no pending-recon.json is created when open is false
 });
 ```
 
@@ -427,7 +429,7 @@ describe('usePendingRecon', () => {
       }),
     }));
 
-    // Render with ?source=recon
+    // Render with ?source=recon&token=<generated-token>
     // Verify loading state shown
     // Verify config applied to store
     // Verify navigation to Review tab
@@ -438,7 +440,7 @@ describe('usePendingRecon', () => {
       callApi: vi.fn().mockResolvedValue({ ok: false, status: 404 }),
     }));
 
-    // Render with ?source=recon
+    // Render with ?source=recon&token=<generated-token>
     // Verify warning toast shown
     // Verify URL cleaned up
   });
@@ -456,7 +458,7 @@ npm run local -- redteam recon --yes --no-open
 # Verify:
 # - promptfooconfig.yaml created
 # - Contains reasonable plugins
-# - pending-recon.json exists
+# - No pending-recon.json browser handoff is created
 
 # Full E2E with browser
 npm run local -- redteam recon --dir examples/redteam-medical-agent -y
@@ -512,9 +514,9 @@ npm run local -- redteam recon --dir examples/redteam-medical-agent -y
 # Enable verbose logging
 LOG_LEVEL=debug npm run local -- redteam recon
 
-# Check pending config
-cat ~/.promptfoo/pending-recon.json | jq .
+# Check pending config without printing its handoff capability
+jq 'del(.handoffToken)' ~/.promptfoo/pending-recon.json
 
-# Check scratchpad (if debugging agent notes)
-# Look in temp directory during analysis
+# Check the temporary analysis workspace while debugging startup or cleanup
+# It is read-only for the running recon agent and removed afterward
 ```

@@ -43,10 +43,10 @@ The AI agent reads file contents and sends relevant excerpts to the configured m
 
 ### What Gets Stored Locally
 
-| Output           | Location                                    | Purpose                                   |
-| ---------------- | ------------------------------------------- | ----------------------------------------- |
-| Generated config | `promptfooconfig.yaml` (or `--output` path) | Red team configuration                    |
-| Pending UI state | `~/.promptfoo/pending-recon.json`           | Browser handoff (auto-deleted after load) |
+| Output           | Location                                    | Purpose                                                                   |
+| ---------------- | ------------------------------------------- | ------------------------------------------------------------------------- |
+| Generated config | `promptfooconfig.yaml` (or `--output` path) | Red team configuration                                                    |
+| Pending UI state | `~/.promptfoo/pending-recon.json`           | Permission-restricted, one-time browser handoff (auto-deleted after load) |
 
 No code or analysis results are sent to Promptfoo's servers. All processing happens between your machine and your configured AI provider.
 
@@ -92,14 +92,14 @@ That's it. For CI/CD or scripted workflows, add `--yes --no-open` to skip prompt
 
 ## Prerequisites
 
-### API Keys
+### Authentication
 
-You need at least one of:
+Use an existing Codex/ChatGPT login or configure an API key:
 
-| Provider                     | Environment Variable                | Recommended Model                |
-| ---------------------------- | ----------------------------------- | -------------------------------- |
-| OpenAI (Codex SDK)           | `OPENAI_API_KEY` or `CODEX_API_KEY` | `gpt-5.2-codex`                  |
-| Anthropic (Claude Agent SDK) | `ANTHROPIC_API_KEY`                 | SDK default (override with `-m`) |
+| Provider                     | Authentication                                        | Recommended Model                |
+| ---------------------------- | ----------------------------------------------------- | -------------------------------- |
+| OpenAI (Codex SDK)           | Codex CLI login, `OPENAI_API_KEY`, or `CODEX_API_KEY` | `gpt-5.5`                        |
+| Anthropic (Claude Agent SDK) | `ANTHROPIC_API_KEY`                                   | SDK default (override with `-m`) |
 
 Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) and [Claude Agent SDK](/docs/providers/claude-agent-sdk/) for current defaults and configuration options.
 
@@ -107,15 +107,15 @@ Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-s
 
 The recon agent has limited, read-only access to your codebase:
 
-| Capability        | Status | Notes                                                     |
-| ----------------- | ------ | --------------------------------------------------------- |
-| File read         | Yes    | Reads source files matching include patterns              |
-| File write        | No     | Only writes to a temp scratchpad; cannot modify your code |
-| Command execution | No     | Cannot run scripts or commands                            |
-| Web search        | Yes    | Can search web for API docs and library documentation     |
-| Web fetch         | Yes    | Can fetch web content for context                         |
+| Capability        | Status    | Notes                                                                |
+| ----------------- | --------- | -------------------------------------------------------------------- |
+| File read         | Yes       | Reads source files needed to characterize the application            |
+| File write        | No        | OpenAI runs in a read-only sandbox; Claude is given no editing tools |
+| Command execution | Read-only | Codex may run inspection commands; it cannot modify the checkout     |
+| Web search        | Yes       | Can search web for API docs and library documentation                |
+| Web fetch         | Yes       | Can fetch web content for context                                    |
 
-The agent cannot modify your code or execute commands. Web access is limited to documentation lookups.
+The agent cannot modify your code. The OpenAI provider runs under a read-only sandbox with non-interactive approvals disabled; the Claude provider receives read-only workspace tools. Web access is limited to documentation lookups.
 
 :::note Cost Consideration
 Recon uses advanced AI models for code analysis. Large codebases may incur significant API costs. Use `--exclude` patterns to limit scope.
@@ -245,7 +245,7 @@ promptfoo redteam recon --exclude "*.test.ts" --exclude "fixtures/**"
 
 ## Web UI Integration
 
-When recon completes, it opens the red team setup page with discovered context pre-populated.
+When recon completes, it opens the red team setup page with discovered context pre-populated. The generated browser URL contains a random, one-time handoff token; the local API will not return or delete pending recon output without it.
 
 ### Application Details Page
 
@@ -279,8 +279,8 @@ From here:
 If the promptfoo server isn't running when recon completes:
 
 - Config file is still written to disk
-- Browser may open to an error page
-- Start the server with `promptfoo view`, then navigate to `/redteam/setup?source=recon`
+- Browser may open to an error page; start the server and refresh that generated URL
+- If the URL is no longer available, run recon again to create a fresh one-time handoff
 
 ### Custom Port
 
@@ -346,13 +346,13 @@ Large codebases may hit API limits.
 - Try a different provider with `--provider`
 - Break analysis into smaller directories
 
-### Missing API key error
+### Missing authentication error
 
 ```text
-Error: No API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.
+Error: No authentication found. Please configure a Codex CLI login or an API key.
 ```
 
-**Solution**: Set an API key or use `--env-file`:
+**Solution**: Sign in with the Codex CLI, or set an API key directly or through `--env-file`:
 
 ```bash
 promptfoo redteam recon --env-file .env
@@ -360,13 +360,12 @@ promptfoo redteam recon --env-file .env
 
 ### Browser doesn't open
 
-Some environments (SSH, containers) can't open browsers.
+Some environments (SSH, containers) can't open browsers. When automatic launch fails, recon prints the one-time import URL so it can be opened in a browser on the same machine.
 
-**Solution**: Use `--no-open` and open manually:
+For config-only automation, skip browser handoff:
 
 ```bash
 promptfoo redteam recon --no-open
-# Then open: http://localhost:3000/redteam/setup?source=recon
 ```
 
 ---

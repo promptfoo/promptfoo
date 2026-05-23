@@ -11,7 +11,7 @@ import {
 } from '../../../../src/redteam/commands/recon/config';
 import { isValueMeaningful } from '../../../../src/validators/recon-constants';
 
-import type { ReconResult } from '../../../../src/redteam/commands/recon/types';
+import type { ReconResult } from '../../../../src/validators/recon';
 
 // Mock logger to suppress expected warnings during tests
 vi.mock('../../../../src/logger', () => ({

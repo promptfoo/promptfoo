@@ -14,6 +14,7 @@ describe('Redteam Recon Routes', () => {
   let app: ReturnType<typeof createApp>;
   const testDir = '/tmp/promptfoo-test';
   const pendingReconPath = path.join(testDir, 'pending-recon.json');
+  const handoffToken = 'a'.repeat(43);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,6 +48,7 @@ describe('Redteam Recon Routes', () => {
 
     it('should return pending recon config when file exists', async () => {
       const pendingData = {
+        handoffToken,
         config: {
           description: 'Test config',
           plugins: ['bola', 'bfla'],
@@ -65,10 +67,55 @@ describe('Redteam Recon Routes', () => {
 
       fs.writeFileSync(pendingReconPath, JSON.stringify(pendingData));
 
-      const response = await request(app).get('/api/redteam/recon/pending');
+      const response = await request(app)
+        .get('/api/redteam/recon/pending')
+        .query({ token: handoffToken });
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(pendingData);
+      expect(response.body).toEqual({
+        config: pendingData.config,
+        metadata: pendingData.metadata,
+        reconResult: pendingData.reconResult,
+      });
+      expect(response.body.handoffToken).toBeUndefined();
+      expect(fs.existsSync(pendingReconPath)).toBe(false);
+    });
+
+    it('should consume a valid handoff so it cannot be replayed', async () => {
+      fs.writeFileSync(
+        pendingReconPath,
+        JSON.stringify({
+          handoffToken,
+          config: {},
+          metadata: { source: 'recon-cli', timestamp: Date.now() },
+        }),
+      );
+
+      const firstResponse = await request(app)
+        .get('/api/redteam/recon/pending')
+        .query({ token: handoffToken });
+      const replayResponse = await request(app)
+        .get('/api/redteam/recon/pending')
+        .query({ token: handoffToken });
+
+      expect(firstResponse.status).toBe(200);
+      expect(replayResponse.status).toBe(404);
+    });
+
+    it('should reject retrieval without the browser handoff token', async () => {
+      fs.writeFileSync(
+        pendingReconPath,
+        JSON.stringify({
+          handoffToken,
+          config: {},
+          metadata: { source: 'recon-cli', timestamp: Date.now() },
+        }),
+      );
+
+      const response = await request(app).get('/api/redteam/recon/pending');
+
+      expect(response.status).toBe(403);
+      expect(response.body).toEqual({ error: 'Access denied: invalid recon handoff token' });
     });
 
     it('should return 400 for invalid pending recon file format', async () => {
@@ -89,8 +136,7 @@ describe('Redteam Recon Routes', () => {
       // Error message now includes regeneration guidance
       expect(response.body.error).toContain('Invalid pending recon file format');
       expect(response.body.error).toContain('Run `promptfoo redteam recon` again');
-      // Response may include additional details about validation failures
-      expect(response.body.details).toBeDefined();
+      expect(response.body.details).toBeUndefined();
       // Corrupted file should be auto-deleted to prevent repeated failures
       expect(fs.existsSync(pendingReconPath)).toBe(false);
     });
@@ -112,6 +158,7 @@ describe('Redteam Recon Routes', () => {
   describe('DELETE /api/redteam/recon/pending', () => {
     it('should delete pending recon file when it exists', async () => {
       const pendingData = {
+        handoffToken,
         config: {},
         metadata: {
           source: 'recon-cli',
@@ -122,7 +169,9 @@ describe('Redteam Recon Routes', () => {
       fs.writeFileSync(pendingReconPath, JSON.stringify(pendingData));
       expect(fs.existsSync(pendingReconPath)).toBe(true);
 
-      const response = await request(app).delete('/api/redteam/recon/pending');
+      const response = await request(app)
+        .delete('/api/redteam/recon/pending')
+        .query({ token: handoffToken });
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ success: true });
@@ -139,6 +188,22 @@ describe('Redteam Recon Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ success: true });
+    });
+
+    it('should not delete pending recon data without the handoff token', async () => {
+      fs.writeFileSync(
+        pendingReconPath,
+        JSON.stringify({
+          handoffToken,
+          config: {},
+          metadata: { source: 'recon-cli', timestamp: Date.now() },
+        }),
+      );
+
+      const response = await request(app).delete('/api/redteam/recon/pending');
+
+      expect(response.status).toBe(403);
+      expect(fs.existsSync(pendingReconPath)).toBe(true);
     });
   });
 });

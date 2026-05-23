@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { SETUP_TAB_INDICES } from '../constants';
 import { countPopulatedFields } from '../utils/applicationDefinition';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './useRedTeamConfig';
-import type { PendingReconConfig } from '@promptfoo/validators/recon';
+import type { GetPendingReconResponse } from '@promptfoo/validators/recon';
 
 import type { Config, ReconContext } from '../types';
 
@@ -24,10 +24,10 @@ interface UsePendingReconResult {
 /**
  * Hook that checks for and applies pending recon configuration.
  *
- * When the page loads with `?source=recon`, this hook:
+ * When the page loads with `?source=recon&token=<one-time-token>`, this hook:
  * 1. Fetches the pending recon config from the server
  * 2. Applies it to the Zustand store
- * 3. Clears the pending file
+ * 3. Relies on the successful fetch to consume the single-use handoff
  * 4. Navigates to the Review tab
  * 5. Cleans up the URL
  *
@@ -49,7 +49,7 @@ export function usePendingRecon(
   const { setFullConfig, setReconContext: setStoreReconContext } = useRedTeamConfig();
 
   const applyReconConfig = useCallback(
-    async (data: PendingReconConfig) => {
+    async (data: GetPendingReconResponse) => {
       const { config: reconConfig, metadata } = data;
 
       // Build the full config for the Zustand store
@@ -137,14 +137,23 @@ export function usePendingRecon(
     }
 
     hasAttemptedLoad.current = true;
+    const handoffToken = searchParams.get('token');
 
     const loadPendingRecon = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
+        if (!handoffToken) {
+          throw new Error(
+            'Missing recon handoff token. Run `promptfoo redteam recon` again to open a fresh import link.',
+          );
+        }
+
+        const pendingReconUrl = `/redteam/recon/pending?token=${encodeURIComponent(handoffToken)}`;
+
         // Fetch pending recon config
-        const response = await callApi('/redteam/recon/pending');
+        const response = await callApi(pendingReconUrl);
 
         if (response.status === 404) {
           // No pending config, clean up URL and notify user
@@ -160,27 +169,10 @@ export function usePendingRecon(
           throw new Error('Failed to fetch pending recon configuration');
         }
 
-        const data: PendingReconConfig = await response.json();
+        const data: GetPendingReconResponse = await response.json();
 
         // Apply the configuration
         await applyReconConfig(data);
-
-        // Clear the pending file to prevent re-application on next visit
-        try {
-          const deleteResponse = await callApi('/redteam/recon/pending', { method: 'DELETE' });
-          if (!deleteResponse.ok) {
-            // Log warning but continue - config was already applied successfully
-            // If delete fails, the file may be re-applied on next visit, but that's
-            // preferable to blocking the user flow
-            console.warn(
-              `Failed to clear pending recon file (status ${deleteResponse.status}). ` +
-                'The file may be re-applied if you visit this page again.',
-            );
-          }
-        } catch (deleteErr) {
-          // Network error during delete - log but don't block
-          console.warn('Failed to clear pending recon file:', deleteErr);
-        }
 
         setReconApplied(true);
 

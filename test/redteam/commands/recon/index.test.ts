@@ -5,9 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock external dependencies before importing the module
 vi.mock('fs');
-vi.mock('open', () => ({
-  default: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock('../../../../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn(() => '/tmp/promptfoo-test'),
 }));
@@ -101,9 +98,12 @@ describe('recon CLI pending config', () => {
   describe('browser URL construction', () => {
     it('should construct correct URL with source parameter', () => {
       const DEFAULT_SERVER_PORT = 15500;
-      const url = `http://localhost:${DEFAULT_SERVER_PORT}/redteam/setup?source=recon`;
+      const token = 'browser-handoff-token';
+      const url = `http://localhost:${DEFAULT_SERVER_PORT}/redteam/setup?source=recon&token=${token}`;
 
-      expect(url).toBe('http://localhost:15500/redteam/setup?source=recon');
+      expect(url).toBe(
+        'http://localhost:15500/redteam/setup?source=recon&token=browser-handoff-token',
+      );
     });
   });
 });

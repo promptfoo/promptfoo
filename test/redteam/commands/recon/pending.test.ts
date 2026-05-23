@@ -5,6 +5,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPendingConfig,
+  createReconHandoffToken,
   deletePendingReconConfig,
   getPendingReconPath,
   hasPendingReconConfig,
@@ -59,6 +60,7 @@ function createPendingConfig() {
       suggestedPlugins: ['pii:direct'],
     },
     '/repo',
+    'a'.repeat(43),
   );
 }
 
@@ -80,6 +82,9 @@ describe('pending recon config helpers', () => {
     expect(getPendingReconPath()).toBe(pendingPath);
     expect(hasPendingReconConfig()).toBe(true);
     expect(readPendingReconConfig()).toEqual(config);
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(pendingPath).mode & 0o777).toBe(0o600);
+    }
     expect(deletePendingReconConfig()).toBe(true);
     expect(deletePendingReconConfig()).toBe(false);
     expect(hasPendingReconConfig()).toBe(false);
@@ -87,6 +92,14 @@ describe('pending recon config helpers', () => {
 
   it('returns null when no pending config exists', () => {
     expect(readPendingReconConfig()).toBeNull();
+  });
+
+  it('generates unpredictable browser handoff tokens', () => {
+    const first = createReconHandoffToken();
+    const second = createReconHandoffToken();
+
+    expect(first.length).toBeGreaterThanOrEqual(32);
+    expect(first).not.toBe(second);
   });
 
   it('throws for malformed JSON and deletes the corrupted file by default', () => {

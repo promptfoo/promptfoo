@@ -8,7 +8,7 @@
 import chalk from 'chalk';
 import logger from '../../../logger';
 
-import type { ReconResult } from './types';
+import type { ReconResult } from '../../../validators/recon';
 
 /**
  * Displays the reconnaissance results to the console in a formatted layout.

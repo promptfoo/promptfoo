@@ -252,6 +252,7 @@ describe('PendingReconMetadataSchema', () => {
 describe('PendingReconConfigSchema', () => {
   it('should validate complete pending config', () => {
     const config: PendingReconConfig = {
+      handoffToken: 'a'.repeat(43),
       config: {
         description: 'Red team configuration for my app',
         redteam: {
@@ -280,6 +281,7 @@ describe('PendingReconConfigSchema', () => {
 
   it('should validate minimal pending config', () => {
     const config = {
+      handoffToken: 'a'.repeat(43),
       config: {},
       metadata: {
         source: 'recon-cli' as const,
@@ -292,6 +294,7 @@ describe('PendingReconConfigSchema', () => {
 
   it('should reject config without metadata', () => {
     const config = {
+      handoffToken: 'a'.repeat(43),
       config: {},
     };
     const result = PendingReconConfigSchema.safeParse(config);
@@ -300,7 +303,7 @@ describe('PendingReconConfigSchema', () => {
 });
 
 describe('GetPendingReconResponseSchema', () => {
-  it('should validate as alias for PendingReconConfigSchema', () => {
+  it('should validate the public response without returning the handoff token', () => {
     const response: GetPendingReconResponse = {
       config: {
         description: 'Test config',
@@ -334,10 +337,9 @@ describe('DeletePendingReconResponseSchema', () => {
 });
 
 describe('ReconErrorResponseSchema', () => {
-  it('should validate error with details', () => {
+  it('should validate an error response', () => {
     const error: ReconErrorResponse = {
       error: 'Something went wrong',
-      details: 'Additional information about the error',
     };
     const result = ReconErrorResponseSchema.safeParse(error);
     expect(result.success).toBe(true);
@@ -396,6 +398,7 @@ describe('Type inference', () => {
 
   it('should correctly infer PendingReconConfig type', () => {
     const config: PendingReconConfig = {
+      handoffToken: 'a'.repeat(43),
       config: {},
       metadata: {
         source: 'recon-cli',
@@ -450,6 +453,7 @@ describe('Edge cases', () => {
 
   it('should passthrough extra fields in config block', () => {
     const config = {
+      handoffToken: 'a'.repeat(43),
       config: {
         description: 'Test',
         customField: 'custom value',

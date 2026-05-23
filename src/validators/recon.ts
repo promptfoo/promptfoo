@@ -213,6 +213,8 @@ export const PendingReconConfigBlockSchema = z
  * This is the top-level structure written to pending-recon.json.
  */
 export const PendingReconConfigSchema = z.object({
+  /** One-time capability passed only through the CLI-opened browser URL */
+  handoffToken: z.string().min(32).describe('Secret token for consuming the browser handoff'),
   /** The red team configuration */
   config: PendingReconConfigBlockSchema.describe('Red team configuration block'),
   /** Metadata about the recon run */
@@ -227,8 +229,9 @@ export const PendingReconConfigSchema = z.object({
 
 /**
  * Schema for successful GET /api/redteam/recon/pending response.
+ * The browser already possesses the handoff capability; never echo it in the payload.
  */
-export const GetPendingReconResponseSchema = PendingReconConfigSchema;
+export const GetPendingReconResponseSchema = PendingReconConfigSchema.omit({ handoffToken: true });
 
 /**
  * Schema for successful DELETE /api/redteam/recon/pending response.
@@ -244,11 +247,6 @@ export const DeletePendingReconResponseSchema = z.object({
 export const ReconErrorResponseSchema = z.object({
   /** Error message */
   error: z.string().describe('Error message describing what went wrong'),
-  /** Optional additional details */
-  details: z
-    .union([z.string(), z.record(z.string(), z.array(z.string()).optional())])
-    .optional()
-    .describe('Additional error details'),
 });
 
 // =============================================================================

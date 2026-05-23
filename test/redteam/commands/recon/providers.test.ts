@@ -7,10 +7,15 @@ import {
   parseReconOutput,
   selectProvider,
 } from '../../../../src/redteam/commands/recon/providers';
+import { ReconOutputSchema } from '../../../../src/redteam/commands/recon/schema';
 
 // Mock the envars module
 vi.mock('../../../../src/envars', () => ({
   getEnvString: vi.fn(),
+}));
+
+vi.mock('../../../../src/providers/openai/codexDefaults', () => ({
+  hasCodexDefaultCredentials: vi.fn(),
 }));
 
 // Mock the logger to verify warning behavior
@@ -25,8 +30,10 @@ vi.mock('../../../../src/logger', () => ({
 
 import { getEnvString } from '../../../../src/envars';
 import logger from '../../../../src/logger';
+import { hasCodexDefaultCredentials } from '../../../../src/providers/openai/codexDefaults';
 
 const mockedGetEnvString = getEnvString as Mock;
+const mockedHasCodexDefaultCredentials = vi.mocked(hasCodexDefaultCredentials);
 const providerMocks = vi.hoisted(() => ({
   openAiCallApi: vi.fn(),
   anthropicCallApi: vi.fn(),
@@ -57,6 +64,7 @@ vi.mock('../../../../src/providers/claude-agent-sdk', () => ({
 describe('selectProvider', () => {
   beforeEach(() => {
     mockedGetEnvString.mockReset();
+    mockedHasCodexDefaultCredentials.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -105,6 +113,15 @@ describe('selectProvider', () => {
     expect(result.model).toBe(DEFAULT_ANTHROPIC_MODEL);
   });
 
+  it('should select OpenAI when an existing Codex login is usable', () => {
+    mockedGetEnvString.mockReturnValue(undefined);
+    mockedHasCodexDefaultCredentials.mockReturnValue(true);
+
+    const result = selectProvider();
+
+    expect(result).toEqual({ type: 'openai', model: DEFAULT_OPENAI_MODEL });
+  });
+
   it('should prefer OpenAI when both keys are set', () => {
     mockedGetEnvString.mockImplementation((key: string) => {
       if (key === 'OPENAI_API_KEY') {
@@ -121,10 +138,10 @@ describe('selectProvider', () => {
     expect(result.type).toBe('openai');
   });
 
-  it('should throw when no keys are set', () => {
+  it('should throw when no provider authentication is available', () => {
     mockedGetEnvString.mockReturnValue(undefined);
 
-    expect(() => selectProvider()).toThrow('No API key found');
+    expect(() => selectProvider()).toThrow('No authentication found');
   });
 
   it('should respect forced provider override to anthropic', () => {
@@ -172,7 +189,7 @@ describe('selectProvider', () => {
     expect(() => selectProvider('anthropic')).toThrow('ANTHROPIC_API_KEY required');
   });
 
-  it('should throw when forced to openai but no key', () => {
+  it('should throw when forced to openai without a key or Codex login', () => {
     mockedGetEnvString.mockImplementation((key: string) => {
       if (key === 'ANTHROPIC_API_KEY') {
         return 'test-anthropic-key';
@@ -180,7 +197,7 @@ describe('selectProvider', () => {
       return undefined;
     });
 
-    expect(() => selectProvider('openai')).toThrow('OPENAI_API_KEY or CODEX_API_KEY required');
+    expect(() => selectProvider('openai')).toThrow('OpenAI recon requires');
   });
 });
 
@@ -238,6 +255,31 @@ describe('parseReconOutput', () => {
       const result = parseReconOutput(input);
 
       expect(result).toEqual({});
+    });
+
+    it('should normalize nullable structured output fields to optional domain fields', () => {
+      const input = {
+        purpose: 'Customer support assistant',
+        features: null,
+        entities: null,
+        stateful: null,
+        discoveredTools: [
+          {
+            name: 'lookupOrder',
+            description: 'Looks up an order',
+            file: null,
+            parameters: null,
+          },
+        ],
+      };
+
+      const result = parseReconOutput(input);
+
+      expect(result).toEqual({
+        purpose: 'Customer support assistant',
+        discoveredTools: [{ name: 'lookupOrder', description: 'Looks up an order' }],
+      });
+      expect(mockedLogger.warn).not.toHaveBeenCalled();
     });
   });
 
@@ -498,6 +540,21 @@ describe('recon provider factories', () => {
     vi.resetAllMocks();
   });
 
+  it('uses a Codex-compatible strict output schema with nullable optional values', () => {
+    expect(ReconOutputSchema.required).toEqual(Object.keys(ReconOutputSchema.properties));
+    expect(ReconOutputSchema.properties.purpose.type).toEqual(['string', 'null']);
+    expect(ReconOutputSchema.properties.discoveredTools.items.required).toEqual([
+      'name',
+      'description',
+      'file',
+      'parameters',
+    ]);
+    expect(ReconOutputSchema.properties.discoveredTools.items.properties.file.type).toEqual([
+      'string',
+      'null',
+    ]);
+  });
+
   it('creates an OpenAI provider with streaming progress and parses successful output', async () => {
     const onProgress = vi.fn();
     providerMocks.openAiCallApi.mockResolvedValue({
@@ -532,6 +589,10 @@ describe('recon provider factories', () => {
         working_dir: scratchpad.dir,
         additional_directories: ['/repo'],
         model: 'gpt-test',
+        sandbox_mode: 'read-only',
+        approval_policy: 'never',
+        network_access_enabled: true,
+        web_search_mode: 'live',
         enable_streaming: true,
       }),
     );

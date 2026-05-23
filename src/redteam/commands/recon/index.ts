@@ -10,7 +10,7 @@ import logger from '../../../logger';
 import { writePromptfooConfig } from '../../../util/config/writer';
 import { buildRedteamConfig } from './config';
 import { displayResults } from './output';
-import { buildPendingConfig, writePendingReconConfig } from './pending';
+import { buildPendingConfig, createReconHandoffToken, writePendingReconConfig } from './pending';
 import { buildReconPrompt } from './prompt';
 import {
   createAnthropicReconProvider,
@@ -20,13 +20,14 @@ import {
 } from './providers';
 import { createScratchpad } from './scratchpad';
 
-import type { ReconOptions, ReconResult } from './types';
+import type { ReconResult } from '../../../validators/recon';
+import type { ReconOptions } from './types';
 
 /**
  * Opens the web UI with the recon source parameter
  */
-async function openBrowserWithRecon(): Promise<void> {
-  const url = getLocalAppUrl('/redteam/setup', { source: 'recon' });
+async function openBrowserWithRecon(handoffToken: string): Promise<void> {
+  const url = getLocalAppUrl('/redteam/setup', { source: 'recon', token: handoffToken });
 
   try {
     await opener(url);
@@ -52,14 +53,14 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
   }
 
   logger.info(`\nReconnaissance target: ${chalk.cyan(directory)}`);
-  logger.info(chalk.dim('Agent can read files, search web, and take notes\n'));
+  logger.info(chalk.dim('Agent can read files and search documentation in a read-only run\n'));
 
-  // Create scratchpad for agent notes - wrapped in try/finally to ensure cleanup
+  // Create an isolated temporary working directory and always remove it afterward.
   const scratchpad = createScratchpad();
   let spinner: ReturnType<typeof ora> | undefined;
 
   try {
-    // Select provider based on available API keys or forced choice
+    // Select provider based on available authentication or a forced choice.
     const providerChoice = selectProvider(options.provider);
     logger.info(`Provider: ${chalk.cyan(providerChoice.type)} (${providerChoice.model})`);
 
@@ -80,7 +81,7 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
         : await createAnthropicReconProvider(directory, scratchpad, modelOverride, onProgress);
 
     // Build the analysis prompt
-    const prompt = buildReconPrompt(scratchpad.path, options.exclude);
+    const prompt = buildReconPrompt(directory, scratchpad.path, options.exclude);
 
     const result = await provider.analyze(directory, prompt);
     spinner.succeed('Analysis complete');
@@ -114,10 +115,6 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
 
     logger.info(`\nConfig written to ${chalk.green(outputPath)}`);
 
-    // Write pending recon config for web UI handoff
-    const pendingConfig = buildPendingConfig(config, result, directory);
-    writePendingReconConfig(pendingConfig);
-
     // Open browser if not disabled
     if (options.open === false) {
       logger.info(`\n${chalk.yellow('Next steps:')}`);
@@ -125,7 +122,10 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
       logger.info('  2. Review the discovered application context');
       logger.info(`  3. Run: ${chalk.cyan('promptfoo redteam run')}`);
     } else {
-      await openBrowserWithRecon();
+      const handoffToken = createReconHandoffToken();
+      const pendingConfig = buildPendingConfig(config, result, directory, handoffToken);
+      writePendingReconConfig(pendingConfig);
+      await openBrowserWithRecon(handoffToken);
       logger.info('');
       logger.info(chalk.dim('In the browser:'));
       logger.info(chalk.dim('  1. Review the populated application context'));
@@ -141,10 +141,7 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     }
     throw error;
   } finally {
-    // Always cleanup scratchpad - prevents /tmp/promptfoo-recon-* leaks
+    // Always clean up temporary analysis workspace artifacts.
     scratchpad.cleanup();
   }
 }
-
-// Re-export types for external use
-export type { ReconOptions, ReconResult } from './types';

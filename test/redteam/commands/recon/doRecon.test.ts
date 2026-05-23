@@ -10,6 +10,7 @@ import { doRecon } from '../../../../src/redteam/commands/recon/index';
 import { displayResults } from '../../../../src/redteam/commands/recon/output';
 import {
   buildPendingConfig,
+  createReconHandoffToken,
   writePendingReconConfig,
 } from '../../../../src/redteam/commands/recon/pending';
 import { buildReconPrompt } from '../../../../src/redteam/commands/recon/prompt';
@@ -52,7 +53,9 @@ vi.mock('ora', () => ({
 }));
 
 vi.mock('../../../../src/constants', () => ({
-  getLocalAppUrl: vi.fn(() => 'http://localhost:15500/redteam/setup?source=recon'),
+  getLocalAppUrl: vi.fn(
+    () => 'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
+  ),
 }));
 
 vi.mock('../../../../src/logger', () => ({
@@ -76,6 +79,7 @@ vi.mock('../../../../src/redteam/commands/recon/output', () => ({
 
 vi.mock('../../../../src/redteam/commands/recon/pending', () => ({
   buildPendingConfig: vi.fn(() => ({ metadata: { source: 'recon-cli' } })),
+  createReconHandoffToken: vi.fn(() => 'test-handoff-token'),
   writePendingReconConfig: vi.fn(),
 }));
 
@@ -123,7 +127,7 @@ describe('doRecon', () => {
     vi.resetAllMocks();
   });
 
-  it('writes config and pending handoff without opening the browser when disabled', async () => {
+  it('writes config without retaining browser handoff data when browser launch is disabled', async () => {
     const directory = path.resolve('/repo');
 
     vi.mocked(createOpenAIReconProvider).mockImplementationOnce(
@@ -144,7 +148,9 @@ describe('doRecon', () => {
 
     expect(result.purpose).toBe('Target app');
     expect(createOpenAIReconProvider).toHaveBeenCalled();
-    expect(buildReconPrompt).toHaveBeenCalledWith('/tmp/recon-notes/notes.md', ['node_modules']);
+    expect(buildReconPrompt).toHaveBeenCalledWith(directory, '/tmp/recon-notes/notes.md', [
+      'node_modules',
+    ]);
     expect(displayResults).toHaveBeenCalledWith(result, true);
     expect(buildRedteamConfig).toHaveBeenCalledWith(result, directory);
     expect(writePromptfooConfig).toHaveBeenCalledWith(
@@ -152,13 +158,10 @@ describe('doRecon', () => {
       'promptfooconfig.yaml',
       expect.any(Array),
     );
-    expect(buildPendingConfig).toHaveBeenCalledWith(
-      { description: 'generated config' },
-      result,
-      directory,
-    );
     expect(spinner.text).toBe('Reading files');
-    expect(writePendingReconConfig).toHaveBeenCalled();
+    expect(createReconHandoffToken).not.toHaveBeenCalled();
+    expect(buildPendingConfig).not.toHaveBeenCalled();
+    expect(writePendingReconConfig).not.toHaveBeenCalled();
     expect(opener).not.toHaveBeenCalled();
     expect(mockedCreateScratchpad.mock.results[0]?.value.cleanup).toHaveBeenCalled();
   });
@@ -170,6 +173,13 @@ describe('doRecon', () => {
     await doRecon({ dir: '/repo', yes: true });
 
     expect(createAnthropicReconProvider).toHaveBeenCalled();
+    expect(buildPendingConfig).toHaveBeenCalledWith(
+      { description: 'generated config' },
+      expect.objectContaining({ purpose: 'Target app' }),
+      path.resolve('/repo'),
+      'test-handoff-token',
+    );
+    expect(writePendingReconConfig).toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalledWith(
       'Failed to open browser automatically',
       expect.objectContaining({ error: expect.any(Error) }),

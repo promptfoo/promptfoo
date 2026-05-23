@@ -8,7 +8,7 @@ describe('createScratchpad', () => {
     vi.resetAllMocks();
   });
 
-  it('should create temp directory and notes file', () => {
+  it('should create a temporary analysis workspace marker', () => {
     const scratchpad = createScratchpad();
     try {
       expect(fs.existsSync(scratchpad.dir)).toBe(true);
@@ -19,12 +19,12 @@ describe('createScratchpad', () => {
     }
   });
 
-  it('should initialize notes file with header', () => {
+  it('should describe the workspace as read-only', () => {
     const scratchpad = createScratchpad();
     try {
       const content = fs.readFileSync(scratchpad.path, 'utf-8');
-      expect(content).toContain('# Recon Scratchpad');
-      expect(content).toContain('Use this file to keep notes');
+      expect(content).toContain('# Recon Workspace');
+      expect(content).toContain('read-only reconnaissance run');
     } finally {
       scratchpad.cleanup();
     }
