@@ -127,7 +127,7 @@ describe('RSA signature authentication', () => {
     expect(crypto.createSign).toHaveBeenCalledTimes(1); // Should not be called again
   });
 
-  it('should regenerate signature when expired', async () => {
+  it('should regenerate signature at the default refresh buffer boundary', async () => {
     const provider = new HttpProvider('http://example.com', {
       config: {
         method: 'POST',
@@ -151,10 +151,14 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
     expect(crypto.createSign).toHaveBeenCalledTimes(1);
 
-    // Second call after validity period should regenerate signature
-    vi.spyOn(Date, 'now').mockReturnValue(301000); // After validity period
+    // The default refresh buffer is 10%, so a five-minute signature refreshes at 4.5 minutes.
+    vi.mocked(Date.now).mockReturnValue(270999);
     await provider.callApi('test');
-    expect(crypto.createSign).toHaveBeenCalledTimes(2); // Should be called again
+    expect(crypto.createSign).toHaveBeenCalledTimes(1);
+
+    vi.mocked(Date.now).mockReturnValue(271000);
+    await provider.callApi('test');
+    expect(crypto.createSign).toHaveBeenCalledTimes(2);
   });
 
   it('should use custom signature data template', async () => {
