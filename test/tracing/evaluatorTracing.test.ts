@@ -368,6 +368,25 @@ describe('evaluatorTracing', () => {
       expect(deleteOldTraces).toHaveBeenCalledWith(7);
     });
 
+    it('should prune the trace store without requiring an OTLP HTTP receiver', async () => {
+      const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(getTraceStore).mockReturnValue({
+        deleteOldTraces,
+      } as unknown as ReturnType<typeof getTraceStore>);
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          storage: { type: 'sqlite', retentionDays: 7 },
+        },
+      } as unknown as TestSuite);
+
+      expect(deleteOldTraces).toHaveBeenCalledWith(7);
+      expect(mockStartOTLPReceiver).not.toHaveBeenCalled();
+    });
+
     it('should not prune when retentionDays is omitted', async () => {
       const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
       const { getTraceStore } = await import('../../src/tracing/store');
