@@ -2678,6 +2678,34 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.001, 10);
     });
 
+    it('should calculate cost for gemini-3.1-flash-lite (GA)', () => {
+      // gemini-3.1-flash-lite: input=0.25/1M, output=1.5/1M
+      const cost = calculateGoogleCost('gemini-3.1-flash-lite', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.001, 10);
+    });
+
+    it('should calculate cost for gemini-3.5-flash', () => {
+      // gemini-3.5-flash: input=1.5/1M, output=9.0/1M
+      const cost = calculateGoogleCost('gemini-3.5-flash', {}, 1000, 500);
+      // Expected: (1000 * 1.5 + 500 * 9.0) / 1M = (1500 + 4500) / 1M = 0.006
+      expect(cost).toBeCloseTo(0.006, 10);
+    });
+
+    it('should not apply long-context tiered pricing to gemini-3.5-flash', () => {
+      // gemini-3.5-flash is flat-rate: prompts above 200k tokens bill at the
+      // standard rate (unlike the tiered gemini-3.1-pro-preview).
+      const cost = calculateGoogleCost('gemini-3.5-flash', {}, 250000, 50000);
+      // Expected: (250000 * 1.5 + 50000 * 9.0) / 1M = (375000 + 450000) / 1M = 0.825
+      expect(cost).toBeCloseTo(0.825, 10);
+    });
+
+    it('should calculate cost for gemini-embedding-2', () => {
+      // gemini-embedding-2: input=0.2/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-2', {}, 10000, 0);
+      // Expected: (10000 * 0.2) / 1M = 0.002
+      expect(cost).toBeCloseTo(0.002, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M

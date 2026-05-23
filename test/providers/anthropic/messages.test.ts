@@ -1784,6 +1784,46 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.cost).toBeGreaterThan(0);
     });
 
+    it('disables MCP tool execution when max_tool_calls is 0', async () => {
+      // Regression: max_tool_calls: 0 is an explicit "do not auto-execute MCP
+      // tools" guard, but 0 was treated as invalid and silently widened to the
+      // default of 8, so tools ran anyway.
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 0,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_search',
+            name: 'search_companies',
+            input: { query: 'clean energy' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      // No tool was executed and no continuation request was made.
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      // The initial response is returned on the normal output path, not as an error.
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
+    });
+
     it('blocks parallel MCP tool execution when it would exceed max_tool_calls', async () => {
       provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
