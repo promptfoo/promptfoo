@@ -34,6 +34,11 @@ export type SemanticFrontierSummary = {
   bands: Record<string, SemanticFrontierBandSummary>;
 };
 
+function escapeNunjucksLiteral(value: string): string {
+  // All Nunjucks tags start with "{". Emit it at render time so candidate text is never parsed.
+  return value.replaceAll('{', '{{ "{" }}');
+}
+
 export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   protected abstract readonly attackFamilies: readonly AttackFamily[];
 
@@ -117,7 +122,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       .slice(-3)
       .map(
         (candidate) =>
-          `- ${candidate.prompt}\n  Observed predicates: ${this.describeObservedPredicates(candidate)}`,
+          `- ${escapeNunjucksLiteral(candidate.prompt)}\n  Observed predicates: ${this.describeObservedPredicates(candidate)}`,
       )
       .join('\n');
 
@@ -139,6 +144,13 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
       logger.debug(
         `${this.constructor.name} falling back to legacy generation because multi-input mode is enabled`,
+      );
+      return super.generateTests(n, delayMs);
+    }
+
+    if (this.config.language) {
+      logger.debug(
+        `${this.constructor.name} falling back to legacy generation because language modifiers are not compatible with semantic predicate selection`,
       );
       return super.generateTests(n, delayMs);
     }
