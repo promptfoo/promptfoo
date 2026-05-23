@@ -145,24 +145,22 @@ Use the `langfuse://traces` URL scheme to load traces from Langfuse and evaluate
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Evaluate production traces
 
-# Load traces tagged 'production' from Langfuse
-tests: langfuse://traces?tags=production&limit=50
-
 prompts:
   - '{{input}}'
 
 providers:
   - echo
 
-# Run assertions on stored outputs (no LLM calls needed)
+# Run deterministic assertions on stored outputs.
 defaultTest:
   assert:
-    - type: llm-rubric
-      value: 'Response is helpful and on-topic'
     - type: javascript
       value: |
         const cost = Number(context.vars.__langfuse_cost ?? 0);
-        return cost <= 0.01;
+        return typeof output === 'string' && output.length > 0 && cost <= 0.01;
+
+# Load traces tagged 'production' from Langfuse
+tests: langfuse://traces?tags=production&limit=50
 ```
 
 Run the evaluation:
@@ -173,10 +171,23 @@ npx promptfoo@latest eval
 
 ### How it works
 
-1. Promptfoo fetches traces from the Langfuse API based on your filter parameters
-2. Each trace is converted to a test case with the stored input/output
-3. Assertions run against the stored output (no LLM re-execution)
-4. Results show which traces pass or fail your quality criteria
+1. Promptfoo fetches traces from the Langfuse API based on your filter parameters.
+2. Each trace is converted to a test case with its stored input and output.
+3. The configured response provider is not invoked; traces without stored output are graded as empty output.
+4. Assertions run against the stored output. Model-graded assertions such as `llm-rubric` can still call their grading provider.
+5. Results show which traces pass or fail your quality criteria.
+
+:::note
+
+`langfuse://traces` grades stored outputs; it does not replay new prompts against historical inputs. To benchmark a new prompt, create regular test cases from the trace inputs instead.
+
+:::
+
+:::warning
+
+Fetched trace inputs and outputs are included in local eval results. Treat exports and shared results as production data when traces may contain sensitive content.
+
+:::
 
 ### URL parameters
 
@@ -270,30 +281,6 @@ defaultTest:
       value: 'Response maintains context from earlier in the conversation'
 ```
 
-#### Compare new prompt against production
-
-Use real production inputs to test a new prompt version:
-
-```yaml title="promptfooconfig.yaml"
-description: A/B test new prompt against production baseline
-
-prompts:
-  - langfuse://my-prompt@production
-  - langfuse://my-prompt@experiment-v2
-
-providers:
-  - openai:gpt-4o
-
-# Use production trace inputs as test data
-tests: langfuse://traces?tags=production&limit=50
-
-defaultTest:
-  assert:
-    - type: similar
-      value: '{{output}}' # Compare to stored output
-      threshold: 0.8
-```
-
 #### Filter by user segment
 
 Evaluate traces from specific user cohorts:
@@ -330,7 +317,7 @@ defaultTest:
 
 ### Using with the echo provider
 
-Langfuse trace test cases include `providerOutput`, so promptfoo skips the provider call and grades the stored output directly. Use the `echo` provider as a harmless placeholder when your config only evaluates stored traces:
+Langfuse trace test cases always include `providerOutput`, so promptfoo skips the response-provider call and grades the stored output directly. A trace without output receives an empty stored response instead of falling through to the provider. Use the `echo` provider as a harmless placeholder when your config only evaluates stored traces:
 
 ```yaml title="promptfooconfig.yaml"
 description: Assertion-only evaluation
@@ -394,7 +381,7 @@ Verify your credentials:
 If traces exist in Langfuse but aren't being loaded:
 
 - Check filter parameters match your traces (tags, name, timestamps)
-- Verify traces have both `input` and `output` populated
+- Check whether traces have stored outputs; missing output is evaluated as empty output and never invokes the provider
 - Try removing filters to fetch all traces: `langfuse://traces?limit=10`
 
 #### Empty input/output variables
