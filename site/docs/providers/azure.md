@@ -781,11 +781,16 @@ These properties can be set under the provider `config` key:
 
 ## Using Reasoning Models (o1, o3, o3-mini, o4-mini)
 
-Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-mini`. These models operate differently from standard models with specific requirements:
+For `azure:chat` and `azure:completion`, Azure OpenAI reasoning models like `o1`, `o3`,
+`o3-mini`, and `o4-mini` operate differently from standard models with specific
+requirements:
 
 1. They use `max_completion_tokens` instead of `max_tokens`
 2. They don't support `temperature` (it's ignored)
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
+
+For `azure:responses` reasoning deployments, use `max_output_tokens` and the Responses
+configuration documented above.
 
 Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, set `isReasoningModel: true` for aliases or deployment names that do not identify the reasoning model. Promptfoo auto-detects common o-series, GPT-5, DeepSeek-R1, Phi reasoning, and Grok reasoning deployment names. The explicit configuration below works with chat and completion endpoints:
 
