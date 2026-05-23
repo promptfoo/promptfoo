@@ -20,8 +20,6 @@ import {
 import type {
   ApiProvider,
   CallApiContextParams,
-  ProviderClassificationResponse,
-  ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
@@ -47,6 +45,11 @@ export class GolangProvider implements ApiProvider {
       options?.config.basePath || '',
       runPath,
     );
+    if (functionName && functionName !== 'call_api' && functionName !== 'CallApi') {
+      throw new Error(
+        `The Golang provider only supports the CallApi function; received "${functionName}"`,
+      );
+    }
     this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
@@ -72,17 +75,15 @@ export class GolangProvider implements ApiProvider {
   private async executeGolangScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
-  ): Promise<any> {
+  ): Promise<ProviderResponse> {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
     const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
-    const functionName = this.functionName || apiType;
+    const functionName = this.functionName || 'call_api';
     const sanitizedContext = sanitizeScriptContext('GolangProvider', context);
-    const args =
-      apiType === 'call_api' ? [prompt, this.options, sanitizedContext] : [prompt, this.options];
+    const args = [prompt, this.options, sanitizedContext];
     const jsonArgs = safeJsonStringify(args) || '[]';
     // Build a separate arg set for cache-key hashing that excludes per-run
     // non-deterministic fields (`evaluationId`, `traceparent`, etc.). The
@@ -90,14 +91,13 @@ export class GolangProvider implements ApiProvider {
     // Stable (sorted) JSON ensures callers that clone/reshape options or
     // context with a different key order still hit the same cache entry.
     const cacheableContext = buildCacheableScriptContext(context);
-    const cacheKeyArgs =
-      apiType === 'call_api' ? [prompt, this.options, cacheableContext] : [prompt, this.options];
+    const cacheKeyArgs = [prompt, this.options, cacheableContext];
     const cache = await getCache();
     let cachedResult;
     const containsSensitiveInput = containsSensitiveScriptInput(cacheKeyArgs);
     const cacheEnabled = isCacheEnabled() && !containsSensitiveInput;
     const cacheKey = cacheEnabled
-      ? `golang:${this.scriptPath}:${functionName}:${apiType}:${fileHash}:${sha256(
+      ? `golang:${this.scriptPath}:${functionName}:call_api:${fileHash}:${sha256(
           stableJsonStringify(cacheKeyArgs) || '[]',
         )}`
       : undefined;
@@ -110,13 +110,13 @@ export class GolangProvider implements ApiProvider {
     }
 
     if (cachedResult) {
-      logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
+      logger.debug(`Returning cached call_api result for script ${absPath}`);
       return { ...JSON.parse(cachedResult), cached: true };
     } else {
       logger.debug('Running Golang script', {
         scriptPath: absPath,
         providerPath: this.scriptPath,
-        apiType,
+        apiType: 'call_api',
         argCount: args.length,
         hasContext: Boolean(sanitizedContext),
       });
@@ -199,14 +199,6 @@ export class GolangProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    return this.executeGolangScript(prompt, context, 'call_api');
-  }
-
-  async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    return this.executeGolangScript(prompt, undefined, 'call_embedding_api');
-  }
-
-  async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    return this.executeGolangScript(prompt, undefined, 'call_classification_api');
+    return this.executeGolangScript(prompt, context);
   }
 }
