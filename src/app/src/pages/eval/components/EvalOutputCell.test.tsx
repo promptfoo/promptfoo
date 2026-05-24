@@ -17,7 +17,7 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata, prompt, output, variables }) => (
+  default: vi.fn(({ gradingResults, metadata, onClose, prompt, output, variables }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
@@ -27,6 +27,9 @@ vi.mock('./EvalOutputPromptDialog', () => ({
       data-variables={JSON.stringify(variables)}
     >
       Mocked Dialog Component
+      <button type="button" onClick={onClose}>
+        Close mocked dialog
+      </button>
     </div>
   )),
 }));
@@ -321,6 +324,17 @@ describe('EvalOutputCell', () => {
       'data-prompt',
       'Hydrated hash prompt',
     );
+  });
+
+  it('clears the row hint when closing a deep-linked prompt dialog', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, '', '/?rowId=51#details-row-1-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Close mocked dialog' }));
+
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
   });
 
   it('ignores a details hash that targets a different stable row index', () => {
