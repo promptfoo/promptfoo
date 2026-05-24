@@ -15,6 +15,7 @@ import { mockProcessEnv } from '../util/utils';
 import type { TestCase, TestSuite } from '../../src/types/index';
 
 const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
 const mockCreateTrace = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
@@ -37,6 +38,7 @@ vi.mock('../../src/tracing/store', () => ({
 vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: mockStartOTLPReceiver,
   stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+  updateOTLPReceiverOptions: mockUpdateOTLPReceiverOptions,
 }));
 
 describe('evaluatorTracing', () => {
@@ -44,6 +46,7 @@ describe('evaluatorTracing', () => {
     vi.clearAllMocks();
     mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
+    mockUpdateOTLPReceiverOptions.mockReset();
     mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
@@ -388,6 +391,25 @@ describe('evaluatorTracing', () => {
       expect(mockStartOTLPReceiver).not.toHaveBeenCalled();
     });
 
+    it('should prune the trace store when tracing is enabled by environment', async () => {
+      const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(getTraceStore).mockReturnValue({
+        deleteOldTraces,
+      } as unknown as ReturnType<typeof getTraceStore>);
+      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          storage: { type: 'sqlite', retentionDays: 7 },
+        },
+      } as unknown as TestSuite);
+
+      expect(deleteOldTraces).toHaveBeenCalledWith(7);
+      expect(mockStartOTLPReceiver).not.toHaveBeenCalled();
+    });
+
     it('should not prune when retentionDays is omitted', async () => {
       const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
       const { getTraceStore } = await import('../../src/tracing/store');
@@ -517,6 +539,41 @@ describe('evaluatorTracing', () => {
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(deleteOldTraces).toHaveBeenCalledWith(7);
+    });
+
+    it('should refresh receiver options when tracing is already running', async () => {
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite);
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockUpdateOTLPReceiverOptions).toHaveBeenCalledWith(['json'], {
+        commandToolNames: ['bash'],
+        redactAttributes: ['authorization'],
+      });
     });
   });
 });
