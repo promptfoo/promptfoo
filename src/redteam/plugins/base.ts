@@ -452,7 +452,9 @@ export abstract class RedteamGraderBase {
     const tools =
       providerTools && !isMcpToolNameFilter(providerTools)
         ? providerId?.startsWith('openai:agents:')
-          ? await (await import('../../providers/openai/agents-loader')).loadTools(providerTools)
+          ? await (
+              await import('../../providers/openai/agents-loader')
+            ).loadTools(providerTools)
           : await maybeLoadToolsFromExternalFile(providerTools)
         : undefined;
 

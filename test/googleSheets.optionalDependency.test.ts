@@ -71,7 +71,10 @@ describe('Google Sheets optional dependency', () => {
           values: {
             get: vi.fn().mockResolvedValue({
               data: {
-                values: [['header'], ['value']],
+                values: [
+                  ['header'],
+                  ['value'],
+                ],
               },
             }),
           },
@@ -112,7 +115,10 @@ describe('Google Sheets optional dependency', () => {
           values: {
             get: vi.fn().mockResolvedValue({
               data: {
-                values: [['header'], ['value']],
+                values: [
+                  ['header'],
+                  ['value'],
+                ],
               },
             }),
           },

@@ -44,9 +44,7 @@ interface MCPRequestOptions {
   maxTotalTimeout?: number;
 }
 
-async function loadMcpClientSdk(): Promise<
-  typeof import('@modelcontextprotocol/sdk/client/index.js')
-> {
+async function loadMcpClientSdk(): Promise<typeof import('@modelcontextprotocol/sdk/client/index.js')> {
   try {
     return await import('@modelcontextprotocol/sdk/client/index.js');
   } catch (error) {

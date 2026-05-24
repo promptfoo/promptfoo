@@ -27,9 +27,7 @@ function createMcpSdkDependencyError(): Error {
   );
 }
 
-async function loadMcpServerSdk(): Promise<
-  typeof import('@modelcontextprotocol/sdk/server/mcp.js')
-> {
+async function loadMcpServerSdk(): Promise<typeof import('@modelcontextprotocol/sdk/server/mcp.js')> {
   try {
     return await import('@modelcontextprotocol/sdk/server/mcp.js');
   } catch (error) {
