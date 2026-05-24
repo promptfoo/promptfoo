@@ -1200,6 +1200,23 @@ describe('ResultsTable Row Navigation', () => {
     });
   });
 
+  it('observes the body table while waiting for a deep-linked row to render', () => {
+    const observeSpy = vi.spyOn(MutationObserver.prototype, 'observe');
+    setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(observeSpy).toHaveBeenCalledWith(
+      document.getElementById('results-table-container'),
+      expect.objectContaining({
+        childList: true,
+        subtree: true,
+      }),
+    );
+
+    observeSpy.mockRestore();
+  });
+
   it('preserves the details hash on initial mount', async () => {
     const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
 

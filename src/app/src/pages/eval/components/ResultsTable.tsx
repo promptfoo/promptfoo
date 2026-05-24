@@ -1537,7 +1537,9 @@ function ResultsTableHeader({
         className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
         <table
-          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          className={`results-table results-table-header-table firefox-fix ${
+            maxTextLength <= 25 ? 'compact' : ''
+          }`}
           style={{
             wordBreak,
             width: `${tableWidth}px`,
@@ -2321,8 +2323,7 @@ function ResultsTable({
         }
       };
 
-      const tableContainer =
-        document.querySelector('.results-table')?.parentElement || document.body;
+      const tableContainer = document.getElementById('results-table-container') || document.body;
 
       const observer = new MutationObserver(() => {
         if (hasScrolled) {
