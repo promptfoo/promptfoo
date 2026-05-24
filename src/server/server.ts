@@ -16,7 +16,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries, getEvalSummariesCount } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
@@ -164,11 +164,27 @@ export function createApp() {
         replyValidationError(res, queryResult.error);
         return;
       }
-      const previousResults = await getEvalSummaries(
-        queryResult.data.datasetId,
-        queryResult.data.type,
-        queryResult.data.includeProviders,
-      );
+      const { datasetId, type, includeProviders, limit, offset } = queryResult.data;
+
+      if (limit !== undefined) {
+        const pagination = { limit, offset: offset ?? 0 };
+        const [previousResults, totalCount] = await Promise.all([
+          getEvalSummaries(datasetId, type, includeProviders, pagination),
+          getEvalSummariesCount(datasetId, type),
+        ]);
+        res.json(
+          ServerSchemas.ResultList.Response.parse({
+            data: previousResults,
+            pagination: {
+              totalCount,
+              ...pagination,
+            },
+          }),
+        );
+        return;
+      }
+
+      const previousResults = await getEvalSummaries(datasetId, type, includeProviders);
       res.json(ServerSchemas.ResultList.Response.parse({ data: previousResults }));
     },
   );

@@ -29,14 +29,28 @@ const RemoteHealthResponseSchema = z.object({
   message: z.string(),
 });
 
-const ListResultsQuerySchema = z.object({
-  datasetId: z.string().min(1).optional(),
-  type: z.enum(['redteam', 'eval']).optional(),
-  includeProviders: BooleanQueryParamSchema,
-});
+const ListResultsQuerySchema = z
+  .object({
+    datasetId: z.string().min(1).optional(),
+    type: z.enum(['redteam', 'eval']).optional(),
+    includeProviders: BooleanQueryParamSchema,
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
+  })
+  .refine((value) => value.offset === undefined || value.limit !== undefined, {
+    path: ['offset'],
+    message: 'offset requires limit',
+  });
 
 const ListResultsResponseSchema = z.object({
   data: z.array(JsonObjectSchema),
+  pagination: z
+    .object({
+      totalCount: z.number().int().nonnegative(),
+      limit: z.number().int().positive(),
+      offset: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 const ResultParamsSchema = z.object({
