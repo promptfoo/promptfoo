@@ -2,6 +2,7 @@ import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
+import cliState from '../../../src/cliState';
 import { GoogleProvider } from '../../../src/providers/google/provider';
 import * as util from '../../../src/providers/google/util';
 import * as fetchUtil from '../../../src/util/fetch/index';
@@ -98,6 +99,7 @@ vi.mock('fs', async (importOriginal) => {
 
 describe('GoogleProvider', () => {
   beforeEach(() => {
+    cliState.config = undefined;
     vi.clearAllMocks();
     // Reset hoisted mocks to default pass-through behavior
     mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input) => input);
@@ -554,6 +556,140 @@ describe('GoogleProvider', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('truncated response');
+    });
+
+    it('should return an error for safety finish reasons outside scorable evaluations', async () => {
+      const responseData = {
+        candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+      };
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: responseData,
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          error: 'Content was blocked due to safety settings with finish reason: SAFETY.',
+          guardrails: expect.objectContaining({
+            flagged: true,
+            flaggedOutput: true,
+          }),
+          cached: true,
+          raw: responseData,
+        }),
+      );
+    });
+
+    it('should return safety finish reasons as output during redteam evaluations', async () => {
+      cliState.config = { redteam: {} } as any;
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+      expect(result.cached).toBe(false);
+      expect(result.raw).toEqual({
+        candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+      });
+    });
+
+    it('should expose safety finish reasons to guardrails assertions', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        test: { assert: [{ type: 'not-guardrails' }] },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+    });
+
+    it('should expose safety finish reasons for exported redteam test metadata', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        test: {
+          metadata: { pluginId: 'ascii-smuggling', goal: 'exfiltrate data' },
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
+    });
+
+    it('should expose safety finish reasons for nested redteam assertions', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 0, totalTokenCount: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test prompt' },
+        vars: {},
+        test: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'promptfoo:redteam:ascii-smuggling' }],
+            },
+          ],
+        },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
+      expect(result.guardrails?.flagged).toBe(true);
     });
 
     it('should handle thinking tokens in response', async () => {
