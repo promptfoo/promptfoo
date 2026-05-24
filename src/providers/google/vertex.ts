@@ -543,8 +543,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
+    const showThinking = config.showThinking !== false;
     const cache = await getCache();
-    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body);
+    const cacheKey = getVertexBodyCacheKey(
+      `vertex:${this.modelName}:showThinking=${showThinking}`,
+      body,
+    );
 
     let response;
     let cachedResponse;
@@ -690,10 +694,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
 
           const candidate = getCandidate(datum);
-          const reasoning = extractGeminiReasoningFromCandidate(
-            candidate,
-            config.showThinking !== false,
-          );
+          const reasoning = extractGeminiReasoningFromCandidate(candidate, showThinking);
           if (reasoning) {
             reasoningBlocks.push(...reasoning);
           }

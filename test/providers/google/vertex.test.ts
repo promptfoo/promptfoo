@@ -699,11 +699,90 @@ describe('VertexChatProvider.callGeminiApi', () => {
     provider = new VertexChatProvider('gemini-2.0-flash-001');
     await provider.callGeminiApi('test prompt');
 
-    expectHashedBodyCacheKeys(/^vertex:gemini-2\.0-flash-001:[a-f0-9]{64}$/, ['test prompt']);
+    expectHashedBodyCacheKeys(/^vertex:gemini-2\.0-flash-001:showThinking=true:[a-f0-9]{64}$/, [
+      'test prompt',
+    ]);
     expect(mockCacheSet).toHaveBeenCalledWith(
-      expect.stringContaining('vertex:gemini-2.0-flash-001:'),
+      expect.stringContaining('vertex:gemini-2.0-flash-001:showThinking=true:'),
       expect.any(String),
     );
+  });
+
+  it('should separate cached Gemini responses by effective showThinking', async () => {
+    const cachedResponses = new Map<string, string>();
+    mockCacheGet.mockImplementation((key: string) =>
+      Promise.resolve(cachedResponses.get(key) ?? null),
+    );
+    mockCacheSet.mockImplementation((key: string, value: string) => {
+      cachedResponses.set(key, value);
+      return Promise.resolve();
+    });
+
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [
+                { thought: true, text: 'internal reasoning', thoughtSignature: 'sig-cache' },
+                { text: 'visible answer' },
+              ],
+            },
+          },
+        ],
+        usageMetadata: {
+          totalTokenCount: 10,
+          promptTokenCount: 4,
+          candidatesTokenCount: 6,
+        },
+      },
+    ]);
+
+    const providerWithThinking = new VertexChatProvider('gemini-2.5-flash', {
+      config: { showThinking: true },
+    });
+    const withThinking = await providerWithThinking.callGeminiApi('same prompt');
+
+    const providerWithoutThinking = new VertexChatProvider('gemini-2.5-flash', {
+      config: { showThinking: false },
+    });
+    const withoutThinking = await providerWithoutThinking.callGeminiApi('same prompt');
+
+    expect(withThinking.cached).toBe(false);
+    expect(withThinking.output).toBe('visible answer');
+    expect(withThinking.reasoning).toEqual([
+      { type: 'thought', thought: 'internal reasoning', signature: 'sig-cache' },
+    ]);
+
+    expect(withoutThinking.cached).toBe(false);
+    expect(withoutThinking.output).toBe('visible answer');
+    expect(withoutThinking.reasoning).toBeUndefined();
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+
+    const [withThinkingKey, withoutThinkingKey] = mockCacheGet.mock.calls.map(
+      ([key]) => key as string,
+    );
+    expect(withThinkingKey).toMatch(/^vertex:gemini-2\.5-flash:showThinking=true:[a-f0-9]{64}$/);
+    expect(withoutThinkingKey).toMatch(
+      /^vertex:gemini-2\.5-flash:showThinking=false:[a-f0-9]{64}$/,
+    );
+    expect(withThinkingKey).not.toBe(withoutThinkingKey);
+
+    cachedResponses.clear();
+    mockRequest.mockClear();
+    mockCacheGet.mockClear();
+    mockCacheSet.mockClear();
+
+    const withoutThinkingFirst = await providerWithoutThinking.callGeminiApi('same prompt');
+    const withThinkingSecond = await providerWithThinking.callGeminiApi('same prompt');
+
+    expect(withoutThinkingFirst.cached).toBe(false);
+    expect(withoutThinkingFirst.reasoning).toBeUndefined();
+    expect(withThinkingSecond.cached).toBe(false);
+    expect(withThinkingSecond.reasoning).toEqual([
+      { type: 'thought', thought: 'internal reasoning', signature: 'sig-cache' },
+    ]);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
   });
 
   it('should handle function tool callbacks correctly', async () => {
