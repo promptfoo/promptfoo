@@ -153,9 +153,7 @@ const CustomMetrics = ({
               <TooltipContent side="top">
                 <div className="space-y-2 max-w-[400px]">
                   {tooltipContent}
-                  <p className="text-sm font-medium">
-                    Click to filter by this {filterTargetLabel}
-                  </p>
+                  <p className="text-sm font-medium">Click to filter by this {filterTargetLabel}</p>
                 </div>
               </TooltipContent>
             </Tooltip>
