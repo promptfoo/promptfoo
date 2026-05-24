@@ -14,10 +14,10 @@ Run these commands to diagnose common red team issues:
 
 ```bash
 # Verify your configuration is valid
-npx promptfoo redteam validate
+npx promptfoo validate -c redteam.yaml
 
-# Test connection to your target
-npx promptfoo eval --config redteam.yaml --dry-run
+# Test connection to your target(s) without running an eval
+npx promptfoo validate target -c redteam.yaml
 
 # Check environment variables are set
 echo $OPENAI_API_KEY  # or your provider's key
