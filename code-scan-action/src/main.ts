@@ -579,6 +579,10 @@ async function handleScanResponse(
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
 
+  // Always emit SARIF first so downstream upload-sarif steps find a file even on skips —
+  // otherwise a configured sarif-output-path silently disappears when the scan is skipped.
+  emitConfiguredSarifOutput(scanResponse, inputs);
+
   // Intentional skip (e.g. fork PR awaiting maintainer approval). The server has already
   // posted the explanatory PR comment, so just surface the reason.
   if (skipReason) {
@@ -587,8 +591,6 @@ async function handleScanResponse(
   }
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
-
-  emitConfiguredSarifOutput(scanResponse, inputs);
 
   if ((comments.length > 0 || review) && commentsPosted === false) {
     await postFallbackComments(

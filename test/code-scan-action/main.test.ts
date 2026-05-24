@@ -635,6 +635,47 @@ describe('code-scan-action main', () => {
       expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
     });
 
+    it('writes SARIF when the scanner returns a skipReason so upload-sarif does not break', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(
+              Buffer.from(
+                JSON.stringify({
+                  success: true,
+                  commentsPosted: true,
+                  comments: [],
+                  skipReason: 'Fork PR scanning requires maintainer approval.',
+                }),
+              ),
+            );
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      const expectedPath = path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif');
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(expectedPath, expect.any(String));
+      });
+
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string)).toMatchObject({
+        version: '2.1.0',
+        runs: [{ results: [] }],
+      });
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
+      expect(mocks.core.info).toHaveBeenCalledWith(
+        '🔀 Scan skipped: Fork PR scanning requires maintainer approval.',
+      );
+    });
+
     it('does not write SARIF when a setup PR is skipped', async () => {
       mocks.actionGithub.getPRFiles.mockResolvedValue([
         {
