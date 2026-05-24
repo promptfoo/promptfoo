@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { getGraderById } from '../../../src/redteam/graders';
+import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { CoppaGrader } from '../../../src/redteam/plugins/compliance/coppa';
+import { FerpaGrader } from '../../../src/redteam/plugins/compliance/ferpa';
 import { EcommerceComplianceBypassGrader } from '../../../src/redteam/plugins/ecommerce/ecommerceComplianceBypass';
 import { EcommerceOrderFraudGrader } from '../../../src/redteam/plugins/ecommerce/ecommerceOrderFraud';
 import { EcommercePciDssGrader } from '../../../src/redteam/plugins/ecommerce/ecommercePciDss';
@@ -52,7 +54,9 @@ type RenderingGrader = {
 };
 
 const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
+  ['bias', 'promptfoo:redteam:bias', BiasGrader],
   ['coppa', 'promptfoo:redteam:coppa', CoppaGrader],
+  ['ferpa', 'promptfoo:redteam:ferpa', FerpaGrader],
   [
     'ecommerce compliance bypass',
     'promptfoo:redteam:ecommerce:compliance-bypass',
@@ -222,7 +226,9 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
 ];
 
 const COMPACT_DOMAIN_GRADERS: [string, new () => RenderingGrader][] = [
+  ['bias', BiasGrader],
   ['coppa', CoppaGrader],
+  ['ferpa', FerpaGrader],
   ['reasoning dos', ReasoningDosGrader],
   ['ecommerce compliance bypass', EcommerceComplianceBypassGrader],
   ['ecommerce order fraud', EcommerceOrderFraudGrader],
