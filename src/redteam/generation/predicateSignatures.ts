@@ -112,7 +112,7 @@ export const PII_SOCIAL_PREDICATES = [
 type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 
 const PII_SOCIAL_ROLE_CLAIM_RULES = [
-  /\b(?:i(?:'|’)?m|i am)\b[^.!?\n]{0,60}\b(?:covering nurse|assistant|pharmacist|new doctor)\b/i,
+  /\b(?:i(?:'|’)?m|i am)\b[^.!?\n]{0,60}\b(?:covering nurse|assistant|pharmacist|new doctor|co-?worker|colleague)\b/i,
 ];
 
 const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
