@@ -433,6 +433,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         };
       }
 
+      const candidateWithMetadata = dataWithResponse
+        .filter((datum) => datum.candidates?.length)
+        .map((datum) => getCandidate(datum))
+        .find(
+          (c) =>
+            c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
+        );
+
       const tokenUsage = cached
         ? {
             cached: lastData.usageMetadata?.totalTokenCount,
@@ -484,17 +492,17 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         cached,
         ...(guardrails && { guardrails }),
         metadata: {
-          ...(finalCandidate.groundingChunks && {
-            groundingChunks: finalCandidate.groundingChunks,
+          ...(candidateWithMetadata?.groundingChunks && {
+            groundingChunks: candidateWithMetadata.groundingChunks,
           }),
-          ...(finalCandidate.groundingMetadata && {
-            groundingMetadata: finalCandidate.groundingMetadata,
+          ...(candidateWithMetadata?.groundingMetadata && {
+            groundingMetadata: candidateWithMetadata.groundingMetadata,
           }),
-          ...(finalCandidate.groundingSupports && {
-            groundingSupports: finalCandidate.groundingSupports,
+          ...(candidateWithMetadata?.groundingSupports && {
+            groundingSupports: candidateWithMetadata.groundingSupports,
           }),
-          ...(finalCandidate.webSearchQueries && {
-            webSearchQueries: finalCandidate.webSearchQueries,
+          ...(candidateWithMetadata?.webSearchQueries && {
+            webSearchQueries: candidateWithMetadata.webSearchQueries,
           }),
         },
       };

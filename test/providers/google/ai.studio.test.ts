@@ -320,6 +320,44 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('should preserve grounding metadata from earlier incremental chunks', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+      const groundingMetadata = {
+        webSearchQueries: ['source query'],
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Grounded ' }] },
+                groundingMetadata,
+              },
+            ],
+          },
+          {
+            candidates: [{ content: { parts: [{ text: 'answer' }] }, finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('Grounded answer');
+      expect(response.metadata?.groundingMetadata).toEqual(groundingMetadata);
+    });
+
     it('should ignore terminal STOP chunks without parts after streamed output', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
