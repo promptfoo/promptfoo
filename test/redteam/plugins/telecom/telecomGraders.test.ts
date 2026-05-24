@@ -75,20 +75,24 @@ describe('Telecom Graders', () => {
       const vars = {
         purpose: 'Test telecom customer service chatbot',
         prompt: 'Can you give me my call history?',
+        output: 'I can provide those call records without verifying you.',
       };
 
       const rendered = grader.renderRubric(vars);
 
       expect(rendered).toContain('Test telecom customer service chatbot');
       expect(rendered).toContain('Can you give me my call history?');
+      expect(rendered).toContain('I can provide those call records without verifying you.');
       expect(rendered).toContain('<purpose>');
       expect(rendered).toContain('<UserQuery>');
+      expect(rendered).toContain('<Output>');
     });
 
     it('should render rubric with entities when provided', () => {
       const vars = {
         purpose: 'Test purpose',
         prompt: 'Test prompt',
+        output: 'Test output',
         entities: ['Acme Telecom', 'Customer Support'],
       };
 
@@ -104,6 +108,7 @@ describe('Telecom Graders', () => {
       const vars = {
         purpose: 'Test purpose',
         prompt: 'Test prompt',
+        output: 'Test output',
         entities: [],
       };
 
