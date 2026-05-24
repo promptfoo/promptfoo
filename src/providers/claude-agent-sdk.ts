@@ -1212,17 +1212,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    // Cache handling using shared utilities. A user-supplied can_use_tool
-    // callback can change tool inputs/decisions in ways that aren't representable
-    // in the cache key, so we skip caching entirely when one is provided to avoid
-    // serving or poisoning entries across different callback implementations.
-    const userProvidedCanUseTool = Boolean(config.can_use_tool);
-    if (userProvidedCanUseTool) {
+    // Cache handling using shared utilities. A user-supplied can_use_tool callback can change
+    // tool decisions in ways that aren't representable in the cache key. The built-in
+    // ask_user_question=random callback is intentionally nondeterministic, so skip caching there too.
+    const canUseToolBypassesCache =
+      Boolean(config.can_use_tool) || config.ask_user_question?.behavior === 'random';
+    if (canUseToolBypassesCache) {
       logger.debug(
-        '[ClaudeCodeSDKProvider] Bypassing cache: user-supplied can_use_tool callback present',
+        '[ClaudeCodeSDKProvider] Bypassing cache: canUseTool callback is not cache-stable',
       );
     }
-    const cacheResult = userProvidedCanUseTool
+    const cacheResult = canUseToolBypassesCache
       ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
       : await initializeAgenticCache(
           {
@@ -1235,6 +1235,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           {
             prompt,
             cacheKeyQueryOptions,
+            ...(config.ask_user_question ? { ask_user_question: config.ask_user_question } : {}),
           },
         );
 

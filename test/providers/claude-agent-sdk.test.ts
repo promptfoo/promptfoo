@@ -3512,6 +3512,53 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
+      it('should partition cache entries by ask_user_question behavior', async () => {
+        mockQuery
+          .mockImplementationOnce(() => createMockResponse('First option response'))
+          .mockImplementationOnce(() => createMockResponse('Denied question response'));
+
+        await clearCache();
+
+        const firstOptionProvider = new ClaudeCodeSDKProvider({
+          config: { ask_user_question: { behavior: 'first_option' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const denyProvider = new ClaudeCodeSDKProvider({
+          config: { ask_user_question: { behavior: 'deny' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const firstOptionProviderAgain = new ClaudeCodeSDKProvider({
+          config: { ask_user_question: { behavior: 'first_option' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const first = await firstOptionProvider.callApi('Test prompt');
+        const denied = await denyProvider.callApi('Test prompt');
+        const firstAgain = await firstOptionProviderAgain.callApi('Test prompt');
+
+        expect(first.output).toBe('First option response');
+        expect(denied.output).toBe('Denied question response');
+        expect(firstAgain.cached).toBe(true);
+        expect(firstAgain.output).toBe('First option response');
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
+      it('should bypass cache for random ask_user_question automation', async () => {
+        mockQuery.mockImplementation(() => createMockResponse('Randomized response'));
+
+        await clearCache();
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { ask_user_question: { behavior: 'random' } },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
       it('should handle cache errors gracefully', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
