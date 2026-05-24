@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -14,6 +15,7 @@ import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
+import { isSecretField, looksLikeSecret } from './util/sanitizer';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -285,6 +287,8 @@ type PreparedFetchResponse = {
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
+const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
+const FETCH_CACHE_SECRET_HMAC_KEY = crypto.randomBytes(32);
 // Headers that describe the transport/runtime rather than the selected
 // representation. Excluded from cache keys so caches stay portable across SDK
 // upgrades, Node versions, and OS/arch. `accept` intentionally stays in the
@@ -314,6 +318,108 @@ function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
   );
 }
 
+function fingerprintFetchCacheSecret(value: string) {
+  return {
+    __promptfooSecretFingerprint: crypto
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .update(FETCH_CACHE_SECRET_HMAC_CONTEXT)
+      .update('\0')
+      .update(value)
+      .digest('hex'),
+  };
+}
+
+function isSensitiveFetchCacheString(value: string, fieldName?: string) {
+  return (fieldName && isSecretField(fieldName)) || looksLikeSecret(value);
+}
+
+function getStringForFetchCacheKey(value: string, fieldName?: string): unknown {
+  if (isSensitiveFetchCacheString(value, fieldName)) {
+    return fingerprintFetchCacheSecret(value);
+  }
+  return value;
+}
+
+function hasSensitiveJsonValue(value: unknown, fieldName?: string): boolean {
+  if (typeof value === 'string') {
+    return isSensitiveFetchCacheString(value, fieldName);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSensitiveJsonValue(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, nestedValue]) =>
+      hasSensitiveJsonValue(nestedValue, key),
+    );
+  }
+  return false;
+}
+
+function getJsonValueForFetchCacheKey(value: unknown, fieldName?: string): unknown {
+  if (typeof value === 'string') {
+    return getStringForFetchCacheKey(value, fieldName);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => getJsonValueForFetchCacheKey(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nestedValue]) => [
+        key,
+        getJsonValueForFetchCacheKey(nestedValue, key),
+      ]),
+    );
+  }
+  return value;
+}
+
+function getBodyStringForFetchCacheKey(value: string): unknown {
+  try {
+    const parsedValue = JSON.parse(value);
+    return hasSensitiveJsonValue(parsedValue)
+      ? {
+          encoding: 'json',
+          value: getJsonValueForFetchCacheKey(parsedValue),
+        }
+      : value;
+  } catch {
+    return getStringForFetchCacheKey(value);
+  }
+}
+
+function hasSensitiveSearchParam(searchParams: URLSearchParams) {
+  return Array.from(searchParams.entries()).some(([name, value]) =>
+    isSensitiveFetchCacheString(value, name),
+  );
+}
+
+function getSearchParamsForFetchCacheKey(searchParams: URLSearchParams): unknown {
+  if (!hasSensitiveSearchParam(searchParams)) {
+    return searchParams.toString();
+  }
+  return Array.from(searchParams.entries()).map(([name, value]) => [
+    name,
+    getStringForFetchCacheKey(value, name),
+  ]);
+}
+
+function getUrlForFetchCacheKey(url: RequestInfo) {
+  const urlString = url instanceof Request ? url.url : String(url);
+  try {
+    const parsedUrl = new URL(urlString);
+    if (!hasSensitiveSearchParam(parsedUrl.searchParams)) {
+      return urlString;
+    }
+    parsedUrl.search = '';
+    return {
+      href: parsedUrl.toString(),
+      searchParams: getSearchParamsForFetchCacheKey(new URL(urlString).searchParams),
+    };
+  } catch {
+    return getStringForFetchCacheKey(urlString);
+  }
+}
+
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
@@ -329,7 +435,8 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
     .sort(([nameA, valueA], [nameB, valueB]) => {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
-    });
+    })
+    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
 }
 
 function hashFetchCacheKey(identity: unknown) {
@@ -342,7 +449,12 @@ function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
     : Buffer.from(bytes);
   return {
     byteLength: buffer.byteLength,
-    sha256: sha256(buffer),
+    hmacSha256: crypto
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:bytes`)
+      .update('\0')
+      .update(buffer)
+      .digest('hex'),
   };
 }
 
@@ -352,11 +464,17 @@ function getBodyForFetchCacheKey(body: RequestInit['body'] | ReadableStream | nu
   }
 
   if (typeof body === 'string') {
-    return { cacheable: true, identity: { type: 'string', value: body } };
+    return {
+      cacheable: true,
+      identity: { type: 'string', value: getBodyStringForFetchCacheKey(body) },
+    };
   }
 
   if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
-    return { cacheable: true, identity: { type: 'url-search-params', value: body.toString() } };
+    return {
+      cacheable: true,
+      identity: { type: 'url-search-params', value: getSearchParamsForFetchCacheKey(body) },
+    };
   }
 
   if (body instanceof ArrayBuffer) {
@@ -429,7 +547,7 @@ function getFetchCacheKey(
       headers: getHeadersForCacheKey(url, options),
       method,
       options: optionsForCacheKey.identity,
-      url: url instanceof Request ? url.url : String(url),
+      url: getUrlForFetchCacheKey(url),
     })}${repeatSuffix}`,
   );
 }
