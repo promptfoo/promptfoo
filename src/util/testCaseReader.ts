@@ -365,7 +365,7 @@ function parseJsonTestCases(fileContent: string): TestCase[] {
 
 type AgentSkillsEvalCase = {
   id?: string | number;
-  prompt?: unknown;
+  prompt: string;
   expected_output?: unknown;
   assertions?: unknown;
   files?: unknown;
@@ -373,7 +373,7 @@ type AgentSkillsEvalCase = {
 
 type AgentSkillsEvalsFile = {
   skill_name?: unknown;
-  evals: AgentSkillsEvalCase[];
+  evals?: unknown;
 };
 
 /**
@@ -396,38 +396,33 @@ function parseAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
   }
 
   const candidate = input as AgentSkillsEvalsFile;
-  if (!Array.isArray(candidate.evals)) {
+  const skillName =
+    typeof candidate.skill_name === 'string' && candidate.skill_name.trim()
+      ? candidate.skill_name
+      : undefined;
+  if (!skillName || !Array.isArray(candidate.evals)) {
     return null;
   }
 
-  // Require at least one entry to look like an AgentSkills eval (i.e. has a
-  // `prompt` field). This avoids hijacking unrelated JSON files that happen
-  // to expose an `evals` array.
-  const looksLikeAgentSkills = candidate.evals.some(
+  const validCases = candidate.evals.filter(
     (entry): entry is AgentSkillsEvalCase =>
       typeof entry === 'object' &&
       entry !== null &&
-      typeof (entry as AgentSkillsEvalCase).prompt === 'string',
+      typeof (entry as Partial<AgentSkillsEvalCase>).prompt === 'string' &&
+      Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
   );
-  if (!looksLikeAgentSkills) {
-    return null;
-  }
-
-  const skillName = typeof candidate.skill_name === 'string' ? candidate.skill_name : undefined;
-  return candidate.evals.map((rawCase, idx) => agentSkillsEvalToTestCase(rawCase, idx, skillName));
+  return validCases.map((entry, idx) => agentSkillsEvalToTestCase(entry, idx, skillName));
 }
 
 function agentSkillsEvalToTestCase(
-  rawCase: unknown,
+  entry: AgentSkillsEvalCase,
   idx: number,
-  skillName: string | undefined,
+  skillName: string,
 ): TestCase {
-  const entry = rawCase && typeof rawCase === 'object' ? (rawCase as AgentSkillsEvalCase) : {};
-  const prompt = typeof entry.prompt === 'string' ? entry.prompt : '';
   const idValue =
     typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
 
-  const vars: Record<string, VarValue> = { prompt };
+  const vars: Record<string, VarValue> = { prompt: entry.prompt };
   if (Array.isArray(entry.files)) {
     vars.files = entry.files.filter((f): f is string => typeof f === 'string');
   }

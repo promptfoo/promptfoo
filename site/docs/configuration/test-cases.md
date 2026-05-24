@@ -535,9 +535,10 @@ def create_tests(config):
 
 Promptfoo automatically detects the
 [AgentSkills `evals.json`](https://agentskills.io/skill-creation/evaluating-skills)
-format when a JSON test file's top-level shape is `{ "evals": [...] }`. Each
-eval is converted into a promptfoo test case so you can run the same suite that
-ships alongside a skill without rewriting it.
+format when a JSON test file includes a non-empty top-level `skill_name` and an
+`evals` array. Each valid prompt-bearing eval is converted into a promptfoo
+test case so you can run the same suite that ships alongside a skill without
+rewriting it. Malformed entries and entries with blank prompts are ignored.
 
 ```json title="evals.json"
 {

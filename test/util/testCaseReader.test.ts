@@ -342,10 +342,10 @@ describe('readStandaloneTestsFile', () => {
       ]);
     });
 
-    it('does not hijack JSON files that happen to have an `evals` field but no prompts', async () => {
+    it('does not hijack prompt-bearing JSON files without an AgentSkills skill name', async () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({
-          evals: [{ description: 'looks like a TestCase', vars: { foo: 'bar' } }],
+          evals: [{ prompt: 'generic prompt', vars: { foo: 'bar' } }],
         }),
       );
 
@@ -355,16 +355,20 @@ describe('readStandaloneTestsFile', () => {
       // and stamps the default `Row #1` description.
       expect(result).toEqual([
         {
-          evals: [{ description: 'looks like a TestCase', vars: { foo: 'bar' } }],
+          evals: [{ prompt: 'generic prompt', vars: { foo: 'bar' } }],
           description: 'Row #1',
         },
       ]);
     });
 
-    it('omits metadata when neither skill_name nor id is set', async () => {
+    it('ignores blank prompts and keeps skill metadata for valid entries without ids', async () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({
-          evals: [{ prompt: 'hello', expected_output: 'greets the user' }],
+          skill_name: 'greeter',
+          evals: [
+            { prompt: '   ', expected_output: 'must not run' },
+            { prompt: 'hello', expected_output: 'greets the user' },
+          ],
         }),
       );
 
@@ -375,6 +379,7 @@ describe('readStandaloneTestsFile', () => {
           description: 'Row #1',
           vars: { prompt: 'hello' },
           assert: [{ type: 'llm-rubric', value: 'greets the user' }],
+          metadata: { skill_name: 'greeter' },
         },
       ]);
     });
@@ -389,18 +394,26 @@ describe('readStandaloneTestsFile', () => {
 
       const result = await readStandaloneTestsFile('evals.json');
 
-      expect(result).toHaveLength(2);
-      expect(result[0]).toMatchObject({
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
         description: 'Row #1',
-        vars: { prompt: '' },
-        metadata: { skill_name: 'mixed' },
-      });
-      expect(result[1]).toMatchObject({
-        description: 'Row #2',
         vars: { prompt: 'good entry' },
         assert: [{ type: 'llm-rubric', value: 'must answer' }],
         metadata: { skill_name: 'mixed' },
       });
+    });
+
+    it('does not emit a generic passing row when all AgentSkills entries are invalid', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'invalid',
+          evals: [null, { prompt: '   ' }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toEqual([]);
     });
   });
 
