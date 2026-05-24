@@ -617,17 +617,12 @@ function addedPatchPayload(value: unknown): string | undefined {
   return additions || undefined;
 }
 
-function authoredFileToolPayload(toolInput: unknown): string | undefined {
-  const parsedInput = parseProviderRaw(toolInput);
-  const inputObject = getObject(parsedInput);
-  if (!inputObject) {
-    return coerceToolPayload(parsedInput);
-  }
-
+function authoredFileContentParts(inputObject: Record<string, unknown>): string[] {
   const authoredParts = AUTHORED_FILE_CONTENT_KEYS.flatMap((key) => {
     const value = coerceToolPayload(inputObject[key]);
     return value ? [value] : [];
   });
+
   for (const key of FILE_PATCH_KEYS) {
     const addedText = addedPatchPayload(inputObject[key]);
     if (addedText) {
@@ -635,7 +630,25 @@ function authoredFileToolPayload(toolInput: unknown): string | undefined {
     }
   }
 
-  const authoredText = authoredParts.join('\n').trim();
+  const edits = Array.isArray(inputObject.edits) ? inputObject.edits : [];
+  for (const edit of edits) {
+    const editObject = getObject(parseProviderRaw(edit));
+    if (editObject) {
+      authoredParts.push(...authoredFileContentParts(editObject));
+    }
+  }
+
+  return authoredParts;
+}
+
+function authoredFileToolPayload(toolInput: unknown): string | undefined {
+  const parsedInput = parseProviderRaw(toolInput);
+  const inputObject = getObject(parsedInput);
+  if (!inputObject) {
+    return coerceToolPayload(parsedInput);
+  }
+
+  const authoredText = authoredFileContentParts(inputObject).join('\n').trim();
   return authoredText || undefined;
 }
 
@@ -854,7 +867,7 @@ function providerRawToolName(itemObject: Record<string, unknown>): string {
 function providerRawToolInputEvidence(
   itemObject: Record<string, unknown>,
   itemLocation: string,
-): TargetEvidence | undefined {
+): TargetEvidence[] {
   const toolName = providerRawToolName(itemObject);
   const functionCall = getObject(itemObject.function);
   const rawToolInput =
@@ -866,17 +879,50 @@ function providerRawToolInputEvidence(
     itemObject.content ??
     itemObject.text;
   const toolCommand = isShellToolName(toolName) ? getToolCommand(rawToolInput) : undefined;
-  const toolInput =
-    toolCommand ??
-    (isFileWriteToolName(toolName) ? authoredFileToolPayload(rawToolInput) : undefined);
-
-  return toolInput
-    ? {
-        evidenceSource: toolCommand ? 'command' : 'artifact-file',
-        location: `${itemLocation} ${toolName} input`,
-        text: toolInput,
-      }
+  const authoredInput = isFileWriteToolName(toolName)
+    ? authoredFileToolPayload(rawToolInput)
     : undefined;
+  const genericInput = coerceToolPayload(rawToolInput);
+  const evidence: TargetEvidence[] = [];
+
+  if (toolCommand) {
+    evidence.push({
+      evidenceSource: 'command',
+      location: `${itemLocation} ${toolName} input`,
+      text: toolCommand,
+    });
+  }
+
+  if (authoredInput) {
+    evidence.push({
+      evidenceSource: 'artifact-file',
+      location: `${itemLocation} ${toolName} input`,
+      text: authoredInput,
+    });
+  }
+
+  if (genericInput && genericInput !== toolCommand && genericInput !== authoredInput) {
+    evidence.push({
+      evidenceSource: 'provider-output',
+      location: `${itemLocation} ${toolName} input`,
+      text: genericInput,
+    });
+  }
+
+  return evidence;
+}
+
+function providerRawMessageContentEvidence(
+  itemObject: Record<string, unknown>,
+  itemLocation: string,
+): TargetEvidence[] {
+  const content = Array.isArray(itemObject.content) ? itemObject.content : [];
+  return content.flatMap((contentItem, index) => {
+    const contentObject = getObject(contentItem);
+    return contentObject
+      ? evidenceFromProviderRawItem(contentObject, `${itemLocation} content ${index + 1}`)
+      : [];
+  });
 }
 
 function providerRawToolOutputEvidence(
@@ -887,6 +933,7 @@ function providerRawToolOutputEvidence(
   const toolOutput = coerceToolPayload(
     itemObject.output ??
       itemObject.result ??
+      itemObject.error ??
       itemObject.text ??
       itemObject.content ??
       itemObject.content_items ??
@@ -919,14 +966,14 @@ function evidenceFromProviderRawItem(
   if (agentMessageEvidence) {
     evidence.push(agentMessageEvidence);
   }
+  if (type === 'message') {
+    evidence.push(...providerRawMessageContentEvidence(itemObject, itemLocation));
+  }
   if (type === 'command_execution') {
     evidence.push(...providerRawCommandEvidence(itemObject, itemLocation));
   }
-  const toolInputEvidence = TOOL_INPUT_ITEM_TYPES.has(type)
-    ? providerRawToolInputEvidence(itemObject, itemLocation)
-    : undefined;
-  if (toolInputEvidence) {
-    evidence.push(toolInputEvidence);
+  if (TOOL_INPUT_ITEM_TYPES.has(type)) {
+    evidence.push(...providerRawToolInputEvidence(itemObject, itemLocation));
   }
   const toolOutputEvidence = TOOL_OUTPUT_ITEM_TYPES.has(type)
     ? providerRawToolOutputEvidence(itemObject, itemLocation)
@@ -983,10 +1030,7 @@ function evidenceFromProviderMetadata(metadata: unknown): TargetEvidence[] {
     }
 
     const location = `provider metadata tool call ${index + 1}`;
-    const inputEvidence = providerRawToolInputEvidence(toolCallObject, location);
-    if (inputEvidence) {
-      evidence.push(inputEvidence);
-    }
+    evidence.push(...providerRawToolInputEvidence(toolCallObject, location));
     const outputEvidence = providerRawToolOutputEvidence(toolCallObject, location);
     if (outputEvidence) {
       evidence.push(outputEvidence);
