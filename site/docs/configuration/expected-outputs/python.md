@@ -98,7 +98,7 @@ class AssertionValueFunctionContext(TypedDict):
     # OpenTelemetry trace data (when tracing is enabled)
     trace: Optional[TraceData]
 
-    # Shortcut to providerResponse.metadata; key is omitted when unavailable
+    # Optional shortcut to providerResponse.metadata
     metadata: Optional[Dict[str, Any]]
 ```
 
