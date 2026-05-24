@@ -1,80 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   extractMarkdownImageSources,
   normalizeImageSrcForComparison,
   resolveEvalImageOutputSource,
 } from './EvalOutputCell';
-
-// Helper function to handle string image resolution (extracted to reduce complexity)
-function resolveImageString(image: string): string | undefined {
-  // Handle blob URIs
-  if (image.includes('promptfoo://blob/')) {
-    const match = image.match(/promptfoo:\/\/blob\/([a-f0-9]{32,64})/i);
-    if (match) {
-      return `/api/blobs/${match[1]}`;
-    }
-  }
-  // Handle storage refs
-  if (image.startsWith('storageRef:')) {
-    const path = image.replace(/^storageRef:\/?/, '');
-    return `/api/media/${path}`;
-  }
-  // Handle data URIs
-  if (image.startsWith('data:')) {
-    return image;
-  }
-  return undefined;
-}
-
-// Helper function to handle object image resolution (extracted to reduce complexity)
-function resolveImageObject(image: {
-  data?: string;
-  blobRef?: { uri?: string };
-}): string | undefined {
-  // Check data property first
-  if (image.data) {
-    if (image.data.startsWith('data:')) {
-      return image.data;
-    }
-    // Handle storageRef in data property
-    if (image.data.startsWith('storageRef:')) {
-      const path = image.data.replace(/^storageRef:\/?/, '');
-      return `/api/media/${path}`;
-    }
-  }
-  // Check blobRef
-  if (image.blobRef?.uri) {
-    const match = image.blobRef.uri.match(/promptfoo:\/\/blob\/([a-f0-9]{32,64})/i);
-    if (match) {
-      return `/api/blobs/${match[1]}`;
-    }
-  }
-  return undefined;
-}
-
-// Mock the media utilities
-vi.mock('@app/utils/media', () => ({
-  normalizeMediaText: (text: string) => {
-    // Simplified normalization - replace blob URIs and storage refs with API paths
-    return text
-      .replace(/promptfoo:\/\/blob\/([a-f0-9]{32,64})/gi, '/api/blobs/$1')
-      .replace(/storageRef:\/?([^\s)'"`]+)/gi, '/api/media/$1');
-  },
-  resolveImageSource: (
-    image: string | { data?: string; blobRef?: { uri?: string } } | null | undefined,
-  ) => {
-    if (!image) {
-      return undefined;
-    }
-    if (typeof image === 'string') {
-      return resolveImageString(image);
-    }
-    if (typeof image === 'object') {
-      return resolveImageObject(image);
-    }
-    return undefined;
-  },
-}));
 
 describe('normalizeImageSrcForComparison', () => {
   it('normalizes and resolves HTTP URLs', () => {

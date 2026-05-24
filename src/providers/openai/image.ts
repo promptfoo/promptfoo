@@ -655,6 +655,15 @@ function isUnsafeIpv4Address(address: string): boolean {
   );
 }
 
+function hasIpv6BytePrefix(bytes: number[], prefix: number[]): boolean {
+  return prefix.every((byte, index) => bytes[index] === byte);
+}
+
+function hasUnsafeEmbeddedIpv4Address(bytes: number[], startIndex: number): boolean {
+  const octets = bytes.slice(startIndex, startIndex + 4);
+  return octets.length === 4 && isUnsafeIpv4Address(octets.join('.'));
+}
+
 function isUnsafeIpv6Address(address: string): boolean {
   const ipv4MappedAddress = extractIpv4MappedIpv6Address(address);
   if (ipv4MappedAddress) {
@@ -672,6 +681,18 @@ function isUnsafeIpv6Address(address: string): boolean {
     return isUnsafeIpv4Address(bytes.slice(12).join('.'));
   }
 
+  // IPv6 transition prefixes can route to an embedded IPv4 destination; block
+  // unsafe embedded targets before a NAT64/6to4 environment can translate them.
+  const isIpv4Compatible = bytes.slice(0, 12).every((byte) => byte === 0);
+  const isWellKnownNat64 =
+    hasIpv6BytePrefix(bytes, [0x00, 0x64, 0xff, 0x9b]) &&
+    bytes.slice(4, 12).every((byte) => byte === 0);
+  const isLocalUseNat64 = hasIpv6BytePrefix(bytes, [0x00, 0x64, 0xff, 0x9b, 0x00, 0x01]);
+  const isSixToFour = bytes[0] === 0x20 && bytes[1] === 0x02;
+  const hasUnsafeTranslatedIpv4 =
+    (isWellKnownNat64 && hasUnsafeEmbeddedIpv4Address(bytes, 12)) ||
+    (isSixToFour && hasUnsafeEmbeddedIpv4Address(bytes, 2));
+
   const isAllZeroes = bytes.every((byte) => byte === 0);
   const isLoopback = bytes.slice(0, 15).every((byte) => byte === 0) && bytes[15] === 1;
   const isUniqueLocal = (bytes[0] & 0xfe) === 0xfc;
@@ -681,7 +702,15 @@ function isUnsafeIpv6Address(address: string): boolean {
     bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x0d && bytes[3] === 0xb8;
 
   return (
-    isAllZeroes || isLoopback || isUniqueLocal || isLinkLocal || isMulticast || isDocumentation
+    isAllZeroes ||
+    isLoopback ||
+    isIpv4Compatible ||
+    isUniqueLocal ||
+    isLinkLocal ||
+    isMulticast ||
+    isDocumentation ||
+    isLocalUseNat64 ||
+    hasUnsafeTranslatedIpv4
   );
 }
 
