@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
+import EvalResult from '../../src/models/evalResult';
 import EvalFactory from '../factories/evalFactory';
 
 describe('Eval.getFilteredTestIndices', () => {
@@ -63,7 +64,7 @@ describe('Eval.getFilteredTestIndices', () => {
 
   it('treats lowercase OR filter operators as disjunctions', async () => {
     const eval_ = await EvalFactory.create();
-    const results = await eval_.getResults();
+    const results = await EvalResult.findManyByEvalId(eval_.id);
 
     results[0].metadata = { category: 'alpha' };
     results[1].metadata = { category: 'beta' };

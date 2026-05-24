@@ -204,6 +204,47 @@ describe('AddAssertionsDialog', () => {
     });
   });
 
+  it('requires a prompt for PI assertions before submitting', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-pi',
+      availableScopes: ['results'],
+      defaultScope: 'results',
+      resultId: 'result-pi',
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText(/Browse all/));
+    await user.type(screen.getByPlaceholderText('Search assertion types...'), 'pi');
+    await user.click(screen.getByRole('button', { name: /^pi LLM Checks/i }));
+
+    const submitButton = screen.getByRole('button', { name: /Run 1 on 1/ });
+    expect(submitButton).toBeDisabled();
+
+    await user.type(
+      screen.getByPlaceholderText('Describe your evaluation criteria...'),
+      'The output must not disclose personal information.',
+    );
+    expect(submitButton).toBeEnabled();
+
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(addEvalAssertions).toHaveBeenCalledWith('eval-pi', {
+        assertions: [
+          {
+            type: 'pi',
+            value: 'The output must not disclose personal information.',
+          },
+        ],
+        scope: { type: 'results', resultIds: ['result-pi'] },
+      });
+    });
+  });
+
   describe('handleSubmit', () => {
     it('constructs filtered scope payload correctly', async () => {
       const user = userEvent.setup();
@@ -369,6 +410,39 @@ describe('AddAssertionsDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(screen.queryByText('Confirm large assertion run')).not.toBeInTheDocument();
+    expect(addEvalAssertions).not.toHaveBeenCalled();
+  });
+
+  it('confirms filtered runs when model request count exceeds the threshold', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-model-confirm',
+      availableScopes: ['filtered'],
+      defaultScope: 'filtered',
+      filteredCount: 60,
+      promptCount: 1,
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText('LLM evaluates'));
+    await user.type(
+      screen.getByPlaceholderText('Describe what makes a good response...'),
+      'helpful',
+    );
+    await user.click(screen.getByText('Semantically similar'));
+    await user.type(
+      screen.getByPlaceholderText('Expected output to compare against...'),
+      'reference answer',
+    );
+
+    await user.click(screen.getByRole('button', { name: /Run 2 on 60/ }));
+
+    expect(screen.getByText('Confirm large assertion run')).toBeInTheDocument();
+    expect(screen.getByText(/2 LLM assertions × 60 outputs =/)).toBeInTheDocument();
+    expect(screen.getByText(/at least 120 model requests/)).toBeInTheDocument();
     expect(addEvalAssertions).not.toHaveBeenCalled();
   });
 

@@ -192,7 +192,6 @@ const NO_VALUE_REQUIRED = new Set<AssertionType>([
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'moderation',
-  'pi',
   // These assertions can work without a value (they just check format presence)
   'contains-json',
   'contains-xml',

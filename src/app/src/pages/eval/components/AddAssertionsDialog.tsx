@@ -42,6 +42,8 @@ import {
 import PosthocAssertionsForm from './PosthocAssertionsForm';
 import type { Assertion, AssertionType, EvalResultsFilterMode } from '@promptfoo/types';
 
+import type { ResultsFilter } from './store';
+
 // Assertion types that don't require a value (they check format/structure only)
 // or where a value is optional (contains-* assertions can work without a schema to validate against)
 const NO_VALUE_REQUIRED: Set<AssertionType> = new Set([
@@ -53,7 +55,6 @@ const NO_VALUE_REQUIRED: Set<AssertionType> = new Set([
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
   'moderation',
-  'pi',
   // These assertions can work without a value (they just check format presence)
   'contains-json',
   'contains-xml',
@@ -80,8 +81,6 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
 
 // Threshold for showing confirmation step
 const LARGE_RUN_THRESHOLD = 100;
-
-import type { ResultsFilter } from './store';
 
 type AssertionScope = 'results' | 'tests' | 'filtered';
 
@@ -235,8 +234,9 @@ export default function AddAssertionsDialog({
   const targetLabel = scope === 'results' ? 'output' : 'test case';
   const mayIncludeMultipleOutputs = outputCountEstimate > targetCount;
 
-  // Determine if this is a large run requiring confirmation
-  const isLargeRun = outputCountEstimate > LARGE_RUN_THRESHOLD;
+  // Require confirmation for broad result updates or model-backed assertion runs.
+  const isLargeRun =
+    outputCountEstimate > LARGE_RUN_THRESHOLD || totalApiCalls > LARGE_RUN_THRESHOLD;
 
   // Get active filter summary for confirmation
   const filterSummary = useMemo(() => {
