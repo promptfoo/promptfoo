@@ -619,6 +619,7 @@ async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number | undefined,
   onTimeout: () => T,
+  afterTimeout?: () => void,
 ): Promise<T> {
   if (!timeoutMs) {
     return promise;
@@ -626,7 +627,10 @@ async function withTimeout<T>(
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<T>((resolve) => {
-    timer = setTimeout(() => resolve(onTimeout()), timeoutMs);
+    timer = setTimeout(() => {
+      resolve(onTimeout());
+      afterTimeout?.();
+    }, timeoutMs);
   });
 
   try {
@@ -673,16 +677,18 @@ export const handleTrajectoryGoalSuccess = async (
       )
     : runJudge();
 
-  const result = await withTimeout(judgePromise, timeoutMs, () => {
-    timeoutController?.abort();
-    return {
+  const result = await withTimeout(
+    judgePromise,
+    timeoutMs,
+    () => ({
       pass: false,
       score: 0,
       reason: `trajectory:goal-success judge timed out after ${timeoutMs}ms`,
       assertion: params.assertion,
       metadata: { graderError: true as const },
-    };
-  });
+    }),
+    () => timeoutController?.abort(),
+  );
 
   if (!params.inverse) {
     return result;

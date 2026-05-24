@@ -322,6 +322,41 @@ describe('handleTrajectoryGoalSuccess', () => {
     }
   });
 
+  it('returns the timeout fallback when an abort-aware judge rejects on abort', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            getProviderCallExecutionContext()?.abortSignal?.addEventListener('abort', () =>
+              reject(new Error('judge aborted')),
+            );
+          }),
+      );
+
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          type: 'trajectory:goal-success',
+          value: { goal: 'Resolve the order lookup task', timeoutMs: 100 },
+        },
+        renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 100 },
+      };
+
+      const promise = handleTrajectoryGoalSuccess(params);
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await promise;
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('trajectory:goal-success judge timed out after 100ms');
+      expect(result.assertion).toBe(params.assertion);
+      expect(result.metadata?.graderError).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('preserves timeout grader failures for not-trajectory:goal-success', async () => {
     vi.useFakeTimers();
     try {
