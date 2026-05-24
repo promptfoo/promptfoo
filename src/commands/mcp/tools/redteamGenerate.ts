@@ -12,7 +12,12 @@ import {
 } from '../../../redteam/constants';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
-import { validateMcpConfigFile, validateMcpFilePath, validateProviderId } from '../lib/security';
+import {
+  validateDefaultMcpConfigFile,
+  validateMcpConfigFile,
+  validateMcpFilePath,
+  validateProviderId,
+} from '../lib/security';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -176,6 +181,8 @@ export function registerRedteamGenerateTool(server: McpServer) {
 
         if (configPath) {
           validateMcpConfigFile(configPath);
+        } else {
+          validateDefaultMcpConfigFile();
         }
 
         const outputPath = output || (write ? undefined : 'redteam.yaml');

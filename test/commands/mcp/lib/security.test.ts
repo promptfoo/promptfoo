@@ -333,6 +333,57 @@ describe('MCP Security', () => {
       ).toThrow(ConfigurationError);
     });
 
+    it('should reject exec providers that run inline code instead of workspace scripts', () => {
+      expect(() => validateProviderId('exec:bash -c id')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('exec:node --eval "console.log(process.env)"')).toThrow(
+        ConfigurationError,
+      );
+      expect(() => validateProviderId('exec:python -c "print(1)"')).toThrow(ConfigurationError);
+    });
+
+    it('should reject MCP provider server command configs', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'mcp',
+          config: {
+            server: {
+              command: 'node',
+              args: ['scripts/server.js'],
+            },
+          },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('should validate MCP provider server paths against the workspace', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'mcp',
+          config: { server: { path: 'scripts/mcp-server.js' } },
+        }),
+      ).not.toThrow();
+
+      expect(() =>
+        validateProviderReference({
+          id: 'mcp',
+          config: { server: { path: path.join(path.dirname(process.cwd()), 'server.js') } },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('should validate nested MCP configs on other providers', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:gpt-4o',
+          config: {
+            mcp: {
+              servers: [{ path: path.join(path.dirname(process.cwd()), 'server.py') }],
+            },
+          },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
     it('should accept HTTP providers', () => {
       expect(() => validateProviderId('http://localhost:8080/api')).not.toThrow();
       expect(() => validateProviderId('https://api.example.com/v1')).not.toThrow();
@@ -371,6 +422,104 @@ describe('MCP Security', () => {
               config: { transformResponse: `file://${path.join(outside, 'evil.js')}` },
             },
           ],
+        }),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.json')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should reject external JSON-schema refs before config dereferencing', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.yaml'),
+        [
+          'prompts:',
+          '  - hello',
+          'providers:',
+          `  - $ref: ${path.join(outside, 'provider.yaml')}`,
+          '',
+        ].join('\n'),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should allow internal JSON-schema refs', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.yaml'),
+        [
+          'prompts:',
+          '  - hello',
+          'providers:',
+          '  - $ref: "#/defs/provider"',
+          'defs:',
+          '  provider: echo',
+          '',
+        ].join('\n'),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml')).not.toThrow();
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should reject bare local file references outside the workspace', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      const outside = path.join(tempRoot, 'outside');
+      fs.mkdirSync(workspace);
+      fs.mkdirSync(outside);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.json'),
+        JSON.stringify({
+          outputPath: path.join(outside, 'results.json'),
+          prompts: [path.join(outside, 'prompt.py')],
+          providers: ['echo'],
+          tests: path.join(outside, 'tests.yaml'),
+        }),
+      );
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.json')).toThrow(ConfigurationError);
+      } finally {
+        cwdSpy.mockRestore();
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('should reject executable prompts that run inline code', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.json'),
+        JSON.stringify({
+          prompts: ['exec:bash -c id'],
+          providers: ['echo'],
         }),
       );
       const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(workspace);

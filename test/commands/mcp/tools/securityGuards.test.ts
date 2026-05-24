@@ -89,6 +89,12 @@ function outsideWorkspacePath(filename: string) {
   return path.join(path.dirname(process.cwd()), filename);
 }
 
+function writeDefaultConfig(config: Record<string, unknown>) {
+  const configPath = path.join(process.cwd(), 'promptfooconfig.json');
+  fs.writeFileSync(configPath, JSON.stringify(config));
+  return configPath;
+}
+
 describe('MCP tool security guards', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -295,6 +301,76 @@ describe('MCP tool security guards', () => {
       expect(resolveConfigs).not.toHaveBeenCalled();
     } finally {
       fs.rmSync(path.join(process.cwd(), configPath), { force: true });
+    }
+  });
+
+  it('should reject run_evaluation implicit default config contents before loading defaults', async () => {
+    const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+    const { registerRunEvaluationTool } = await import(
+      '../../../../src/commands/mcp/tools/runEvaluation'
+    );
+    const handler = captureToolHandler(registerRunEvaluationTool);
+    const configPath = writeDefaultConfig({
+      prompts: ['hello'],
+      providers: [`file://${outsideWorkspacePath('evil-provider.js')}`],
+    });
+
+    try {
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).error).toContain('Path must be within base directory');
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(configPath, { force: true });
+    }
+  });
+
+  it('should reject redteam_generate implicit default configs before loading defaults', async () => {
+    const { doGenerateRedteam } = await import('../../../../src/redteam/commands/generate');
+    const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+    const { registerRedteamGenerateTool } = await import(
+      '../../../../src/commands/mcp/tools/redteamGenerate'
+    );
+    const handler = captureToolHandler(registerRedteamGenerateTool);
+    const configPath = writeDefaultConfig({
+      prompts: ['hello'],
+      providers: [`file://${outsideWorkspacePath('evil-provider.js')}`],
+    });
+
+    try {
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).error).toContain('Path must be within base directory');
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+      expect(doGenerateRedteam).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(configPath, { force: true });
+    }
+  });
+
+  it('should reject redteam_run implicit default configs before starting scans', async () => {
+    const { doRedteamRun } = await import('../../../../src/redteam/shared');
+    const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+    const { registerRedteamRunTool } = await import(
+      '../../../../src/commands/mcp/tools/redteamRun'
+    );
+    const handler = captureToolHandler(registerRedteamRunTool);
+    const configPath = writeDefaultConfig({
+      prompts: ['hello'],
+      providers: [`file://${outsideWorkspacePath('evil-provider.js')}`],
+    });
+
+    try {
+      const result = await handler({});
+
+      expect(result.isError).toBe(true);
+      expect(parseToolResponse(result).error).toContain('Path must be within base directory');
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+      expect(doRedteamRun).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(configPath, { force: true });
     }
   });
 
