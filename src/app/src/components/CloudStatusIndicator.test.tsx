@@ -186,6 +186,31 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
+  it('opens the dialog instead of a stale dashboard URL when refresh fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
+      },
+      isLoading: false,
+      error: 'Network error',
+      refetch: mockRefetch,
+    });
+
+    renderCloudStatusIndicator();
+
+    await user.click(screen.getByRole('button', { name: /unable to check cloud configuration/i }));
+
+    expect(mockWindowOpen).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'Unable to check cloud configuration. Please check your connection and try again.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('opens dialog when unconfigured and tracks telemetry', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({

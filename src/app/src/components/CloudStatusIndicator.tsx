@@ -40,6 +40,7 @@ export default function CloudStatusIndicator() {
   const serviceName = getServiceName(isEnterprise);
   const teamName = isEnterprise ? 'organization' : 'team';
   const hasInvalidAppUrl = isConfigured && !appUrl;
+  const canOpenDashboard = isConfigured && Boolean(appUrl) && !error;
 
   const statusLabel = (() => {
     if (isLoading) {
@@ -73,7 +74,7 @@ export default function CloudStatusIndicator() {
       configured: isConfigured,
     });
 
-    if (isConfigured && appUrl) {
+    if (canOpenDashboard && appUrl) {
       window.open(appUrl, '_blank', 'noopener,noreferrer');
       return;
     }
@@ -100,21 +101,23 @@ export default function CloudStatusIndicator() {
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={handleIconClick}
             className={cn(
-              'inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-              isConfigured && appUrl && !error && 'text-emerald-600 hover:text-emerald-700',
+              'text-foreground/60 focus-visible:ring-2 focus-visible:ring-offset-2 [&_svg]:size-5',
+              canOpenDashboard && 'text-emerald-600 hover:text-emerald-700',
               (error || hasInvalidAppUrl) && 'text-destructive hover:text-destructive',
             )}
             aria-label={statusLabel}
           >
             <StatusIcon
               className={cn('size-5', isLoading && 'animate-spin')}
-              data-testid={isConfigured && appUrl && !error ? 'CloudIcon' : 'CloudOffIcon'}
+              data-testid={canOpenDashboard ? 'CloudIcon' : 'CloudOffIcon'}
             />
-          </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">{statusLabel}</TooltipContent>
       </Tooltip>
