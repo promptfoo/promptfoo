@@ -66,6 +66,16 @@ export function isOtlpReceiverStarted(): boolean {
   return otlpReceiverStarted;
 }
 
+function isTracingEnabledForSuite(testSuite: TestSuite): boolean {
+  return (
+    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+    testSuite.tracing?.enabled === true ||
+    (typeof testSuite.defaultTest === 'object' &&
+      testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+    testSuite.tests?.some((test) => test.metadata?.tracingEnabled === true) === true
+  );
+}
+
 /**
  * Start the OTLP receiver if tracing is enabled and it hasn't been started yet
  */
@@ -78,15 +88,18 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
 
   const httpTracing = testSuite.tracing?.otlp?.http;
   const commandToolNames = testSuite.tracing?.commandToolNames;
-  if (testSuite.tracing?.enabled) {
+  const tracingEnabled = isTracingEnabledForSuite(testSuite);
+  if (tracingEnabled) {
     await pruneTraceStoreIfNeeded(testSuite);
   }
 
-  if (testSuite.tracing?.enabled && httpTracing?.enabled) {
+  if (tracingEnabled && httpTracing?.enabled) {
     const acceptFormats = normalizeOtlpAcceptFormats(httpTracing.acceptFormats);
     const redactAttributes = httpTracing.redactAttributes;
 
     if (otlpReceiverStarted) {
+      const { updateOTLPReceiverOptions } = await import('./otlpReceiver');
+      updateOTLPReceiverOptions(acceptFormats, { commandToolNames, redactAttributes });
       logger.debug('[EvaluatorTracing] OTLP receiver already started, skipping initialization');
       return;
     }
