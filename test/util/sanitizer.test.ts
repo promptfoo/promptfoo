@@ -1191,6 +1191,12 @@ describe('sanitizeUrl', () => {
       expect(result).toBe('https://example.com/api?limit=10&page=1&sort=name&filter=active');
     });
 
+    it('should redact secret-looking values in non-sensitive parameters', () => {
+      const url = 'https://example.com/api?cursor=sk-123456789012345678901234567890&data=public';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('https://example.com/api?cursor=%5BREDACTED%5D&data=public');
+    });
+
     it('should handle parameters with empty values', () => {
       const url = 'https://example.com/api?api_key=&data=public';
       const result = sanitizeUrl(url);

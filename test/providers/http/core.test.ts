@@ -2765,6 +2765,24 @@ describe('urlEncodeRawRequestPath', () => {
     }
   });
 
+  it('should not leak secret-looking query values with non-sensitive parameter names', () => {
+    const debugSpy = vi.spyOn(logger, 'debug');
+    try {
+      const rawRequest =
+        'GET /api/data?cursor=sk-123456789012345678901234567890&query=hello world HTTP/1.1';
+      const result = urlEncodeRawRequestPath(rawRequest);
+
+      expect(result).toBe(
+        'GET /api/data?cursor=sk-123456789012345678901234567890&query=hello%20world HTTP/1.1',
+      );
+      const debugOutput = debugSpy.mock.calls.flat().join('\n');
+      expect(debugOutput).toContain('cursor=%5BREDACTED%5D');
+      expect(debugOutput).not.toContain('sk-123456789012345678901234567890');
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
   it('should throw error when modifying malformed request with no URL', () => {
     const rawRequest = 'GET HTTP/1.1';
     expect(() => urlEncodeRawRequestPath(rawRequest)).toThrow(/not valid/);

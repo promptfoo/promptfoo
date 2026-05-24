@@ -117,11 +117,7 @@ export function sanitizeRuntimeOptions(
   return sanitized;
 }
 
-/**
- * Check if a value looks like a secret based on common patterns.
- * Detects API keys, tokens, and other credential patterns.
- */
-export function looksLikeSecret(value: string): boolean {
+function looksLikeCredentialValue(value: string): boolean {
   if (typeof value !== 'string') {
     return false;
   }
@@ -156,12 +152,6 @@ export function looksLikeSecret(value: string): boolean {
     return true;
   }
 
-  // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
-  // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
-  if (/^[a-zA-Z0-9+/=_-]{64,}$/.test(value)) {
-    return true;
-  }
-
   // AWS-style access keys (AKIA...)
   if (/^AKIA[A-Z0-9]{16}/.test(value)) {
     return true;
@@ -169,6 +159,24 @@ export function looksLikeSecret(value: string): boolean {
 
   // Google API keys (AIza...)
   if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if a value looks like a secret based on common patterns.
+ * Detects API keys, tokens, and other credential patterns.
+ */
+export function looksLikeSecret(value: string): boolean {
+  if (looksLikeCredentialValue(value)) {
+    return true;
+  }
+
+  // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
+  // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
+  if (/^[a-zA-Z0-9+/=_-]{64,}$/.test(value)) {
     return true;
   }
 
@@ -415,8 +423,8 @@ export function sanitizeUrl(url: string): string {
       /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
 
     try {
-      for (const key of Array.from(sanitizedUrl.searchParams.keys())) {
-        if (sensitiveParams.test(key)) {
+      for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
+        if (sensitiveParams.test(key) || looksLikeCredentialValue(value)) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
         }
       }

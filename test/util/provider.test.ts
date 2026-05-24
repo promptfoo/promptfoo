@@ -11,6 +11,7 @@ import {
   isOpenAiProvider,
   isProviderAllowed,
   providerToIdentifier,
+  sanitizeProviderIdForLog,
 } from '../../src/util/provider';
 import {
   canonicalizeProviderId,
@@ -334,6 +335,28 @@ describe('getProviderDescription', () => {
   it('returns only id when label equals id', () => {
     const provider = createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' });
     expect(getProviderDescription(provider)).toBe('openai:gpt-4');
+  });
+});
+
+describe('sanitizeProviderIdForLog', () => {
+  it('redacts credentials in URL provider IDs', () => {
+    expect(
+      sanitizeProviderIdForLog(
+        'http://example.com/api?cursor=sk-123456789012345678901234567890&safe=ok',
+      ),
+    ).toBe('http://example.com/api?cursor=%5BREDACTED%5D&safe=ok');
+  });
+
+  it('leaves non-URL provider IDs unchanged', () => {
+    expect(sanitizeProviderIdForLog('openai:gpt-4.1')).toBe('openai:gpt-4.1');
+  });
+
+  it('preserves provider descriptions while sanitizing URL IDs', () => {
+    expect(
+      sanitizeProviderIdForLog(
+        'http://example.com/api?cursor=sk-123456789012345678901234567890 (HttpProvider)',
+      ),
+    ).toBe('http://example.com/api?cursor=%5BREDACTED%5D (HttpProvider)');
   });
 });
 

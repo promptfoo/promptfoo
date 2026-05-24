@@ -80,6 +80,7 @@ import {
   isGoogleProvider,
   isOpenAiProvider,
   isProviderAllowed,
+  sanitizeProviderIdForLog,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
@@ -888,7 +889,7 @@ async function callActiveProvider({
     isApiProvider(test.provider) ? test.provider : originalProvider,
     test,
   );
-  logger.debug(`Provider type: ${activeProvider.id()}`);
+  logger.debug(`Provider type: ${sanitizeProviderIdForLog(activeProvider.id())}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
@@ -4598,7 +4599,7 @@ class Evaluator {
         const metrics = this.rateLimitRegistry.getMetrics();
         for (const [key, m] of Object.entries(metrics)) {
           if (m.totalRequests > 0) {
-            logger.debug(`[Scheduler] Final metrics for ${key}`, {
+            logger.debug(`[Scheduler] Final metrics for ${sanitizeProviderIdForLog(key)}`, {
               totalRequests: m.totalRequests,
               completedRequests: m.completedRequests,
               failedRequests: m.failedRequests,
