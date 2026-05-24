@@ -37,9 +37,11 @@ function isApplicationInferenceProfileArn(modelId: string): boolean {
 }
 
 function getPricingModelId(modelId: string): string {
-  const inferenceProfileId = modelId.match(/inference-profile\/([a-zA-Z0-9-:.]+)$/)?.[1];
+  const resourceModelId = modelId.match(
+    /(?:foundation-model|inference-profile)\/([a-zA-Z0-9-:.]+)$/,
+  )?.[1];
 
-  return (inferenceProfileId ?? modelId).replace(/:\d+$/, '');
+  return (resourceModelId ?? modelId).replace(/:\d+$/, '');
 }
 
 export function mapBedrockModelIdToApiName(modelId: string): string {
@@ -311,10 +313,17 @@ async function fetchAllPriceItems(pricingClient: PricingClient, region: string):
   return allPriceItems;
 }
 
-function getOnDemandUsdPricePerToken(product: any, tokensPerPriceUnit: number): number | undefined {
+function getOnDemandPriceDimension(product: any): any | undefined {
   const onDemand = Object.values(product.terms?.OnDemand ?? {})[0] as any;
-  const priceDim = Object.values(onDemand?.priceDimensions ?? {})[0] as any;
-  const priceRaw = priceDim?.pricePerUnit?.USD;
+  return Object.values(onDemand?.priceDimensions ?? {})[0] as any;
+}
+
+function getOnDemandUsdPricePerToken(
+  product: any,
+  tokensPerPriceUnit: number,
+  priceDimension = getOnDemandPriceDimension(product),
+): number | undefined {
+  const priceRaw = priceDimension?.pricePerUnit?.USD;
 
   if (!priceRaw) {
     return undefined;
@@ -371,7 +380,14 @@ function getFoundationModelName(serviceName: string): string | undefined {
   return aliases[foundationModelName] ?? foundationModelName;
 }
 
-function getStandardTextTokenRateType(attrs: any): 'input' | 'output' | undefined {
+function isStandardTextTokenDescriptor(value: string): boolean {
+  return value.includes('token') && !/(cache|batch|flex|priority)/.test(value);
+}
+
+function getStandardTextTokenRateType(
+  attrs: any,
+  priceDimension?: any,
+): 'input' | 'output' | undefined {
   const normalizedInferenceType = String(attrs.inferenceType ?? '').toLowerCase();
   if (attrs.feature === 'On-demand Inference') {
     return normalizedInferenceType === 'input tokens' ||
@@ -384,13 +400,41 @@ function getStandardTextTokenRateType(attrs: any): 'input' | 'output' | undefine
   }
 
   const usageType = String(attrs.usagetype ?? '').toLowerCase();
-  return usageType.endsWith('_inputtokencount-units') ||
+  if (
+    usageType.endsWith('_inputtokencount-units') ||
     usageType.endsWith('_input_tokens_standard-units')
-    ? 'input'
-    : usageType.endsWith('_outputtokencount-units') ||
-        usageType.endsWith('_output_tokens_standard-units')
-      ? 'output'
-      : undefined;
+  ) {
+    return 'input';
+  }
+
+  if (
+    usageType.endsWith('_outputtokencount-units') ||
+    usageType.endsWith('_output_tokens_standard-units') ||
+    usageType.endsWith('_responsetokencount-units') ||
+    usageType.endsWith('_response_tokens_standard-units')
+  ) {
+    return 'output';
+  }
+
+  const priceDimensionText = String(priceDimension?.description ?? '').toLowerCase();
+  const descriptor = `${usageType} ${priceDimensionText}`;
+  if (!isStandardTextTokenDescriptor(descriptor)) {
+    return undefined;
+  }
+
+  if (descriptor.includes('input') || descriptor.includes('prompt')) {
+    return 'input';
+  }
+
+  if (
+    descriptor.includes('output') ||
+    descriptor.includes('response') ||
+    descriptor.includes('completion')
+  ) {
+    return 'output';
+  }
+
+  return undefined;
 }
 
 function parseBedrockPriceItems(priceItems: string[]): {
@@ -416,7 +460,8 @@ function parseBedrockPriceItems(priceItems: string[]): {
       allModelsFound.add(modelName);
       usageTypeSamples[modelName] ||= attrs.usagetype || '';
 
-      const rateType = getStandardTextTokenRateType(attrs);
+      const priceDimension = getOnDemandPriceDimension(product);
+      const rateType = getStandardTextTokenRateType(attrs, priceDimension);
       if (!rateType) {
         continue;
       }
@@ -424,7 +469,11 @@ function parseBedrockPriceItems(priceItems: string[]): {
       // AmazonBedrock reports per-1K-token prices; foundation model marketplace
       // rows report per-million-token prices in their Units dimensions.
       const tokensPerPriceUnit = foundationModelName ? 1_000_000 : 1_000;
-      const pricePerToken = getOnDemandUsdPricePerToken(product, tokensPerPriceUnit);
+      const pricePerToken = getOnDemandUsdPricePerToken(
+        product,
+        tokensPerPriceUnit,
+        priceDimension,
+      );
       if (pricePerToken === undefined) {
         logger.debug('[Bedrock Pricing]: Skipping invalid price', {
           modelName,

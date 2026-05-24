@@ -1124,7 +1124,9 @@ Promptfoo automatically tracks token usage and calculates costs for AWS Bedrock 
 
 ### Real-Time Pricing
 
-Promptfoo automatically fetches current pricing from the AWS Pricing API and caches it. This ensures accurate costs for your region and automatically reflects AWS price changes.
+For the InvokeModel provider (`bedrock:<model-id>`), Promptfoo automatically fetches current pricing from the AWS Pricing API and caches it. This ensures accurate costs for your region and automatically reflects AWS price changes.
+
+The Converse provider (`bedrock:converse:<model-id>`) currently uses Promptfoo's built-in Converse pricing table plus any explicit `cost`, `inputCost`, or `outputCost` overrides. Configure an override when you need deterministic Converse costs for a model or region that is not represented in the built-in table.
 
 **How it works:**
 
@@ -1142,7 +1144,7 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 
 No configuration is needed. When IAM pricing credentials are unavailable or AWS does not return standard token pricing for a model, Promptfoo does not add an estimated automatic charge. Evaluation totals may therefore show zero cost for those calls. Configure `cost` when deterministic cost reporting is required without Pricing API access.
 
-Automatic pricing can identify direct Bedrock model IDs and regional system-defined inference profile IDs because those identifiers include the underlying model and map to regional standard-token rates. Global and application inference profiles require distinct or opaque pricing selection, so Promptfoo does not infer a charge for them. Add a `cost` override when you need deterministic cost reporting for those calls.
+InvokeModel automatic pricing can identify direct Bedrock model IDs and regional system-defined inference profile IDs because those identifiers include the underlying model and map to regional standard-token rates. Global and application inference profiles require distinct or opaque pricing selection, so Promptfoo does not infer a charge for them. Add a `cost` override when you need deterministic cost reporting for those calls.
 
 ### Model Coverage
 

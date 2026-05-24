@@ -6,7 +6,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
-import { parseChatPrompt } from '../shared';
+import { getTokenCostRates, parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { calculateCostWithFetchedPricing } from './pricingFetcher';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -2660,16 +2660,22 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       // Calculate cost if we have token usage
       let cost: number | undefined;
       if (tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
-        // Check for custom cost override in config
-        const configCost = resolvedConfig.cost;
-        if (typeof configCost === 'object' && configCost !== null) {
-          // Custom cost override: { input: number, output: number }
-          cost = tokenUsage.prompt * configCost.input + tokenUsage.completion * configCost.output;
-          logger.debug('[Bedrock]: Using custom cost override', { cost, configCost });
-        } else if (typeof configCost === 'number') {
-          // Legacy: single number for both input and output
-          cost = (tokenUsage.prompt + tokenUsage.completion) * configCost;
-          logger.debug('[Bedrock]: Using legacy cost override', { cost, configCost });
+        const hasExplicitCostOverride =
+          resolvedConfig.cost !== undefined ||
+          resolvedConfig.inputCost !== undefined ||
+          resolvedConfig.outputCost !== undefined;
+
+        if (hasExplicitCostOverride) {
+          const { inputCost, outputCost } = getTokenCostRates(resolvedConfig, {
+            input: 0,
+            output: 0,
+          });
+          cost = tokenUsage.prompt * inputCost + tokenUsage.completion * outputCost;
+          logger.debug('[Bedrock]: Using custom cost override', {
+            cost,
+            inputCost,
+            outputCost,
+          });
         } else {
           // Fetch pricing data and calculate cost
           const pricingData = await this.getPricingDataForCost();

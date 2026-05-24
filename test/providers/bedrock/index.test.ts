@@ -3330,6 +3330,39 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 
+  it('should prefer call-level inputCost and outputCost overrides for InvokeModel costs', async () => {
+    const encodedBody = new TextEncoder().encode(JSON.stringify({ completion: 'test response' }));
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(encodedBody, {
+        transformToString: () => JSON.stringify({ completion: 'test response' }),
+      }),
+    });
+    const provider = new AwsBedrockCompletionProvider(
+      'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {
+        config: {
+          region: 'us-east-1',
+          cost: { input: 0.5, output: 0.5 },
+        } as BedrockClaudeMessagesCompletionOptions,
+      },
+    );
+
+    const result = await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          inputCost: 0.01,
+          outputCost: 0.02,
+        },
+      },
+      vars: {},
+    });
+
+    expect(result.cost).toBeCloseTo(0.5);
+    expect(mockGetPricingData).not.toHaveBeenCalled();
+  });
+
   it('should set cached flag when returning cached response', async () => {
     const mockCachedResponseData = { completion: 'cached response' };
 
