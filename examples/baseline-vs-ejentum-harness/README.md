@@ -16,13 +16,31 @@ This example compares the same `gpt-4o-mini` model under two conditions on a sma
 
 Each row in the eval table is the same task posed to both providers, scored by the same `llm-rubric`. The rubric checks for three behaviors that the harness targets directly: naming relevant trade-offs before recommending, refusing to skip steps when the user invites skipping, and grounding the final recommendation in named criteria. The table format makes the lift (if any) visible per task.
 
-Set `OPENAI_API_KEY` and `EJENTUM_API_KEY`, then run:
+## Setup
+
+Set `OPENAI_API_KEY` (required for both providers) and `EJENTUM_API_KEY` (required only for the augmented provider), then run:
 
 ```bash
 promptfoo eval --no-cache
 ```
 
 Get an Ejentum key at <https://ejentum.com/dashboard>. Free and paid tiers are available.
+
+Without `EJENTUM_API_KEY`, the augmented half of the eval will error out, but the baseline `openai:gpt-4o-mini` provider still runs to completion — so you can preview the baseline scores even without an Ejentum account.
+
+The custom provider in this directory (`provider.js`) is meant as a transferable template: it shows how to pre-fetch a per-task prompt augmentation, splice it into the system message, and return the result in promptfoo's standard provider shape. You can adapt the same pattern to any prompt-augmentation service — LangChain, DSPy, a self-hosted retrieval pipeline, or your own internal API — by swapping the `fetch` call in step 1.
+
+### Pointing at a different endpoint
+
+The Ejentum base URL is configurable so you can target staging or a self-hosted endpoint without editing code. The provider resolves it in this order: `config.apiUrl` in `promptfooconfig.yaml`, then `EJENTUM_API_URL` env var, then the default. For example:
+
+```yaml
+- id: file://provider.js
+  label: ejentum-reasoning-gpt-4o-mini
+  config:
+    mode: reasoning
+    apiUrl: https://your-endpoint.example.com/logicv1/
+```
 
 ## How the custom provider works
 
@@ -34,11 +52,12 @@ Get an Ejentum key at <https://ejentum.com/dashboard>. Free and paid tiers are a
 
 Provider config options (set in `promptfooconfig.yaml`):
 
-| Option        | Default       | Notes                                                   |
-| ------------- | ------------- | ------------------------------------------------------- |
-| `mode`        | `reasoning`   | One of `reasoning`, `code`, `anti-deception`, `memory`. |
-| `model`       | `gpt-4o-mini` | Any OpenAI chat-completion model.                       |
-| `temperature` | `0`           | Standard OpenAI temperature.                            |
+| Option        | Default                 | Notes                                                                                       |
+| ------------- | ----------------------- | ------------------------------------------------------------------------------------------- |
+| `mode`        | `reasoning`             | One of `reasoning`, `code`, `anti-deception`, `memory`.                                     |
+| `model`       | `gpt-4o-mini`           | Any OpenAI chat-completion model.                                                           |
+| `temperature` | `0`                     | Standard OpenAI temperature.                                                                |
+| `apiUrl`      | Ejentum public endpoint | Override the Ejentum base URL. Falls back to `EJENTUM_API_URL`, then the default published. |
 
 To test a different harness (for example, the anti-deception mode), copy the `file://provider.js` provider block, change `mode: reasoning` to `mode: anti-deception`, and update the label.
 

@@ -5,7 +5,14 @@
  * uses plain openai:gpt-4o-mini so the eval table makes the lift visible.
  */
 
-const EJENTUM_URL = 'https://ejentum-main-ab125c3.zuplo.app/logicv1/';
+// The Ejentum Logic API base URL. Resolved in priority order:
+//   1. `config.apiUrl` from the provider block in promptfooconfig.yaml
+//   2. `EJENTUM_API_URL` environment variable
+//   3. The default published endpoint below
+// This pattern (config -> env -> default) is the transferable lesson:
+// it lets readers point this provider at a staging endpoint, a self-hosted
+// prompt-augmentation service, or any other compatible API without editing code.
+const DEFAULT_EJENTUM_URL = 'https://ejentum-main-ab125c3.zuplo.app/logicv1/';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 class EjentumAugmentedProvider {
@@ -36,11 +43,13 @@ class EjentumAugmentedProvider {
     const model = this.config.model || 'gpt-4o-mini';
     const temperature =
       this.config.temperature !== undefined ? this.config.temperature : 0;
+    const ejentumUrl =
+      this.config.apiUrl || process.env.EJENTUM_API_URL || DEFAULT_EJENTUM_URL;
 
     // Step 1: fetch the cognitive scaffold for this task.
     let scaffold = '';
     try {
-      const r = await fetch(EJENTUM_URL, {
+      const r = await fetch(ejentumUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${ejentumKey}`,
