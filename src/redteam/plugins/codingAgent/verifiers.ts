@@ -723,7 +723,14 @@ function authoredFilePayload(value: unknown): string | undefined {
 
 function toolNameFromItem(item: Record<string, unknown>): string {
   const functionObject = getObject(item.function);
-  return getString(item.tool) ?? getString(item.name) ?? getString(functionObject?.name) ?? 'tool';
+  return (
+    getString(item.tool) ??
+    getString(item.toolName) ??
+    getString(item.tool_name) ??
+    getString(item.name) ??
+    getString(functionObject?.name) ??
+    'tool'
+  );
 }
 
 function normalizedProviderRawItemType(item: Record<string, unknown>): string | undefined {
