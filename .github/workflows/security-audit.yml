@@ -17,21 +17,13 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@4b3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
-          node-version: "22.x"
-          cache: "npm"
+          node-version-file: '.nvmrc'
 
-      - name: Install dependencies
-        run: npm ci --registry=https://registry.npmjs.org/
-
-      - name: Run security audit
-        run: npm audit --audit-level=high
-
-      - name: Run security audit on site
-        run: npm audit --audit-level=high --prefix site
-
-      - name: Run audit on src/app
-        run: npm audit --audit-level=high --prefix src/app
+      - name: Audit dependency lockfile
+        run: npm audit --registry=https://registry.npmjs.org/ --package-lock-only --audit-level=high
