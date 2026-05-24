@@ -751,6 +751,66 @@ describe('OTLPReceiver', () => {
         },
       );
     });
+
+    it('persists receiver redaction policy for receiver-created traces', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      mockTraceStore.getTraceMetadata.mockResolvedValueOnce({
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'd'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'receiver-created-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'receiver-created-test' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer hidden' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'dddddddddddddddddddddddddddddddd',
+        evaluationId: 'receiver-created-eval',
+        testCaseId: 'receiver-created-test',
+        metadata: { otlpHttpRedactAttributes: ['authorization'] },
+      });
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'dddddddddddddddddddddddddddddddd',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+            }),
+          }),
+        ],
+        {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+        },
+      );
+    });
   });
 
   describe('Singleton startup recovery', () => {
