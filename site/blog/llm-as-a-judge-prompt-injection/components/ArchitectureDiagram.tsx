@@ -56,18 +56,6 @@ export default function ArchitectureDiagram({ variant }: ArchitectureDiagramProp
         >
           <polygon points="0 0, 10 3.5, 0 7" fill="#22c55e" />
         </marker>
-        <linearGradient id={`${idPrefix}-dangerGrad`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ef4444" />
-          <stop offset="100%" stopColor="#dc2626" />
-        </linearGradient>
-        <linearGradient id={`${idPrefix}-safeGrad`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#22c55e" />
-          <stop offset="100%" stopColor="#16a34a" />
-        </linearGradient>
-        <linearGradient id={`${idPrefix}-trustGrad`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#3b82f6" />
-          <stop offset="100%" stopColor="#1d4ed8" />
-        </linearGradient>
       </defs>
 
       {/* Background */}

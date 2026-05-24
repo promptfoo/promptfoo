@@ -36,6 +36,8 @@ It also includes simple direct attacks as low-effort baselines. All probes begin
 ## Quick Start
 
 ```bash
+npx promptfoo@latest init --example judge-prompt-injection
+cd judge-prompt-injection
 export OPENAI_API_KEY=your-key-here
 npx promptfoo@latest eval --no-cache
 npx promptfoo@latest view
