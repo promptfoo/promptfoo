@@ -12,6 +12,7 @@ import telemetry from '../../telemetry';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import { validatePositiveIntegerOption } from './options';
 import type { Command } from 'commander';
 
 import type { AssertionGenerationOptions, AssertionGenerationResult } from '../../generation/types';
@@ -201,6 +202,8 @@ async function finishOutput(
 }
 
 export async function doGenerateAssertions(options: DatasetGenerateOptions): Promise<void> {
+  validatePositiveIntegerOption(options.numAssertions, '--numAssertions');
+
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');

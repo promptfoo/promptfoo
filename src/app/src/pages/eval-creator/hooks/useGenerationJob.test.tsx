@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getJobStatus } from '../api/generation';
 import { useGenerationJob } from './useGenerationJob';
 
@@ -12,7 +12,7 @@ vi.mock('../api/generation', () => ({
 const mockGetJobStatus = vi.mocked(getJobStatus);
 
 describe('useGenerationJob', () => {
-  beforeEach(() => {
+  afterEach(() => {
     vi.resetAllMocks();
   });
 
@@ -123,6 +123,143 @@ describe('useGenerationJob', () => {
     expect(result.current.progress).toBe(0);
     expect(result.current.total).toBe(0);
     expect(result.current.result).toBeNull();
+  });
+
+  it('ignores a successful poll that resolves after the job is cancelled', async () => {
+    const onComplete = vi.fn();
+    const resultPayload: GenerationResult = {
+      testCases: [{ city: 'Paris' }],
+      metadata: { totalGenerated: 1, durationMs: 4, provider: 'test' },
+    };
+    let resolveStatus: ((value: Awaited<ReturnType<typeof getJobStatus>>) => void) | undefined;
+    mockGetJobStatus.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useGenerationJob({ onComplete, pollInterval: 10 }));
+
+    await act(async () => {
+      await result.current.startJob('dataset', async () => ({ jobId: 'job-cancelled' }));
+    });
+    act(() => {
+      result.current.cancelJob();
+    });
+
+    await act(async () => {
+      resolveStatus?.({
+        id: 'job-cancelled',
+        type: 'dataset',
+        status: 'complete',
+        progress: 1,
+        total: 1,
+        phase: 'Done',
+        result: resultPayload,
+        createdAt: '2026-05-16T00:00:00.000Z',
+        updatedAt: '2026-05-16T00:00:01.000Z',
+      });
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.result).toBeNull();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it('ignores a failed poll superseded by a newer job', async () => {
+    const onError = vi.fn();
+    let rejectOldPoll: ((reason?: unknown) => void) | undefined;
+
+    mockGetJobStatus
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectOldPoll = reject;
+          }),
+      )
+      .mockResolvedValue({
+        id: 'job-new',
+        type: 'dataset',
+        status: 'in-progress',
+        progress: 1,
+        total: 2,
+        phase: 'Generating',
+        createdAt: '2026-05-16T00:00:00.000Z',
+        updatedAt: '2026-05-16T00:00:01.000Z',
+      });
+
+    const { result } = renderHook(() => useGenerationJob({ onError, pollInterval: 10 }));
+
+    await act(async () => {
+      await result.current.startJob('dataset', async () => ({ jobId: 'job-old' }));
+    });
+    await act(async () => {
+      await result.current.startJob('dataset', async () => ({ jobId: 'job-new' }));
+    });
+    await waitFor(() => {
+      expect(result.current.jobId).toBe('job-new');
+      expect(result.current.status).toBe('in-progress');
+    });
+
+    await act(async () => {
+      rejectOldPoll?.(new Error('old polling failed'));
+    });
+
+    expect(result.current.jobId).toBe('job-new');
+    expect(result.current.error).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('keeps a newer job active when an earlier start request resolves last', async () => {
+    let resolveFirstStart: ((value: { jobId: string }) => void) | undefined;
+    let resolveSecondStart: ((value: { jobId: string }) => void) | undefined;
+    mockGetJobStatus.mockResolvedValue({
+      id: 'job-new',
+      type: 'dataset',
+      status: 'in-progress',
+      progress: 1,
+      total: 2,
+      phase: 'Generating',
+      createdAt: '2026-05-16T00:00:00.000Z',
+      updatedAt: '2026-05-16T00:00:01.000Z',
+    });
+
+    const { result } = renderHook(() => useGenerationJob({ pollInterval: 10 }));
+    let firstStart!: Promise<string>;
+    let secondStart!: Promise<string>;
+
+    act(() => {
+      firstStart = result.current.startJob(
+        'dataset',
+        () =>
+          new Promise((resolve) => {
+            resolveFirstStart = resolve;
+          }),
+      );
+      secondStart = result.current.startJob(
+        'dataset',
+        () =>
+          new Promise((resolve) => {
+            resolveSecondStart = resolve;
+          }),
+      );
+    });
+
+    await act(async () => {
+      resolveSecondStart?.({ jobId: 'job-new' });
+      await secondStart;
+    });
+    await waitFor(() => {
+      expect(result.current.jobId).toBe('job-new');
+    });
+
+    await act(async () => {
+      resolveFirstStart?.({ jobId: 'job-old' });
+      await firstStart;
+    });
+
+    expect(result.current.jobId).toBe('job-new');
   });
 
   it('uses default error messaging and ignores async updates after unmount', async () => {

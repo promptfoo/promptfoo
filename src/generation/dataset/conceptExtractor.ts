@@ -159,21 +159,20 @@ export async function extractConcepts(
 
   if (!parseResult.success) {
     logger.warn(`Concept analysis validation failed: ${parseResult.error.message}`);
-    // Return a partial result with defaults for missing fields
-    // Cast to allow property access on the raw object
     const raw = rawAnalysis as Record<string, unknown>;
+    const topics = ConceptAnalysisSchema.shape.topics.safeParse(raw.topics ?? []);
+    const entities = ConceptAnalysisSchema.shape.entities.safeParse(raw.entities ?? []);
+    const constraints = ConceptAnalysisSchema.shape.constraints.safeParse(raw.constraints ?? []);
+    const variableRelationships = ConceptAnalysisSchema.shape.variableRelationships.safeParse(
+      raw.variableRelationships ?? [],
+    );
+
     return {
-      topics: Array.isArray(raw.topics)
-        ? (raw.topics as ConceptAnalysis['topics']).slice(0, mergedOptions.maxTopics)
-        : [],
-      entities: Array.isArray(raw.entities)
-        ? (raw.entities as ConceptAnalysis['entities']).slice(0, mergedOptions.maxEntities)
-        : [],
-      constraints: Array.isArray(raw.constraints)
-        ? (raw.constraints as ConceptAnalysis['constraints'])
-        : [],
-      variableRelationships: Array.isArray(raw.variableRelationships)
-        ? (raw.variableRelationships as ConceptAnalysis['variableRelationships'])
+      topics: topics.success ? topics.data.slice(0, mergedOptions.maxTopics) : [],
+      entities: entities.success ? entities.data.slice(0, mergedOptions.maxEntities) : [],
+      constraints: constraints.success ? constraints.data : [],
+      variableRelationships: variableRelationships.success
+        ? (variableRelationships.data ?? [])
         : [],
     };
   }

@@ -161,6 +161,31 @@ describe('personaGenerator', () => {
     ]);
   });
 
+  it('drops invalid demographics while retaining a salvageable persona', async () => {
+    mockCallApi.mockResolvedValue({
+      output: JSON.stringify({
+        personas: [
+          {
+            name: 'Partial Persona',
+            description: 'Has invalid optional data',
+            demographics: { expertise: 'administrator', region: 42 },
+          },
+        ],
+      }),
+    });
+
+    await expect(generatePersonas(['Prompt'], mockProvider, { count: 1 })).resolves.toEqual([
+      {
+        name: 'Partial Persona',
+        description: 'Has invalid optional data',
+        demographics: undefined,
+        goals: undefined,
+        behaviors: undefined,
+        edge: undefined,
+      },
+    ]);
+  });
+
   it('returns plain descriptions for the backward-compatible simple persona helper', async () => {
     mockCallApi.mockResolvedValue({
       output: JSON.stringify({

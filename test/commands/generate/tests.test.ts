@@ -446,6 +446,38 @@ describe('generate tests command', () => {
         }),
       ).rejects.toThrow('Generation failed');
     });
+
+    it('rejects invalid generation counts and mutually exclusive modes', async () => {
+      await expect(
+        doGenerateTests({
+          cache: true,
+          config: 'config.yaml',
+          numPersonas: '0',
+          numTestCasesPerPersona: '3',
+          write: false,
+          type: 'pi',
+          defaultConfig: {},
+          defaultConfigPath: 'config.yaml',
+        }),
+      ).rejects.toThrow('Option --numPersonas must be a positive integer.');
+
+      await expect(
+        doGenerateTests({
+          cache: true,
+          config: 'config.yaml',
+          numPersonas: '1',
+          numTestCasesPerPersona: '1',
+          datasetOnly: true,
+          assertionsOnly: true,
+          write: false,
+          type: 'pi',
+          defaultConfig: {},
+          defaultConfigPath: 'config.yaml',
+        }),
+      ).rejects.toThrow('Cannot use --dataset-only and --assertions-only together.');
+
+      expect(generateTestSuite).not.toHaveBeenCalled();
+    });
   });
 
   describe('generateTestsCommand', () => {

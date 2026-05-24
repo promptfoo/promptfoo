@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { getDefaultProviders } from '../../providers/defaults';
@@ -34,6 +35,22 @@ const DEFAULT_OPTIONS: DatasetGenerationOptions = {
   numPersonas: 5,
   numTestCasesPerPersona: 3,
 };
+const VarMappingSchema = z.record(z.string(), z.string());
+
+function parseGeneratedVarMappings(value: unknown): VarMapping[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((candidate) => {
+    const parsed = VarMappingSchema.safeParse(candidate);
+    if (!parsed.success) {
+      logger.warn('Invalid generated test case variable values, skipping');
+      return [];
+    }
+    return [parsed.data];
+  });
+}
 
 /**
  * Generates the prompt for test case generation from a persona.
@@ -356,8 +373,8 @@ async function generateTestCasesFromPersonas(
 
     invariant(jsonObjects.length >= 1, `Expected at least one JSON object in test case response`);
 
-    const parsed = jsonObjects[0] as { vars: VarMapping[] };
-    const newCases = parsed.vars || [];
+    const parsed = jsonObjects[0] as { vars?: unknown };
+    const newCases = parseGeneratedVarMappings(parsed.vars);
 
     // Emit test cases for SSE streaming
     progress.emitTestCases(newCases);
@@ -426,8 +443,8 @@ async function generateTestCasesToFillGaps(
     return [];
   }
 
-  const parsed = jsonObjects[0] as { vars: VarMapping[] };
-  return parsed.vars || [];
+  const parsed = jsonObjects[0] as { vars?: unknown };
+  return parseGeneratedVarMappings(parsed.vars);
 }
 
 /**

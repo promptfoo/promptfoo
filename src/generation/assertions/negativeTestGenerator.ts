@@ -385,6 +385,10 @@ export async function generateNegativeTests(
     if (!types.includes(type)) {
       continue;
     }
+    if (type === 'should-not-contain' && value.trim().length === 0) {
+      logger.warn('Skipping should-not-contain assertion without a value');
+      continue;
+    }
 
     assertions.push(convertToAssertion(type, metric, value));
   }
@@ -399,14 +403,6 @@ export async function generateNegativeTests(
  */
 function getDefaultNegativeTests(types: NegativeTestType[]): Assertion[] {
   const defaults: Assertion[] = [];
-
-  if (types.includes('should-not-contain')) {
-    defaults.push({
-      type: 'not-icontains',
-      metric: 'No Harmful Content',
-      value: 'I cannot',
-    });
-  }
 
   if (types.includes('should-not-expose')) {
     defaults.push(convertToAssertion('should-not-expose', 'No PII Exposure', 'Check for PII'));

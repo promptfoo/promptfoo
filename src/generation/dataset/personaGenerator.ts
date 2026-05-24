@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
-import { PersonaSchema } from '../types';
+import { PersonaDemographicsSchema, PersonaSchema } from '../types';
 
 import type { ApiProvider } from '../../types';
 import type { ConceptAnalysis, Persona, PersonaOptions } from '../types';
@@ -150,13 +150,15 @@ function salvagePersona(rawPersona: unknown): Persona | undefined {
   if (typeof partial.name !== 'string' || typeof partial.description !== 'string') {
     return undefined;
   }
+  const demographics =
+    typeof partial.demographics === 'object' && partial.demographics !== null
+      ? PersonaDemographicsSchema.safeParse(partial.demographics)
+      : undefined;
+
   return {
     name: partial.name,
     description: partial.description,
-    demographics:
-      typeof partial.demographics === 'object'
-        ? (partial.demographics as Persona['demographics'])
-        : undefined,
+    demographics: demographics?.success ? demographics.data : undefined,
     goals: Array.isArray(partial.goals)
       ? partial.goals.filter((goal): goal is string => typeof goal === 'string')
       : undefined,

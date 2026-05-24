@@ -67,7 +67,6 @@ describe('negativeTestGenerator', () => {
       }),
     ).resolves.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ type: 'not-icontains' }),
         expect.objectContaining({ type: 'javascript', metric: 'No PII Exposure' }),
         expect.objectContaining({ type: 'javascript', metric: 'No Repetition' }),
         expect.objectContaining({ type: 'javascript', metric: 'Length Limit' }),
@@ -78,7 +77,7 @@ describe('negativeTestGenerator', () => {
       generateNegativeTests(['Prompt'], mockProvider, {
         types: ['should-not-contain'],
       }),
-    ).resolves.toEqual([expect.objectContaining({ type: 'not-icontains' })]);
+    ).resolves.toEqual([]);
   });
 
   it('converts valid generated negative tests and skips unusable items', async () => {
@@ -158,12 +157,10 @@ describe('negativeTestGenerator', () => {
           type: 'javascript',
           metric: 'should-not-exceed-length check',
         }),
-        expect.objectContaining({
-          type: 'not-contains',
-          metric: 'should-not-contain check',
-          value: '',
-        }),
       ]),
+    );
+    expect(assertions).not.toContainEqual(
+      expect.objectContaining({ type: 'not-contains', value: '' }),
     );
   });
 

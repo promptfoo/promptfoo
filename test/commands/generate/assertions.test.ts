@@ -266,5 +266,21 @@ describe('assertion generation', () => {
         }),
       ).rejects.toThrow('Synthesis failed');
     });
+
+    it('rejects invalid assertion counts before generating', async () => {
+      await expect(
+        doGenerateAssertions({
+          cache: true,
+          config: 'config.yaml',
+          numAssertions: '0',
+          type: 'pi',
+          write: false,
+          defaultConfig: {},
+          defaultConfigPath: 'config.yaml',
+        }),
+      ).rejects.toThrow('Option --numAssertions must be a positive integer.');
+      expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
+      expect(generateAssertions).not.toHaveBeenCalled();
+    });
   });
 });

@@ -340,5 +340,22 @@ describe('dataset generation', () => {
         }),
       ).rejects.toThrow('Synthesis failed');
     });
+
+    it('rejects invalid enhanced generation numeric options before generating', async () => {
+      await expect(
+        doGenerateDataset({
+          cache: true,
+          config: 'config.yaml',
+          enhanced: true,
+          numPersonas: 'zero',
+          numTestCasesPerPersona: '3',
+          write: false,
+          defaultConfig: {},
+          defaultConfigPath: 'config.yaml',
+        }),
+      ).rejects.toThrow('Option --numPersonas must be a positive integer.');
+      expect(generateDataset).not.toHaveBeenCalled();
+      expect(generateTestSuite).not.toHaveBeenCalled();
+    });
   });
 });

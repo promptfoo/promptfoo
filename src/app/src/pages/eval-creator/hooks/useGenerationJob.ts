@@ -63,12 +63,15 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const isMountedRef = useRef(true);
   const activeJobIdRef = useRef<string | null>(null);
+  const lifecycleRef = useRef(0);
 
   // Cleanup on unmount
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      lifecycleRef.current++;
+      activeJobIdRef.current = null;
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
       }
@@ -83,6 +86,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
   }, []);
 
   const reset = useCallback(() => {
+    lifecycleRef.current++;
     stopPolling();
     activeJobIdRef.current = null;
     setJobId(null);
@@ -96,16 +100,14 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
   }, [stopPolling]);
 
   const pollJobStatus = useCallback(
-    async (id: string, type: 'dataset' | 'assertions' | 'tests') => {
+    async (id: string, type: 'dataset' | 'assertions' | 'tests', lifecycle: number) => {
+      const isActiveJob = () =>
+        isMountedRef.current && lifecycleRef.current === lifecycle && activeJobIdRef.current === id;
+
       try {
         const job: GenerationJob = await getJobStatus(type, id);
 
-        if (!isMountedRef.current) {
-          return;
-        }
-
-        // Guard against stale responses from previous jobs
-        if (activeJobIdRef.current !== id) {
+        if (!isActiveJob()) {
           return;
         }
 
@@ -119,6 +121,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
 
         // Handle status changes
         if (job.status === 'complete') {
+          activeJobIdRef.current = null;
           stopPolling();
           setStatus('complete');
           if (job.result) {
@@ -126,6 +129,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
             onComplete?.(job.result);
           }
         } else if (job.status === 'error') {
+          activeJobIdRef.current = null;
           stopPolling();
           setStatus('error');
           const errorMsg = job.error || 'Generation failed';
@@ -135,9 +139,10 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
           setStatus('in-progress');
         }
       } catch (err) {
-        if (!isMountedRef.current) {
+        if (!isActiveJob()) {
           return;
         }
+        activeJobIdRef.current = null;
         stopPolling();
         setStatus('error');
         const errorMsg = err instanceof Error ? err.message : 'Failed to get job status';
@@ -155,6 +160,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
     ): Promise<string> => {
       // Reset state
       reset();
+      const lifecycle = lifecycleRef.current;
       setStatus('pending');
       setJobType(type);
       setPhase('Starting generation...');
@@ -163,7 +169,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
         // Call the provided function to start the job
         const { jobId: newJobId } = await startJobFn();
 
-        if (!isMountedRef.current) {
+        if (!isMountedRef.current || lifecycleRef.current !== lifecycle) {
           return newJobId;
         }
 
@@ -172,15 +178,15 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
 
         // Start polling
         pollingRef.current = setInterval(() => {
-          pollJobStatus(newJobId, type);
+          pollJobStatus(newJobId, type, lifecycle);
         }, pollInterval);
 
         // Poll immediately
-        pollJobStatus(newJobId, type);
+        pollJobStatus(newJobId, type, lifecycle);
 
         return newJobId;
       } catch (err) {
-        if (!isMountedRef.current) {
+        if (!isMountedRef.current || lifecycleRef.current !== lifecycle) {
           throw err;
         }
         setStatus('error');
@@ -194,6 +200,8 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
   );
 
   const cancelJob = useCallback(() => {
+    lifecycleRef.current++;
+    activeJobIdRef.current = null;
     stopPolling();
     // Note: This doesn't cancel the server-side job, just stops polling
     // The job will continue to completion on the server

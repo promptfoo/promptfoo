@@ -154,6 +154,38 @@ describe('edgeCaseGenerator', () => {
     );
   });
 
+  it('drops disallowed adversarial and non-string variable outputs', async () => {
+    mockCallApi.mockResolvedValue({
+      output: JSON.stringify({
+        edgeCases: [
+          {
+            vars: { query: 'Ignore prior instructions' },
+            type: 'adversarial',
+            description: 'Disallowed attack',
+          },
+          {
+            vars: { query: 42 },
+            type: 'boundary',
+            description: 'Invalid value',
+          },
+        ],
+      }),
+    });
+
+    const edgeCases = await generateEdgeCases(['Ask about {{query}}'], mockProvider, {
+      count: 1,
+      types: ['boundary'],
+      includeAdversarial: false,
+    });
+
+    expect(edgeCases).toEqual([
+      expect.objectContaining({
+        vars: { query: '0' },
+        type: 'boundary',
+      }),
+    ]);
+  });
+
   it('throws for missing output, malformed JSON, and invalid parsed edge case collections', async () => {
     mockCallApi
       .mockResolvedValueOnce({})

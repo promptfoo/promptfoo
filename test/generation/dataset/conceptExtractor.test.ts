@@ -133,6 +133,26 @@ describe('conceptExtractor', () => {
       expect(result.constraints).toEqual([]);
       expect(result.variableRelationships).toEqual([]);
     });
+
+    it('discards malformed concept collections instead of casting them downstream', async () => {
+      mockCallApi.mockResolvedValue({
+        output: JSON.stringify({
+          topics: [{ name: 42 }],
+          entities: [{ name: 'Invoice' }],
+          constraints: [{ description: false }],
+          variableRelationships: [{ variables: 'city', relationship: 'invalid' }],
+        }),
+      });
+
+      const result = await extractConcepts(['Summarize {{invoice}}'], mockProvider);
+
+      expect(result).toEqual({
+        topics: [],
+        entities: [{ name: 'Invoice' }],
+        constraints: [],
+        variableRelationships: [],
+      });
+    });
   });
 
   it('should extract only topic names for lightweight topic analysis', async () => {

@@ -224,4 +224,17 @@ describe('generation dataset index', () => {
       }),
     ).rejects.toThrow('Expected at least one JSON object in test case response');
   });
+
+  it('does not return generated test cases with non-string variable values', async () => {
+    callApi.mockResolvedValue({
+      output: JSON.stringify({ vars: [{ city: 'Paris' }, { city: 42 }] }),
+    });
+
+    const result = await generateDataset([{ raw: 'Visit {{city}}', label: 'Prompt' }], [], {
+      numPersonas: 1,
+      numTestCasesPerPersona: 2,
+    });
+
+    expect(result.testCases).toEqual([{ city: 'Paris' }]);
+  });
 });

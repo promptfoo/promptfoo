@@ -13,6 +13,7 @@ import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import { validatePositiveIntegerOption, validateProbabilityOption } from './options';
 import type { Command } from 'commander';
 
 import type { DatasetGenerationOptions } from '../../generation/types';
@@ -345,6 +346,11 @@ async function finishOutput(
 }
 
 export async function doGenerateDataset(options: DatasetGenerateOptions): Promise<void> {
+  validatePositiveIntegerOption(options.numPersonas, '--numPersonas');
+  validatePositiveIntegerOption(options.numTestCasesPerPersona, '--numTestCasesPerPersona');
+  validatePositiveIntegerOption(options.numAssertions, '--num-assertions');
+  validateProbabilityOption(options.diversityTarget, '--diversity-target');
+
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');

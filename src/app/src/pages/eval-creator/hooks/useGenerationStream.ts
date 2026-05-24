@@ -109,6 +109,7 @@ export function useGenerationStream(
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const eventSourceRef = useRef<EventSource | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const isMountedRef = useRef(true);
 
@@ -128,6 +129,7 @@ export function useGenerationStream(
   }, []);
 
   const disconnect = useCallback(() => {
+    activeJobIdRef.current = null;
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
@@ -143,6 +145,9 @@ export function useGenerationStream(
 
       try {
         const data = JSON.parse(event.data) as StreamEvent;
+        if (data.jobId !== activeJobIdRef.current) {
+          return;
+        }
 
         switch (data.type) {
           case 'progress':
@@ -201,6 +206,7 @@ export function useGenerationStream(
       disconnect();
 
       // Reset state
+      activeJobIdRef.current = id;
       setJobId(id);
       setTestCases([]);
       setAssertions([]);
@@ -209,9 +215,14 @@ export function useGenerationStream(
 
       const url = getStreamUrl(id);
       const eventSource = new EventSource(url);
+      eventSourceRef.current = eventSource;
+      const isActiveConnection = () =>
+        isMountedRef.current &&
+        eventSourceRef.current === eventSource &&
+        activeJobIdRef.current === id;
 
       eventSource.onopen = () => {
-        if (!isMountedRef.current) {
+        if (!isActiveConnection()) {
           return;
         }
         setIsConnected(true);
@@ -219,10 +230,14 @@ export function useGenerationStream(
         reconnectAttemptsRef.current = 0;
       };
 
-      eventSource.onmessage = handleEvent;
+      eventSource.onmessage = (event) => {
+        if (isActiveConnection()) {
+          handleEvent(event);
+        }
+      };
 
       eventSource.onerror = () => {
-        if (!isMountedRef.current) {
+        if (!isActiveConnection()) {
           return;
         }
 
@@ -241,8 +256,6 @@ export function useGenerationStream(
         }
         // Otherwise, EventSource will automatically try to reconnect
       };
-
-      eventSourceRef.current = eventSource;
     },
     [disconnect, getStreamUrl, handleEvent, autoReconnect, maxReconnectAttempts],
   );

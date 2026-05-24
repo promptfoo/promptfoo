@@ -1,10 +1,11 @@
 import dedent from 'dedent';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   convertQuestionToPythonPrompt,
   generateNewQuestionsPrompt,
   synthesize,
 } from '../../src/assertions/synthesis';
+import { getDefaultProviders } from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
 import { createMockProvider } from '../factories/provider';
 
@@ -14,7 +15,15 @@ vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
 
+vi.mock('../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn(),
+}));
+
 describe('synthesize', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should generate assertions based on config prompts and existing assertions', async () => {
     let i = 0;
     const mockProvider = createMockProvider({
@@ -41,6 +50,78 @@ describe('synthesize', () => {
 
     expect(result).toHaveLength(1);
     expect(result).toEqual([{ metric: 'metric1', value: 'test question', type: 'pi' }]);
+  });
+
+  it('requires at least one prompt before invoking a provider', async () => {
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: [],
+        tests: [],
+        numQuestions: 1,
+      }),
+    ).rejects.toThrow('Assertion synthesis requires at least one prompt.');
+    expect(loadApiProvider).not.toHaveBeenCalled();
+  });
+
+  it('uses the default provider, appends instructions, and returns generated python assertions', async () => {
+    const mockProvider = createMockProvider({
+      id: 'default-provider',
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({
+          output: {
+            questions: [
+              {
+                label: 'Json Format',
+                question: 'Does the response contain valid JSON?',
+                question_source: 'IMPLIED_IN_INSTRUCTIONS',
+                question_type: 'FORMAT_CHECK',
+              },
+            ],
+          },
+        })
+        .mockResolvedValueOnce({ output: 'return {"pass": True, "score": 1.0}' }),
+    });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      synthesizeProvider: mockProvider,
+    } as unknown as Awaited<ReturnType<typeof getDefaultProviders>>);
+
+    const result = await synthesize({
+      prompts: ['Return JSON.'],
+      tests: [],
+      numQuestions: 1,
+      instructions: 'Focus on strict JSON structure.',
+    });
+
+    expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('Focus on strict JSON structure.'),
+    );
+    expect(result).toEqual([
+      {
+        metric: 'Json Format',
+        type: 'python',
+        value: 'return {"pass": True, "score": 1.0}',
+      },
+    ]);
+  });
+
+  it('rejects an empty provider question response', async () => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({ output: undefined }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+        numQuestions: 1,
+      }),
+    ).rejects.toThrow('resp.output must be defined');
   });
 });
 

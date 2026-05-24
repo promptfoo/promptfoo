@@ -1,3 +1,4 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGenerationStream } from './useGenerationStream';
@@ -27,7 +28,11 @@ describe('useGenerationStream', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     MockEventSource.instances = [];
-    vi.stubGlobal('EventSource', MockEventSource as unknown as typeof EventSource);
+    mockBrowserProperty(
+      globalThis,
+      'EventSource',
+      MockEventSource as unknown as typeof EventSource,
+    );
   });
 
   it('connects to the stream and handles progress, item, and completion events', async () => {
@@ -166,6 +171,62 @@ describe('useGenerationStream', () => {
     });
 
     expect(onError).toHaveBeenCalledWith('generation failed');
+  });
+
+  it('ignores events queued by a stream that was replaced by a newer job', () => {
+    const onComplete = vi.fn();
+    const onTestCase = vi.fn();
+    const { result } = renderHook(() => useGenerationStream({ onComplete, onTestCase }));
+
+    act(() => {
+      result.current.connect('job-old');
+    });
+    const oldSource = MockEventSource.instances[0];
+
+    act(() => {
+      result.current.connect('job-new');
+    });
+    const newSource = MockEventSource.instances[1];
+
+    act(() => {
+      newSource.onopen?.();
+      newSource.onmessage?.({
+        data: JSON.stringify({
+          type: 'testcase',
+          jobId: 'job-new',
+          index: 0,
+          testCase: { city: 'Paris' },
+        }),
+      } as MessageEvent);
+      oldSource.onmessage?.({
+        data: JSON.stringify({
+          type: 'testcase',
+          jobId: 'job-old',
+          index: 1,
+          testCase: { city: 'Berlin' },
+        }),
+      } as MessageEvent);
+      oldSource.onmessage?.({
+        data: JSON.stringify({
+          type: 'complete',
+          jobId: 'job-old',
+          result: {
+            testCases: [{ city: 'Berlin' }],
+            metadata: { totalGenerated: 1, durationMs: 4, provider: 'test' },
+          },
+        }),
+      } as MessageEvent);
+      oldSource.onerror?.();
+    });
+
+    expect(result.current.jobId).toBe('job-new');
+    expect(result.current.testCases).toEqual([{ city: 'Paris' }]);
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.connectionError).toBeNull();
+    expect(onTestCase).toHaveBeenCalledTimes(1);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(oldSource.close).toHaveBeenCalled();
+    expect(newSource.close).not.toHaveBeenCalled();
   });
 
   it('handles reconnect policy branches and duplicate assertion events', async () => {

@@ -11,6 +11,11 @@ import telemetry from '../../telemetry';
 import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import {
+  validateExclusiveGenerationModes,
+  validatePositiveIntegerOption,
+  validateProbabilityOption,
+} from './options';
 import type { Command } from 'commander';
 
 import type {
@@ -294,6 +299,12 @@ function finishOutput(
 }
 
 export async function doGenerateTests(options: TestsGenerateOptions): Promise<void> {
+  validatePositiveIntegerOption(options.numPersonas, '--numPersonas');
+  validatePositiveIntegerOption(options.numTestCasesPerPersona, '--numTestCasesPerPersona');
+  validatePositiveIntegerOption(options.numAssertions, '--numAssertions');
+  validateProbabilityOption(options.diversityTarget, '--diversity-target');
+  validateExclusiveGenerationModes(options.datasetOnly, options.assertionsOnly);
+
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled.');

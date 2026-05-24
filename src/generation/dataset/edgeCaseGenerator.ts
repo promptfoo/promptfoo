@@ -3,6 +3,7 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { extractVariablesFromTemplates } from '../../util/templates';
+import { EdgeCaseSchema } from '../types';
 
 import type { ApiProvider } from '../../types';
 import type { ConceptAnalysis, EdgeCase, EdgeCaseOptions, EdgeCaseType } from '../types';
@@ -352,14 +353,13 @@ export async function generateEdgeCases(
       continue;
     }
 
-    // Validate type is one of the allowed types
     const type = caseObj.type as EdgeCaseType;
-    if (!['boundary', 'format', 'empty', 'special-chars', 'adversarial', 'length'].includes(type)) {
+    if (!mergedOptions.types.includes(type)) {
       logger.warn(`Invalid edge case type: ${type}, skipping`);
       continue;
     }
 
-    edgeCases.push({
+    const candidate = {
       vars: caseObj.vars as Record<string, string>,
       type,
       description: caseObj.description,
@@ -367,7 +367,13 @@ export async function generateEdgeCases(
         typeof caseObj.severity === 'string' && ['low', 'medium', 'high'].includes(caseObj.severity)
           ? (caseObj.severity as 'low' | 'medium' | 'high')
           : undefined,
-    });
+    };
+    const parsedCase = EdgeCaseSchema.safeParse(candidate);
+    if (!parsedCase.success) {
+      logger.warn('Invalid edge case variable values, skipping');
+      continue;
+    }
+    edgeCases.push(parsedCase.data);
   }
 
   logger.debug(`Generated ${edgeCases.length} valid edge cases`);
