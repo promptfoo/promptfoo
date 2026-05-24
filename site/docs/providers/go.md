@@ -33,6 +33,8 @@ The function should:
 - Return a map containing an "output" key with the response
 - Return an error if the operation fails
 
+The Go file provider currently supports standard text generation through `CallApi` only. For other provider-like Go scripts, use the [`exec:` custom script provider](/docs/providers/custom-script).
+
 ## Configuration
 
 To configure the Go provider, you need to specify the path to your Go script and any additional options you want to pass to the script. Here's an example configuration in YAML format:
