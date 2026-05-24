@@ -67,6 +67,25 @@ type ApplicationDefinitionSectionKey = Extract<
   keyof typeof SECTION_HEADERS
 >;
 
+const APPLICATION_DEFINITION_STRING_FIELDS: readonly (keyof ReconApplicationDefinition)[] = [
+  'purpose',
+  'features',
+  'industry',
+  'systemPrompt',
+  'hasAccessTo',
+  'doesNotHaveAccessTo',
+  'userTypes',
+  'securityRequirements',
+  'sensitiveDataTypes',
+  'exampleIdentifiers',
+  'criticalActions',
+  'forbiddenTopics',
+  'attackConstraints',
+  'competitors',
+  'connectedSystems',
+  'redteamUser',
+] as const;
+
 /**
  * Recon details for YAML metadata output.
  * Mirrors the reconDetails structure from validators/recon.ts.
@@ -168,27 +187,7 @@ export const SUGGESTED_PLUGIN_LIST = generatePluginList();
  * Validates if a plugin ID is valid
  */
 export function isValidPlugin(pluginId: string): boolean {
-  // Direct match
-  if (VALID_PLUGIN_IDS.has(pluginId)) {
-    return true;
-  }
-  // Check for category prefixes (e.g., harmful:violent-crime)
-  const prefixes = [
-    'harmful:',
-    'pii:',
-    'bias:',
-    'medical:',
-    'financial:',
-    'pharmacy:',
-    'insurance:',
-    'ecommerce:',
-  ];
-  for (const prefix of prefixes) {
-    if (pluginId.startsWith(prefix)) {
-      return VALID_PLUGIN_IDS.has(pluginId);
-    }
-  }
-  return false;
+  return VALID_PLUGIN_IDS.has(pluginId);
 }
 
 /**
@@ -253,28 +252,8 @@ export function formatToolsForAccessDescription(
 export function buildApplicationDefinition(result: ReconResult): ReconApplicationDefinition {
   const def: ReconApplicationDefinition = {};
 
-  // Fields that map directly from ReconResult to ApplicationDefinition
-  const fieldsToCopy: (keyof ReconApplicationDefinition)[] = [
-    'purpose',
-    'features',
-    'industry',
-    'systemPrompt',
-    'hasAccessTo',
-    'doesNotHaveAccessTo',
-    'userTypes',
-    'securityRequirements',
-    'sensitiveDataTypes',
-    'exampleIdentifiers',
-    'criticalActions',
-    'forbiddenTopics',
-    'attackConstraints',
-    'competitors',
-    'connectedSystems',
-    'redteamUser',
-  ];
-
-  for (const field of fieldsToCopy) {
-    const value = result[field as keyof ReconResult] as string | undefined;
+  for (const field of APPLICATION_DEFINITION_STRING_FIELDS) {
+    const value = result[field];
     if (isValueMeaningful(value)) {
       def[field] = value;
     }

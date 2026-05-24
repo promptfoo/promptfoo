@@ -78,8 +78,7 @@ export function buildReconPrompt(
     ## Tools Available
 
     - **File Tools**: Read, Grep, Glob, LS - for analyzing the codebase
-    - **Provider lookup tools**: use only provider-approved documentation search tools when available.
-      Do not fetch arbitrary URLs or use shell/network egress.
+    - **No network tools**: do not fetch URLs, use web search, or use shell/network egress.
     - **Workspace**: Your isolated temporary execution workspace is ${scratchpadPath}
 
     ## Files to Exclude

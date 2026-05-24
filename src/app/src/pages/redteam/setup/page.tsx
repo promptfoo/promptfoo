@@ -110,12 +110,7 @@ export default function RedTeamSetupPage() {
 
   const { hasSeenSetup, markSetupAsSeen } = useSetupState();
   const [setupModalOpen, setSetupModalOpen] = useState(!hasSeenSetup);
-  const {
-    config,
-    setFullConfig,
-    resetConfig,
-    setReconContext: setStoreReconContext,
-  } = useRedTeamConfig();
+  const { config, setFullConfig, resetConfig } = useRedTeamConfig();
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [loadDialogOpen, setLoadDialogOpen] = useState(false);
@@ -411,7 +406,6 @@ export default function RedTeamSetupPage() {
       // Set reconContext for recon-generated configs so the banner displays
       if (reconContext) {
         setFullConfig(updatedConfig, reconContext);
-        setStoreReconContext(reconContext);
       } else {
         setFullConfig(updatedConfig);
       }

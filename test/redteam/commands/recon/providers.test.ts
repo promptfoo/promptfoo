@@ -592,7 +592,7 @@ describe('recon provider factories', () => {
         sandbox_mode: 'read-only',
         approval_policy: 'never',
         network_access_enabled: false,
-        web_search_mode: 'live',
+        web_search_mode: 'disabled',
         enable_streaming: true,
       }),
     );

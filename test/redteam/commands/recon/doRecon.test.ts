@@ -57,9 +57,10 @@ vi.mock('ora', () => ({
 
 vi.mock('../../../../src/constants', () => ({
   getDefaultPort: vi.fn(() => 15500),
-  getLocalAppUrl: vi.fn(
-    () => 'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
-  ),
+  getLocalAppUrl: vi.fn((urlPath: string, queryParams?: Record<string, string>) => {
+    const params = new URLSearchParams(queryParams).toString();
+    return `http://localhost:15500${urlPath}${params ? `?${params}` : ''}`;
+  }),
 }));
 
 vi.mock('../../../../src/logger', () => ({
@@ -231,6 +232,21 @@ describe('doRecon', () => {
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining('Open this URL in your browser:'),
     );
+  });
+
+  it('does not log the browser handoff token when the browser opens successfully', async () => {
+    await doRecon({ dir: '/repo', yes: true });
+
+    expect(opener).toHaveBeenCalledWith(
+      'http://localhost:15500/redteam/setup?source=recon&token=test-handoff-token',
+    );
+
+    const infoMessages = vi
+      .mocked(logger.info)
+      .mock.calls.map(([message]) => String(message))
+      .join('\n');
+    expect(infoMessages).toContain('http://localhost:15500/redteam/setup?source=recon');
+    expect(infoMessages).not.toContain('token=test-handoff-token');
   });
 
   it('starts the local server before opening recon handoff when none is running', async () => {

@@ -53,6 +53,13 @@ function matchesDirectoryGlob(relativePath: string, pattern: string): boolean {
   return matchesPlainPathSegment(relativePath, directoryPattern);
 }
 
+function isInsideDirectory(candidatePath: string, directoryPath: string): boolean {
+  const relative = path.relative(directoryPath, candidatePath);
+  return (
+    relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+  );
+}
+
 export function buildReconExclusions(additionalExclusions?: string[]): string[] {
   return [...DEFAULT_EXCLUSIONS, ...(additionalExclusions || [])]
     .map((pattern) => normalizePattern(pattern.trim()))
@@ -93,6 +100,7 @@ export function prepareReconTarget(
   additionalExclusions?: string[],
 ): PreparedReconTarget {
   const exclusions = buildReconExclusions(additionalExclusions);
+  const resolvedScratchpadDirectory = path.resolve(scratchpadDirectory);
   const snapshotRoot = path.join(scratchpadDirectory, 'target');
   const snapshotDirectory = path.join(snapshotRoot, path.basename(targetDirectory) || 'codebase');
   let copiedFiles = 0;
@@ -101,6 +109,11 @@ export function prepareReconTarget(
   fs.mkdirSync(snapshotDirectory, { recursive: true, mode: 0o700 });
 
   const copyEntry = (sourcePath: string, destinationPath: string, relativePath: string): void => {
+    if (isInsideDirectory(path.resolve(sourcePath), resolvedScratchpadDirectory)) {
+      skippedEntries += 1;
+      return;
+    }
+
     if (relativePath && isReconPathExcluded(relativePath, exclusions)) {
       skippedEntries += 1;
       return;

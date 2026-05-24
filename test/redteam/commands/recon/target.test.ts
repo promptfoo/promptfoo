@@ -72,4 +72,19 @@ describe('recon target preparation', () => {
     expect(target.copiedFiles).toBe(2);
     expect(target.skippedEntries).toBeGreaterThanOrEqual(5);
   });
+
+  it('skips the scratchpad when scanning a parent directory of the scratchpad', () => {
+    fs.writeFileSync(path.join(sourceDir, 'README.md'), 'allowed docs');
+    const nestedScratchpadDir = path.join(sourceDir, 'promptfoo-recon-scratchpad');
+    fs.mkdirSync(path.join(nestedScratchpadDir, 'target'), { recursive: true });
+    fs.writeFileSync(path.join(nestedScratchpadDir, 'notes.md'), 'temporary notes');
+    fs.writeFileSync(path.join(nestedScratchpadDir, 'target', 'recursive.txt'), 'do not copy');
+
+    const target = prepareReconTarget(sourceDir, nestedScratchpadDir);
+
+    expect(fs.readFileSync(path.join(target.directory, 'README.md'), 'utf8')).toBe('allowed docs');
+    expect(fs.existsSync(path.join(target.directory, 'promptfoo-recon-scratchpad'))).toBe(false);
+    expect(target.copiedFiles).toBe(1);
+    expect(target.skippedEntries).toBeGreaterThanOrEqual(1);
+  });
 });

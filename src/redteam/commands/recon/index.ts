@@ -42,10 +42,11 @@ function pluralize(count: number, singular: string, plural = `${singular}s`): st
  */
 async function openBrowserWithRecon(handoffToken: string): Promise<void> {
   const url = getLocalAppUrl('/redteam/setup', { source: 'recon', token: handoffToken });
+  const displayUrl = getLocalAppUrl('/redteam/setup', { source: 'recon' });
 
   try {
     await opener(url);
-    logger.info(`\n${chalk.green('✨')} Opening browser: ${chalk.cyan(url)}`);
+    logger.info(`\n${chalk.green('✨')} Opening browser: ${chalk.cyan(displayUrl)}`);
   } catch (error) {
     logger.debug('Failed to open browser automatically', { error });
     logger.info(`\nOpen this URL in your browser: ${chalk.cyan(url)}`);
