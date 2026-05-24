@@ -422,7 +422,7 @@ Without `percentile`, every matching span must be under `max` milliseconds. With
     method: linear # NumPy-style interpolation; default is "nearest"
 ```
 
-Promptfoo also appends a `warning: small sample N=<count>` note to the assertion reason whenever the percentile is computed over fewer than 20 samples, so the small-N footgun shows up in `output.json` and the UI without you having to remember it. Use percentiles when matching spans aggregate to 20+ samples (typically across many test rows) and prefer `max` over a small fixed batch.
+Promptfoo also appends a `warning: small sample N=<count>` note to the assertion reason whenever the percentile is computed over fewer than 20 samples, so the small-N footgun shows up in `output.json` and the UI without you having to remember it. Percentiles are computed per row from that row's matching spans; they do not aggregate across an eval run. Use `max` for small fixed batches, and use a separate artifact comparison step when you need suite-level latency percentiles across rows.
 
 :::warning No-spans pass
 If no spans match the pattern, `trace-span-duration` returns `pass: true` by default. A renamed span, a dropped flush, or a missing `trace-span-count` companion can silently mask a real regression. Set `requirePresence: true` to fail when nothing matches, or pair duration with a separate `trace-span-count` assertion:
@@ -806,7 +806,7 @@ Agents that loop have unbounded cost. Use the built-in `tokens-used` assertion t
     source: auto # auto (default) | trace | response
 ```
 
-`source: auto` uses traces whenever trace spans exist and falls back to `providerResponse.tokenUsage` only when they do not. For each matched span, Promptfoo prefers an aggregate total such as `gen_ai.usage.total_tokens`, `llm.usage.total_tokens`, or `tokens.used`; otherwise it sums one matching input/output token family. When matched parent and child spans both carry totals, only the leaf token-bearing spans count so repeated hierarchy totals are not double-counted. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
+`source: auto` uses trace token attributes when matched spans include them. If the default `pattern: '*'` sees spans but none of them carry token-usage attributes, it falls back to `providerResponse.tokenUsage`; with a custom `pattern`, it stays on the trace path so the filter is not silently ignored. For each matched span, Promptfoo prefers an aggregate total such as `gen_ai.usage.total_tokens`, `llm.usage.total_tokens`, or `tokens.used`; otherwise it sums one matching input/output token family. When matched parent and child spans both carry totals, only the leaf token-bearing spans count so repeated hierarchy totals are not double-counted. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
 
 Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
 
