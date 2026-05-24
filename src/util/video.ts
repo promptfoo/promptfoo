@@ -48,7 +48,7 @@ export async function resolveVideoBytes(video: VideoRef): Promise<ResolvedVideo>
     const blob = await getBlobByHash(video.blobRef.hash);
     return {
       buffer: blob.data,
-      mimeType: blob.metadata.mimeType || 'video/mp4',
+      mimeType: blob.metadata.mimeType || video.blobRef.mimeType || 'video/mp4',
     };
   }
 

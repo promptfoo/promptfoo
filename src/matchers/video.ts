@@ -135,10 +135,11 @@ export async function matchesVideoRubric(
 
   const rubricString = typeof rubric === 'object' ? JSON.stringify(rubric) : rubric;
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, DEFAULT_VIDEO_GRADING_PROMPT);
-  const renderedGradingPrompt = nunjucks.renderString(rubricPrompt, {
-    rubric: rubricString,
+  const promptVars = {
     ...(vars || {}),
-  });
+    rubric: rubricString,
+  };
+  const renderedGradingPrompt = nunjucks.renderString(rubricPrompt, promptVars);
   const videoBase64 = videoToBase64(resolvedVideo.buffer);
   const defaultProvider = grading.provider
     ? DefaultVideoGradingProvider
@@ -186,10 +187,7 @@ export async function matchesVideoRubric(
     finalProvider,
     multimodalPrompt,
     'video-rubric',
-    {
-      rubric: rubricString,
-      ...(vars || {}),
-    },
+    promptVars,
     providerCallContext,
   );
 

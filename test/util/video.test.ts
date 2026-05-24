@@ -152,6 +152,27 @@ describe('video utilities', () => {
       expect(result.mimeType).toBe('video/mp4');
     });
 
+    it('should use blobRef mimeType when blob metadata does not include one', async () => {
+      const mockBlobData = Buffer.from('video data');
+      const { getBlobByHash } = await import('../../src/blobs');
+      vi.mocked(getBlobByHash).mockResolvedValue({
+        data: mockBlobData,
+        metadata: {},
+      } as any);
+
+      const result = await resolveVideoBytes({
+        blobRef: {
+          hash: 'abc123',
+          uri: 'blob://abc123',
+          mimeType: 'video/webm',
+          sizeBytes: 100,
+          provider: 'test',
+        },
+      });
+
+      expect(result.mimeType).toBe('video/webm');
+    });
+
     it('should resolve video from storageRef', async () => {
       const mockBuffer = Buffer.from('video from storage');
       const { retrieveMedia } = await import('../../src/storage');
