@@ -557,6 +557,9 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Set by assertion handlers when the validator itself could not execute,
+    // e.g. JavaScript/Python/Ruby syntax errors or unreachable webhooks.
+    assertionError?: true;
     [key: string]: any;
   };
 }

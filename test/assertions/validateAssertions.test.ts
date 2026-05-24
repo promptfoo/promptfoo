@@ -200,6 +200,128 @@ describe('validateAssertions', () => {
     });
   });
 
+  describe('fallback chain validation', () => {
+    it('passes with a valid fallback chain', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            { type: 'equals', value: 'cheap', fallback: 'next' },
+            { type: 'llm-rubric', value: 'expensive fallback' },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('rejects malformed chains before runtime assertion execution', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'equals', value: 'orphan', fallback: 'next' }],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/tests\[0\]\.assert\[0\].*no next assertion/);
+    });
+
+    it('rejects malformed defaultTest chains', () => {
+      expect(() =>
+        validateAssertions([], {
+          assert: [{ type: 'equals', value: 'orphan', fallback: 'next' }],
+        }),
+      ).toThrow(/defaultTest\.assert\[0\].*no next assertion/);
+    });
+
+    it('allows defaultTest fallback chains to terminate in each test assertion list', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'contains', value: 'per-test target' }],
+        },
+      ];
+
+      expect(() =>
+        validateAssertions(tests, {
+          assert: [{ type: 'equals', value: 'default primary', fallback: 'next' }],
+        }),
+      ).not.toThrow();
+    });
+
+    it('rejects a defaultTest fallback chain when a test has no target assertion', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+        },
+      ];
+
+      expect(() =>
+        validateAssertions(tests, {
+          assert: [{ type: 'equals', value: 'default primary', fallback: 'next' }],
+        }),
+      ).toThrow(/tests\[0\]\.mergedAssert\[0\].*no next assertion/);
+    });
+
+    it('does not validate disabled defaultTest assertions against a test', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          options: { disableDefaultAsserts: true },
+          assert: [{ type: 'contains', value: 'only per-test assertion runs' }],
+        },
+      ];
+
+      expect(() =>
+        validateAssertions(tests, {
+          assert: [{ type: 'equals', value: 'disabled default', fallback: 'next' }],
+        }),
+      ).not.toThrow();
+    });
+
+    it('includes nested assert-set paths in fallback validation errors', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                { type: 'contains', value: 'ok' },
+                { type: 'equals', value: 'orphan', fallback: 'next' },
+              ],
+            },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(
+        /tests\[0\]\.assert\[0\]\.assert\[1\].*no next assertion/,
+      );
+    });
+
+    it('rejects redteam guardrail fallback primaries', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'guardrails',
+              config: { purpose: 'redteam' },
+              fallback: 'next',
+            },
+            { type: 'contains', value: 'ok' },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(
+        /redteam guardrail assertions cannot be fallback chain sources/,
+      );
+    });
+  });
+
   describe('valid assertions', () => {
     it('passes with valid assertions', () => {
       const tests: TestCase[] = [

@@ -33,7 +33,6 @@ import {
   type ApiProvider,
   type Assertion,
   type AssertionOrSet,
-  type AssertionSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
@@ -65,6 +64,13 @@ import { handleContextRelevance } from './contextRelevance';
 import { handleCost } from './cost';
 import { handleEquals } from './equals';
 import { handleFactuality } from './factuality';
+import {
+  hasFallback,
+  isAssertionExecutionFailure,
+  isRedteamGuardrailFailure,
+  isSpecialCompareAssertion,
+  validateFallbackChains,
+} from './fallbackChains';
 import { handleFinishReason } from './finishReason';
 import { handleIsValidFunctionCall } from './functionToolCall';
 import { handleGEval } from './geval';
@@ -509,6 +515,7 @@ export async function runAssertion({
             score: 0,
             reason: (error as Error).message,
             assertion,
+            metadata: { assertionError: true },
           };
         }
       } else if (filePath.endsWith('.rb')) {
@@ -527,6 +534,7 @@ export async function runAssertion({
             score: 0,
             reason: (error as Error).message,
             assertion,
+            metadata: { assertionError: true },
           };
         }
       } else {
@@ -674,68 +682,6 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
-function hasFallback(assertion: Assertion): boolean {
-  return assertion.fallback === 'next' || assertion.fallback === true;
-}
-
-function isAssertionSet(assertion: AssertionOrSet): assertion is AssertionSet {
-  return assertion.type === 'assert-set';
-}
-
-function isSpecialCompareAssertion(assertion: Assertion): boolean {
-  return assertion.type.startsWith('select-') || assertion.type === 'max-score';
-}
-
-/**
- * Validates that fallback-bearing assertions are configured correctly.
- *
- * Runs before assertion-set flattening so that fallback chains cannot bridge
- * across an assert-set boundary. The `path` argument carries dotted-index
- * breadcrumbs (e.g. `assert[2].assert[0]`) into recursive calls so users with
- * nested assert-sets can localize a validation failure.
- */
-function validateFallbackChains(assertions: AssertionOrSet[], path = 'assert'): void {
-  for (let i = 0; i < assertions.length; i++) {
-    const assertion = assertions[i];
-    const here = `${path}[${i}]`;
-
-    if (isAssertionSet(assertion)) {
-      validateFallbackChains(assertion.assert, `${here}.assert`);
-      continue;
-    }
-
-    if (!hasFallback(assertion)) {
-      continue;
-    }
-
-    if (isSpecialCompareAssertion(assertion)) {
-      throw new Error(
-        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): ${assertion.type} assertions cannot be fallback chain sources`,
-      );
-    }
-
-    if (i === assertions.length - 1) {
-      throw new Error(
-        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): has fallback but no next assertion to fall through to`,
-      );
-    }
-
-    const nextAssertion = assertions[i + 1];
-
-    if (isAssertionSet(nextAssertion)) {
-      throw new Error(
-        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): next assertion is assert-set (not supported as fallback target)`,
-      );
-    }
-
-    if (isSpecialCompareAssertion(nextAssertion)) {
-      throw new Error(
-        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): next assertion is ${nextAssertion.type} (not supported as fallback target)`,
-      );
-    }
-  }
-}
-
 /**
  * Splits the flattened assertion list into independent assertions and chain
  * primaries. Independent assertions can run in parallel; chain primaries are
@@ -850,7 +796,13 @@ async function executeFallbackChain(
       traceData: context.traceData,
     });
 
-    if (result.pass || !assertionHasFallback || isGraderFailure(result)) {
+    if (
+      result.pass ||
+      !assertionHasFallback ||
+      isGraderFailure(result) ||
+      isAssertionExecutionFailure(result) ||
+      isRedteamGuardrailFailure(result)
+    ) {
       for (const earlier of intermediateResults) {
         sumTokensInto(result, earlier.tokensUsed);
       }

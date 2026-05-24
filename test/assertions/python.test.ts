@@ -562,6 +562,7 @@ describe('Python file references', { timeout: 15000 }, () => {
       pass: false,
       reason: 'The Python script `call_api` function must return a dict with an `output`',
       score: 0,
+      metadata: { assertionError: true },
     });
   });
 

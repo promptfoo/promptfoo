@@ -87,7 +87,7 @@ The chain executes until:
 
 - Failed primaries that triggered the fallback **remain visible** in `componentResults` and named metrics. They are not silently dropped, so the eval UI/JSON shows exactly what was tried.
 - Token counts from every assertion that actually executed (including failed primaries) are summed into the test's aggregate `tokensUsed`, so cost telemetry stays accurate.
-- Assertion errors and model-grader failures are not eligible for fallback: they still surface as errors or failed checks rather than allowing a cheaper fallback to hide a broken validation path.
+- Assertion errors, redteam guardrail failures, and model-grader failures are not eligible for fallback: they still surface as errors or failed checks rather than allowing a cheaper fallback to hide a broken validation path.
 
 ### Independent vs. Fallback Assertions
 
@@ -137,6 +137,15 @@ assert:
     fallback: next
   - type: select-best  # Cannot be fallback target
     value: "..."
+
+# Error: redteam guardrail fallback source
+assert:
+  - type: guardrails
+    config:
+      purpose: redteam
+    fallback: next      # Redteam guardrails fail closed
+  - type: contains
+    value: 'safe'
 ```
 
 ## Running the Example

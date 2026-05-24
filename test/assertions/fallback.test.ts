@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../src/assertions';
+import { runPython } from '../../src/python/pythonUtils';
 
 import type { Assertion, AssertionOrSet, AtomicTestCase, ProviderResponse } from '../../src/types';
 
@@ -302,6 +303,27 @@ describe('Assertion Fallback Mechanism', () => {
         });
       }).rejects.toThrow('select-best assertions cannot be fallback chain sources');
     });
+
+    it('should throw error if redteam guardrails start a fallback chain', async () => {
+      const assertions: Assertion[] = [
+        {
+          type: 'guardrails',
+          config: { purpose: 'redteam' },
+          fallback: 'next',
+        },
+        {
+          type: 'contains',
+          value: 'test',
+        },
+      ];
+
+      await expect(async () => {
+        await runAssertions({
+          test: createTestCase(assertions),
+          providerResponse: mockProviderResponse,
+        });
+      }).rejects.toThrow('redteam guardrail assertions cannot be fallback chain sources');
+    });
   });
 
   describe('Score Calculation', () => {
@@ -509,6 +531,51 @@ describe('Assertion Fallback Mechanism', () => {
       expect(result.reason).toBe('grader unavailable');
       expect(result.componentResults).toHaveLength(1);
       expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+    });
+
+    it('does not fall through a JavaScript execution error', async () => {
+      const assertions: Assertion[] = [
+        {
+          type: 'javascript',
+          value: () => {
+            throw new Error('boom');
+          },
+          fallback: 'next',
+        },
+        { type: 'contains', value: 'test' },
+      ];
+
+      const result = await runAssertions({
+        test: createTestCase(assertions),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Custom function threw error: boom');
+      expect(result.componentResults).toHaveLength(1);
+      expect(result.componentResults?.[0].metadata?.assertionError).toBe(true);
+    });
+
+    it('does not fall through a file-backed assertion execution error', async () => {
+      vi.mocked(runPython).mockRejectedValueOnce(new Error('Python exploded'));
+      const assertions: Assertion[] = [
+        {
+          type: 'contains',
+          value: 'file://bad.py',
+          fallback: 'next',
+        },
+        { type: 'contains', value: 'test' },
+      ];
+
+      const result = await runAssertions({
+        test: createTestCase(assertions),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Python exploded');
+      expect(result.componentResults).toHaveLength(1);
+      expect(result.componentResults?.[0].metadata?.assertionError).toBe(true);
     });
   });
 

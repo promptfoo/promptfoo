@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import {
   type Assertion,
+  type AssertionOrSet,
   AssertionOrSetSchema,
   type AssertionSet,
   type TestCase,
 } from '../types/index';
+import { validateFallbackChains } from './fallbackChains';
 
 export class AssertValidationError extends Error {
   constructor(message: string) {
@@ -71,6 +73,14 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
   return result.data;
 }
 
+function validateFallbackChainsForConfig(assertions: AssertionOrSet[], context: string): void {
+  try {
+    validateFallbackChains(assertions, context);
+  } catch (error) {
+    throw new AssertValidationError((error as Error).message);
+  }
+}
+
 // Maximum number of assertions per test case to prevent DoS
 const MAX_ASSERTIONS_PER_TEST = 10000;
 
@@ -84,6 +94,8 @@ const MAX_ASSERTIONS_PER_TEST = 10000;
  */
 
 export function validateAssertions(tests: TestCase[], defaultTest?: Partial<TestCase>): void {
+  const parsedDefaultAssertions: AssertionOrSet[] = [];
+
   // Validate defaultTest assertions
   if (defaultTest?.assert) {
     if (!Array.isArray(defaultTest.assert)) {
@@ -95,7 +107,9 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
       );
     }
     for (let i = 0; i < defaultTest.assert.length; i++) {
-      parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`);
+      parsedDefaultAssertions.push(
+        parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`),
+      );
     }
   }
 
@@ -107,7 +121,8 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
   // Validate test case assertions
   for (let testIdx = 0; testIdx < tests.length; testIdx++) {
     const test = tests[testIdx];
-    if (test.assert) {
+    const parsedAssertions: AssertionOrSet[] = [];
+    if (test.assert !== undefined) {
       if (!Array.isArray(test.assert)) {
         throw new AssertValidationError(`tests[${testIdx}].assert must be an array`);
       }
@@ -117,8 +132,24 @@ export function validateAssertions(tests: TestCase[], defaultTest?: Partial<Test
         );
       }
       for (let i = 0; i < test.assert.length; i++) {
-        parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`);
+        parsedAssertions.push(parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`));
       }
     }
+
+    const includeDefaultAssertions = test.options?.disableDefaultAsserts !== true;
+    const effectiveAssertions = includeDefaultAssertions
+      ? [...parsedDefaultAssertions, ...parsedAssertions]
+      : parsedAssertions;
+    if (effectiveAssertions.length > 0) {
+      const fallbackPath =
+        includeDefaultAssertions && parsedDefaultAssertions.length > 0
+          ? `tests[${testIdx}].mergedAssert`
+          : `tests[${testIdx}].assert`;
+      validateFallbackChainsForConfig(effectiveAssertions, fallbackPath);
+    }
+  }
+
+  if (tests.length === 0 && parsedDefaultAssertions.length > 0) {
+    validateFallbackChainsForConfig(parsedDefaultAssertions, 'defaultTest.assert');
   }
 }
