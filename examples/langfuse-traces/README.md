@@ -38,6 +38,8 @@ npx promptfoo@latest eval
 | `name`          | Filter by trace name                   | `name=chat-completion`     |
 | `fromTimestamp` | Start timestamp (ISO 8601)             | `fromTimestamp=2024-01-01` |
 | `toTimestamp`   | End timestamp (ISO 8601)               | `toTimestamp=2024-01-31`   |
+| `version`       | Filter by trace version                | `version=1.0`              |
+| `release`       | Filter by release                      | `release=v2.0.0`           |
 
 ## Learn More
 

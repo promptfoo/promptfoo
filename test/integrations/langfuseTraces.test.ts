@@ -453,6 +453,87 @@ describe('langfuseTraces', () => {
       expect(tests[0].providerOutput).toBe('Hi there!');
     });
 
+    it('should extract content from top-level chat message arrays', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-top-level-messages',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: [
+              { role: 'system', content: 'You are concise.' },
+              { role: 'user', content: 'Summarize the release notes' },
+            ],
+            output: 'Done',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Summarize the release notes');
+      expect(tests[0].vars?.__langfuse_input).toEqual([
+        { role: 'system', content: 'You are concise.' },
+        { role: 'user', content: 'Summarize the release notes' },
+      ]);
+    });
+
+    it('should extract OpenAI input_text blocks from message content', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-openai-input-blocks',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: {
+              messages: [
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'input_text', text: 'Describe this dashboard' },
+                    { type: 'input_image', image_url: 'https://example.com/dashboard.png' },
+                  ],
+                },
+              ],
+            },
+            output: 'Dashboard summary',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.input).toBe('Describe this dashboard');
+    });
+
+    it('should extract Responses API output_text blocks from output arrays', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-responses-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Summarize this',
+            output: {
+              output: [
+                { type: 'reasoning', summary: [] },
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [
+                    { type: 'output_text', text: 'Final answer' },
+                    { type: 'output_text', text: 'Additional detail' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toBe('Final answer\nAdditional detail');
+      expect(tests[0].providerOutput).toBe('Final answer\nAdditional detail');
+    });
+
     it('should handle traces with Anthropic format', async () => {
       mockTraceList.mockResolvedValueOnce({
         data: [

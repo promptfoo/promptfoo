@@ -81,6 +81,8 @@ type MessageContent = {
   content?: unknown;
 };
 
+const TEXT_BLOCK_TYPES = new Set(['text', 'input_text', 'output_text']);
+
 let langfuseInstance: LangfuseTracesClient | undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,22 +99,83 @@ function setVar(vars: Record<string, VarValue>, key: string, value: unknown): vo
   }
 }
 
-function extractTextBlocks(content: unknown[]): unknown {
-  const textValues = content
-    .filter(
-      (item): item is { text: unknown } => isRecord(item) && item.type === 'text' && 'text' in item,
-    )
-    .map((item) => item.text);
+function isTextBlock(value: unknown): value is { text: unknown } {
+  return (
+    isRecord(value) &&
+    typeof value.type === 'string' &&
+    TEXT_BLOCK_TYPES.has(value.type) &&
+    'text' in value
+  );
+}
 
-  if (textValues.length === 0) {
-    return JSON.stringify(content);
-  }
+function getTextBlockValues(content: unknown[]): unknown[] {
+  return content.filter(isTextBlock).map((item) => item.text);
+}
+
+function joinTextValues(textValues: unknown[]): unknown {
   if (textValues.length === 1) {
     return textValues[0];
   }
   return textValues
     .map((text) => (typeof text === 'string' ? text : JSON.stringify(text)))
     .join('\n');
+}
+
+function extractTextBlocksIfPresent(content: unknown[]): unknown | undefined {
+  const textValues = getTextBlockValues(content);
+  return textValues.length > 0 ? joinTextValues(textValues) : undefined;
+}
+
+function extractTextBlocks(content: unknown[]): unknown {
+  return extractTextBlocksIfPresent(content) ?? JSON.stringify(content);
+}
+
+function extractMessageContent(messagesInput: unknown[]): unknown | undefined {
+  const messages = messagesInput.filter(isRecord) as MessageContent[];
+  if (messages.length === 0) {
+    return undefined;
+  }
+
+  // Get the last user message, or the last message if no user message.
+  const userMessages = messages.filter((message) => message.role === 'user');
+  const lastMessage =
+    userMessages.length > 0 ? userMessages[userMessages.length - 1] : messages[messages.length - 1];
+
+  if (!lastMessage || !('content' in lastMessage)) {
+    return undefined;
+  }
+
+  const content = lastMessage.content;
+  if (Array.isArray(content)) {
+    return extractTextBlocks(content);
+  }
+  return content;
+}
+
+function extractOutputItemText(item: unknown): unknown | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  if (isTextBlock(item)) {
+    return item.text;
+  }
+
+  if (Array.isArray(item.content)) {
+    return extractTextBlocks(item.content);
+  }
+
+  if ((item.type === 'message' || item.role === 'assistant') && item.content !== undefined) {
+    return item.content;
+  }
+
+  return undefined;
+}
+
+function extractOutputItemsText(outputItems: unknown[]): unknown | undefined {
+  const textValues = outputItems.map(extractOutputItemText).filter((value) => value !== undefined);
+
+  return textValues.length > 0 ? joinTextValues(textValues) : undefined;
 }
 
 function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
@@ -230,6 +293,10 @@ function extractInputText(input: unknown): unknown {
     return input;
   }
 
+  if (Array.isArray(input)) {
+    return extractMessageContent(input) ?? extractTextBlocksIfPresent(input) ?? input;
+  }
+
   if (typeof input !== 'object' || input === null) {
     return input;
   }
@@ -238,19 +305,8 @@ function extractInputText(input: unknown): unknown {
 
   // OpenAI chat format: { messages: [{role: 'user', content: '...'}] }
   if (Array.isArray(obj.messages) && obj.messages.length > 0) {
-    const messages = obj.messages.filter(isRecord) as MessageContent[];
-    // Get the last user message, or the last message if no user message
-    const userMessages = messages.filter((message) => message.role === 'user');
-    const lastMessage =
-      userMessages.length > 0
-        ? userMessages[userMessages.length - 1]
-        : messages[messages.length - 1];
-    if (lastMessage && 'content' in lastMessage) {
-      const content = lastMessage.content;
-      // Handle Anthropic-style content array
-      if (Array.isArray(content)) {
-        return extractTextBlocks(content);
-      }
+    const content = extractMessageContent(obj.messages);
+    if (content !== undefined) {
       return content;
     }
   }
@@ -267,6 +323,10 @@ function extractOutputText(output: unknown): unknown {
     return output;
   }
 
+  if (Array.isArray(output)) {
+    return extractOutputItemsText(output) ?? output;
+  }
+
   if (typeof output !== 'object' || output === null) {
     return output;
   }
@@ -278,7 +338,9 @@ function extractOutputText(output: unknown): unknown {
     const choice = obj.choices[0];
     if (isRecord(choice)) {
       if (isRecord(choice.message) && choice.message.content !== undefined) {
-        return choice.message.content;
+        return Array.isArray(choice.message.content)
+          ? extractTextBlocks(choice.message.content)
+          : choice.message.content;
       }
       if (choice.text !== undefined) {
         return choice.text;
@@ -295,7 +357,22 @@ function extractOutputText(output: unknown): unknown {
   }
 
   // Simple key patterns: { response, output, result, completion, text }
-  return obj.response ?? obj.output ?? obj.result ?? obj.completion ?? obj.text ?? output;
+  if (Array.isArray(obj.output)) {
+    const outputText = extractOutputItemsText(obj.output);
+    if (outputText !== undefined) {
+      return outputText;
+    }
+  }
+
+  return (
+    obj.response ??
+    obj.output_text ??
+    obj.output ??
+    obj.result ??
+    obj.completion ??
+    obj.text ??
+    output
+  );
 }
 
 /**

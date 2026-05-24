@@ -352,13 +352,14 @@ Each test case links back to the original trace in Langfuse via the `__langfuse_
 
 The `input` and `output` variables are automatically extracted from these common LLM formats:
 
-| Format                | Input extraction                                       | Output extraction                                             |
-| --------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
-| **String**            | Used directly                                          | Used directly                                                 |
-| **OpenAI chat**       | Last user message content from `messages[]`            | `choices[0].message.content`                                  |
-| **OpenAI completion** | -                                                      | `choices[0].text`                                             |
-| **Anthropic**         | Joined text content blocks                             | Joined `content[].text` blocks or `content` string            |
-| **Simple objects**    | `query`, `prompt`, `message`, `input`, or `text` field | `response`, `output`, `result`, `completion`, or `text` field |
+| Format                | Input extraction                                        | Output extraction                                             |
+| --------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| **String**            | Used directly                                           | Used directly                                                 |
+| **OpenAI chat**       | Last user message from `messages[]` or top-level arrays | `choices[0].message.content`                                  |
+| **OpenAI Responses**  | Joined `input_text` message blocks                      | Joined `output[].content[].output_text` blocks                |
+| **OpenAI completion** | -                                                       | `choices[0].text`                                             |
+| **Anthropic**         | Joined text content blocks                              | Joined `content[].text` blocks or `content` string            |
+| **Simple objects**    | `query`, `prompt`, `message`, `input`, or `text` field  | `response`, `output`, `result`, `completion`, or `text` field |
 
 For formats not listed above, the full object is used. Access raw data via `__langfuse_input` and `__langfuse_output`.
 

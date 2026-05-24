@@ -36,5 +36,5 @@ defaultTest:
 
 # Load traces from Langfuse
 # URL format: langfuse://traces?<params>
-# Supported params: limit, userId, sessionId, tags, name, fromTimestamp, toTimestamp
+# Supported params: limit, userId, sessionId, tags, name, fromTimestamp, toTimestamp, version, release
 tests: langfuse://traces?limit=10
