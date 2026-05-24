@@ -231,7 +231,7 @@ template: "{{ variable }}   "
       expect(result[0].raw).toBe(JSON.stringify(parsedYaml));
     });
 
-    it('should handle empty string value in YAML', () => {
+    it('should preserve empty string values when parsing YAML', () => {
       const filePath = 'empty-value.yaml';
       const fileContent = dedent`
         prompts:
@@ -242,10 +242,12 @@ template: "{{ variable }}   "
 
       const result = processYamlFile(filePath, {});
 
-      expect(result[0].config.prompts[0].key).toBe('');
+      expect(result).toHaveLength(1);
+      const parsed = JSON.parse(result[0].raw as string);
+      expect(parsed).toEqual({ prompts: [{ key: '' }] });
     });
 
-    it('should handle null value in YAML', () => {
+    it('should preserve null values when parsing YAML', () => {
       const filePath = 'null-value.yaml';
       const fileContent = dedent`
         prompts:
@@ -258,8 +260,12 @@ template: "{{ variable }}   "
 
       const result = processYamlFile(filePath, {});
 
-      expect(result[0].config.prompts[0].key).toBeNull();
-      expect(result[0].config.options.temperature).toBeNull();
+      expect(result).toHaveLength(1);
+      const parsed = JSON.parse(result[0].raw as string);
+      expect(parsed).toEqual({
+        prompts: [{ key: null }],
+        options: { temperature: null },
+      });
     });
 
     it('should handle empty YAML document', () => {
@@ -271,8 +277,9 @@ template: "{{ variable }}   "
       const result = processYamlFile(filePath, {});
 
       expect(result).toHaveLength(1);
-      expect(result[0].config).toBeNull();
-      expect(result[0].raw).toBe(JSON.stringify(null));
+      // Empty YAML parses to undefined; maybeLoadConfigFromExternalFile passes it
+      // through; JSON.stringify(undefined) is the literal string "undefined".
+      expect(result[0].raw).toBe(JSON.stringify(undefined));
     });
   });
 });
