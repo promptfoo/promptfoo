@@ -118,7 +118,6 @@ describe('Scanner fork PR auth rejection', () => {
     expect(displayScanResults).toHaveBeenCalledWith(
       {
         success: true,
-        commentsPosted: true,
         comments: [],
         skipReason: SKIP_MESSAGE,
       },
@@ -156,10 +155,10 @@ describe('Scanner fork PR auth rejection', () => {
     const parsed = JSON.parse(stdout);
     expect(parsed).toMatchObject({
       success: true,
-      commentsPosted: true,
       comments: [],
       skipReason: SKIP_MESSAGE,
     });
+    expect(parsed).not.toHaveProperty('commentsPosted');
 
     await cliState.postActionCallback?.();
     expect(process.exitCode).toBe(0);

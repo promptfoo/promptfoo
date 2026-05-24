@@ -557,7 +557,6 @@ describe('code-scan-action main', () => {
               Buffer.from(
                 JSON.stringify({
                   success: true,
-                  commentsPosted: true,
                   comments: [],
                   skipReason: skipMessage,
                 }),
@@ -647,7 +646,6 @@ describe('code-scan-action main', () => {
               Buffer.from(
                 JSON.stringify({
                   success: true,
-                  commentsPosted: true,
                   comments: [],
                   skipReason: 'Fork PR scanning requires maintainer approval.',
                 }),
@@ -699,35 +697,6 @@ describe('code-scan-action main', () => {
         expect.anything(),
         expect.anything(),
       );
-    });
-
-    it('does not write SARIF when fork PR scanning awaits maintainer approval', async () => {
-      mocks.exec.exec.mockImplementation(
-        async (
-          command: string,
-          _args: string[] | undefined,
-          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
-        ) => {
-          if (command === 'promptfoo' && options?.listeners?.stdout) {
-            options.listeners.stdout(Buffer.from('Fork PR scanning not authorized'));
-            return 1;
-          }
-          return 0;
-        },
-      );
-
-      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
-
-      await vi.waitFor(() => {
-        expect(mocks.exec.exec).toHaveBeenCalledWith(
-          'promptfoo',
-          expect.anything(),
-          expect.anything(),
-        );
-      });
-
-      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
-      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
     it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {

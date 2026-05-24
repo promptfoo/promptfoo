@@ -315,12 +315,6 @@ async function runPromptfooScan(
     return parseScanOutput(scanOutput);
   }
 
-  // Fork PR auth rejection is expected - server posts helpful comment to PR
-  if (scanOutput.includes('Fork PR scanning not authorized')) {
-    core.info('🔀 Fork PR detected - see PR comment for scan options');
-    return undefined;
-  }
-
   core.error(`CLI exited with code ${exitCode}`);
   core.error(`Error output: ${scanError}`);
   throw new Error(`Code scan failed with exit code ${exitCode}`);

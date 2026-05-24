@@ -333,9 +333,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (errorMessage.includes('Fork PR scanning not authorized')) {
       const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
       if (outputFormat !== CodeScanOutputFormat.TEXT) {
+        // commentsPosted is intentionally omitted — the scanner has no signal that the
+        // server actually posted the PR comment, only that authorization was rejected.
+        // Consumers should branch on skipReason instead.
         const response: ScanResponse = {
           success: true,
-          commentsPosted: true,
           comments: [],
           skipReason: msg,
         };
