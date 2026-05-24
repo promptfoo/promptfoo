@@ -279,12 +279,12 @@ npx promptfoo eval --max-concurrency 5
 
 Configure default column visibility for the web viewer. Browser preferences take priority after a viewer changes columns locally.
 
-| Property    | Type                    | Default   | Description                                                 |
-| ----------- | ----------------------- | --------- | ----------------------------------------------------------- |
-| variables   | `'visible' \| 'hidden'` | `visible` | Default visibility for all variable columns                 |
-| prompts     | `'visible' \| 'hidden'` | `visible` | Default visibility for all prompt columns                   |
-| hideColumns | `string[]`              | `[]`      | List of column names to hide by default                     |
-| showColumns | `string[]`              | `[]`      | List of column names to always show (overrides hideColumns) |
+| Property    | Type                    | Default   | Description                                                                 |
+| ----------- | ----------------------- | --------- | --------------------------------------------------------------------------- |
+| variables   | `'visible' \| 'hidden'` | `visible` | Default visibility for all variable columns                                 |
+| prompts     | `'visible' \| 'hidden'` | `visible` | Default visibility for all prompt columns                                   |
+| hideColumns | `string[]`              | `[]`      | Variable names or display column IDs to hide by default                     |
+| showColumns | `string[]`              | `[]`      | Variable names or display column IDs to always show (overrides hideColumns) |
 
 #### Example
 

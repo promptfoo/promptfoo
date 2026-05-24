@@ -36,6 +36,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
+import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -404,6 +405,48 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
   }
 }
 
+function hasFunctionValue(value: unknown, seen: WeakSet<object> = new WeakSet()): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Reflect.ownKeys(value).some((key) =>
+    hasFunctionValue((value as Record<PropertyKey, unknown>)[key], seen),
+  );
+}
+
+/**
+ * Build a dedupe key for a provider entry. Returns `undefined` when no stable
+ * key is possible (an object that holds function values JSON.stringify would
+ * silently drop, an ApiProvider instance whose identity lives on the prototype,
+ * or a value JSON.stringify refuses to serialize).
+ *
+ * Functions are keyed by reference so the same fn ref listed twice still
+ * dedupes to one entry, while distinct fns are preserved.
+ */
+function providerDedupeKey(provider: unknown): unknown {
+  if (typeof provider === 'string') {
+    return provider;
+  }
+  if (typeof provider === 'function') {
+    return provider;
+  }
+  if (isApiProvider(provider) || hasFunctionValue(provider)) {
+    return undefined;
+  }
+  try {
+    return JSON.stringify(provider);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
@@ -431,7 +474,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   }
 
   const providers: UnifiedConfig['providers'] = [];
-  const seenProviders = new Set<string>();
+  const seenProviders = new Set<unknown>();
   configs.forEach((config) => {
     invariant(
       typeof config.providers !== 'function',
@@ -444,9 +487,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
     } else if (Array.isArray(config.providers)) {
       config.providers.forEach((provider) => {
-        if (!seenProviders.has(JSON.stringify(provider))) {
+        const key = providerDedupeKey(provider);
+        if (key === undefined) {
           providers.push(provider);
-          seenProviders.add(JSON.stringify(provider));
+          return;
+        }
+        if (!seenProviders.has(key)) {
+          providers.push(provider);
+          seenProviders.add(key);
         }
       });
     }
