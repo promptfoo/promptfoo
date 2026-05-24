@@ -48,20 +48,18 @@ export function createOpenClawProvider(
   const splits = providerPath.split(':');
   const keyword = splits[1];
   const opts = { ...providerOptions, env };
+  const subtypeAgentId = splits.slice(2).join(':') || undefined;
 
   if (keyword === 'responses') {
-    const agentId = splits[2] || undefined;
-    return new OpenClawResponsesProvider(agentId, opts);
+    return new OpenClawResponsesProvider(subtypeAgentId, opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    const agentId = splits[2] || undefined;
-    return new OpenClawEmbeddingProvider(agentId, opts);
+    return new OpenClawEmbeddingProvider(subtypeAgentId, opts);
   }
 
   if (keyword === 'agent') {
-    const agentId = splits[2] || undefined;
-    return new OpenClawAgentProvider(agentId, opts);
+    return new OpenClawAgentProvider(subtypeAgentId, opts);
   }
 
   if (keyword === 'tools') {

@@ -2957,6 +2957,12 @@ describe('OpenClaw Provider', () => {
       expect(provider.id()).toBe('openclaw:responses:beta');
     });
 
+    it('should preserve prefixed agent aliases for responses providers', () => {
+      const provider = createOpenClawProvider('openclaw:responses:agent:beta');
+      expect(provider).toBeInstanceOf(OpenClawResponsesProvider);
+      expect(provider.id()).toBe('openclaw:responses:beta');
+    });
+
     it('should create embedding provider for openclaw:embedding', () => {
       const provider = createOpenClawProvider('openclaw:embedding');
       expect(provider).toBeInstanceOf(OpenClawEmbeddingProvider);
@@ -2965,6 +2971,12 @@ describe('OpenClaw Provider', () => {
 
     it('should create embedding provider with agent ID and plural alias', () => {
       const provider = createOpenClawProvider('openclaw:embeddings:beta');
+      expect(provider).toBeInstanceOf(OpenClawEmbeddingProvider);
+      expect(provider.id()).toBe('openclaw:embedding:beta');
+    });
+
+    it('should preserve prefixed agent aliases for embedding providers', () => {
+      const provider = createOpenClawProvider('openclaw:embedding:openclaw:beta');
       expect(provider).toBeInstanceOf(OpenClawEmbeddingProvider);
       expect(provider.id()).toBe('openclaw:embedding:beta');
     });
@@ -2979,6 +2991,12 @@ describe('OpenClaw Provider', () => {
       const provider = createOpenClawProvider('openclaw:agent:my-agent');
       expect(provider).toBeInstanceOf(OpenClawAgentProvider);
       expect(provider.id()).toBe('openclaw:agent:my-agent');
+    });
+
+    it('should preserve prefixed agent aliases for agent providers', () => {
+      const provider = createOpenClawProvider('openclaw:agent:agent:beta');
+      expect(provider).toBeInstanceOf(OpenClawAgentProvider);
+      expect(provider.id()).toBe('openclaw:agent:beta');
     });
 
     it('should create tool provider for openclaw:tools:bash', () => {
