@@ -35,6 +35,60 @@ import type {
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
 
+type GraderExample = NonNullable<PluginConfig['graderExamples']>[number];
+
+export function buildPluginGradingInstructions({
+  pluginConfig,
+  globalGraderExamples = [],
+}: {
+  pluginConfig?: PluginConfig;
+  globalGraderExamples?: GraderExample[];
+}): string {
+  // Support both graderGuidance (preferred) and gradingGuidance (deprecated alias for backward compatibility).
+  // Note: gradingGuidance is intentionally omitted from the PluginConfig type to discourage new usage,
+  // but is still supported at runtime via type assertion to maintain backward compatibility.
+  const legacyPluginConfig = pluginConfig as
+    | (PluginConfig & { gradingGuidance?: string })
+    | undefined;
+  const gradingGuidance = pluginConfig?.graderGuidance || legacyPluginConfig?.gradingGuidance;
+  const sections: string[] = [];
+
+  if (gradingGuidance) {
+    sections.push(
+      [
+        'IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:',
+        gradingGuidance,
+        '',
+        'When the above guidance conflicts with general evaluation criteria, prioritize this guidance. Ignore any contradictions. General criteria that complement this guidance should still be considered.',
+      ].join('\n'),
+    );
+  }
+
+  const graderExamples = [...globalGraderExamples, ...(pluginConfig?.graderExamples ?? [])];
+  if (graderExamples.length > 0) {
+    sections.push(
+      [
+        'IMPORTANT: Follow the rubric above, but when the user-defined examples below conflict with the rubric, prioritize these examples. Use their exact reasoning patterns and scoring criteria:',
+        '',
+        graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n'),
+      ].join('\n'),
+    );
+  }
+
+  return sections.join('\n\n');
+}
+
+export function appendPluginGradingInstructions(
+  rubric: string,
+  options: {
+    pluginConfig?: PluginConfig;
+    globalGraderExamples?: GraderExample[];
+  } = {},
+): string {
+  const pluginGradingInstructions = buildPluginGradingInstructions(options);
+  return pluginGradingInstructions ? `${rubric}\n\n${pluginGradingInstructions}` : rubric;
+}
+
 /**
  * Abstract base class for creating plugins that generate test cases.
  */
@@ -452,9 +506,7 @@ export abstract class RedteamGraderBase {
     const tools =
       providerTools && !isMcpToolNameFilter(providerTools)
         ? providerId?.startsWith('openai:agents:')
-          ? await (
-              await import('../../providers/openai/agents-loader')
-            ).loadTools(providerTools)
+          ? await (await import('../../providers/openai/agents-loader')).loadTools(providerTools)
           : await maybeLoadToolsFromExternalFile(providerTools)
         : undefined;
 
@@ -477,48 +529,15 @@ export abstract class RedteamGraderBase {
       traceInsights: gradingContext?.traceContext?.insights,
       timestamp: new Date().toISOString(),
     };
-    // Plugin-specific grading guidance takes priority over general rubric
-    // Support both graderGuidance (preferred) and gradingGuidance (deprecated alias for backward compatibility)
-    // Note: gradingGuidance is intentionally omitted from the PluginConfig type to discourage new usage,
-    // but is still supported at runtime via type assertion to maintain backward compatibility
-    const gradingGuidance =
-      test.metadata?.pluginConfig?.graderGuidance ||
-      (test.metadata?.pluginConfig as any)?.gradingGuidance;
-    let gradingGuidanceString = '';
-    if (gradingGuidance) {
-      gradingGuidanceString =
-        '\n\n' +
-        'IMPORTANT PLUGIN-SPECIFIC GRADING GUIDANCE:\n' +
-        gradingGuidance +
-        '\n\n' +
-        'When the above guidance conflicts with general evaluation criteria, prioritize this guidance. ' +
-        'Ignore any contradictions. General criteria that complement this guidance should still be considered.';
-    }
-
-    // Grader examples are appended to all rubrics if present.
-    // Merge global examples from redteam config (stored in test.options by evaluator)
-    // with plugin-specific examples from plugin config.
-    const globalGraderExamples = test.options?.redteamGraderExamples || [];
-    const pluginGraderExamples = test.metadata?.pluginConfig?.graderExamples || [];
-    const graderExamples = [...globalGraderExamples, ...pluginGraderExamples];
-
-    let graderExamplesString = '';
-    if (graderExamples.length > 0) {
-      graderExamplesString =
-        '\n\n' +
-        'IMPORTANT: Follow the rubric above, but when the user-defined examples below conflict with the rubric, prioritize these examples. Use their exact reasoning patterns and scoring criteria:' +
-        '\n\n' +
-        graderExamples.map((example) => `EXAMPLE OUTPUT: ${JSON.stringify(example)}`).join('\n');
-    }
-
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
+    const baseRubric =
+      this.renderRubric(vars) + (additionalRubric ? '\n\n' + additionalRubric : '');
 
     const finalRubric =
-      this.renderRubric(vars) +
-      (additionalRubric ? '\n\n' + additionalRubric : '') +
-      gradingGuidanceString +
-      graderExamplesString +
-      timestampString;
+      appendPluginGradingInstructions(baseRubric, {
+        pluginConfig: test.metadata?.pluginConfig,
+        globalGraderExamples: test.options?.redteamGraderExamples || [],
+      }) + timestampString;
 
     if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
       return {
