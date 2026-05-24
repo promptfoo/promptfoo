@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -642,7 +643,6 @@ describe('readStandaloneTestsFile', () => {
 
   it('should read real XLSX file from examples (integration test)', async () => {
     // Integration test using the actual Excel file from examples
-    const path = require('path');
     const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
 
     // Only run if read-excel-file is actually installed (in dev environment)
