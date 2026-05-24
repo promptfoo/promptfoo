@@ -33,7 +33,7 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 | 3        | Azure OpenAI     | Your deployment          | `AZURE_OPENAI_API_KEY` or `AZURE_API_KEY` + `AZURE_OPENAI_DEPLOYMENT_NAME` or `AZURE_DEPLOYMENT_NAME` |
 | 4        | Google AI Studio | `gemini-3.1-pro-preview` | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`                                                 |
 | 5        | xAI              | `grok-4.3`               | `XAI_API_KEY`                                                                                         |
-| 6        | DeepSeek         | `deepseek-chat`          | `DEEPSEEK_API_KEY`                                                                                    |
+| 6        | DeepSeek         | `deepseek-v4-flash`      | `DEEPSEEK_API_KEY`                                                                                    |
 | 7        | Mistral          | `mistral-large-latest`   | `MISTRAL_API_KEY`                                                                                     |
 | 8        | AWS Bedrock      | `amazon.nova-pro-v1:0`   | `AWS_BEARER_TOKEN_BEDROCK`                                                                            |
 | 9        | Codex SDK        | `openai:codex-sdk`       | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set       |

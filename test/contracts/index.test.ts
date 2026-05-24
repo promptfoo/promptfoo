@@ -37,10 +37,14 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
-    it('parses a known env key', () => {
-      const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
+    it('parses known provider env keys', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        DEEPSEEK_API_KEY: 'deepseek-known',
+        OPENAI_API_KEY: 'sk-known',
+      });
       expect(parsed.success).toBe(true);
       if (parsed.success) {
+        expect(parsed.data.DEEPSEEK_API_KEY).toBe('deepseek-known');
         expect(parsed.data.OPENAI_API_KEY).toBe('sk-known');
       }
     });

@@ -275,6 +275,9 @@
         "DATABRICKS_WORKSPACE_URL": {
           "type": "string"
         },
+        "DEEPSEEK_API_KEY": {
+          "type": "string"
+        },
         "DOCKER_MODEL_RUNNER_BASE_URL": {
           "type": "string"
         },
@@ -1713,6 +1716,9 @@
                       "type": "string"
                     },
                     "DATABRICKS_WORKSPACE_URL": {
+                      "type": "string"
+                    },
+                    "DEEPSEEK_API_KEY": {
                       "type": "string"
                     },
                     "DOCKER_MODEL_RUNNER_BASE_URL": {

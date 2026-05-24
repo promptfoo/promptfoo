@@ -3,9 +3,9 @@ import { DeepSeekProvider } from '../deepseek';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders } from '../../types/index';
 
-// Default model for DeepSeek grading - deepseek-chat is the most capable general model
-// Cost-effective with prompt caching support
-export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
+// Default model for DeepSeek grading: current primary, cost-effective chat model
+// with prompt caching support.
+export const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
 export function getDeepSeekProviders(
   env?: EnvOverrides,

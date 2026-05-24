@@ -37,6 +37,7 @@ export const ProviderEnvOverridesSchema = z.object({
   COHERE_CLIENT_NAME: z.string().optional(),
   DATABRICKS_TOKEN: z.string().optional(),
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
+  DEEPSEEK_API_KEY: z.string().optional(),
   DOCKER_MODEL_RUNNER_BASE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_API_KEY: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),

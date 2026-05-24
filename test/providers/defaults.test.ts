@@ -564,7 +564,7 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe('deepseek:deepseek-chat');
+      expect(providers.gradingProvider.id()).toBe('deepseek:deepseek-v4-flash');
     });
 
     it('should pass DeepSeek credentials supplied through env overrides to the provider', async () => {
@@ -579,7 +579,7 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).not.toBe('deepseek:deepseek-chat');
+      expect(providers.gradingProvider.id()).not.toBe('deepseek:deepseek-v4-flash');
     });
   });
 
@@ -1026,7 +1026,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // Completion should use DeepSeek (higher priority than Vertex)
-      expect(providers.gradingProvider.id()).toBe('deepseek:deepseek-chat');
+      expect(providers.gradingProvider.id()).toBe('deepseek:deepseek-v4-flash');
 
       // Embedding should use Vertex (Google ADC is available)
       expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);

@@ -18,13 +18,13 @@ Basic configuration example:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-chat
+  - id: deepseek:deepseek-v4-flash
     config:
       temperature: 0.7
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
 
-  - id: deepseek:deepseek-reasoner # Legacy alias for V4 Flash thinking mode
+  - id: deepseek:deepseek-v4-pro
     config:
       max_tokens: 8000
 ```
