@@ -576,9 +576,12 @@ export abstract class RedteamGraderBase {
       // Spread all gradingContext properties to make them accessible in rubrics
       ...(gradingContext || {}),
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
-      // This is done after gradingContext so renderedValue properties take precedence
+      // This is done after gradingContext so renderedValue properties take precedence,
+      // except for the canonical evaluated output and extracted trace properties below.
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
       value: renderedValue,
+      // Rubrics must always receive the actual target response being graded.
+      output: llmOutput,
       // Extract specific trace properties for convenience (these override any conflicts)
       traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,

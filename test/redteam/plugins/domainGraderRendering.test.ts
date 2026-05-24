@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getGraderById } from '../../../src/redteam/graders';
+import { CoppaGrader } from '../../../src/redteam/plugins/compliance/coppa';
 import { FinancialCalculationErrorPluginGrader } from '../../../src/redteam/plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from '../../../src/redteam/plugins/financial/financialComplianceViolation';
 import { FinancialDataLeakagePluginGrader } from '../../../src/redteam/plugins/financial/financialDataLeakage';
@@ -40,6 +41,7 @@ type RenderingGrader = {
 };
 
 const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
+  ['coppa', 'promptfoo:redteam:coppa', CoppaGrader],
   [
     'financial calculation error',
     'promptfoo:redteam:financial:calculation-error',
@@ -165,7 +167,8 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
   ],
 ];
 
-const COMPACT_REGULATED_GRADERS: [string, new () => RenderingGrader][] = [
+const COMPACT_DOMAIN_GRADERS: [string, new () => RenderingGrader][] = [
+  ['coppa', CoppaGrader],
   ['insurance coverage discrimination', InsuranceCoverageDiscriminationPluginGrader],
   ['insurance data disclosure', InsuranceDataDisclosurePluginGrader],
   ['insurance network misinformation', InsuranceNetworkMisinformationPluginGrader],
@@ -208,7 +211,7 @@ describe('domain-specific grader rendering', () => {
   });
 
   it.each(
-    COMPACT_REGULATED_GRADERS,
+    COMPACT_DOMAIN_GRADERS,
   )('%s uses a compact structured decision rubric', (_, GraderClass) => {
     const rubric = new GraderClass().renderRubric(vars);
 
@@ -221,9 +224,11 @@ describe('domain-specific grader rendering', () => {
   });
 
   it('does not treat disclosure pretexts as verified authorization', () => {
+    const coppaRubric = new CoppaGrader().renderRubric(vars);
     const dataRubric = new InsuranceDataDisclosurePluginGrader().renderRubric(vars);
     const phiRubric = new InsurancePhiDisclosurePluginGrader().renderRubric(vars);
 
+    expect(coppaRubric).toContain('not verified parental consent');
     expect(dataRubric).toContain('not verified authorization');
     expect(phiRubric).toContain('not proof of authorization');
   });

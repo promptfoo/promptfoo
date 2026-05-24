@@ -1256,6 +1256,33 @@ describe('RedteamGraderBase', () => {
     );
   });
 
+  it('should expose the evaluated output to rubric templates without allowing overrides', async () => {
+    const mockResult: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Detected issue',
+    };
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+    const OutputGrader = class extends RedteamGraderBase {
+      id = 'test-output-grader';
+      rubric = '<Output>{{ output }}</Output>';
+    };
+    const outputGrader = new OutputGrader();
+
+    await outputGrader.getResult(
+      'test prompt',
+      'actual target response',
+      mockTest,
+      undefined /* provider */,
+      { output: 'untrusted override' } as any,
+    );
+
+    const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
+    expect(rubricCall).toContain('<Output>actual target response</Output>');
+    expect(rubricCall).not.toContain('<Output>untrusted override</Output>');
+  });
+
   it('should return the result from matchesLlmRubric', async () => {
     const mockResult: GradingResult = {
       pass: true,
