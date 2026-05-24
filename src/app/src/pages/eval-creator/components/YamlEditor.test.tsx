@@ -144,6 +144,24 @@ describe('YamlEditor', () => {
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });
 
+  it('saves partial top-level YAML configurations', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    await user.clear(editor);
+    await user.type(editor, 'prompts:\n  - Say hi');
+    await user.click(screen.getByRole('button', { name: /Save/ }));
+
+    expect(mockUpdateConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompts: ['Say hi'],
+      }),
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
+  });
+
   it('rejects a test-case list saved as a full YAML configuration', async () => {
     const user = userEvent.setup();
     render(<YamlEditorComponent />);

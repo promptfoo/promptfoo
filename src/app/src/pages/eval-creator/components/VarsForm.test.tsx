@@ -22,10 +22,13 @@ describe('VarsForm', () => {
 
     expect(onAddMock).toHaveBeenCalled();
 
-    expect(onAddMock).toHaveBeenLastCalledWith({
-      name: 'John Doe',
-      location: 'London',
-    });
+    expect(onAddMock).toHaveBeenLastCalledWith(
+      {
+        name: 'John Doe',
+        location: 'London',
+      },
+      'location',
+    );
   });
 
   it('should update its rendered TextFields and internal state to match new varsList and initialValues when these props change after initial render', () => {

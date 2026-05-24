@@ -4,7 +4,7 @@ import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 
 interface VarsFormProps {
-  onAdd: (vars: Record<string, string>) => void;
+  onAdd: (vars: Record<string, string>, updatedVariable?: string) => void;
   varsList: string[];
   initialValues?: Record<string, string>;
 }
@@ -48,7 +48,7 @@ const VarsForm = ({ onAdd, varsList, initialValues }: VarsFormProps) => {
                     [varName]: newValue,
                   };
                   setVars(newVars);
-                  onAdd(newVars);
+                  onAdd(newVars, varName);
                 }}
               />
             </div>

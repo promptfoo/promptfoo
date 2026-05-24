@@ -154,14 +154,26 @@ describe('TestCaseForm', () => {
   it('keeps intentional blank inputs when creating another test case', async () => {
     renderComponent();
 
+    act(() => {
+      mockVarsForm.mock.lastCall?.[0].onAdd({ var1: '', var2: '' }, 'var1');
+    });
     await userEvent.click(screen.getByRole('button', { name: 'Add and create another' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Test Case' }));
 
     expect(onAdd).toHaveBeenNthCalledWith(
+      1,
+      {
+        description: '',
+        vars: { var1: '' },
+        assert: [],
+      },
+      false,
+    );
+    expect(onAdd).toHaveBeenNthCalledWith(
       2,
       {
         description: '',
-        vars: { var1: '', var2: '' },
+        vars: {},
         assert: [],
       },
       true,
@@ -384,9 +396,15 @@ describe('TestCaseForm', () => {
       assertsFormProps.onAdd(testAsserts);
     });
 
-    await act(async () => {
-      onCancel();
-    });
+    rerender(
+      <TestCaseForm
+        open={false}
+        onAdd={onAdd}
+        varsList={['var1', 'var2']}
+        onCancel={onCancel}
+        initialValues={initialValues}
+      />,
+    );
 
     rerender(
       <TestCaseForm
@@ -405,7 +423,7 @@ describe('TestCaseForm', () => {
     expect(lastAssertsFormCall[0].initialValues).toEqual(initialValues.assert);
   });
 
-  it('stores displayed blank variables as intentional empty inputs when submitted untouched', async () => {
+  it('does not store displayed blank variables when submitted untouched', async () => {
     renderComponent();
 
     const addButton = screen.getByRole('button', { name: 'Add Test Case' });
@@ -416,7 +434,7 @@ describe('TestCaseForm', () => {
     expect(onAdd).toHaveBeenCalledWith(
       {
         description: '',
-        vars: { var1: '', var2: '' },
+        vars: {},
         assert: [],
       },
       true,

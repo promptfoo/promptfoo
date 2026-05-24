@@ -225,7 +225,9 @@ function getRequiredVariablesForRunnablePrompts(
   prompts: NormalizedPrompt[],
 ): string[] {
   return extractVariablesFromPrompts(
-    getRunnablePromptsForTest(testCase, defaultTest, providers, prompts).map((prompt) => prompt.raw),
+    getRunnablePromptsForTest(testCase, defaultTest, providers, prompts).map(
+      (prompt) => prompt.raw,
+    ),
   );
 }
 
@@ -674,6 +676,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     ),
   );
 
+  const defaultVars = getVars(defaultTest);
   const assertionVariableIssues = Array.isArray(config.tests)
     ? config.tests.flatMap((testCase, index) => {
         if (!isRecord(testCase)) {

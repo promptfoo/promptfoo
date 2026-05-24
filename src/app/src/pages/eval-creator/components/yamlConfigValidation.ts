@@ -16,6 +16,16 @@ const TEST_CASE_FIELDS = new Set([
   'threshold',
   'metadata',
 ]);
+const TEST_CASE_ONLY_FIELDS = new Set([
+  'vars',
+  'provider',
+  'providerOutput',
+  'assert',
+  'assertScoringFunction',
+  'threshold',
+  'metadata',
+  'options',
+]);
 const FULL_CONFIG_ONLY_FIELDS = new Set([
   'targets',
   'tests',
@@ -40,10 +50,12 @@ export function isFullYamlConfig(value: unknown): value is Partial<UnifiedConfig
   }
 
   const keys = Object.keys(value);
+  const hasConfigSection = keys.some((key) => key === 'providers' || key === 'prompts');
   const looksLikeSingleTestCase =
     keys.length > 0 &&
     keys.every((key) => TEST_CASE_FIELDS.has(key)) &&
-    !keys.some((key) => FULL_CONFIG_ONLY_FIELDS.has(key));
+    !keys.some((key) => FULL_CONFIG_ONLY_FIELDS.has(key)) &&
+    (!hasConfigSection || keys.some((key) => TEST_CASE_ONLY_FIELDS.has(key)));
 
   return !looksLikeSingleTestCase;
 }

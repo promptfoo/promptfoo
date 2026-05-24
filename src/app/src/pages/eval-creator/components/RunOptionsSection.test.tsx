@@ -107,6 +107,27 @@ describe('RunOptionsSection', () => {
     expect(screen.getByText('Fix invalid optional run settings before starting.')).toBeVisible();
   });
 
+  it('adopts external run option changes even when the local draft is invalid', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <RunOptionsSection readiness={readySetup} delay={100} onChange={onChange} />,
+    );
+
+    const delayInput = screen.getByLabelText('Delay between calls (ms)');
+    await user.clear(delayInput);
+    await user.paste('1.5');
+
+    expect(delayInput).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeDisabled();
+
+    rerender(<RunOptionsSection readiness={readySetup} delay={undefined} onChange={onChange} />);
+
+    expect(screen.getByLabelText('Delay between calls (ms)')).toHaveValue(null);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Run Evaluation' })).toBeEnabled();
+  });
+
   it('keeps optional settings expanded while a hidden correction would block running', async () => {
     const user = userEvent.setup();
     render(<RunOptionsSection readiness={readySetup} onChange={vi.fn()} />);

@@ -52,7 +52,6 @@ const getMaxConcurrencyError = (value: string): string | undefined => {
 function useNumericPropToDraftSync(
   prop: number | undefined,
   setDraft: Dispatch<SetStateAction<string>>,
-  getError: (value: string) => string | undefined,
 ) {
   const lastPropRef = useRef(prop);
   useEffect(() => {
@@ -61,13 +60,10 @@ function useNumericPropToDraftSync(
     }
     lastPropRef.current = prop;
     setDraft((current) => {
-      if (getError(current)) {
-        return current;
-      }
       const parsed = current === '' ? undefined : Number(current);
       return parsed === prop ? current : prop?.toString() || '';
     });
-  }, [prop, setDraft, getError]);
+  }, [prop, setDraft]);
 }
 
 export function RunOptionsSection({
@@ -97,8 +93,8 @@ export function RunOptionsSection({
   };
 
   // Preserve invalid in-progress drafts so a parent re-render mid-edit does not wipe user input.
-  useNumericPropToDraftSync(delay, setDelayDraft, getDelayError);
-  useNumericPropToDraftSync(maxConcurrency, setMaxConcurrencyDraft, getMaxConcurrencyError);
+  useNumericPropToDraftSync(delay, setDelayDraft);
+  useNumericPropToDraftSync(maxConcurrency, setMaxConcurrencyDraft);
 
   const handleDelayChange = (value: string) => {
     setDelayDraft(value);

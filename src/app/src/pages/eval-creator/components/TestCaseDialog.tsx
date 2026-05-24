@@ -37,6 +37,17 @@ const getTestCaseVars = (
   ...Object.fromEntries(varsList.map((variable) => [variable, initialVars?.[variable] ?? ''])),
 });
 
+const getPersistedVars = (
+  vars: Record<string, string>,
+  initialVars: Record<string, string>,
+  touchedVars: Set<string>,
+): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(vars).filter(
+      ([variable, value]) => value !== '' || variable in initialVars || touchedVars.has(variable),
+    ),
+  );
+
 const TestCaseForm = ({
   open,
   onAdd,
@@ -46,10 +57,10 @@ const TestCaseForm = ({
   initialValues,
   onCancel,
 }: TestCaseFormProps) => {
+  const initialValuesVars = (initialValues?.vars || {}) as Record<string, string>;
   const [description, setDescription] = useState(initialValues?.description || '');
-  const [vars, setVars] = useState(() =>
-    getTestCaseVars(varsList, initialValues?.vars as Record<string, string> | undefined),
-  );
+  const [vars, setVars] = useState<Record<string, string>>(initialValuesVars);
+  const [touchedVars, setTouchedVars] = useState<Set<string>>(() => new Set());
   const [asserts, setAsserts] = useState<AssertionOrSet[]>(initialValues?.assert || []);
   const [assertsFormKey, setAssertsFormKey] = useState(0);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
@@ -60,9 +71,10 @@ const TestCaseForm = ({
   const effectiveAssertions = [...effectiveInheritedAssertions, ...asserts];
   const assertionVariables = getRequiredAssertionVariables(effectiveAssertions);
   const editableVarsList = Array.from(new Set([...varsList, ...assertionVariables]));
+  const persistedVars = getPersistedVars(vars, initialValuesVars, touchedVars);
   const missingAssertionVariables = getMissingAssertionVariables(effectiveAssertions, {
     ...inheritedVars,
-    ...vars,
+    ...persistedVars,
   });
   const canSave = assertsValid && missingAssertionVariables.length === 0;
   const saveHelpIds = [
@@ -73,29 +85,31 @@ const TestCaseForm = ({
     .join(' ');
 
   React.useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const nextInitialVars = (initialValues?.vars || {}) as Record<string, string>;
     if (initialValues) {
       setDescription(initialValues.description || '');
-      setVars(getTestCaseVars(varsList, initialValues.vars as Record<string, string> | undefined));
+      setVars(nextInitialVars);
       setAsserts(initialValues.assert || []);
     } else {
       setDescription('');
-      setVars(getTestCaseVars(varsList, undefined));
+      setVars({});
       setAsserts([]);
     }
+    setTouchedVars(new Set());
     setDiscardDialogOpen(false);
     setAddAnotherStatus(null);
     setAssertsValid(true);
-  }, [initialValues, varsList]);
+  }, [initialValues, open]);
 
   const initialDescription = initialValues?.description || '';
-  const initialVars = getTestCaseVars(
-    varsList,
-    initialValues?.vars as Record<string, string> | undefined,
-  );
   const initialAsserts = initialValues?.assert || [];
   const isDirty =
     description !== initialDescription ||
-    JSON.stringify(vars) !== JSON.stringify(initialVars) ||
+    JSON.stringify(persistedVars) !== JSON.stringify(initialValuesVars) ||
     JSON.stringify(asserts) !== JSON.stringify(initialAsserts);
 
   const requestCancel = () => {
@@ -116,7 +130,7 @@ const TestCaseForm = ({
         // Preserve fields the dialog does not edit (options, metadata, threshold, …).
         ...(initialValues ?? {}),
         description,
-        vars,
+        vars: persistedVars,
         assert: asserts,
       },
       close,
@@ -130,7 +144,8 @@ const TestCaseForm = ({
       );
     }
     setDescription('');
-    setVars(getTestCaseVars(varsList, undefined));
+    setVars({});
+    setTouchedVars(new Set());
     setAsserts([]);
     setAssertsFormKey((prevKey) => prevKey + 1);
   };
@@ -183,12 +198,15 @@ const TestCaseForm = ({
               />
             </div>
             <VarsForm
-              onAdd={(vars) => {
-                setVars(vars);
+              onAdd={(nextVars, updatedVariable) => {
+                setVars(nextVars);
+                if (updatedVariable) {
+                  setTouchedVars((current) => new Set(current).add(updatedVariable));
+                }
                 setAddAnotherStatus(null);
               }}
               varsList={editableVarsList}
-              initialValues={vars as Record<string, string>}
+              initialValues={getTestCaseVars(editableVarsList, vars)}
             />
             <AssertsForm
               key={assertsFormKey}
