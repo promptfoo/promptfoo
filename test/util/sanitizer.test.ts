@@ -950,6 +950,16 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).not.toContain('plain-secret');
       expect(result.requestBody).not.toContain('sk-123456789012345678901234567890');
     });
+
+    it('should not URL-encode prose strings that happen to contain "="', () => {
+      // Regression: previously, any string containing `=` was parsed by
+      // URLSearchParams and re-serialized, mangling prose like shell commands
+      // and breaking downstream regex-based redaction (e.g. Codex trace text).
+      const command =
+        'curl -H "Authorization: Bearer abc" https://example.test?api_key=sk-xyz user@example.com';
+
+      expect(sanitizeObject(command)).toBe(command);
+    });
   });
 });
 

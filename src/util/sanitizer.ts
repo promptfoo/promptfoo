@@ -209,9 +209,11 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
       return JSON.stringify(sanitized);
     }
   } catch {
-    const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
-    if (sanitizedUrlEncoded !== str) {
-      return sanitizedUrlEncoded;
+    if (looksLikeUrlEncodedFormData(str)) {
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      if (sanitizedUrlEncoded !== str) {
+        return sanitizedUrlEncoded;
+      }
     }
 
     // Not JSON - check if it looks like a secret
@@ -220,6 +222,19 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
     }
   }
   return str;
+}
+
+const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%-]+=[^=&]*$/;
+
+function looksLikeUrlEncodedFormData(value: string): boolean {
+  // Form-urlencoded data has no raw whitespace (spaces are `+` or `%20`) and
+  // every `&`-separated chunk is a `key=value` pair with safe key characters.
+  // Without this gate, prose containing `=` gets re-serialized by
+  // URLSearchParams and emerges URL-encoded.
+  if (!value.includes('=') || /\s/.test(value)) {
+    return false;
+  }
+  return value.split('&').every((segment) => URL_ENCODED_SEGMENT_RE.test(segment));
 }
 
 export function sanitizeUrlEncodedString(value: string): string {
