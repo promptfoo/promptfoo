@@ -478,6 +478,10 @@ export class OTLPReceiver {
           traceId,
           evaluationId: info.evaluationId,
           testCaseId: info.testCaseId,
+          metadata:
+            this.redactAttributePatterns.length > 0
+              ? { otlpHttpRedactAttributes: this.redactAttributePatterns }
+              : undefined,
         });
       } catch (error) {
         // Trace might already exist, which is fine

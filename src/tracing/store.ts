@@ -1,4 +1,4 @@
-import { asc, eq, lt, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
@@ -141,6 +141,30 @@ function serializeSpan(
     statusCode: span.statusCode ?? undefined,
     statusMessage: span.statusMessage ?? undefined,
   };
+}
+
+function sqliteTimestampFromMs(timestampMs: number): string {
+  return new Date(timestampMs).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function traceCreatedBefore(cutoffTime: number) {
+  const sqliteTimestampCutoff = sqliteTimestampFromMs(cutoffTime);
+  return sql`(
+    (
+      typeof(${tracesTable.createdAt}) in ('integer', 'real')
+      and ${tracesTable.createdAt} < ${cutoffTime}
+    )
+    or (
+      typeof(${tracesTable.createdAt}) = 'text'
+      and (
+        (
+          cast(${tracesTable.createdAt} as integer) > 1000000000000
+          and cast(${tracesTable.createdAt} as integer) < ${cutoffTime}
+        )
+        or datetime(${tracesTable.createdAt}) < datetime(${sqliteTimestampCutoff})
+      )
+    )
+  )`;
 }
 
 function computeDepth(
@@ -377,6 +401,7 @@ export class TraceStore {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
       const db = this.getDatabase();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+      const cutoffCondition = traceCreatedBefore(cutoffTime);
 
       // `spans.trace_id` is FK-enforced without ON DELETE CASCADE.
       db.transaction(() => {
@@ -385,11 +410,11 @@ export class TraceStore {
             sql`${spansTable.traceId} in (
               select ${tracesTable.traceId}
               from ${tracesTable}
-              where ${lt(tracesTable.createdAt, cutoffTime)}
+              where ${cutoffCondition}
             )`,
           )
           .run();
-        db.delete(tracesTable).where(lt(tracesTable.createdAt, cutoffTime)).run();
+        db.delete(tracesTable).where(cutoffCondition).run();
       });
 
       logger.debug(`[TraceStore] Successfully deleted traces older than ${retentionDays} days`);
