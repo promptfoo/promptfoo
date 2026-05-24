@@ -56,6 +56,7 @@ describe('TraceStore', () => {
       insert: vi.fn(() => mockInsertChain),
       select: vi.fn(() => mockSelectChain),
       delete: vi.fn(() => mockDeleteChain),
+      transaction: vi.fn(async (callback) => callback(mockDb)),
     };
 
     // Create trace store and inject mock DB
@@ -657,7 +658,8 @@ describe('TraceStore', () => {
 
       await traceStore.deleteOldTraces(retentionDays);
 
-      expect(mockDb.delete).toHaveBeenCalledWith(expect.anything());
+      expect(mockDb.transaction).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockDb.delete).toHaveBeenCalledTimes(2);
       expect(mockDb.delete().where).toHaveBeenCalledWith(expect.anything());
     });
 
