@@ -205,9 +205,6 @@ describeEvaluator('evaluator execution control', () => {
         invocation += 1;
         if (invocation === 1) {
           await waitForSecond;
-          await new Promise<void>((resolve) => setTimeout(resolve, 10));
-        } else {
-          releaseFirst();
         }
         return {
           output: 'ok',
@@ -221,6 +218,13 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{ vars: { zebra: 'first' } }, { vars: { apple: 'second' } }],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const addResult = evalRecord.addResult.bind(evalRecord);
+    vi.spyOn(evalRecord, 'addResult').mockImplementation(async (row) => {
+      await addResult(row);
+      if (row.testIdx === 1) {
+        releaseFirst();
+      }
+    });
 
     await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
 
