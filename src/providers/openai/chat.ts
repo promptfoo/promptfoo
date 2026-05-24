@@ -325,6 +325,26 @@ function getOpenAiStreamingValidationError(state: OpenAiStreamingState): string 
   return undefined;
 }
 
+function getCachedOpenAiStreamingTokenUsage(
+  tokenUsage: ProviderResponse['tokenUsage'],
+): ProviderResponse['tokenUsage'] {
+  if (!tokenUsage) {
+    return undefined;
+  }
+  const total =
+    tokenUsage.total ??
+    (tokenUsage.prompt === undefined && tokenUsage.completion === undefined
+      ? tokenUsage.cached
+      : (tokenUsage.prompt ?? 0) + (tokenUsage.completion ?? 0));
+  if (total === undefined) {
+    return undefined;
+  }
+  return {
+    total,
+    cached: total,
+  };
+}
+
 async function getCachedOpenAiStreamingResponse(
   cache: ReturnType<typeof getCache>,
   cacheKey: string,
@@ -338,12 +358,7 @@ async function getCachedOpenAiStreamingResponse(
   logger.debug(`Returning cached streaming response for ${modelName}`);
   try {
     const parsed = JSON.parse(cachedResponse) as ProviderResponse;
-    const tokenUsage = parsed.tokenUsage
-      ? {
-          ...parsed.tokenUsage,
-          ...(parsed.tokenUsage.total === undefined ? {} : { cached: parsed.tokenUsage.total }),
-        }
-      : undefined;
+    const tokenUsage = getCachedOpenAiStreamingTokenUsage(parsed.tokenUsage);
     return {
       ...parsed,
       ...(tokenUsage === undefined ? {} : { tokenUsage }),

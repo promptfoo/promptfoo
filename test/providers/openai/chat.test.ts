@@ -3573,7 +3573,14 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should return cached streaming response when available', async () => {
       const cachedResponse = {
         output: 'Cached response',
-        tokenUsage: { prompt: 10, completion: 5, total: 15, cached: 0 },
+        tokenUsage: {
+          prompt: 10,
+          completion: 5,
+          total: 15,
+          cached: 0,
+          numRequests: 1,
+          completionDetails: { reasoning: 2 },
+        },
         cost: 0.01,
       };
 
@@ -3592,8 +3599,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(result.output).toBe('Cached response');
       expect(result.cached).toBe(true);
-      // tokenUsage.cached should equal total while preserving the original usage breakdown.
-      expect(result.tokenUsage).toEqual({ prompt: 10, completion: 5, total: 15, cached: 15 });
+      // Cache hits should match the non-streaming path and avoid counting fresh usage.
+      expect(result.tokenUsage).toEqual({ total: 15, cached: 15 });
       expect(result.cost).toBe(0);
       expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
