@@ -24,8 +24,12 @@ import { InsuranceDataDisclosurePluginGrader } from '../../../src/redteam/plugin
 import { InsuranceNetworkMisinformationPluginGrader } from '../../../src/redteam/plugins/insurance/networkMisinformation';
 import { InsurancePhiDisclosurePluginGrader } from '../../../src/redteam/plugins/insurance/phiDisclosure';
 import { MedicalAnchoringBiasPluginGrader } from '../../../src/redteam/plugins/medical/medicalAnchoringBias';
+import { MedicalFdaAiDisclosurePluginGrader } from '../../../src/redteam/plugins/medical/medicalFdaAiDisclosure';
+import { MedicalFdaCyberAccessControlPluginGrader } from '../../../src/redteam/plugins/medical/medicalFdaCyberAccessControl';
+import { MedicalFdaCyberAuditTamperingPluginGrader } from '../../../src/redteam/plugins/medical/medicalFdaCyberAuditTampering';
 import { MedicalHallucinationPluginGrader } from '../../../src/redteam/plugins/medical/medicalHallucination';
 import { MedicalIncorrectKnowledgePluginGrader } from '../../../src/redteam/plugins/medical/medicalIncorrectKnowledge';
+import { MedicalOffLabelUsePluginGrader } from '../../../src/redteam/plugins/medical/medicalOffLabelUse';
 import { MedicalPrioritizationErrorPluginGrader } from '../../../src/redteam/plugins/medical/medicalPrioritizationError';
 import { MedicalSycophancyPluginGrader } from '../../../src/redteam/plugins/medical/medicalSycophancy';
 import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic';
@@ -155,6 +159,21 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
     MedicalAnchoringBiasPluginGrader,
   ],
   [
+    'medical fda ai disclosure',
+    'promptfoo:redteam:medical:fda:ai-disclosure',
+    MedicalFdaAiDisclosurePluginGrader,
+  ],
+  [
+    'medical fda cyber access control',
+    'promptfoo:redteam:medical:fda:cyber-access-control',
+    MedicalFdaCyberAccessControlPluginGrader,
+  ],
+  [
+    'medical fda cyber audit tampering',
+    'promptfoo:redteam:medical:fda:cyber-audit-tampering',
+    MedicalFdaCyberAuditTamperingPluginGrader,
+  ],
+  [
     'medical hallucination',
     'promptfoo:redteam:medical:hallucination',
     MedicalHallucinationPluginGrader,
@@ -168,6 +187,11 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
     'medical prioritization error',
     'promptfoo:redteam:medical:prioritization-error',
     MedicalPrioritizationErrorPluginGrader,
+  ],
+  [
+    'medical off label use',
+    'promptfoo:redteam:medical:off-label-use',
+    MedicalOffLabelUsePluginGrader,
   ],
   ['medical sycophancy', 'promptfoo:redteam:medical:sycophancy', MedicalSycophancyPluginGrader],
   ['off topic', 'promptfoo:redteam:off-topic', OffTopicPluginGrader],
@@ -250,6 +274,15 @@ const COMPACT_DOMAIN_GRADERS: [string, new () => RenderingGrader][] = [
   ['insurance data disclosure', InsuranceDataDisclosurePluginGrader],
   ['insurance network misinformation', InsuranceNetworkMisinformationPluginGrader],
   ['insurance phi disclosure', InsurancePhiDisclosurePluginGrader],
+  ['medical anchoring bias', MedicalAnchoringBiasPluginGrader],
+  ['medical fda ai disclosure', MedicalFdaAiDisclosurePluginGrader],
+  ['medical fda cyber access control', MedicalFdaCyberAccessControlPluginGrader],
+  ['medical fda cyber audit tampering', MedicalFdaCyberAuditTamperingPluginGrader],
+  ['medical hallucination', MedicalHallucinationPluginGrader],
+  ['medical incorrect knowledge', MedicalIncorrectKnowledgePluginGrader],
+  ['medical off label use', MedicalOffLabelUsePluginGrader],
+  ['medical prioritization error', MedicalPrioritizationErrorPluginGrader],
+  ['medical sycophancy', MedicalSycophancyPluginGrader],
   ['pharmacy controlled substance compliance', PharmacyControlledSubstanceCompliancePluginGrader],
   ['pharmacy dosage calculation', PharmacyDosageCalculationPluginGrader],
   ['pharmacy drug interaction', PharmacyDrugInteractionPluginGrader],

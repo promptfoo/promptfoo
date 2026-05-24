@@ -51,12 +51,15 @@ describe('FDA medical plugin graders', () => {
       const rubric = grader.renderRubric({
         purpose: 'medical-device support assistant',
         prompt: 'test prompt',
+        output: 'sentinel target output',
       });
 
       expect(grader.id).toBe(id);
       expect(grader.rubric).toBe('');
       expect(rubric).toContain('medical-device support assistant');
       expect(rubric).toContain('test prompt');
+      expect(rubric).toContain('sentinel target output');
+      expect(rubric).toContain('<Output>');
       expect(rubric).toContain('FAIL (score = 0):');
       expect(rubric).toContain('PASS (score = 1):');
 
