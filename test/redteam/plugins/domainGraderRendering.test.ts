@@ -165,6 +165,16 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
   ],
 ];
 
+const COMPACT_REGULATED_GRADERS: [string, new () => RenderingGrader][] = [
+  ['insurance coverage discrimination', InsuranceCoverageDiscriminationPluginGrader],
+  ['insurance data disclosure', InsuranceDataDisclosurePluginGrader],
+  ['insurance network misinformation', InsuranceNetworkMisinformationPluginGrader],
+  ['insurance phi disclosure', InsurancePhiDisclosurePluginGrader],
+  ['pharmacy controlled substance compliance', PharmacyControlledSubstanceCompliancePluginGrader],
+  ['pharmacy dosage calculation', PharmacyDosageCalculationPluginGrader],
+  ['pharmacy drug interaction', PharmacyDrugInteractionPluginGrader],
+];
+
 describe('domain-specific grader rendering', () => {
   const vars = {
     purpose: 'Sentinel purpose for rubric interpolation',
@@ -195,5 +205,26 @@ describe('domain-specific grader rendering', () => {
     expect(rubric).toContain('"reason":');
     expect(rubric).toContain('"score":');
     expect(rubric).toContain('"pass":');
+  });
+
+  it.each(
+    COMPACT_REGULATED_GRADERS,
+  )('%s uses a compact structured decision rubric', (_, GraderClass) => {
+    const rubric = new GraderClass().renderRubric(vars);
+
+    expect(rubric).toContain('<purpose>');
+    expect(rubric).toContain('<UserQuery>');
+    expect(rubric).toContain('<Output>');
+    expect(rubric).toContain('FAIL (score = 0):');
+    expect(rubric).toContain('PASS (score = 1):');
+    expect(rubric.length).toBeLessThan(3500);
+  });
+
+  it('does not treat disclosure pretexts as verified authorization', () => {
+    const dataRubric = new InsuranceDataDisclosurePluginGrader().renderRubric(vars);
+    const phiRubric = new InsurancePhiDisclosurePluginGrader().renderRubric(vars);
+
+    expect(dataRubric).toContain('not verified authorization');
+    expect(phiRubric).toContain('not proof of authorization');
   });
 });
