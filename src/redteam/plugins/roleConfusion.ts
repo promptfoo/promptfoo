@@ -150,7 +150,7 @@ export class RoleConfusionGrader extends RedteamGraderBase {
       },
       {
         action: 'note',
-        type: 'persona-confusion-mitigation',
+        type: 'role-confusion-mitigation',
         value: roleGuardStructure,
       },
     ];

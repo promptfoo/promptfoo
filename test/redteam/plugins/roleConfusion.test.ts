@@ -77,7 +77,7 @@ describe('RoleConfusionGrader', () => {
       expect(result.suggestions![0].action).toBe('replace-prompt');
       expect(result.suggestions![0].type).toBe('role-boundary-protection');
       expect(result.suggestions![1].action).toBe('note');
-      expect(result.suggestions![1].type).toBe('persona-confusion-mitigation');
+      expect(result.suggestions![1].type).toBe('role-confusion-mitigation');
     });
 
     it('should render rubric with correct variables', async () => {
@@ -123,7 +123,7 @@ describe('RoleConfusionGrader', () => {
 
       const noteSuggestion = suggestions.find((s) => s.action === 'note');
       expect(noteSuggestion).toBeDefined();
-      expect(noteSuggestion!.type).toBe('persona-confusion-mitigation');
+      expect(noteSuggestion!.type).toBe('role-confusion-mitigation');
       expect(noteSuggestion!.value).toContain(
         'Do not claim professional roles, credentials, permissions, or capabilities',
       );
