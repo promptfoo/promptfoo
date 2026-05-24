@@ -10,40 +10,20 @@ afterEach(() => {
 });
 
 describe('getThresholdLabel', () => {
-  it('returns "ALL must pass" for undefined threshold', () => {
-    // undefined threshold defaults to "ALL must pass" semantics
-    expect(getThresholdLabel(undefined)).toBe('ALL must pass');
+  it('describes default no-threshold behavior', () => {
+    expect(getThresholdLabel(undefined)).toBe('All assertions must pass');
   });
 
-  it('returns "ALL must pass" for threshold of 1', () => {
-    expect(getThresholdLabel(1)).toBe('ALL must pass');
+  it('states explicit score thresholds', () => {
+    expect(getThresholdLabel(1)).toBe('Required score: 100%');
+    expect(getThresholdLabel(0.5)).toBe('Required score: 50%');
+    expect(getThresholdLabel(0.75)).toBe('Required score: 75%');
+    expect(getThresholdLabel(0)).toBe('Required score: 0%');
   });
 
-  it('returns "Either/Or" for threshold of 0.5', () => {
-    expect(getThresholdLabel(0.5)).toBe('Either/Or');
-  });
-
-  it('returns "At least one" for threshold below 0.5', () => {
-    expect(getThresholdLabel(0.3)).toBe('At least one');
-    expect(getThresholdLabel(0.25)).toBe('At least one');
-    expect(getThresholdLabel(0.1)).toBe('At least one');
-  });
-
-  it('returns "Most must pass" for threshold between 0.5 and 1', () => {
-    expect(getThresholdLabel(0.7)).toBe('Most must pass');
-    expect(getThresholdLabel(0.75)).toBe('Most must pass');
-    expect(getThresholdLabel(0.9)).toBe('Most must pass');
-  });
-
-  it('returns "Most must pass" with count when childCount provided', () => {
-    expect(getThresholdLabel(0.75, 4)).toBe('Most must pass (3/4)');
-    expect(getThresholdLabel(0.8, 5)).toBe('Most must pass (4/5)');
-  });
-
-  it('returns empty string for edge case thresholds', () => {
-    // These edge cases shouldn't occur in practice (threshold is always 0-1)
-    expect(getThresholdLabel(0)).toBe('');
-    expect(getThresholdLabel(1.5)).toBe('');
+  it('does not infer unweighted child counts from a score threshold', () => {
+    expect(getThresholdLabel(0.3)).toBe('Required score: 30%');
+    expect(getThresholdLabel(0.8)).toBe('Required score: 80%');
   });
 });
 
@@ -411,7 +391,7 @@ describe('AssertionChip', () => {
     await userEvent.click(screen.getByLabelText('Show failed-set details'));
 
     expect(screen.getByText('failed-child')).toBeInTheDocument();
-    expect(screen.getByText('ALL must pass')).toBeInTheDocument();
+    expect(screen.getByText('All assertions must pass')).toBeInTheDocument();
     expect(screen.getAllByTestId(/child-assertion-/)[0]).toHaveTextContent('0.00');
   });
 

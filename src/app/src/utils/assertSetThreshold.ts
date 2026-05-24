@@ -6,9 +6,9 @@
  * Threshold constants for assert-set evaluation
  */
 export const THRESHOLD = {
-  /** All children must pass */
+  /** Full aggregate score is required */
   ALL: 1,
-  /** At least half must pass (Either/Or) */
+  /** Half of the aggregate score is required */
   HALF: 0.5,
 } as const;
 
@@ -16,31 +16,14 @@ export const THRESHOLD = {
  * Get a human-readable label for an assert-set threshold
  *
  * @param threshold - The threshold value (0-1)
- * @param childCount - Optional number of children for "X/Y" display
  * @returns Human-readable label describing the threshold requirement
  */
-export function getThresholdLabel(threshold: number | undefined, childCount?: number): string {
-  if (threshold === undefined || threshold === THRESHOLD.ALL) {
-    return 'ALL must pass';
+export function getThresholdLabel(threshold: number | undefined): string {
+  if (threshold === undefined) {
+    return 'All assertions must pass';
   }
 
-  if (threshold === THRESHOLD.HALF) {
-    return 'Either/Or';
-  }
-
-  if (threshold > 0 && threshold < THRESHOLD.HALF) {
-    return 'At least one';
-  }
-
-  if (threshold > THRESHOLD.HALF && threshold < THRESHOLD.ALL) {
-    if (childCount) {
-      const requiredCount = Math.ceil(threshold * childCount);
-      return `Most must pass (${requiredCount}/${childCount})`;
-    }
-    return 'Most must pass';
-  }
-
-  return '';
+  return `Required score: ${Math.round(threshold * 100)}%`;
 }
 
 /**

@@ -343,6 +343,41 @@ describe('runAssertions', () => {
       });
     });
 
+    it('treats an explicit zero assert-set threshold as passing', async () => {
+      const output = 'Actual output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            threshold: 0,
+            assert: [{ type: 'equals', value: 'Expected output' }],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0,
+        componentResults: [
+          expect.objectContaining({
+            pass: true,
+            reason: 'Aggregate score 0.00 ≥ 0 threshold',
+          }),
+          expect.objectContaining({
+            pass: false,
+            reason: 'Expected output "Actual output" to equal "Expected output"',
+          }),
+        ],
+      });
+    });
+
     it('assert-set with metric', async () => {
       const metric = 'The best metric';
       const output = 'Expected output';

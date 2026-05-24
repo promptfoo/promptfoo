@@ -10,41 +10,35 @@ describe('assertSetThreshold', () => {
   });
 
   describe('getThresholdLabel', () => {
-    it('should return "ALL must pass" for undefined threshold', () => {
-      expect(getThresholdLabel(undefined)).toBe('ALL must pass');
+    it('should describe default no-threshold behavior', () => {
+      expect(getThresholdLabel(undefined)).toBe('All assertions must pass');
     });
 
-    it('should return "ALL must pass" for threshold of 1', () => {
-      expect(getThresholdLabel(1)).toBe('ALL must pass');
-      expect(getThresholdLabel(THRESHOLD.ALL)).toBe('ALL must pass');
+    it('should state full aggregate-score requirements', () => {
+      expect(getThresholdLabel(1)).toBe('Required score: 100%');
+      expect(getThresholdLabel(THRESHOLD.ALL)).toBe('Required score: 100%');
     });
 
-    it('should return "Either/Or" for threshold of 0.5', () => {
-      expect(getThresholdLabel(0.5)).toBe('Either/Or');
-      expect(getThresholdLabel(THRESHOLD.HALF)).toBe('Either/Or');
+    it('should not interpret weighted half scores as either-or child counts', () => {
+      expect(getThresholdLabel(0.5)).toBe('Required score: 50%');
+      expect(getThresholdLabel(THRESHOLD.HALF)).toBe('Required score: 50%');
     });
 
-    it('should return "At least one" for threshold less than 0.5', () => {
-      expect(getThresholdLabel(0.25)).toBe('At least one');
-      expect(getThresholdLabel(0.1)).toBe('At least one');
-      expect(getThresholdLabel(0.01)).toBe('At least one');
+    it('should state low aggregate-score thresholds explicitly', () => {
+      expect(getThresholdLabel(0.25)).toBe('Required score: 25%');
+      expect(getThresholdLabel(0.1)).toBe('Required score: 10%');
+      expect(getThresholdLabel(0.01)).toBe('Required score: 1%');
     });
 
-    it('should return "Most must pass" for threshold between 0.5 and 1', () => {
-      expect(getThresholdLabel(0.75)).toBe('Most must pass');
-      expect(getThresholdLabel(0.9)).toBe('Most must pass');
-      expect(getThresholdLabel(0.51)).toBe('Most must pass');
-      expect(getThresholdLabel(0.99)).toBe('Most must pass');
+    it('should state high aggregate-score thresholds explicitly', () => {
+      expect(getThresholdLabel(0.75)).toBe('Required score: 75%');
+      expect(getThresholdLabel(0.9)).toBe('Required score: 90%');
+      expect(getThresholdLabel(0.51)).toBe('Required score: 51%');
+      expect(getThresholdLabel(0.99)).toBe('Required score: 99%');
     });
 
-    it('should include child count in "Most must pass" label when provided', () => {
-      expect(getThresholdLabel(0.75, 4)).toBe('Most must pass (3/4)');
-      expect(getThresholdLabel(0.8, 5)).toBe('Most must pass (4/5)');
-      expect(getThresholdLabel(0.6, 10)).toBe('Most must pass (6/10)');
-    });
-
-    it('should return empty string for threshold of 0', () => {
-      expect(getThresholdLabel(0)).toBe('');
+    it('should retain an explicit zero aggregate-score threshold', () => {
+      expect(getThresholdLabel(0)).toBe('Required score: 0%');
     });
   });
 

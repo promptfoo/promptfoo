@@ -9,7 +9,7 @@ import type { GradingResult } from '@promptfoo/types';
 // However, based on the task requirements, we should test getThresholdLabel and formatScoreThreshold
 
 describe('AssertSetCard - getThresholdLabel logic', () => {
-  it('displays "ALL must pass" for undefined threshold', () => {
+  it('describes default no-threshold behavior', () => {
     const result: GradingResult = {
       pass: true,
       score: 1,
@@ -20,10 +20,10 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
     render(<AssertSetCard result={result} children={[]} />);
 
-    expect(screen.getByText('(ALL must pass)')).toBeInTheDocument();
+    expect(screen.getByText('(All assertions must pass)')).toBeInTheDocument();
   });
 
-  it('displays "ALL must pass" for threshold of 1', () => {
+  it('displays an explicit full score threshold', () => {
     const result: GradingResult = {
       pass: true,
       score: 1,
@@ -34,10 +34,10 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
     render(<AssertSetCard result={result} children={[]} />);
 
-    expect(screen.getByText('(ALL must pass)')).toBeInTheDocument();
+    expect(screen.getByText('(Required score: 100%)')).toBeInTheDocument();
   });
 
-  it('displays "Either/Or" for threshold of 0.5', () => {
+  it('does not describe a weighted score threshold as either-or', () => {
     const result: GradingResult = {
       pass: true,
       score: 0.5,
@@ -48,10 +48,10 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
     render(<AssertSetCard result={result} children={[]} />);
 
-    expect(screen.getByText('(Either/Or)')).toBeInTheDocument();
+    expect(screen.getByText('(Required score: 50%)')).toBeInTheDocument();
   });
 
-  it('displays "At least one" for threshold between 0 and 0.5', () => {
+  it('displays a low aggregate score threshold explicitly', () => {
     const result: GradingResult = {
       pass: true,
       score: 0.3,
@@ -62,10 +62,10 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
     render(<AssertSetCard result={result} children={[]} />);
 
-    expect(screen.getByText('(At least one)')).toBeInTheDocument();
+    expect(screen.getByText('(Required score: 30%)')).toBeInTheDocument();
   });
 
-  it('displays "Most must pass" with count for threshold between 0.5 and 1', () => {
+  it('does not infer child counts from a weighted score threshold', () => {
     const result: GradingResult = {
       pass: true,
       score: 0.75,
@@ -76,10 +76,10 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
     render(<AssertSetCard result={result} children={[]} />);
 
-    expect(screen.getByText('(Most must pass (3/4))')).toBeInTheDocument();
+    expect(screen.getByText('(Required score: 75%)')).toBeInTheDocument();
   });
 
-  it('displays "Most must pass" without count when childCount unavailable', () => {
+  it('displays a high aggregate score threshold explicitly', () => {
     const result: GradingResult = {
       pass: true,
       score: 0.8,
@@ -90,10 +90,10 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
 
     render(<AssertSetCard result={result} children={[]} />);
 
-    expect(screen.getByText('(Most must pass)')).toBeInTheDocument();
+    expect(screen.getByText('(Required score: 80%)')).toBeInTheDocument();
   });
 
-  it('displays empty label for threshold of 0', () => {
+  it('displays a zero score threshold explicitly', () => {
     const result: GradingResult = {
       pass: true,
       score: 1,
@@ -102,10 +102,9 @@ describe('AssertSetCard - getThresholdLabel logic', () => {
       metadata: { assertSetThreshold: 0 },
     };
 
-    const { container } = render(<AssertSetCard result={result} children={[]} />);
+    render(<AssertSetCard result={result} children={[]} />);
 
-    // Should not display threshold label when it's empty
-    expect(container.textContent).not.toContain('(');
+    expect(screen.getByText('(Required score: 0%)')).toBeInTheDocument();
   });
 });
 
@@ -257,10 +256,12 @@ describe('AssertSetCard component', () => {
     expect(screen.queryByText('child')).not.toBeInTheDocument();
 
     // Click to expand
-    const header = screen.getByText('parent-set');
+    const header = screen.getByRole('button', { name: /parent-set/i });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(header);
 
     // Should show children
+    expect(header).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('child')).toBeInTheDocument();
 
     // Click to collapse

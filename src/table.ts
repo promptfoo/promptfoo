@@ -9,23 +9,12 @@ import {
 } from './types/index';
 import { ellipsize } from './util/text';
 
-function getThresholdLabel(threshold: number | undefined, childCount?: number): string {
-  if (threshold === undefined || threshold === 1) {
-    return 'ALL must pass';
+function getThresholdLabel(threshold: number | undefined): string {
+  if (threshold === undefined) {
+    return 'All assertions must pass';
   }
-  if (threshold === 0.5) {
-    return 'Either/Or';
-  }
-  if (threshold > 0 && threshold < 0.5) {
-    return 'At least one';
-  }
-  if (threshold > 0.5 && threshold < 1) {
-    if (childCount) {
-      return `Most must pass (${Math.ceil(threshold * childCount)}/${childCount})`;
-    }
-    return 'Most must pass';
-  }
-  return '';
+
+  return `Required score: ${Math.round(threshold * 100)}%`;
 }
 
 function getAssertionMetric(result: GradingResult): string {
@@ -71,10 +60,7 @@ function formatAssertionResult(
 
   let metric = getAssertionMetric(result);
   if (result.metadata?.isAssertSet) {
-    const thresholdLabel = getThresholdLabel(
-      result.metadata.assertSetThreshold,
-      result.metadata.childCount,
-    );
+    const thresholdLabel = getThresholdLabel(result.metadata.assertSetThreshold);
     if (thresholdLabel) {
       metric = `${metric} (${thresholdLabel})`;
     }

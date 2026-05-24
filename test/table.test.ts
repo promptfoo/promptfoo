@@ -276,7 +276,7 @@ describe('table', () => {
               score: 0.5,
               reason: 'Outer failed',
               assertion: { type: 'contains', metric: 'outer' },
-              metadata: { isAssertSet: true, childCount: 1 },
+              metadata: { isAssertSet: true, childCount: 2, assertSetThreshold: 0.75 },
             },
             {
               pass: false,
@@ -300,6 +300,8 @@ describe('table', () => {
 
       const table = mockTableInstances[mockTableInstances.length - 1];
       expect(table.push).toHaveBeenCalledTimes(3);
+      expect(table.push.mock.calls[0][0][0]).toContain('Required score: 75%');
+      expect(table.push.mock.calls[0][0][0]).not.toContain('Most must pass');
       expect(table.push.mock.calls[1][0][0]).toContain('inner');
       expect(table.push.mock.calls[2][0][0]).toContain('leaf');
     });

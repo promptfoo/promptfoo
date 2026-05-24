@@ -149,6 +149,22 @@ describe('AssertionsResult', () => {
     });
   });
 
+  it('respects an explicit zero threshold', async () => {
+    assertionsResult = new AssertionsResult({ threshold: 0 });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: failingResult,
+    });
+
+    await expect(assertionsResult.testResult()).resolves.toEqual({
+      ...testResult,
+      reason: 'Aggregate score 0.00 ≥ 0 threshold',
+      score: 0,
+      componentResults: [failingResult],
+    });
+  });
+
   it('can use a parentAssertionSet', () => {
     const parentAssertionSet = {
       index: 3,

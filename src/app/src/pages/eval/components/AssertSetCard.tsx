@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { formatScoreThreshold, getThresholdLabel } from '@app/utils/assertSetThreshold';
@@ -82,10 +82,11 @@ function AssertionRow({
 
 export function AssertSetCard({ result, children, defaultExpanded }: AssertSetCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded ?? !result.pass);
+  const childrenId = useId();
+  const hasChildren = children.length > 0;
 
   const threshold = result.metadata?.assertSetThreshold ?? result.assertion?.threshold;
-  const childCount = result.metadata?.childCount ?? children.length;
-  const thresholdLabel = getThresholdLabel(threshold, childCount);
+  const thresholdLabel = getThresholdLabel(threshold);
 
   return (
     <div
@@ -100,9 +101,12 @@ export function AssertSetCard({ result, children, defaultExpanded }: AssertSetCa
       <button
         type="button"
         onClick={() => setIsExpanded(!isExpanded)}
+        aria-controls={hasChildren ? childrenId : undefined}
+        aria-expanded={hasChildren ? isExpanded : undefined}
+        disabled={!hasChildren}
         className={cn(
           'w-full flex items-center gap-3 px-4 py-3 text-left',
-          'hover:bg-muted/30 transition-colors',
+          hasChildren && 'hover:bg-muted/30 transition-colors',
         )}
       >
         {/* Pass/Fail indicator */}
@@ -139,17 +143,19 @@ export function AssertSetCard({ result, children, defaultExpanded }: AssertSetCa
         </span>
 
         {/* Expand/collapse chevron */}
-        <ChevronDown
-          className={cn(
-            'size-4 text-muted-foreground transition-transform',
-            isExpanded && 'rotate-180',
-          )}
-        />
+        {hasChildren && (
+          <ChevronDown
+            className={cn(
+              'size-4 text-muted-foreground transition-transform',
+              isExpanded && 'rotate-180',
+            )}
+          />
+        )}
       </button>
 
       {/* Children */}
-      {isExpanded && (
-        <div className="border-t border-border bg-background/50">
+      {hasChildren && isExpanded && (
+        <div id={childrenId} className="border-t border-border bg-background/50">
           {children.map((child, index) => {
             const nestedChildren = getChildResults(child);
             if (child.metadata?.isAssertSet || nestedChildren.length > 0) {
