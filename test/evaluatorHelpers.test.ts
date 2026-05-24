@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -385,7 +386,6 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should resolve file:// references nested inside an object var (issue #1613)', async () => {
-      const prompt = toPrompt('Test prompt with {{ reporting_period | dump }}');
       const vars = {
         reporting_period: {
           current: { period: '2023-12-31' },
@@ -396,12 +396,16 @@ describe('evaluatorHelpers', () => {
         },
       };
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('file content here');
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('file content here');
 
       await renderPrompt(toPrompt('{{ reporting_period.previous.report }}'), vars, {});
 
       // The nested file:// reference should have been resolved
       expect((vars.reporting_period as any).previous.report).toBe('file content here');
+      expect(fsPromises.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('report.txt'),
+        'utf8',
+      );
     });
 
     it('should resolve file:// references nested inside an array var (issue #1613)', async () => {
@@ -409,11 +413,12 @@ describe('evaluatorHelpers', () => {
         items: ['plain string', 'file:///path/to/item.txt'],
       };
 
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('item file content');
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('item file content');
 
       await renderPrompt(toPrompt('{{ items }}'), vars, {});
 
       expect(vars.items[1]).toBe('item file content');
+      expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringContaining('item.txt'), 'utf8');
     });
 
     it('should not modify nested non-file:// strings in object vars (issue #1613)', async () => {
@@ -428,6 +433,61 @@ describe('evaluatorHelpers', () => {
 
       expect(vars.context.name).toBe('Alice');
       expect(vars.context.role).toBe('admin');
+    });
+
+    it('should wrap missing-file errors with the var name and path (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        data: {
+          report: 'file:///missing/file.txt',
+        },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockRejectedValueOnce(
+        Object.assign(new Error("ENOENT: no such file or directory, open '/missing/file.txt'"), {
+          code: 'ENOENT',
+        }),
+      );
+
+      await expect(renderPrompt(toPrompt('{{ data.report }}'), vars, {})).rejects.toThrow(
+        /Failed to load nested file reference for var "data".*file\.txt.*ENOENT/,
+      );
+    });
+
+    it('should not stack-overflow on cyclic var values (issue #1613)', async () => {
+      const cyclic: Record<string, any> = { name: 'root', child: null };
+      cyclic.child = cyclic;
+      const vars: Record<string, any> = { cyclic };
+
+      // Must not throw a RangeError / stack overflow, and must terminate.
+      await expect(renderPrompt(toPrompt('{{ cyclic.name }}'), vars, {})).resolves.toBeDefined();
+
+      // The non-file string under the cycle is preserved.
+      expect(vars.cyclic.name).toBe('root');
+    });
+
+    it('should resolve deeply nested array-of-object-of-array file refs (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        bundle: [
+          {
+            section: 'intro',
+            chunks: ['file:///path/to/a.txt', 'plain', 'file:///path/to/b.txt'],
+          },
+          {
+            section: 'body',
+            chunks: [{ inner: 'file:///path/to/c.txt' }],
+          },
+        ],
+      };
+
+      vi.spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce('content-a')
+        .mockResolvedValueOnce('content-b')
+        .mockResolvedValueOnce('content-c');
+
+      await renderPrompt(toPrompt('{{ bundle | dump }}'), vars, {});
+
+      expect(vars.bundle[0].chunks).toEqual(['content-a', 'plain', 'content-b']);
+      expect(vars.bundle[1].chunks[0].inner).toBe('content-c');
     });
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {

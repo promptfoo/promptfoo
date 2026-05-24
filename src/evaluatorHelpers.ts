@@ -152,26 +152,71 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
 }
 
 /**
+ * Maximum recursion depth when resolving nested file:// references. This guards
+ * against pathologically deep var structures even if the cycle check is bypassed
+ * by constructing fresh wrapper objects at each level.
+ */
+const NESTED_FILE_REFS_MAX_DEPTH = 32;
+
+/**
  * Recursively resolves file:// references inside nested objects and arrays.
  * This is used when a var value is itself an object/array containing file:// strings.
  * JS, Python, image, video, audio, and PDF references are intentionally not supported
  * inside nested structures — only plain-text files are resolved (txt, md, html, etc.).
+ *
+ * @param value - The value to walk; strings starting with `file://` are read from disk.
+ * @param basePath - Base directory used to resolve relative file paths.
+ * @param varName - Name of the top-level var being resolved (used in error messages).
+ * @param seen - WeakSet of objects/arrays already visited on the current path; used to
+ *   short-circuit cycles and prevent stack overflow on self-referential vars.
+ * @param depth - Current recursion depth; throws once it exceeds
+ *   `NESTED_FILE_REFS_MAX_DEPTH`.
  */
-async function resolveNestedFileRefs(value: unknown, basePath: string): Promise<VarValue> {
+async function resolveNestedFileRefs(
+  value: unknown,
+  basePath: string,
+  varName: string,
+  seen: WeakSet<object> = new WeakSet(),
+  depth = 0,
+): Promise<VarValue> {
+  if (depth > NESTED_FILE_REFS_MAX_DEPTH) {
+    throw new Error(
+      `Failed to resolve nested file references for var "${varName}": exceeded maximum depth of ${NESTED_FILE_REFS_MAX_DEPTH}`,
+    );
+  }
+
   if (typeof value === 'string' && value.startsWith('file://')) {
     const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-    logger.debug(`Resolving nested file reference: ${value} -> ${filePath}`);
-    return (await fs.readFile(filePath, 'utf8')).trim();
+    logger.debug(`Resolving nested file reference for var ${varName}: ${value} -> ${filePath}`);
+    try {
+      return (await fs.readFile(filePath, 'utf8')).trim();
+    } catch (error) {
+      throw new Error(
+        `Failed to load nested file reference for var "${varName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   if (Array.isArray(value)) {
-    return Promise.all(value.map((item) => resolveNestedFileRefs(item, basePath)));
+    if (seen.has(value)) {
+      // Cycle detected — return the original reference unchanged.
+      return value as VarValue;
+    }
+    seen.add(value);
+    return Promise.all(
+      value.map((item) => resolveNestedFileRefs(item, basePath, varName, seen, depth + 1)),
+    );
   }
 
   if (typeof value === 'object' && value !== null) {
+    if (seen.has(value)) {
+      // Cycle detected — return the original reference unchanged.
+      return value as VarValue;
+    }
+    seen.add(value);
     const result: Record<string, VarValue> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      result[k] = await resolveNestedFileRefs(v, basePath);
+      result[k] = await resolveNestedFileRefs(v, basePath, varName, seen, depth + 1);
     }
     return result;
   }
@@ -412,7 +457,7 @@ export async function renderPrompt(
     } else if (typeof value === 'object' && value !== null) {
       // Recursively resolve file:// references inside nested objects/arrays (issue #1613)
       const basePath = cliState.basePath || '';
-      vars[varName] = await resolveNestedFileRefs(value, basePath);
+      vars[varName] = await resolveNestedFileRefs(value, basePath, varName);
     }
   }
 
