@@ -171,7 +171,7 @@ tracing:
       acceptFormats: ['json']
 ```
 
-Promptfoo creates provider-level spans for supported built-in providers. To assert on internal agent behavior, your provider or app should also export child spans to `http://localhost:4318/v1/traces`.
+Promptfoo creates provider-level spans for supported built-in providers. To assert on internal agent behavior, your provider or app should also export child spans to `http://127.0.0.1:4318/v1/traces`.
 
 For custom providers, Promptfoo passes a W3C `traceparent` in the provider context. Use it as the parent context for child spans so all telemetry appears under the same eval row. See [Tracing](/docs/tracing/) for JavaScript and Python setup examples.
 
@@ -997,7 +997,7 @@ Trace-based evals are most reliable when you design for the current assertion su
 If trajectory assertions say no trace data is available:
 
 1. Confirm `tracing.enabled: true` and `tracing.otlp.http.enabled: true`.
-2. Confirm your provider or target app exports to `http://localhost:4318/v1/traces`.
+2. Confirm your provider or target app exports to `http://127.0.0.1:4318/v1/traces`.
 3. Confirm the provider parses or forwards Promptfoo's `traceparent`.
 4. Confirm the OTLP format matches `acceptFormats`; JavaScript examples often use JSON, while Python examples commonly use protobuf.
 5. Confirm provider-specific switches are enabled, such as Codex `enable_streaming`, Codex `deep_tracing`, or an OpenAI Agents tracing processor.

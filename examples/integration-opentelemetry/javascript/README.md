@@ -84,7 +84,7 @@ const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
 // Initialize OpenTelemetry (v2.x API)
 const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:4318/v1/traces',
+  url: 'http://127.0.0.1:4318/v1/traces',
 });
 
 const provider = new NodeTracerProvider({
@@ -193,7 +193,7 @@ Configure OpenTelemetry using standard environment variables:
 
 ```bash
 # Custom endpoint (defaults to Promptfoo's receiver)
-export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318/v1/traces"
 
 # Headers for authentication with external collectors
 export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
