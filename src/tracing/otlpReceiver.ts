@@ -158,6 +158,8 @@ type OTLPFormat = 'json' | 'protobuf';
 
 interface OTLPReceiverOptions {
   acceptFormats?: OTLPFormat[];
+  /** Tool names whose tool-call spans should be normalized as command steps. */
+  commandToolNames?: string[];
   /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
   redactAttributes?: string[];
 }
@@ -202,6 +204,17 @@ function normalizeRedactAttributePatterns(redactAttributes?: string[]): string[]
   ];
 }
 
+function normalizeCommandToolNames(commandToolNames?: string[]): string[] | undefined {
+  const normalized = [
+    ...new Set(
+      (commandToolNames ?? [])
+        .map((name) => (typeof name === 'string' ? name.trim() : ''))
+        .filter((name) => name.length > 0),
+    ),
+  ];
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function getRequestFormat(contentType: string | string[] | undefined): OTLPFormat | null {
   const rawContentType = Array.isArray(contentType) ? contentType[0] : contentType;
   const mimeType = rawContentType?.split(';', 1)[0]?.trim().toLowerCase();
@@ -223,12 +236,14 @@ export class OTLPReceiver {
   private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
+  private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
     this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
+    this.setCommandToolNames(options.commandToolNames);
     this.setRedactAttributes(options.redactAttributes);
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
@@ -237,6 +252,10 @@ export class OTLPReceiver {
 
   setRedactAttributes(redactAttributes?: string[]): void {
     this.redactAttributePatterns = normalizeRedactAttributePatterns(redactAttributes);
+  }
+
+  setCommandToolNames(commandToolNames?: string[]): void {
+    this.commandToolNames = normalizeCommandToolNames(commandToolNames);
   }
 
   private shouldRedactAttribute(key: string, redactAttributePatterns: string[]): boolean {
@@ -478,16 +497,24 @@ export class OTLPReceiver {
           traceId,
           evaluationId: info.evaluationId,
           testCaseId: info.testCaseId,
-          metadata:
-            this.redactAttributePatterns.length > 0
-              ? { otlpHttpRedactAttributes: this.redactAttributePatterns }
-              : undefined,
+          metadata: this.getTraceMetadata(),
         });
       } catch (error) {
         // Trace might already exist, which is fine
         logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
       }
     }
+  }
+
+  private getTraceMetadata(): Record<string, unknown> | undefined {
+    const metadata: Record<string, unknown> = {};
+    if (this.commandToolNames) {
+      metadata.commandToolNames = this.commandToolNames;
+    }
+    if (this.redactAttributePatterns.length > 0) {
+      metadata.otlpHttpRedactAttributes = this.redactAttributePatterns;
+    }
+    return Object.keys(metadata).length > 0 ? metadata : undefined;
   }
 
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
@@ -951,6 +978,9 @@ let otlpReceiver: OTLPReceiver | null = null;
 
 function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   if (otlpReceiver) {
+    otlpReceiver.setAcceptFormats(options?.acceptFormats);
+    otlpReceiver.setCommandToolNames(options?.commandToolNames);
+    otlpReceiver.setRedactAttributes(options?.redactAttributes);
     return otlpReceiver;
   }
 
@@ -962,7 +992,7 @@ export async function startOTLPReceiver(
   port?: number,
   host?: string,
   acceptFormats?: OTLPFormat[],
-  extra?: { redactAttributes?: string[] },
+  extra?: { commandToolNames?: string[]; redactAttributes?: string[] },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });
