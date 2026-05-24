@@ -714,7 +714,8 @@ export function formatCandidateContents(candidate: Candidate) {
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
   if (parts1 === undefined) {
-    return parts2;
+    // Detach the accumulator from the raw multipart response before appending later chunks.
+    return typeof parts2 === 'string' ? parts2 : [...parts2];
   }
 
   if (typeof parts1 === 'string' && typeof parts2 === 'string') {
@@ -725,7 +726,9 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
 
   const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
 
-  return [...array1, ...array2];
+  array1.push(...array2);
+
+  return array1;
 }
 
 /**
