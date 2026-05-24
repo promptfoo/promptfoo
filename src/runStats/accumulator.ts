@@ -5,6 +5,12 @@ import {
   type EvaluateStats,
   ResultFailureReason,
 } from '../types/index';
+import {
+  accumulateResultAssertionTokenUsage,
+  createAssertionTokenAccumulator,
+  getStatsAssertionTokenUsage,
+  toAssertionTokenUsage,
+} from './assertionTokens';
 import { categorizeError, type ErrorCategory, isOperationalError } from './errors';
 import { getPercentile } from './latency';
 import { computeModelInfo } from './providers';
@@ -56,6 +62,7 @@ export class RunStatsAccumulator {
   private readonly errors = createEmptyErrorBreakdown();
   private readonly providers = new Map<string, ProviderAccumulator>();
   private readonly assertions = new Map<string, AssertionAccumulator>();
+  private readonly assertionTokenUsage = createAssertionTokenAccumulator();
   private readonly assertionTypes = new Set<string>();
   private cacheHits = 0;
   private cacheMisses = 0;
@@ -64,6 +71,7 @@ export class RunStatsAccumulator {
   private assertionPassCount = 0;
   private processedResultCount = 0;
   private foundTimedOutResult = false;
+  private foundAssertionTokenUsage = false;
 
   addResults(results: Iterable<StatableResult>): void {
     for (const result of results) {
@@ -86,6 +94,9 @@ export class RunStatsAccumulator {
     const errorTypes = (Object.keys(this.errors) as ErrorCategory[])
       .filter((category) => this.errors[category] > 0)
       .sort();
+    const assertionTokenUsage = this.foundAssertionTokenUsage
+      ? this.assertionTokenUsage
+      : getStatsAssertionTokenUsage(stats);
 
     return {
       latency: {
@@ -113,14 +124,7 @@ export class RunStatsAccumulator {
           MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
         ).length,
         breakdown: this.getAssertionBreakdown(),
-        tokenUsage: {
-          totalTokens: stats.tokenUsage?.assertions?.total || 0,
-          promptTokens: stats.tokenUsage?.assertions?.prompt || 0,
-          completionTokens: stats.tokenUsage?.assertions?.completion || 0,
-          cachedTokens: stats.tokenUsage?.assertions?.cached || 0,
-          numRequests: stats.tokenUsage?.assertions?.numRequests || 0,
-          reasoningTokens: stats.tokenUsage?.assertions?.completionDetails?.reasoning || 0,
-        },
+        tokenUsage: toAssertionTokenUsage(assertionTokenUsage),
       },
       models: computeModelInfo(providers),
     };
@@ -151,6 +155,9 @@ export class RunStatsAccumulator {
     ) {
       this.foundTimedOutResult = true;
     }
+    this.foundAssertionTokenUsage =
+      accumulateResultAssertionTokenUsage(this.assertionTokenUsage, result) ||
+      this.foundAssertionTokenUsage;
 
     const providerId = result.provider?.id || 'unknown';
     const provider = this.providers.get(providerId) ?? {

@@ -21,7 +21,7 @@ export interface StatableResult {
   failureReason?: ResultFailureReason;
   response?: Pick<ProviderResponse, 'cached' | 'tokenUsage'>;
   provider?: { id?: string };
-  gradingResult?: Pick<GradingResult, 'componentResults'> | null;
+  gradingResult?: Pick<GradingResult, 'componentResults' | 'tokensUsed'> | null;
 }
 
 /**

@@ -255,6 +255,151 @@ describe('computeRunStats', () => {
     });
   });
 
+  it('should derive assertion token usage from persisted result rows when invocation stats are partial', async () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 100,
+        gradingResult: {
+          tokensUsed: {
+            total: 300,
+            prompt: 220,
+            completion: 80,
+            cached: 25,
+            numRequests: 2,
+            completionDetails: {
+              reasoning: 7,
+            },
+          },
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: '',
+              assertion: { type: 'llm-rubric' },
+              tokensUsed: {
+                total: 300,
+                prompt: 220,
+                completion: 80,
+                cached: 25,
+                numRequests: 2,
+                completionDetails: {
+                  reasoning: 7,
+                },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    async function* resultBatches() {
+      yield results;
+    }
+
+    const { runStats } = await computeRunStatsBatched({
+      resultBatches: resultBatches(),
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.assertions.tokenUsage).toEqual({
+      totalTokens: 300,
+      promptTokens: 220,
+      completionTokens: 80,
+      cachedTokens: 25,
+      numRequests: 2,
+      reasoningTokens: 7,
+    });
+  });
+
+  it('should count comparison assertion requests without double-counting merged token totals', () => {
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: true,
+          latencyMs: 100,
+          gradingResult: {
+            // Comparison tokens are merged into the row-level grading result,
+            // but the historical merge path did not preserve numRequests here.
+            tokensUsed: {
+              total: 50,
+              prompt: 30,
+              completion: 20,
+            },
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: '',
+                assertion: { type: 'select-best' },
+                tokensUsed: {
+                  total: 50,
+                  prompt: 30,
+                  completion: 20,
+                  numRequests: 1,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.assertions.tokenUsage).toEqual({
+      totalTokens: 50,
+      promptTokens: 30,
+      completionTokens: 20,
+      cachedTokens: 0,
+      numRequests: 1,
+      reasoningTokens: 0,
+    });
+  });
+
+  it('should preserve row-level assertion request counts for model-graded assertions', () => {
+    const runStats = computeRunStats({
+      results: [
+        {
+          success: true,
+          latencyMs: 100,
+          gradingResult: {
+            tokensUsed: {
+              total: 42,
+              prompt: 32,
+              completion: 10,
+              numRequests: 2,
+            },
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: '',
+                assertion: { type: 'llm-rubric' },
+                tokensUsed: {
+                  total: 42,
+                  prompt: 32,
+                  completion: 10,
+                  numRequests: 2,
+                },
+              },
+            ],
+          },
+        },
+      ],
+      stats: createStats(),
+      providers: [],
+    });
+
+    expect(runStats.assertions.tokenUsage).toMatchObject({
+      totalTokens: 42,
+      promptTokens: 32,
+      completionTokens: 10,
+      numRequests: 2,
+    });
+  });
+
   it('should count zero-millisecond and uncached default responses in aggregate stats', () => {
     const results: StatableResult[] = [
       {

@@ -1,4 +1,10 @@
 import { MODEL_GRADED_ASSERTION_TYPES } from '../assertions/constants';
+import {
+  accumulateResultAssertionTokenUsage,
+  createAssertionTokenAccumulator,
+  getStatsAssertionTokenUsage,
+  toAssertionTokenUsage,
+} from './assertionTokens';
 
 import type { AssertionType, EvaluateStats } from '../types/index';
 import type { AssertionTokenUsage, AssertionTypeStats, StatableResult } from './types';
@@ -101,16 +107,12 @@ export function computeAssertionStats(
   const modelGraded = Array.from(assertionTypes).filter((type) =>
     MODEL_GRADED_ASSERTION_TYPES.has(type as AssertionType),
   ).length;
-
-  // Get token usage for assertions from stats
-  const tokenUsage: AssertionTokenUsage = {
-    totalTokens: stats.tokenUsage?.assertions?.total || 0,
-    promptTokens: stats.tokenUsage?.assertions?.prompt || 0,
-    completionTokens: stats.tokenUsage?.assertions?.completion || 0,
-    cachedTokens: stats.tokenUsage?.assertions?.cached || 0,
-    numRequests: stats.tokenUsage?.assertions?.numRequests || 0,
-    reasoningTokens: stats.tokenUsage?.assertions?.completionDetails?.reasoning || 0,
-  };
+  const resultTokenUsage = createAssertionTokenAccumulator();
+  let foundResultTokenUsage = false;
+  for (const result of results) {
+    foundResultTokenUsage =
+      accumulateResultAssertionTokenUsage(resultTokenUsage, result) || foundResultTokenUsage;
+  }
 
   return {
     total,
@@ -118,6 +120,8 @@ export function computeAssertionStats(
     passRate: total > 0 ? passed / total : 0,
     modelGraded,
     breakdown: computeAssertionBreakdown(results),
-    tokenUsage,
+    tokenUsage: toAssertionTokenUsage(
+      foundResultTokenUsage ? resultTokenUsage : getStatsAssertionTokenUsage(stats),
+    ),
   };
 }

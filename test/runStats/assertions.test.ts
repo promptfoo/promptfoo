@@ -280,6 +280,56 @@ describe('computeAssertionStats', () => {
     });
   });
 
+  it('should prefer result assertion token usage when available', () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 100,
+        gradingResult: {
+          tokensUsed: {
+            total: 60,
+            prompt: 45,
+            completion: 15,
+            numRequests: 1,
+          },
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: '',
+              assertion: { type: 'llm-rubric' },
+            },
+          ],
+        },
+      },
+    ];
+    const evalStats = createStats({
+      tokenUsage: {
+        total: 1000,
+        prompt: 800,
+        completion: 200,
+        cached: 100,
+        numRequests: 5,
+        assertions: {
+          total: 500,
+          prompt: 400,
+          completion: 100,
+          cached: 50,
+          numRequests: 3,
+        },
+      },
+    } as any);
+
+    const stats = computeAssertionStats(results, evalStats);
+
+    expect(stats.tokenUsage).toMatchObject({
+      totalTokens: 60,
+      promptTokens: 45,
+      completionTokens: 15,
+      numRequests: 1,
+    });
+  });
+
   it('should handle missing assertion token usage gracefully', () => {
     const evalStats = createStats();
     const stats = computeAssertionStats([], evalStats);
