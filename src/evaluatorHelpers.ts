@@ -128,6 +128,62 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function normalizeVariablePath(variablePath: string): string {
+  return variablePath.replace(/\[(\w+)\]/g, '.$1');
+}
+
+function isSkippedVariablePath(variablePath: string, skipRenderVars?: string[]): boolean {
+  if (!skipRenderVars?.length) {
+    return false;
+  }
+
+  const normalizedPath = normalizeVariablePath(variablePath);
+  return skipRenderVars.some((skipRenderVar) => {
+    const normalizedSkippedPath = normalizeVariablePath(skipRenderVar);
+    return (
+      normalizedPath === normalizedSkippedPath ||
+      normalizedPath.startsWith(`${normalizedSkippedPath}.`)
+    );
+  });
+}
+
+function referencesSkippedVariablePath(
+  variableName: string,
+  skippedVariablePaths: Set<string>,
+): boolean {
+  const normalizedVariableName = normalizeVariablePath(variableName);
+  return [...skippedVariablePaths].some((skippedVariablePath) => {
+    const normalizedSkippedPath = normalizeVariablePath(skippedVariablePath);
+    return (
+      normalizedVariableName === normalizedSkippedPath ||
+      normalizedVariableName.startsWith(`${normalizedSkippedPath}.`)
+    );
+  });
+}
+
+function blockTagsReferenceSkippedVariables(
+  template: string,
+  skippedVariablePaths: Set<string>,
+): boolean {
+  const blockTagRegex = /\{%\s*([\s\S]*?)\s*%\}/g;
+  let match: RegExpExecArray | null;
+  while ((match = blockTagRegex.exec(template)) !== null) {
+    const tagBody = match[1].replace(/\s+/g, '');
+    if (
+      [...skippedVariablePaths].some((skippedVariablePath) => {
+        const normalizedSkippedPath = normalizeVariablePath(skippedVariablePath);
+        const skippedReference = new RegExp(
+          `(^|[^A-Za-z0-9_])${escapeRegExp(normalizedSkippedPath)}($|[^A-Za-z0-9_])`,
+        );
+        return skippedReference.test(tagBody);
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
   return extractVariablesFromTemplate(template).some((variableName) => {
     const rootVariableName = getRootVariableName(variableName);
@@ -142,26 +198,27 @@ function referencesSkippedVariables(
   skipRenderVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): boolean {
-  const skippedRootVars = new Set([...(skipRenderVars ?? []), ...(varsResolvedFromSkipped ?? [])]);
-  if (skippedRootVars.size === 0) {
+  const skippedVariablePaths = new Set([
+    ...(skipRenderVars ?? []),
+    ...(varsResolvedFromSkipped ?? []),
+  ]);
+  if (skippedVariablePaths.size === 0) {
     return false;
   }
 
   if (
     extractVariablesFromTemplate(template).some((variableName) => {
       const rootVariableName = getRootVariableName(variableName);
-      return Boolean(rootVariableName && skippedRootVars.has(rootVariableName));
+      return (
+        referencesSkippedVariablePath(variableName, skippedVariablePaths) ||
+        Boolean(rootVariableName && skippedVariablePaths.has(rootVariableName))
+      );
     })
   ) {
     return true;
   }
 
-  return [...skippedRootVars].some((rootVariableName) => {
-    const rootReference = new RegExp(
-      `(^|[^A-Za-z0-9_])${escapeRegExp(rootVariableName)}(\\b|\\s*[.\\[])`,
-    );
-    return rootReference.test(template);
-  });
+  return blockTagsReferenceSkippedVariables(template, skippedVariablePaths);
 }
 
 /**
@@ -275,7 +332,15 @@ function isPlainObject(value: VarValue): value is Record<string, VarValue> {
   return prototype === Object.prototype || prototype === null;
 }
 
-function containsFileReference(value: VarValue, seen: WeakSet<object> = new WeakSet()): boolean {
+function containsLoadableFileReference(
+  value: VarValue,
+  varPath: string,
+  skipRenderVars?: string[],
+  seen: WeakSet<object> = new WeakSet(),
+): boolean {
+  if (isSkippedVariablePath(varPath, skipRenderVars)) {
+    return false;
+  }
   if (typeof value === 'string') {
     return value.startsWith('file://');
   }
@@ -291,7 +356,12 @@ function containsFileReference(value: VarValue, seen: WeakSet<object> = new Weak
     return Boolean(
       descriptor &&
         'value' in descriptor &&
-        containsFileReference(descriptor.value as VarValue, seen),
+        containsLoadableFileReference(
+          descriptor.value as VarValue,
+          propertyPath(varPath, key, Array.isArray(value)),
+          skipRenderVars,
+          seen,
+        ),
     );
   });
 }
@@ -434,7 +504,11 @@ function propertyPath(parentPath: string, key: PropertyKey, parentIsArray: boole
   return `${parentPath}.${String(key)}`;
 }
 
-function createContainerShell(value: VarValue[] | Record<string, VarValue>): VarValue {
+function createContainerShell(
+  value: VarValue[] | Record<string, VarValue>,
+  varPath: string,
+  skipRenderVars?: string[],
+): VarValue {
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const shell = Array.isArray(value) ? [] : Object.create(Object.getPrototypeOf(value));
 
@@ -443,7 +517,11 @@ function createContainerShell(value: VarValue[] | Record<string, VarValue>): Var
     if (
       descriptor &&
       'value' in descriptor &&
-      containsFileReference(descriptor.value as VarValue)
+      containsLoadableFileReference(
+        descriptor.value as VarValue,
+        propertyPath(varPath, key, Array.isArray(value)),
+        skipRenderVars,
+      )
     ) {
       continue;
     }
@@ -471,9 +549,15 @@ async function loadNestedVariableFiles(
   vars: Record<string, VarValue>,
   provider?: ApiProvider,
   fileBackedStringPaths: Set<string> = new Set(),
+  skipRenderVars?: string[],
   resolvedObjects: WeakMap<object, VarValue> = new WeakMap(),
   publishResolvedValue?: (resolvedValue: VarValue) => void,
 ): Promise<VarValue> {
+  if (isSkippedVariablePath(varPath, skipRenderVars)) {
+    publishResolvedValue?.(value);
+    return value;
+  }
+
   if (typeof value === 'string' && value.startsWith('file://')) {
     const resolved = await loadVariableFile(varPath, value, basePrompt, vars, provider);
     fileBackedStringPaths.add(varPath);
@@ -488,7 +572,11 @@ async function loadNestedVariableFiles(
       return existing;
     }
 
-    const resolved = createContainerShell(value as VarValue[]) as VarValue[];
+    const resolved = createContainerShell(
+      value as VarValue[],
+      varPath,
+      skipRenderVars,
+    ) as VarValue[];
     resolvedObjects.set(value, resolved);
     publishResolvedValue?.(resolved);
     assignRootContainer(vars, varPath, value, resolved);
@@ -498,7 +586,11 @@ async function loadNestedVariableFiles(
       if (
         !descriptor ||
         !('value' in descriptor) ||
-        !containsFileReference(descriptor.value as VarValue)
+        !containsLoadableFileReference(
+          descriptor.value as VarValue,
+          propertyPath(varPath, key, true),
+          skipRenderVars,
+        )
       ) {
         continue;
       }
@@ -509,6 +601,7 @@ async function loadNestedVariableFiles(
         vars,
         provider,
         fileBackedStringPaths,
+        skipRenderVars,
         resolvedObjects,
         (result) => {
           Object.defineProperty(resolved, key, { ...descriptor, value: result });
@@ -531,7 +624,7 @@ async function loadNestedVariableFiles(
     return existing;
   }
 
-  const resolved = createContainerShell(value) as Record<string, VarValue>;
+  const resolved = createContainerShell(value, varPath, skipRenderVars) as Record<string, VarValue>;
   resolvedObjects.set(value, resolved);
   publishResolvedValue?.(resolved);
   assignRootContainer(vars, varPath, value, resolved);
@@ -541,7 +634,11 @@ async function loadNestedVariableFiles(
     if (
       !descriptor ||
       !('value' in descriptor) ||
-      !containsFileReference(descriptor.value as VarValue)
+      !containsLoadableFileReference(
+        descriptor.value as VarValue,
+        propertyPath(varPath, key, false),
+        skipRenderVars,
+      )
     ) {
       continue;
     }
@@ -552,6 +649,7 @@ async function loadNestedVariableFiles(
       vars,
       provider,
       fileBackedStringPaths,
+      skipRenderVars,
       resolvedObjects,
       (result) => {
         Object.defineProperty(resolved, key, { ...descriptor, value: result });
@@ -573,6 +671,7 @@ function renderNestedTemplates(
   skipRenderVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
   seen: WeakMap<object, VarValue> = new WeakMap(),
+  changed?: { value: boolean },
 ): VarValue {
   if (typeof value === 'string') {
     if (!fileBackedStringPaths.has(varPath)) {
@@ -584,7 +683,11 @@ function renderNestedTemplates(
     ) {
       return value;
     }
-    return nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars);
+    const rendered = nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars);
+    if (rendered !== value) {
+      changed!.value = true;
+    }
+    return rendered;
   }
 
   if (!Array.isArray(value) && !isPlainObject(value)) {
@@ -621,6 +724,7 @@ function renderNestedTemplates(
         skipRenderVars,
         varsResolvedFromSkipped,
         seen,
+        changed,
       ),
     });
   }
@@ -628,8 +732,15 @@ function renderNestedTemplates(
   return resolved as VarValue;
 }
 
-function shouldLoadNestedVariableFiles(value: VarValue): boolean {
-  return (Array.isArray(value) || isPlainObject(value)) && containsFileReference(value);
+function shouldLoadNestedVariableFiles(
+  value: VarValue,
+  varName: string,
+  skipRenderVars?: string[],
+): boolean {
+  return (
+    (Array.isArray(value) || isPlainObject(value)) &&
+    containsLoadableFileReference(value, varName, skipRenderVars)
+  );
 }
 
 async function loadPackageVariable(
@@ -696,7 +807,7 @@ async function loadFileBackedVariables({
         varName,
         await loadPackageVariable(varName, value, basePrompt, vars, provider),
       );
-    } else if (shouldLoadNestedVariableFiles(value)) {
+    } else if (shouldLoadNestedVariableFiles(value, varName, skipRenderVars)) {
       const resolved = await loadNestedVariableFiles(
         value,
         varName,
@@ -704,6 +815,7 @@ async function loadFileBackedVariables({
         vars,
         provider,
         nestedFileValuePaths,
+        skipRenderVars,
       );
       if (resolved !== value) {
         assignVarValue(vars, varName, resolved);
@@ -764,23 +876,33 @@ function renderNestedFileBackedTemplates({
     return;
   }
 
-  for (const varName of nestedFileVarNames) {
-    if (skipRenderVars?.includes(varName)) {
-      continue;
-    }
-    assignVarValue(
-      vars,
-      varName,
-      renderNestedTemplates(
-        vars[varName],
-        varName,
+  for (let iteration = 0; iteration < 5; iteration++) {
+    let changedAny = false;
+    for (const varName of nestedFileVarNames) {
+      if (isSkippedVariablePath(varName, skipRenderVars)) {
+        continue;
+      }
+      const changed = { value: false };
+      assignVarValue(
         vars,
-        nunjucks,
-        nestedFileValuePaths,
-        skipRenderVars,
-        varsResolvedFromSkipped,
-      ),
-    );
+        varName,
+        renderNestedTemplates(
+          vars[varName],
+          varName,
+          vars,
+          nunjucks,
+          nestedFileValuePaths,
+          skipRenderVars,
+          varsResolvedFromSkipped,
+          new WeakMap(),
+          changed,
+        ),
+      );
+      changedAny ||= changed.value;
+    }
+    if (!changedAny) {
+      break;
+    }
   }
 }
 
@@ -921,14 +1043,6 @@ export async function renderPrompt(
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
 
-  renderNestedFileBackedTemplates({
-    nestedFileValuePaths,
-    nestedFileVarNames,
-    nunjucks,
-    skipRenderVars,
-    vars,
-    varsResolvedFromSkipped,
-  });
   // Third party integrations
   const externalPrompt = await renderExternalPromptIfNeeded(prompt, vars);
   if (externalPrompt !== undefined) {
@@ -948,6 +1062,15 @@ export async function renderPrompt(
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
+    renderNestedFileBackedTemplates({
+      nestedFileValuePaths,
+      nestedFileVarNames,
+      nunjucks,
+      skipRenderVars,
+      vars,
+      varsResolvedFromSkipped,
+    });
+
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => {

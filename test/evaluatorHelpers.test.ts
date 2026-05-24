@@ -683,6 +683,57 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('{% for item in attack.payload %}{{ item }}{% endfor %}');
     });
 
+    it('should not treat skipped variable names in literal file text as template references', async () => {
+      const prompt = toPrompt('{{ payload.report }}');
+      const vars = {
+        name: 'Alice',
+        payload: {
+          report: 'file://report.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('System prompt for {{ name }}');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['prompt']);
+
+      expect(renderedPrompt).toBe('System prompt for Alice');
+    });
+
+    it('should render nested file-backed templates after sibling templates settle', async () => {
+      const prompt = toPrompt('{{ payload.a }} / {{ payload.b }}');
+      const vars = {
+        name: 'Alice',
+        payload: {
+          a: 'file://a.txt',
+          b: 'file://b.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile)
+        .mockResolvedValueOnce('{{ payload.b }}')
+        .mockResolvedValueOnce('Hello {{ name }}');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Hello Alice / Hello Alice');
+    });
+
+    it('should preserve nested file-backed template text in JSON prompts', async () => {
+      const prompt = toPrompt('{"content":"{{ payload.report }}"}');
+      const vars = {
+        name: 'Alice',
+        payload: {
+          report: 'file://report.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('Example {{ name }}');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ content: 'Example {{ name }}' }, null, 2));
+    });
+
     it('should preserve non-plain nested variable values', async () => {
       const date = new Date('2024-01-15T00:00:00.000Z');
       const vars = { eventDate: date };
@@ -813,6 +864,27 @@ describe('evaluatorHelpers', () => {
 
       expect(fs.promises.readFile).not.toHaveBeenCalled();
       expect(renderedPrompt).toBe('file://payload.txt');
+    });
+
+    it('should not load nested file:// references for exact skipped nested vars', async () => {
+      const prompt = toPrompt('{{ payload.query }}');
+      const vars = {
+        payload: {
+          query: 'file://attack.txt',
+          context: 'file://context.txt',
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockResolvedValueOnce('safe context');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload.query']);
+
+      expect(fs.promises.readFile).toHaveBeenCalledTimes(1);
+      expect(fs.promises.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('context.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('file://attack.txt');
     });
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
