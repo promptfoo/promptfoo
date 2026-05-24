@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CodeScanOutputFormat } from '../../../src/types/codeScan';
 
 describe('Scanner fork PR auth rejection', () => {
   beforeEach(() => {
@@ -95,12 +94,9 @@ describe('Scanner fork PR auth rejection', () => {
   const SKIP_MESSAGE = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
 
   it.each([
-    { format: 'json' as const, expected: CodeScanOutputFormat.JSON },
-    { format: 'sarif' as const, expected: CodeScanOutputFormat.SARIF },
-  ])('emits a structured skip response with skipReason in $format mode', async ({
-    format,
-    expected,
-  }) => {
+    'json',
+    'sarif',
+  ] as const)('emits a structured skip response with skipReason in %s mode', async (format) => {
     mockForkPrAuthScanner();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
@@ -128,7 +124,7 @@ describe('Scanner fork PR auth rejection', () => {
       },
       expect.any(Number),
       {
-        format: expected,
+        format,
         githubPr: 'test-owner/test-repo#123',
       },
     );

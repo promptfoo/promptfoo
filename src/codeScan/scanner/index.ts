@@ -327,10 +327,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Handle fork PR auth rejection as success (helpful comment posted to PR by the server).
-    // In machine-readable modes we must still emit a structured ScanResponse to stdout so the
-    // GitHub Action (which always invokes the CLI with --json) does not choke on empty output
-    // — see issue #9424.
+    // Handle fork PR auth rejection as success — the server has already posted a helpful PR
+    // comment. Machine-readable modes must still emit a structured ScanResponse so consumers
+    // (e.g. the GitHub Action) don't choke on empty stdout. See issue #9424.
     if (errorMessage.includes('Fork PR scanning not authorized')) {
       const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
       if (outputFormat !== CodeScanOutputFormat.TEXT) {
