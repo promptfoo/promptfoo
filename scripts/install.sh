@@ -27,7 +27,7 @@ readonly GITHUB_RELEASES="https://github.com/${GITHUB_REPO}/releases"
 
 INSTALL_DIR="${PROMPTFOO_INSTALL_DIR:-$HOME/.promptfoo}"
 BIN_DIR="$INSTALL_DIR/bin"
-VERSION="${PROMPTFOO_VERSION:-${1:-latest}}"
+VERSION="${PROMPTFOO_VERSION:-latest}"
 INSTALLED_VERSION=""
 
 # ─── Colors ──────────────────────────────────────────────────────────────────

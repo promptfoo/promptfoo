@@ -670,6 +670,66 @@ EOF
 
 # ─── Install Script Tests ────────────────────────────────────────────────────
 
+create_fake_npm_fallback_bin() {
+  local fake_bin="$1"
+
+  cat >"$fake_bin/node" <<'EOF'
+#!/bin/sh
+echo v20.20.0
+EOF
+  chmod +x "$fake_bin/node"
+
+  cat >"$fake_bin/curl" <<'EOF'
+#!/bin/sh
+case "$*" in
+*"/releases/latest"*)
+  echo '{"tag_name":"v0.0.0"}'
+  exit 0
+  ;;
+*)
+  exit 22
+  ;;
+esac
+EOF
+  chmod +x "$fake_bin/curl"
+
+  cat >"$fake_bin/npm" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+prefix=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --prefix)
+    prefix="$2"
+    shift 2
+    ;;
+  *)
+    shift
+    ;;
+  esac
+done
+
+if [[ -z "$prefix" ]]; then
+  echo "missing --prefix" >&2
+  exit 1
+fi
+
+mkdir -p "$prefix/bin" "$prefix/lib/node_modules/promptfoo/dist/src"
+cat >"$prefix/bin/promptfoo" <<'EOF_PROMPTFOO'
+#!/bin/sh
+echo 0.0.0
+EOF_PROMPTFOO
+chmod +x "$prefix/bin/promptfoo"
+ln -sf "$prefix/bin/promptfoo" "$prefix/bin/pf"
+
+cat >"$prefix/lib/node_modules/promptfoo/dist/src/main.js" <<'EOF_MAIN'
+throw new Error('wrong entrypoint');
+EOF_MAIN
+EOF
+  chmod +x "$fake_bin/npm"
+}
+
 test_install_script_syntax() {
   log_test "install.sh syntax is valid"
 
@@ -722,54 +782,7 @@ test_install_script_npm_fallback_preserves_shims() {
   fake_bin="$fake_root/bin"
   install_dir="$fake_root/install"
   mkdir -p "$fake_bin"
-
-  cat >"$fake_bin/node" <<'EOF'
-#!/bin/sh
-echo v20.20.0
-EOF
-  chmod +x "$fake_bin/node"
-
-  cat >"$fake_bin/curl" <<'EOF'
-#!/bin/sh
-exit 22
-EOF
-  chmod +x "$fake_bin/curl"
-
-  cat >"$fake_bin/npm" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-
-prefix=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  --prefix)
-    prefix="$2"
-    shift 2
-    ;;
-  *)
-    shift
-    ;;
-  esac
-done
-
-if [[ -z "$prefix" ]]; then
-  echo "missing --prefix" >&2
-  exit 1
-fi
-
-mkdir -p "$prefix/bin" "$prefix/lib/node_modules/promptfoo/dist/src"
-cat >"$prefix/bin/promptfoo" <<'EOF_PROMPTFOO'
-#!/bin/sh
-echo 0.0.0
-EOF_PROMPTFOO
-chmod +x "$prefix/bin/promptfoo"
-ln -sf "$prefix/bin/promptfoo" "$prefix/bin/pf"
-
-cat >"$prefix/lib/node_modules/promptfoo/dist/src/main.js" <<'EOF_MAIN'
-throw new Error('wrong entrypoint');
-EOF_MAIN
-EOF
-  chmod +x "$fake_bin/npm"
+  create_fake_npm_fallback_bin "$fake_bin"
 
   if output=$(
     PATH="$fake_bin:$PATH" \
@@ -786,6 +799,34 @@ EOF
   fi
 
   log_fail "install.sh npm fallback failed: $output"
+  return 1
+}
+
+test_install_script_dir_without_version_uses_latest() {
+  log_test "install.sh --dir without explicit version installs latest"
+
+  local fake_root fake_bin install_dir output
+  fake_root=$(mktemp -d "$TEST_ROOT/dir-latest.XXXXXXXX")
+  fake_bin="$fake_root/bin"
+  install_dir="$fake_root/install"
+  mkdir -p "$fake_bin"
+  create_fake_npm_fallback_bin "$fake_bin"
+
+  if output=$(
+    PATH="$fake_bin:$PATH" \
+      PROMPTFOO_NO_MODIFY_PATH=1 \
+      PROMPTFOO_DISABLE_TELEMETRY=true \
+      bash "$ROOT_DIR/scripts/install.sh" --dir "$install_dir" 2>&1
+  ); then
+    if [[ -x "$install_dir/bin/promptfoo" ]] && [[ "$output" == *"Version: 0.0.0"* ]]; then
+      log_pass "install.sh --dir without version resolved latest"
+      return 0
+    fi
+    log_fail "install.sh --dir completed but did not install the resolved latest version"
+    return 1
+  fi
+
+  log_fail "install.sh --dir without version failed: $output"
   return 1
 }
 
@@ -926,6 +967,7 @@ main() {
   test_install_script_help
   test_install_script_dir_requires_value
   test_install_script_npm_fallback_preserves_shims
+  test_install_script_dir_without_version_uses_latest
   test_install_ps1_uses_package_entrypoint
   test_install_ps1_syntax
   test_site_installer_mirrors
