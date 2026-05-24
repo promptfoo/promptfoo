@@ -16,13 +16,16 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata }) => (
+  default: vi.fn(({ gradingResults, metadata, onClose }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
     >
       Mocked Dialog Component
+      <button type="button" onClick={onClose}>
+        Close mocked dialog
+      </button>
     </div>
   )),
 }));
@@ -65,10 +68,12 @@ const resetMockStoreState = () => {
 
 beforeEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
 });
 
 afterEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
   restoreTestTimers();
 });
 
@@ -251,6 +256,43 @@ describe('EvalOutputCell', () => {
     // Check that metadata is passed correctly
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
     expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('adds row and details hints when the prompt dialog opens', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} rowPositionIndex={50} />);
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(window.location.search).toBe('?rowId=51');
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('opens the prompt dialog from a matching details hash', () => {
+    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('clears the row hint when closing a deep-linked prompt dialog', async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, '', '/?rowId=51#details-row-1-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Close mocked dialog' }));
+
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
+  });
+
+  it('ignores a details hash that targets a different stable row index', () => {
+    window.history.replaceState({}, '', '/#details-row-51-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.queryByTestId('dialog-component')).not.toBeInTheDocument();
   });
 
   it('handles keyboard navigation between buttons', async () => {
@@ -816,11 +858,12 @@ describe('EvalOutputCell', () => {
     expect(container.querySelectorAll('img')).toHaveLength(0);
   });
 
-  it('allows copying row link to clipboard', async () => {
+  it('allows copying a cell deep-link to clipboard', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
     expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.hash = '#details-row-1-prompt-1';
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -832,6 +875,27 @@ describe('EvalOutputCell', () => {
     await waitFor(() => {
       expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
+  });
+
+  it('refreshes the rowId page hint when copying a cell deep-link', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    window.history.replaceState({}, '', '/eval/test-eval?rowId=99&filter=foo');
+
+    const expectedUrl = new URL(window.location.href);
+    expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.hash = '#details-row-1-prompt-1';
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByLabelText('Copy link to output'));
+
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+    });
+    const written = clipboard.writeText.mock.calls[0]?.[0];
+    expect(written).toContain('filter=foo');
+    expect(written).toContain('rowId=1');
   });
 
   it('shows checkmark after copying link', async () => {
