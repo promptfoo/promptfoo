@@ -111,4 +111,18 @@ describe('GitHub Models Default Providers', () => {
     expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
     expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
   });
+
+  it('should use GitHub redteam temperature from env overrides', async () => {
+    mockedGetEnvString.mockImplementation(function (_key: string, defaultValue = '') {
+      return defaultValue;
+    });
+
+    const providers = await getDefaultProviders({
+      GITHUB_TOKEN: 'override-github-token',
+      PROMPTFOO_JAILBREAK_TEMPERATURE: '0.36',
+    });
+
+    expect(providers.redteamProvider?.config?.temperature).toBe(0.36);
+    expect(providers.redteamJsonProvider?.config?.temperature).toBe(0.36);
+  });
 });

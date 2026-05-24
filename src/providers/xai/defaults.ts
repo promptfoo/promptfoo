@@ -20,7 +20,7 @@ export function getXAIProviders(
   | 'webSearchProvider'
 > {
   const gradingProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, { env });
-  const redteamTemperature = getDefaultRedteamTemperature();
+  const redteamTemperature = getDefaultRedteamTemperature(env);
   const redteamProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
     env,
     config: { config: { temperature: redteamTemperature } },

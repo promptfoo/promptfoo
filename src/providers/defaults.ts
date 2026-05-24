@@ -7,9 +7,8 @@ import { AzureModerationProvider } from './azure/moderation';
 import {
   DefaultGitHubGradingJsonProvider,
   DefaultGitHubGradingProvider,
-  DefaultGitHubRedteamJsonProvider,
-  DefaultGitHubRedteamProvider,
   DefaultGitHubSuggestionsProvider,
+  getGitHubRedteamProviders,
 } from './github/defaults';
 import { AIStudioChatProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
@@ -169,7 +168,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     useMistralDefaults,
     useXAIDefaults,
   } = await getDefaultProviderPreferences(env);
-  const redteamTemperature = getDefaultRedteamTemperature();
+  const redteamTemperature = getDefaultRedteamTemperature(env);
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
 
@@ -306,6 +305,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     };
   } else if (useGitHubDefaults) {
     logger.debug('Using GitHub Models default providers');
+    const githubRedteamProviders = getGitHubRedteamProviders(env);
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
       gradingJsonProvider: DefaultGitHubGradingJsonProvider,
@@ -313,8 +313,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
       synthesizeProvider: DefaultGitHubGradingJsonProvider,
-      redteamProvider: DefaultGitHubRedteamProvider,
-      redteamJsonProvider: DefaultGitHubRedteamJsonProvider,
+      redteamProvider: githubRedteamProviders.redteamProvider,
+      redteamJsonProvider: githubRedteamProviders.redteamJsonProvider,
     };
   } else {
     logger.debug('Using OpenAI default providers');

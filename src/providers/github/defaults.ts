@@ -1,6 +1,8 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import { getDefaultRedteamTemperature } from '../redteamDefaults';
 
+import type { EnvOverrides } from '../../types/env';
+
 // GitHub Models default providers
 // Using OpenAI-compatible API with GitHub's endpoint
 const githubConfig = {
@@ -23,20 +25,35 @@ export const DefaultGitHubSuggestionsProvider = new OpenAiChatCompletionProvider
   config: githubConfig,
 });
 
-export const DefaultGitHubRedteamProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
-  config: {
-    ...githubConfig,
-    temperature: getDefaultRedteamTemperature(),
-  },
-});
+function createGitHubRedteamProvider(env?: EnvOverrides) {
+  return new OpenAiChatCompletionProvider('openai/gpt-5', {
+    config: {
+      ...githubConfig,
+      temperature: getDefaultRedteamTemperature(env),
+    },
+  });
+}
 
-export const DefaultGitHubRedteamJsonProvider = new OpenAiChatCompletionProvider('openai/gpt-5', {
-  config: {
-    ...githubConfig,
-    temperature: getDefaultRedteamTemperature(),
-    response_format: { type: 'json_object' },
-  },
-});
+function createGitHubRedteamJsonProvider(env?: EnvOverrides) {
+  return new OpenAiChatCompletionProvider('openai/gpt-5', {
+    config: {
+      ...githubConfig,
+      temperature: getDefaultRedteamTemperature(env),
+      response_format: { type: 'json_object' },
+    },
+  });
+}
+
+export const DefaultGitHubRedteamProvider = createGitHubRedteamProvider();
+
+export const DefaultGitHubRedteamJsonProvider = createGitHubRedteamJsonProvider();
+
+export function getGitHubRedteamProviders(env?: EnvOverrides) {
+  return {
+    redteamProvider: createGitHubRedteamProvider(env),
+    redteamJsonProvider: createGitHubRedteamJsonProvider(env),
+  };
+}
 
 // Fast model for quick evaluations
 export const DefaultGitHubFastProvider = new OpenAiChatCompletionProvider('openai/gpt-5-nano', {
