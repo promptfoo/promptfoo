@@ -423,11 +423,18 @@ function hasFunctionValue(value: unknown, seen: WeakSet<object> = new WeakSet())
 
 /**
  * Build a dedupe key for a provider entry. Returns `undefined` when no stable
- * key is possible (the value is a function, or an object that holds function
- * values that JSON.stringify would silently drop).
+ * key is possible (an object that holds function values JSON.stringify would
+ * silently drop, an ApiProvider instance whose identity lives on the prototype,
+ * or a value JSON.stringify refuses to serialize).
+ *
+ * Functions are keyed by reference so the same fn ref listed twice still
+ * dedupes to one entry, while distinct fns are preserved.
  */
-function providerDedupeKey(provider: unknown): string | undefined {
+function providerDedupeKey(provider: unknown): unknown {
   if (typeof provider === 'string') {
+    return provider;
+  }
+  if (typeof provider === 'function') {
     return provider;
   }
   if (isApiProvider(provider) || hasFunctionValue(provider)) {
@@ -467,7 +474,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   }
 
   const providers: UnifiedConfig['providers'] = [];
-  const seenProviders = new Set<string>();
+  const seenProviders = new Set<unknown>();
   configs.forEach((config) => {
     invariant(
       typeof config.providers !== 'function',

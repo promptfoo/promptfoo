@@ -1273,6 +1273,21 @@ describe('combineConfigs', () => {
 
     expect(result.providers).toEqual([providerA, providerB]);
   });
+
+  it('dedupes the same CallApiFunction instance when it appears multiple times', async () => {
+    // Behavior carried over from #9402: same function reference twice → one entry.
+    const sharedProvider = async (prompt: string) => ({ output: `shared: ${prompt}` });
+
+    vi.mocked(importModule).mockResolvedValueOnce({
+      prompts: ['{{prompt}}'],
+      providers: [sharedProvider, sharedProvider],
+      tests: [{ vars: { prompt: 'hi' } }],
+    });
+
+    const result = await combineConfigs(['promptfooconfig.ts']);
+
+    expect(result.providers).toEqual([sharedProvider]);
+  });
 });
 
 describe('dereferenceConfig', () => {
