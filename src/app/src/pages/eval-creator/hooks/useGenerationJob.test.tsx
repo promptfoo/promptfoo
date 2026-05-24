@@ -125,6 +125,36 @@ describe('useGenerationJob', () => {
     expect(result.current.result).toBeNull();
   });
 
+  it('ignores in-flight polling failures after cancellation', async () => {
+    const onError = vi.fn();
+    let rejectStatus: ((reason: Error) => void) | undefined;
+
+    mockGetJobStatus.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectStatus = reject;
+        }),
+    );
+
+    const { result } = renderHook(() => useGenerationJob({ onError, pollInterval: 10 }));
+
+    await act(async () => {
+      await result.current.startJob('dataset', async () => ({ jobId: 'job-cancelled' }));
+    });
+
+    act(() => {
+      result.current.cancelJob();
+    });
+
+    await act(async () => {
+      rejectStatus?.(new Error('late polling failure'));
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.error).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   it('uses default error messaging and ignores async updates after unmount', async () => {
     const onError = vi.fn();
     let resolveStatus: ((value: Awaited<ReturnType<typeof getJobStatus>>) => void) | undefined;

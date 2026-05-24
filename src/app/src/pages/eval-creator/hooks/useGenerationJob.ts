@@ -138,6 +138,9 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
         if (!isMountedRef.current) {
           return;
         }
+        if (activeJobIdRef.current !== id) {
+          return;
+        }
         stopPolling();
         setStatus('error');
         const errorMsg = err instanceof Error ? err.message : 'Failed to get job status';
@@ -195,6 +198,7 @@ export function useGenerationJob(options: UseGenerationJobOptions = {}): UseGene
 
   const cancelJob = useCallback(() => {
     stopPolling();
+    activeJobIdRef.current = null;
     // Note: This doesn't cancel the server-side job, just stops polling
     // The job will continue to completion on the server
     if (status === 'pending' || status === 'in-progress') {

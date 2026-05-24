@@ -9,6 +9,7 @@ import {
   extractRequirements,
 } from '../../../src/generation/assertions/coverageAnalyzer';
 import { generateNegativeTests } from '../../../src/generation/assertions/negativeTestGenerator';
+import { jobEventEmitter } from '../../../src/generation/shared/jobManager';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { loadApiProvider } from '../../../src/providers/index';
 
@@ -91,6 +92,7 @@ describe('generation assertions index', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    jobEventEmitter.removeAllListeners();
   });
 
   it('rejects empty prompt input', async () => {
@@ -118,6 +120,13 @@ describe('generation assertions index', () => {
       );
 
     const progress = vi.fn();
+    const assertionEvents: unknown[] = [];
+    jobEventEmitter.on('job:assertions-job', (event) => {
+      if (event.type === 'assertion') {
+        assertionEvents.push(event.assertion);
+      }
+    });
+
     const result = await generateAssertions(
       [{ raw: 'Return JSON', label: 'Prompt' }],
       [{ assert: [{ type: 'contains', value: 'existing' }] }],
@@ -152,6 +161,13 @@ describe('generation assertions index', () => {
     expect(progress).toHaveBeenCalled();
     expect(extractRequirements).toHaveBeenCalled();
     expect(analyzeCoverage).toHaveBeenCalledTimes(2);
+    expect(assertionEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'python', metric: 'JSON' }),
+        expect.objectContaining({ type: 'llm-rubric', metric: 'Tone' }),
+        expect.objectContaining({ type: 'not-contains', value: 'secret' }),
+      ]),
+    );
   });
 
   it('uses an explicitly requested provider and keeps supplied validation samples', async () => {

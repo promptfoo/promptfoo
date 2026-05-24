@@ -462,19 +462,23 @@ export async function generateAssertions(
 
     if (isNoneResponse) {
       // Use LLM-based assertion
-      assertions.push({
+      const assertion: Assertion = {
         type: mergedOptions.type || 'pi',
         metric: question.label,
         value: question.question,
-      });
+      };
+      assertions.push(assertion);
+      progress.emitAssertion(assertion);
     } else {
       // Use Python assertion
       pythonConverted++;
-      assertions.push({
+      const assertion: Assertion = {
         type: 'python',
         metric: question.label,
         value: toExecutablePythonAssertionValue(pythonOutput),
-      });
+      };
+      assertions.push(assertion);
+      progress.emitAssertion(assertion);
     }
   }
 
@@ -510,6 +514,7 @@ export async function generateAssertions(
       types: mergedOptions.negativeTests.types,
       count: mergedOptions.negativeTests.count,
     });
+    progress.emitAssertions(negativeTests);
 
     progress.increment();
     logger.debug(`Generated ${negativeTests.length} negative tests`);

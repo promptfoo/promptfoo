@@ -35,6 +35,8 @@ interface TestCasesSectionProps {
   onOpenYamlEditor?: () => void;
 }
 
+const MAX_TEST_CASE_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
 // Validation function for TestCase structure
 function isValidTestCase(obj: unknown): obj is TestCase {
   if (!obj || typeof obj !== 'object') {
@@ -85,6 +87,89 @@ const getManagedTestsLabel = (tests: unknown): string => {
   return 'YAML test configuration';
 };
 
+const isCsvFile = (fileName: string) => fileName.endsWith('.csv');
+
+const isYamlFile = (fileName: string) => fileName.endsWith('.yaml') || fileName.endsWith('.yml');
+
+async function parseCsvTestCases(text: string): Promise<TestCase[]> {
+  const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
+  const rows: CsvRow[] = parseCsv(text, { columns: true });
+  return rows.map((row) => testCaseFromCsvRow(row) as TestCase);
+}
+
+async function parseYamlTestCases(
+  text: string,
+): Promise<{ testCases: TestCase[]; skippedInvalidCount: number }> {
+  const yaml = await import('js-yaml');
+  const parsedYaml = yaml.load(text);
+
+  if (Array.isArray(parsedYaml)) {
+    const validTestCases = parsedYaml.filter(isValidTestCase);
+    if (validTestCases.length === 0) {
+      throw new Error(
+        'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
+      );
+    }
+    return {
+      testCases: validTestCases,
+      skippedInvalidCount: parsedYaml.length - validTestCases.length,
+    };
+  }
+
+  if (parsedYaml && isValidTestCase(parsedYaml)) {
+    return { testCases: [parsedYaml], skippedInvalidCount: 0 };
+  }
+
+  throw new Error(
+    'Invalid YAML format. Expected an array of test cases or a single test case object with valid structure.',
+  );
+}
+
+async function parseTestCaseFile(
+  fileName: string,
+  text: string,
+): Promise<{ testCases: TestCase[]; skippedInvalidCount: number; shouldAddDescriptions: boolean }> {
+  if (isCsvFile(fileName)) {
+    return {
+      testCases: await parseCsvTestCases(text),
+      skippedInvalidCount: 0,
+      shouldAddDescriptions: false,
+    };
+  }
+
+  if (isYamlFile(fileName)) {
+    return {
+      ...(await parseYamlTestCases(text)),
+      shouldAddDescriptions: true,
+    };
+  }
+
+  throw new Error('Unsupported file type. Please upload a CSV (.csv) or YAML (.yaml, .yml) file.');
+}
+
+function withMissingDescriptions(testCases: TestCase[], existingCount: number): TestCase[] {
+  return testCases.map((testCase, index) => ({
+    ...testCase,
+    description: testCase.description || `Test Case #${existingCount + index + 1}`,
+  }));
+}
+
+function getFileParseErrorMessage(fileName: string, error: unknown): string {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+  if (isCsvFile(fileName)) {
+    return 'Failed to parse CSV file. Please ensure it has valid CSV format with headers.';
+  }
+
+  if (isYamlFile(fileName)) {
+    return errorMessage.includes('Invalid YAML') || errorMessage.includes('No valid test cases')
+      ? errorMessage
+      : 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.';
+  }
+
+  return errorMessage;
+}
+
 const TestCasesSection = ({ varsList, prompts = [], onOpenYamlEditor }: TestCasesSectionProps) => {
   const { config, updateConfig } = useStore();
   const rawTests = config.tests;
@@ -98,6 +183,36 @@ const TestCasesSection = ({ varsList, prompts = [], onOpenYamlEditor }: TestCase
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
   const { showToast } = useToast();
+
+  const importTestCasesFromText = async (fileName: string, text: string) => {
+    const {
+      testCases: parsedTestCases,
+      skippedInvalidCount,
+      shouldAddDescriptions,
+    } = await parseTestCaseFile(fileName, text);
+
+    if (parsedTestCases.length === 0) {
+      showToast('No test cases found in the file.', 'warning');
+      return;
+    }
+
+    if (skippedInvalidCount > 0) {
+      showToast(
+        `Warning: ${skippedInvalidCount} invalid test case${skippedInvalidCount === 1 ? '' : 's'} were skipped.`,
+        'warning',
+      );
+    }
+
+    const newTestCases = shouldAddDescriptions
+      ? withMissingDescriptions(parsedTestCases, testCases.length)
+      : parsedTestCases;
+
+    setTestCases([...testCases, ...newTestCases]);
+    showToast(
+      `Successfully imported ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}`,
+      'success',
+    );
+  };
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
@@ -119,12 +234,12 @@ const TestCasesSection = ({ varsList, prompts = [], onOpenYamlEditor }: TestCase
     event.stopPropagation();
     event.preventDefault();
 
-    const file = event.target.files?.[0];
+    const input = event.currentTarget;
+    const file = input.files?.[0];
     if (file) {
-      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-      if (file.size > MAX_FILE_SIZE) {
+      if (file.size > MAX_TEST_CASE_FILE_SIZE) {
         showToast('File size exceeds 50MB limit. Please use a smaller file.', 'error');
-        event.target.value = ''; // Reset file input
+        input.value = '';
         return;
       }
 
@@ -134,95 +249,22 @@ const TestCasesSection = ({ varsList, prompts = [], onOpenYamlEditor }: TestCase
         const text = e.target?.result?.toString();
         if (!text || text.trim() === '') {
           showToast('The file appears to be empty. Please select a file with content.', 'error');
-          event.target.value = ''; // Reset file input
+          input.value = '';
           return;
         }
 
         try {
-          let newTestCases: TestCase[] = [];
-
-          if (fileName.endsWith('.csv')) {
-            // Handle CSV files
-            const { parse: parseCsv } = await import('csv-parse/browser/esm/sync');
-            const rows: CsvRow[] = parseCsv(text, { columns: true });
-            newTestCases = rows.map((row) => testCaseFromCsvRow(row) as TestCase);
-          } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            // Handle YAML files
-            const yaml = await import('js-yaml');
-            const parsedYaml = yaml.load(text);
-
-            if (Array.isArray(parsedYaml)) {
-              // Validate array of test cases
-              const validTestCases = parsedYaml.filter(isValidTestCase);
-              if (validTestCases.length === 0) {
-                throw new Error(
-                  'No valid test cases found in YAML file. Please ensure test cases have proper structure.',
-                );
-              }
-              if (validTestCases.length < parsedYaml.length) {
-                showToast(
-                  `Warning: ${parsedYaml.length - validTestCases.length} invalid test cases were skipped.`,
-                  'warning',
-                );
-              }
-              newTestCases = validTestCases;
-            } else if (parsedYaml && isValidTestCase(parsedYaml)) {
-              // Single test case
-              newTestCases = [parsedYaml];
-            } else {
-              throw new Error(
-                'Invalid YAML format. Expected an array of test cases or a single test case object with valid structure.',
-              );
-            }
-          } else {
-            showToast(
-              'Unsupported file type. Please upload a CSV (.csv) or YAML (.yaml, .yml) file.',
-              'error',
-            );
-            event.target.value = ''; // Reset file input
-            return;
-          }
-
-          if (newTestCases.length === 0) {
-            showToast('No test cases found in the file.', 'warning');
-            event.target.value = ''; // Reset file input
-            return;
-          }
-
-          // Add description only for YAML files if missing
-          if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            newTestCases = newTestCases.map((tc, idx) => ({
-              ...tc,
-              description: tc.description || `Test Case #${testCases.length + idx + 1}`,
-            }));
-          }
-
-          setTestCases([...testCases, ...newTestCases]);
-          showToast(
-            `Successfully imported ${newTestCases.length} test case${newTestCases.length === 1 ? '' : 's'}`,
-            'success',
-          );
+          await importTestCasesFromText(fileName, text);
         } catch (error) {
           console.error('Error parsing file:', error);
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-          if (fileName.endsWith('.csv')) {
-            showToast(
-              'Failed to parse CSV file. Please ensure it has valid CSV format with headers.',
-              'error',
-            );
-          } else if (fileName.endsWith('.yaml') || fileName.endsWith('.yml')) {
-            showToast(
-              errorMessage.includes('Invalid YAML') || errorMessage.includes('No valid test cases')
-                ? errorMessage
-                : 'Failed to parse YAML file. Please ensure it contains valid YAML syntax.',
-              'error',
-            );
-          }
+          showToast(getFileParseErrorMessage(fileName, error), 'error');
+        } finally {
+          input.value = '';
         }
-
-        // Reset file input
-        event.target.value = '';
+      };
+      reader.onerror = () => {
+        showToast('Failed to read the selected file. Please try again.', 'error');
+        input.value = '';
       };
       reader.readAsText(file);
     }
