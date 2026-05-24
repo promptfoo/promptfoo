@@ -1,0 +1,37 @@
+name: Security Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  security-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@4b3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          node-version: "22.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --registry=https://registry.npmjs.org/
+
+      - name: Run security audit
+        run: npm audit --audit-level=high
+
+      - name: Run security audit on site
+        run: npm audit --audit-level=high --prefix site
+
+      - name: Run audit on src/app
+        run: npm audit --audit-level=high --prefix src/app
