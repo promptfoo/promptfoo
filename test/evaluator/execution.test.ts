@@ -3,7 +3,7 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import { __resetPromptConversationCacheForTests, evaluate, runEval } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -247,6 +247,54 @@ describeEvaluator('evaluator execution control', () => {
     expect(firstRenderedPrompt).not.toContain('prior=');
     expect(secondRenderedPrompt).toContain('prior=');
     expect(secondRenderedPrompt).toContain('now=Turn 2');
+  });
+
+  it('does not let late aborted provider responses mutate shared eval state', async () => {
+    const prompt = toPrompt('{{ topic }}');
+    const conversations = {};
+    const registers = {};
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('late-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'late output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const rows = await runEval({
+      abortSignal: abortController.signal,
+      conversations,
+      delay: 0,
+      isRedteam: false,
+      prompt,
+      promptIdx: 0,
+      provider,
+      registers,
+      repeatIndex: 0,
+      test: {
+        options: { storeOutputAs: 'lateValue' },
+        vars: { topic: 'first' },
+      },
+      testIdx: 0,
+      testSuite: {
+        providers: [provider],
+        prompts: [prompt],
+        tests: [],
+      },
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        failureReason: ResultFailureReason.ERROR,
+        success: false,
+      }),
+    );
+    expect(rows[0].error).toContain('Operation cancelled');
+    expect(conversations).toEqual({});
+    expect(registers).toEqual({});
   });
 
   it('persists updated prompt metrics between serial eval steps for live result refreshes', async () => {
@@ -1300,6 +1348,136 @@ describeEvaluator('evaluator execution control', () => {
       if (comparisonTimer) {
         clearTimeout(comparisonTimer);
       }
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps late select-best grading pending for max-duration timeout conversion', async () => {
+    vi.useFakeTimers();
+
+    const matchers = await import('../../src/matchers/comparison');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve([
+              { pass: true, score: 1, reason: 'Selected as best' },
+              { pass: false, score: 0, reason: 'Not selected' },
+            ]);
+          }, 100);
+        }),
+    );
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [targetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Target' },
+            { type: 'select-best', value: 'pick the best response' },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    let evalPromise: Promise<Eval> | undefined;
+
+    try {
+      evalPromise = evaluate(testSuite, evalRecord, { maxEvalTimeMs: 50 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(matchesSelectBestSpy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 2, failures: 0, successes: 0 }),
+      );
+      expect(
+        summary.results.every(
+          (result) =>
+            result.error?.includes('during comparison grading') &&
+            result.failureReason === ResultFailureReason.ERROR &&
+            !result.success,
+        ),
+      ).toBe(true);
+    } finally {
+      await vi.runOnlyPendingTimersAsync();
+      await evalPromise?.catch(() => undefined);
+      matchesSelectBestSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps late max-score grading pending for max-duration timeout conversion', async () => {
+    vi.useFakeTimers();
+
+    const matchers = await import('../../src/matchers/comparison');
+    const selectMaxScoreSpy = vi.spyOn(matchers, 'selectMaxScore').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve([
+              { pass: true, score: 1, reason: 'Selected as highest scoring output' },
+              { pass: false, score: 0, reason: 'Not selected' },
+            ]);
+          }, 100);
+        }),
+    );
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [targetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [
+            { type: 'contains', value: 'Target' },
+            { type: 'max-score', value: { method: 'average' } },
+          ],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    let evalPromise: Promise<Eval> | undefined;
+
+    try {
+      evalPromise = evaluate(testSuite, evalRecord, { maxEvalTimeMs: 50 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(selectMaxScoreSpy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(100);
+      await evalPromise;
+
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.stats).toEqual(
+        expect.objectContaining({ errors: 2, failures: 0, successes: 0 }),
+      );
+      expect(
+        summary.results.every(
+          (result) =>
+            result.error?.includes('during comparison grading') &&
+            result.failureReason === ResultFailureReason.ERROR &&
+            !result.success,
+        ),
+      ).toBe(true);
+    } finally {
+      await vi.runOnlyPendingTimersAsync();
+      await evalPromise?.catch(() => undefined);
+      selectMaxScoreSpy.mockRestore();
       vi.useRealTimers();
     }
   });

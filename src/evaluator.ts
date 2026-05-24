@@ -1422,6 +1422,8 @@ async function runEvalInternal({
     const { response, traceContext } = providerCall;
     latencyMs = providerCall.latencyMs;
 
+    throwIfOptionalAbortSignalAborted(abortSignal);
+
     updateConversationHistory({
       conversationKey: state.conversationKey,
       conversations,
@@ -2941,7 +2943,15 @@ function configureExplicitEvaluationTimeout({
 
 function throwIfAbortSignalAborted(signal: AbortSignal) {
   if (signal.aborted) {
-    throw new Error('Operation cancelled');
+    const error = new Error('Operation cancelled');
+    error.name = 'AbortError';
+    throw error;
+  }
+}
+
+function throwIfOptionalAbortSignalAborted(signal?: AbortSignal) {
+  if (signal) {
+    throwIfAbortSignalAborted(signal);
   }
 }
 
@@ -3957,6 +3967,7 @@ class Evaluator {
     progressBarManager,
     prompts,
     providerAbortSignal,
+    isEvalTimedOut,
     repeatCacheContextByTestIdx,
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
@@ -3967,6 +3978,7 @@ class Evaluator {
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
+    isEvalTimedOut: () => boolean;
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
@@ -3987,6 +3999,7 @@ class Evaluator {
       progressBarManager,
       prompts,
       providerAbortSignal,
+      isEvalTimedOut,
       repeatCacheContextByTestIdx,
       rowsWithSelectBestAssertion,
       runEvalOptions,
@@ -3996,6 +4009,7 @@ class Evaluator {
       ciProgressReporter,
       compareCount,
       isWebUI,
+      isEvalTimedOut,
       progressBarManager,
       prompts,
       rowsWithMaxScoreAssertion,
@@ -4007,6 +4021,7 @@ class Evaluator {
     ciProgressReporter,
     compareRowsCount,
     isWebUI,
+    isEvalTimedOut,
     progressBarManager,
     prompts,
     providerAbortSignal,
@@ -4017,6 +4032,7 @@ class Evaluator {
     ciProgressReporter: CIProgressReporter | null;
     compareRowsCount: number;
     isWebUI: boolean;
+    isEvalTimedOut: () => boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
@@ -4026,12 +4042,16 @@ class Evaluator {
   }) {
     let compareCount = 0;
     for (const testIdx of rowsWithSelectBestAssertion) {
+      if (isEvalTimedOut()) {
+        break;
+      }
       compareCount++;
-      await this.processSelectBestAssertionForTest({
+      const completed = await this.processSelectBestAssertionForTest({
         ciProgressReporter,
         compareCount,
         compareRowsCount,
         isWebUI,
+        isEvalTimedOut,
         progressBarManager,
         prompts,
         providerAbortSignal,
@@ -4039,7 +4059,9 @@ class Evaluator {
         runEvalOptions,
         testIdx,
       });
-      rowsWithSelectBestAssertion.delete(testIdx);
+      if (completed && !isEvalTimedOut()) {
+        rowsWithSelectBestAssertion.delete(testIdx);
+      }
     }
     return compareCount;
   }
@@ -4049,6 +4071,7 @@ class Evaluator {
     compareCount,
     compareRowsCount,
     isWebUI,
+    isEvalTimedOut,
     progressBarManager,
     prompts,
     providerAbortSignal,
@@ -4060,28 +4083,35 @@ class Evaluator {
     compareCount: number;
     compareRowsCount: number;
     isWebUI: boolean;
+    isEvalTimedOut: () => boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     providerAbortSignal?: AbortSignal;
     repeatCacheContextByTestIdx: Map<number, RepeatCacheContext>;
     runEvalOptions: RunEvalOptions[];
     testIdx: number;
-  }) {
+  }): Promise<boolean> {
+    if (isEvalTimedOut()) {
+      return false;
+    }
     if (isWebUI) {
       logger.info(`Running model-graded comparison ${compareCount} of ${compareRowsCount}...`);
     }
 
     const resultsToCompare = await this.getResultsToCompare(testIdx);
+    if (isEvalTimedOut()) {
+      return false;
+    }
     if (resultsToCompare.length === 0) {
       logger.warn(`Expected results to be found for test index ${testIdx}`);
-      return;
+      return true;
     }
 
     const compareAssertion = resultsToCompare[0].testCase.assert?.find(
       (a) => a.type === 'select-best',
     ) as Assertion;
     if (!compareAssertion) {
-      return;
+      return true;
     }
 
     const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
@@ -4106,12 +4136,19 @@ class Evaluator {
         ),
     );
 
+    if (isEvalTimedOut()) {
+      return false;
+    }
+
     for (let index = 0; index < resultsToCompare.length; index++) {
       await this.applySelectBestGradingResult({
         gradingResult: gradingResults[index],
         metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
         result: resultsToCompare[index],
       });
+      if (isEvalTimedOut()) {
+        return false;
+      }
     }
 
     updateComparisonReporterProgress({
@@ -4123,12 +4160,14 @@ class Evaluator {
       promptRaw: resultsToCompare[0].prompt.raw,
       runEvalOptions,
     });
+    return true;
   }
 
   private async processMaxScoreAssertions({
     ciProgressReporter,
     compareCount,
     isWebUI,
+    isEvalTimedOut,
     progressBarManager,
     prompts,
     rowsWithMaxScoreAssertion,
@@ -4137,6 +4176,7 @@ class Evaluator {
     ciProgressReporter: CIProgressReporter | null;
     compareCount: number;
     isWebUI: boolean;
+    isEvalTimedOut: () => boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     rowsWithMaxScoreAssertion: Set<number>;
@@ -4148,17 +4188,23 @@ class Evaluator {
 
     let currentCompareCount = compareCount;
     for (const testIdx of rowsWithMaxScoreAssertion) {
+      if (isEvalTimedOut()) {
+        break;
+      }
       currentCompareCount++;
-      await this.processMaxScoreAssertionForTest({
+      const completed = await this.processMaxScoreAssertionForTest({
         ciProgressReporter,
         compareCount: currentCompareCount,
         isWebUI,
+        isEvalTimedOut,
         progressBarManager,
         prompts,
         runEvalOptions,
         testIdx,
       });
-      rowsWithMaxScoreAssertion.delete(testIdx);
+      if (completed && !isEvalTimedOut()) {
+        rowsWithMaxScoreAssertion.delete(testIdx);
+      }
     }
   }
 
@@ -4166,6 +4212,7 @@ class Evaluator {
     ciProgressReporter,
     compareCount,
     isWebUI,
+    isEvalTimedOut,
     progressBarManager,
     prompts,
     runEvalOptions,
@@ -4174,22 +4221,29 @@ class Evaluator {
     ciProgressReporter: CIProgressReporter | null;
     compareCount: number;
     isWebUI: boolean;
+    isEvalTimedOut: () => boolean;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
     runEvalOptions: RunEvalOptions[];
     testIdx: number;
-  }) {
+  }): Promise<boolean> {
+    if (isEvalTimedOut()) {
+      return false;
+    }
     const resultsToCompare = await this.getResultsToCompare(testIdx);
+    if (isEvalTimedOut()) {
+      return false;
+    }
     if (resultsToCompare.length === 0) {
       logger.warn(`Expected results to be found for test index ${testIdx}`);
-      return;
+      return true;
     }
 
     const maxScoreAssertion = resultsToCompare[0].testCase.assert?.find(
       (a) => a.type === 'max-score',
     ) as Assertion;
     if (!maxScoreAssertion) {
-      return;
+      return true;
     }
 
     const outputs = resultsToCompare.map((r) => r.response?.output || '');
@@ -4198,6 +4252,9 @@ class Evaluator {
       resultsToCompare,
       maxScoreAssertion,
     );
+    if (isEvalTimedOut()) {
+      return false;
+    }
 
     updateComparisonReporterProgress({
       ciProgressReporter,
@@ -4218,7 +4275,11 @@ class Evaluator {
         metrics: prompts[resultsToCompare[index].promptIdx]?.metrics,
         result: resultsToCompare[index],
       });
+      if (isEvalTimedOut()) {
+        return false;
+      }
     }
+    return true;
   }
 
   private async getResultsToCompare(testIdx: number) {
@@ -4788,6 +4849,7 @@ class Evaluator {
             await this.processComparisonAssertions({
               ciProgressReporter,
               isWebUI,
+              isEvalTimedOut: timeoutConfig.isEvalTimedOut,
               progressBarManager,
               prompts,
               providerAbortSignal: timeoutConfig.providerAbortSignal,
