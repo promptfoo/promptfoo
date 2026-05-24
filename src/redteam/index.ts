@@ -99,6 +99,21 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   return undefined;
 }
 
+function formatPolicySummary(policy: Policy | undefined): string {
+  const truncate = (text: string) => {
+    const normalized = text.trim().replace(/\n+/g, ' ');
+    return normalized.length > 70 ? normalized.slice(0, 70) + '...' : normalized;
+  };
+
+  if (policy !== undefined && isValidPolicyObject(policy)) {
+    const namePrefix = policy.name ? ` ${policy.name}:` : '';
+    const text = typeof policy.text === 'string' ? truncate(policy.text) : '';
+    return text ? `${namePrefix} "${text}"` : namePrefix;
+  }
+
+  return typeof policy === 'string' ? truncate(policy) : '';
+}
+
 async function rematerializeStrategyInputVars(
   testCase: TestCase,
   injectVar: string,
@@ -928,21 +943,7 @@ export async function synthesize({
           let configSummary = '';
           if (p.config) {
             if (p.id === 'policy') {
-              const policy = p.config?.policy as Policy;
-              if (isValidPolicyObject(policy)) {
-                const policyText = policy.text!.trim().replace(/\n+/g, ' ');
-                const truncated =
-                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-                if (policy.name) {
-                  configSummary = ` ${policy.name}:`;
-                }
-                configSummary += ` "${truncated}"`;
-              } else {
-                const policyText = policy.trim().replace(/\n+/g, ' ');
-                const truncated =
-                  policyText.length > 70 ? policyText.slice(0, 70) + '...' : policyText;
-                configSummary = truncated;
-              }
+              configSummary = formatPolicySummary(p.config?.policy as Policy | undefined);
             } else {
               // For other plugins with config, just indicate config exists
               configSummary = ' (custom config)';

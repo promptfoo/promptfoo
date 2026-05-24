@@ -3737,6 +3737,58 @@ describe('Language configuration', () => {
       expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
     });
 
+    it('should keep named inline policy object ids distinct in the report', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'policy',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [
+          {
+            id: 'policy',
+            numTests: 1,
+            config: {
+              policy: {
+                id: '111111111111',
+                text: 'The assistant must not provide restricted export instructions.',
+                name: 'Restricted Export',
+              },
+            },
+          },
+          {
+            id: 'policy',
+            numTests: 1,
+            config: {
+              policy: {
+                id: '222222222222',
+                text: 'The assistant must not provide restricted export workaround steps.',
+                name: 'Restricted Export',
+              },
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      expect(cleanReport).toContain('policy [111111111111]: Restricted Exp');
+      expect(cleanReport).toContain('policy [222222222222]: Restricted Exp');
+    });
+
     it('should work correctly with both built-in plugins and policy plugins', async () => {
       // Mock different plugins
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
