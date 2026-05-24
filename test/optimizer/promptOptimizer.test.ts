@@ -820,6 +820,21 @@ describe('prompt optimizer', () => {
     }
   });
 
+  it('does not run an implicit default test when filterRange selects no tests before validation split', async () => {
+    const testSuite: TestSuite = {
+      providers: [createMockProvider({ id: 'target-provider' })],
+      prompts: [{ raw: 'Base', label: 'Base' }],
+      tests: Array.from({ length: 5 }, (_, index) => ({ vars: { id: String(index) } })),
+    };
+
+    await expect(
+      optimizePromptTestSuite({ evaluateOptions: { filterRange: '10:12' } }, testSuite, {
+        validationSplit: 0.5,
+      }),
+    ).rejects.toThrow('Prompt optimization filterRange did not select any tests.');
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
   it('keeps the baseline when validation and search scores both tie', async () => {
     const provider = createMockProvider({
       id: 'optimizer-provider',

@@ -663,6 +663,16 @@ function createEvaluationOptions(
   return options;
 }
 
+function assertFilterRangeSelectedOptimizationTests(
+  testSuite: TestSuite,
+  filterRangeApplied: boolean,
+): void {
+  if (!filterRangeApplied || countConfiguredOptimizationTests(testSuite) > 0) {
+    return;
+  }
+  throw new Error('Prompt optimization filterRange did not select any tests.');
+}
+
 export async function optimizePromptTestSuite(
   config: Partial<UnifiedConfig>,
   testSuite: TestSuite,
@@ -683,6 +693,7 @@ export async function optimizePromptTestSuite(
   // range into each partition would apply absolute indices a second time.
   const { testSuite: partitionableTestSuite, filterRangeApplied } =
     applyFilterRangeBeforeValidationSplit(config, selectedTestSuite, options.validationSplit);
+  assertFilterRangeSelectedOptimizationTests(partitionableTestSuite, filterRangeApplied);
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(partitionableTestSuite, options.validationSplit);
 
