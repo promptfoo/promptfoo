@@ -49,6 +49,9 @@ interface PullRequestForkPayload {
   } | null;
 }
 
+const FORK_PR_AUTH_SKIP_REASON =
+  'Fork PR scanning requires maintainer approval. See PR comment for options.';
+
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -315,6 +318,16 @@ async function runPromptfooScan(
     return parseScanOutput(scanOutput);
   }
 
+  // Keep compatibility with CLI releases that reported an authorized fork skip as text
+  // while the action and CLI roll out independently.
+  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+    return {
+      success: true,
+      comments: [],
+      skipReason: FORK_PR_AUTH_SKIP_REASON,
+    };
+  }
+
   core.error(`CLI exited with code ${exitCode}`);
   core.error(`Error output: ${scanError}`);
   throw new Error(`Code scan failed with exit code ${exitCode}`);
@@ -570,18 +583,16 @@ async function handleScanResponse(
 ): Promise<void> {
   const { comments, commentsPosted, review, skipReason } = scanResponse;
 
-  // Always emit SARIF first so downstream upload-sarif steps find a file even on skips —
-  // otherwise a configured sarif-output-path silently disappears when the scan is skipped.
-  emitConfiguredSarifOutput(scanResponse, inputs);
-
-  // Intentional skip (e.g. fork PR awaiting maintainer approval). The server has already
-  // posted the explanatory PR comment, so just surface the reason.
+  // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
+  // existing Code Scanning findings or imply that authorization-gated work ran.
   if (skipReason) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+  emitConfiguredSarifOutput(scanResponse, inputs);
 
   if ((comments.length > 0 || review) && commentsPosted === false) {
     await postFallbackComments(
