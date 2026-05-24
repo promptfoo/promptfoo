@@ -10,6 +10,7 @@ import {
   generatePersonas,
   personaToString,
 } from '../../../src/generation/dataset/personaGenerator';
+import { jobEventEmitter } from '../../../src/generation/shared/jobManager';
 import { getDefaultProviders } from '../../../src/providers/defaults';
 import { loadApiProvider } from '../../../src/providers/index';
 import { retryWithDeduplication } from '../../../src/util/generation';
@@ -117,6 +118,7 @@ describe('generation dataset index', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    jobEventEmitter.removeAllListeners();
   });
 
   it('rejects empty prompt input', async () => {
@@ -133,6 +135,13 @@ describe('generation dataset index', () => {
       .mockResolvedValueOnce({
         output: JSON.stringify({ vars: [{ city: 'Berlin' }] }),
       });
+
+    const testCaseEvents: unknown[] = [];
+    jobEventEmitter.on('job:dataset-job', (event) => {
+      if (event.type === 'testcase') {
+        testCaseEvents.push(event.testCase);
+      }
+    });
 
     const result = await generateDataset(
       [{ raw: 'Recommend travel to {{city}}', label: 'Prompt' }],
@@ -167,6 +176,7 @@ describe('generation dataset index', () => {
     expect(measureDiversity).toHaveBeenCalledTimes(2);
     expect(identifyGaps).toHaveBeenCalled();
     expect(retryWithDeduplication).toHaveBeenCalled();
+    expect(testCaseEvents).toEqual([{ city: 'Paris' }, { city: 'Edge City' }, { city: 'Berlin' }]);
   });
 
   it('supports explicit providers, no-gap iterative exit, and the synthesize compatibility wrapper', async () => {

@@ -236,6 +236,7 @@ export async function generateDataset(
     progress.setPhase('Generating edge cases');
     logger.debug('Generating edge cases');
     edgeCases = await generateEdgeCases(promptStrings, provider, mergedOptions.edgeCases, concepts);
+    progress.emitTestCases(edgeCases.map((edgeCase) => edgeCase.vars));
     progress.increment();
     logger.debug(`Generated ${edgeCases.length} edge cases`);
   }
@@ -287,6 +288,7 @@ export async function generateDataset(
       );
 
       finalTestCases = [...finalTestCases, ...additionalCases];
+      progress.emitTestCases(additionalCases);
       diversity = await measureDiversity(finalTestCases, provider, mergedOptions.diversity);
 
       iterationRounds++;
