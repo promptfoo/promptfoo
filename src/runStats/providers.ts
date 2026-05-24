@@ -95,18 +95,20 @@ export function computeModelInfo(providers: ApiProvider[]): {
   isComparison: boolean;
   hasCustom: boolean;
 } {
-  const ids = Array.from(new Set(providers.map((p) => p.id()))).sort();
+  const providerIds = providers.map((provider) => provider.id());
+  const uniqueIds = new Set(providerIds);
+  const ids = Array.from(uniqueIds).sort();
 
   // It's a comparison if there are multiple providers with different IDs
-  const isComparison = providers.length > 1 && new Set(providers.map((p) => p.id())).size > 1;
+  const isComparison = providers.length > 1 && uniqueIds.size > 1;
 
   // Check for custom/unknown providers (no colon in ID or 'unknown' prefix)
-  const providerPrefixes = providers.map((p) => {
-    const idParts = p.id().split(':');
+  const providerPrefixes = providerIds.map((id) => {
+    const idParts = id.split(':');
     return idParts.length > 1 ? idParts[0] : 'unknown';
   });
   const hasCustom =
-    providerPrefixes.includes('unknown') || providers.some((p) => !p.id().includes(':'));
+    providerPrefixes.includes('unknown') || providerIds.some((id) => !id.includes(':'));
 
   return { ids, isComparison, hasCustom };
 }
