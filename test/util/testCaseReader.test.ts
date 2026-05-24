@@ -288,6 +288,122 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  describe('AgentSkills evals.json format', () => {
+    it('detects {skill_name, evals: [...]} and converts to TestCases', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'csv-analyzer',
+          evals: [
+            {
+              id: 1,
+              prompt: 'Find the top 3 months by revenue from data/sales_2025.csv.',
+              expected_output: 'A bar chart image showing the top 3 months by revenue.',
+              files: ['evals/files/sales_2025.csv'],
+              assertions: [
+                'The output includes a bar chart image file',
+                'The chart shows exactly 3 months',
+              ],
+            },
+            {
+              id: 'inv-2',
+              prompt: 'Summarize the quarterly trends.',
+              expected_output: '   ', // whitespace-only should be ignored
+              assertions: ['Mentions Q1 through Q4'],
+            },
+          ],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toEqual([
+        {
+          description: 'eval 1',
+          vars: {
+            prompt: 'Find the top 3 months by revenue from data/sales_2025.csv.',
+            files: ['evals/files/sales_2025.csv'],
+          },
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'A bar chart image showing the top 3 months by revenue.',
+            },
+            { type: 'llm-rubric', value: 'The output includes a bar chart image file' },
+            { type: 'llm-rubric', value: 'The chart shows exactly 3 months' },
+          ],
+          metadata: { id: 1, skill_name: 'csv-analyzer' },
+        },
+        {
+          description: 'eval inv-2',
+          vars: { prompt: 'Summarize the quarterly trends.' },
+          assert: [{ type: 'llm-rubric', value: 'Mentions Q1 through Q4' }],
+          metadata: { id: 'inv-2', skill_name: 'csv-analyzer' },
+        },
+      ]);
+    });
+
+    it('does not hijack JSON files that happen to have an `evals` field but no prompts', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          evals: [{ description: 'looks like a TestCase', vars: { foo: 'bar' } }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('not-agent-skills.json');
+
+      // Falls through to the generic JSON parser: wraps the object as a single TestCase
+      // and stamps the default `Row #1` description.
+      expect(result).toEqual([
+        {
+          evals: [{ description: 'looks like a TestCase', vars: { foo: 'bar' } }],
+          description: 'Row #1',
+        },
+      ]);
+    });
+
+    it('omits metadata when neither skill_name nor id is set', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          evals: [{ prompt: 'hello', expected_output: 'greets the user' }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toEqual([
+        {
+          description: 'Row #1',
+          vars: { prompt: 'hello' },
+          assert: [{ type: 'llm-rubric', value: 'greets the user' }],
+        },
+      ]);
+    });
+
+    it('skips eval entries that are not objects but keeps the rest', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          skill_name: 'mixed',
+          evals: [null, { prompt: 'good entry', assertions: ['must answer'] }],
+        }),
+      );
+
+      const result = await readStandaloneTestsFile('evals.json');
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({
+        description: 'Row #1',
+        vars: { prompt: '' },
+        metadata: { skill_name: 'mixed' },
+      });
+      expect(result[1]).toMatchObject({
+        description: 'Row #2',
+        vars: { prompt: 'good entry' },
+        assert: [{ type: 'llm-rubric', value: 'must answer' }],
+        metadata: { skill_name: 'mixed' },
+      });
+    });
+  });
+
   it('should read JSONL file and return test cases', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       `{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}

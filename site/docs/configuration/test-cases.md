@@ -531,6 +531,61 @@ def create_tests(config):
 {"vars": {"x": 10, "y": 7}, "assert": [{"type": "equals", "value": "17"}]}
 ```
 
+### AgentSkills `evals.json`
+
+Promptfoo automatically detects the
+[AgentSkills `evals.json`](https://agentskills.io/skill-creation/evaluating-skills)
+format when a JSON test file's top-level shape is `{ "evals": [...] }`. Each
+eval is converted into a promptfoo test case so you can run the same suite that
+ships alongside a skill without rewriting it.
+
+```json title="evals.json"
+{
+  "skill_name": "csv-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Find the top 3 months by revenue from data/sales_2025.csv and make a bar chart.",
+      "expected_output": "A bar chart image showing the top 3 months by revenue, with labeled axes.",
+      "files": ["evals/files/sales_2025.csv"],
+      "assertions": [
+        "The output includes a bar chart image file",
+        "The chart shows exactly 3 months",
+        "Both axes are labeled"
+      ]
+    }
+  ]
+}
+```
+
+Point your config at the file like any other JSON test source:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - openai:chat:gpt-4o-mini
+
+tests: file://evals.json
+```
+
+The mapping is:
+
+| `evals.json` field     | Promptfoo test case             |
+| ---------------------- | ------------------------------- |
+| `prompt`               | `vars.prompt`                   |
+| `expected_output`      | `assert: llm-rubric` (first)    |
+| `assertions[]`         | Additional `llm-rubric` asserts |
+| `files`                | `vars.files`                    |
+| `id`                   | `description` and `metadata.id` |
+| top-level `skill_name` | `metadata.skill_name`           |
+
+Each `llm-rubric` assertion is graded independently, so all of
+`expected_output` and every entry in `assertions` must pass for the test case
+to succeed. Pair this format with a `defaultTest.options.provider` to choose
+the grader model.
+
 ## Loading Media Files
 
 Include images, PDFs, and other files as variables:

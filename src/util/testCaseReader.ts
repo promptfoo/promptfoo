@@ -22,6 +22,7 @@ import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseXlsxFile } from './xlsx';
 
+import type { VarValue } from '../contracts/shared';
 import type {
   CsvRow,
   ProviderOptions,
@@ -343,12 +344,139 @@ async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> 
 }
 
 function parseJsonTestCases(fileContent: string): TestCase[] {
-  const jsonData = yaml.load(fileContent) as any;
-  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+  const jsonData = yaml.load(fileContent) as unknown;
+
+  const agentSkillsCases = parseAgentSkillsEvalsJson(jsonData);
+  if (agentSkillsCases) {
+    telemetry.record('feature_used', {
+      feature: 'agent-skills evals.json tests file',
+    });
+    return agentSkillsCases;
+  }
+
+  const testCases: TestCase[] = Array.isArray(jsonData)
+    ? (jsonData as TestCase[])
+    : [jsonData as TestCase];
   return testCases.map((item, idx) => ({
     ...item,
     description: item.description || `Row #${idx + 1}`,
   }));
+}
+
+type AgentSkillsEvalCase = {
+  id?: string | number;
+  prompt?: unknown;
+  expected_output?: unknown;
+  assertions?: unknown;
+  files?: unknown;
+};
+
+type AgentSkillsEvalsFile = {
+  skill_name?: unknown;
+  evals: AgentSkillsEvalCase[];
+};
+
+/**
+ * Detect the AgentSkills `evals.json` format described at
+ * https://agentskills.io/skill-creation/evaluating-skills and convert it to
+ * promptfoo `TestCase`s. Returns `null` when the input does not match the
+ * expected shape so callers can fall back to the generic JSON parser.
+ *
+ * The mapping is:
+ *   - `prompt`           -> `vars.prompt`
+ *   - `expected_output`  -> `llm-rubric` assertion (first)
+ *   - `assertions[i]`    -> additional `llm-rubric` assertions
+ *   - `files`            -> `vars.files`
+ *   - `id`               -> `metadata.id` and `description`
+ *   - top-level `skill_name` -> `metadata.skill_name`
+ */
+function parseAgentSkillsEvalsJson(input: unknown): TestCase[] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null;
+  }
+
+  const candidate = input as AgentSkillsEvalsFile;
+  if (!Array.isArray(candidate.evals)) {
+    return null;
+  }
+
+  // Require at least one entry to look like an AgentSkills eval (i.e. has a
+  // `prompt` field). This avoids hijacking unrelated JSON files that happen
+  // to expose an `evals` array.
+  const looksLikeAgentSkills = candidate.evals.some(
+    (entry): entry is AgentSkillsEvalCase =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as AgentSkillsEvalCase).prompt === 'string',
+  );
+  if (!looksLikeAgentSkills) {
+    return null;
+  }
+
+  const skillName = typeof candidate.skill_name === 'string' ? candidate.skill_name : undefined;
+  return candidate.evals.map((rawCase, idx) => agentSkillsEvalToTestCase(rawCase, idx, skillName));
+}
+
+function agentSkillsEvalToTestCase(
+  rawCase: unknown,
+  idx: number,
+  skillName: string | undefined,
+): TestCase {
+  const entry = rawCase && typeof rawCase === 'object' ? (rawCase as AgentSkillsEvalCase) : {};
+  const prompt = typeof entry.prompt === 'string' ? entry.prompt : '';
+  const idValue =
+    typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
+
+  const vars: Record<string, VarValue> = { prompt };
+  if (Array.isArray(entry.files)) {
+    vars.files = entry.files.filter((f): f is string => typeof f === 'string');
+  }
+
+  const assertions = buildAgentSkillsAssertions(entry);
+  const metadata = buildAgentSkillsMetadata(idValue, skillName);
+
+  const testCase: TestCase = {
+    description: idValue == null ? `Row #${idx + 1}` : `eval ${idValue}`,
+    vars,
+  };
+  if (assertions.length > 0) {
+    testCase.assert = assertions;
+  }
+  if (metadata) {
+    testCase.metadata = metadata;
+  }
+  return testCase;
+}
+
+function buildAgentSkillsAssertions(
+  entry: AgentSkillsEvalCase,
+): { type: 'llm-rubric'; value: string }[] {
+  const assertions: { type: 'llm-rubric'; value: string }[] = [];
+  if (typeof entry.expected_output === 'string' && entry.expected_output.trim()) {
+    assertions.push({ type: 'llm-rubric', value: entry.expected_output });
+  }
+  if (Array.isArray(entry.assertions)) {
+    for (const assertion of entry.assertions) {
+      if (typeof assertion === 'string' && assertion.trim()) {
+        assertions.push({ type: 'llm-rubric', value: assertion });
+      }
+    }
+  }
+  return assertions;
+}
+
+function buildAgentSkillsMetadata(
+  idValue: string | number | undefined,
+  skillName: string | undefined,
+): Record<string, string | number> | undefined {
+  const metadata: Record<string, string | number> = {};
+  if (idValue != null) {
+    metadata.id = idValue;
+  }
+  if (skillName) {
+    metadata.skill_name = skillName;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
 async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
