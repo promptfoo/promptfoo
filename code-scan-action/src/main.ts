@@ -577,7 +577,16 @@ async function handleScanResponse(
   inputs: ActionInputs,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review } = scanResponse;
+  const { comments, commentsPosted, review, skipReason } = scanResponse;
+
+  // The scanner signals intentional skips (e.g. fork PR awaiting maintainer approval)
+  // via skipReason. The server has already posted the helpful PR comment, so just
+  // surface the reason and return without the generic "comments posted" log.
+  if (skipReason) {
+    core.info(`🔀 Scan skipped: ${skipReason}`);
+    return;
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
   emitConfiguredSarifOutput(scanResponse, inputs);

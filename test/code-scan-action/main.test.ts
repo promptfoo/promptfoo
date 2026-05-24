@@ -542,8 +542,10 @@ describe('code-scan-action main', () => {
       expect(mocks.core.getIDToken).toHaveBeenCalled();
     });
 
-    it('should accept a structured successful skip response if fork PR scanning awaits maintainer approval', async () => {
+    it('should surface skipReason when fork PR scanning awaits maintainer approval', async () => {
       mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      const skipMessage =
+        'Fork PR scanning requires maintainer approval. See PR comment for options.';
       mocks.exec.exec.mockImplementation(
         async (
           command: string,
@@ -556,15 +558,8 @@ describe('code-scan-action main', () => {
                 JSON.stringify({
                   success: true,
                   commentsPosted: true,
-                  comments: [
-                    {
-                      file: null,
-                      line: null,
-                      finding:
-                        'Fork PR scanning requires maintainer approval. See PR comment for options.',
-                      severity: 'none',
-                    },
-                  ],
+                  comments: [],
+                  skipReason: skipMessage,
                 }),
               ),
             );
@@ -576,9 +571,12 @@ describe('code-scan-action main', () => {
       await import('../../code-scan-action/src/main');
 
       await vi.waitFor(() => {
-        expect(mocks.core.info).toHaveBeenCalledWith('✅ Comments posted to PR by scan server');
+        expect(mocks.core.info).toHaveBeenCalledWith(`🔀 Scan skipped: ${skipMessage}`);
       });
 
+      // The generic "Comments posted to PR by scan server" log should NOT fire for skips —
+      // that message was misleading because no scan findings were actually posted.
+      expect(mocks.core.info).not.toHaveBeenCalledWith('✅ Comments posted to PR by scan server');
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
   });

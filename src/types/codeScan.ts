@@ -267,6 +267,10 @@ export const ScanResponseSchema = z.object({
   commentsPosted: z.boolean().optional(), // True if server posted comments, false if action should post them
   batchCount: z.number().optional(),
   error: z.string().optional(),
+  // Set when the scan completed successfully without producing findings because it was
+  // intentionally skipped (e.g. fork PR awaiting maintainer approval). Consumers should
+  // treat this as an informational notice, not a finding.
+  skipReason: z.string().optional(),
 });
 
 // ============================================================================

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CodeScanOutputFormat, CodeScanSeverity } from '../../../src/types/codeScan';
+import { CodeScanOutputFormat } from '../../../src/types/codeScan';
 
 describe('Scanner fork PR auth rejection', () => {
   beforeEach(() => {
@@ -92,7 +92,15 @@ describe('Scanner fork PR auth rejection', () => {
     }));
   }
 
-  it('emits a machine-readable skip response if fork PR scanning awaits maintainer approval', async () => {
+  const SKIP_MESSAGE = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
+
+  it.each([
+    { format: 'json' as const, expected: CodeScanOutputFormat.JSON },
+    { format: 'sarif' as const, expected: CodeScanOutputFormat.SARIF },
+  ])('emits a structured skip response with skipReason in $format mode', async ({
+    format,
+    expected,
+  }) => {
     mockForkPrAuthScanner();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
@@ -103,7 +111,7 @@ describe('Scanner fork PR auth rejection', () => {
     const { processDiff } = await import('../../../src/codeScan/git/diffProcessor');
 
     await executeScan('/test/repo', {
-      json: true,
+      format,
       diffsOnly: true,
       githubPr: 'test-owner/test-repo#123',
     });
@@ -115,18 +123,12 @@ describe('Scanner fork PR auth rejection', () => {
       {
         success: true,
         commentsPosted: true,
-        comments: [
-          {
-            file: null,
-            line: null,
-            finding: 'Fork PR scanning requires maintainer approval. See PR comment for options.',
-            severity: CodeScanSeverity.NONE,
-          },
-        ],
+        comments: [],
+        skipReason: SKIP_MESSAGE,
       },
       expect.any(Number),
       {
-        format: CodeScanOutputFormat.JSON,
+        format: expected,
         githubPr: 'test-owner/test-repo#123',
       },
     );
@@ -135,6 +137,35 @@ describe('Scanner fork PR auth rejection', () => {
 
     await cliState.postActionCallback?.();
 
+    expect(process.exitCode).toBe(0);
+  });
+
+  it('emits stdout JSON that the action can round-trip parse', async () => {
+    mockForkPrAuthScanner();
+    // Use the real output module so we exercise the actual stdout serialization.
+    vi.doUnmock('../../../src/codeScan/scanner/output');
+
+    const stdoutSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { executeScan } = await import('../../../src/codeScan/scanner/index');
+    const cliState = (await import('../../../src/cliState')).default;
+
+    await executeScan('/test/repo', {
+      json: true,
+      diffsOnly: true,
+      githubPr: 'test-owner/test-repo#123',
+    });
+
+    const stdout = stdoutSpy.mock.calls.map((args) => args.join('')).join('');
+    const parsed = JSON.parse(stdout);
+    expect(parsed).toMatchObject({
+      success: true,
+      commentsPosted: true,
+      comments: [],
+      skipReason: SKIP_MESSAGE,
+    });
+
+    await cliState.postActionCallback?.();
     expect(process.exitCode).toBe(0);
   });
 });

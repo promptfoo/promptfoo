@@ -12,7 +12,6 @@ import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
-  CodeScanSeverity,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
@@ -328,21 +327,18 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    // Handle fork PR auth rejection as success (helpful comment posted to PR)
+    // Handle fork PR auth rejection as success (helpful comment posted to PR by the server).
+    // In machine-readable modes we must still emit a structured ScanResponse to stdout so the
+    // GitHub Action (which always invokes the CLI with --json) does not choke on empty output
+    // — see issue #9424.
     if (errorMessage.includes('Fork PR scanning not authorized')) {
       const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
       if (outputFormat !== CodeScanOutputFormat.TEXT) {
         const response: ScanResponse = {
           success: true,
           commentsPosted: true,
-          comments: [
-            {
-              file: null,
-              line: null,
-              finding: msg,
-              severity: CodeScanSeverity.NONE,
-            },
-          ],
+          comments: [],
+          skipReason: msg,
         };
         displayScanResults(response, Date.now() - startTime, {
           format: outputFormat,
