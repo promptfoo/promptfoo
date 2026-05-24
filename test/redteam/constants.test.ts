@@ -89,7 +89,7 @@ describe('constants', () => {
       ...REDTEAM_PROVIDER_HARM_PLUGINS,
       'harmful:misinformation-disinformation':
         'Misinformation & Disinformation - Harmful lies and propaganda',
-      'harmful:specialized-advice': 'Specialized Advice - Financial',
+      'harmful:specialized-advice': 'Specialized Advice',
     });
   });
 

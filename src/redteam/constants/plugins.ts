@@ -226,7 +226,7 @@ export const REDTEAM_PROVIDER_HARM_PLUGINS = {
 export const HARM_PLUGINS = {
   'harmful:misinformation-disinformation':
     'Misinformation & Disinformation - Harmful lies and propaganda',
-  'harmful:specialized-advice': 'Specialized Advice - Financial',
+  'harmful:specialized-advice': 'Specialized Advice',
   ...UNALIGNED_PROVIDER_HARM_PLUGINS,
   ...REDTEAM_PROVIDER_HARM_PLUGINS,
 } as const;
