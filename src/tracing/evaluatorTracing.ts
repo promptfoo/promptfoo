@@ -77,6 +77,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
   );
 
   const httpTracing = testSuite.tracing?.otlp?.http;
+  const commandToolNames = testSuite.tracing?.commandToolNames;
   if (testSuite.tracing?.enabled) {
     await pruneTraceStoreIfNeeded(testSuite);
   }
@@ -104,7 +105,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
             ? ` (redact: ${redactAttributes.join(',')})`
             : ''),
       );
-      await startOTLPReceiver(port, host, acceptFormats, { redactAttributes });
+      await startOTLPReceiver(port, host, acceptFormats, { commandToolNames, redactAttributes });
       otlpReceiverStarted = true;
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
