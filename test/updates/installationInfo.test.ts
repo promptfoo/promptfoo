@@ -530,8 +530,8 @@ describe('getInstallationInfo', () => {
     const result = getInstallationInfo('C:\\Users\\Alice\\Project', false);
 
     expect(mockChildProcess.execFileSync).toHaveBeenCalledWith(
-      'npm.cmd',
-      ['root', '--global'],
+      process.env.ComSpec || 'cmd.exe',
+      ['/d', '/s', '/c', 'npm.cmd', 'root', '--global'],
       expect.any(Object),
     );
     expect(result).toEqual({

@@ -249,7 +249,7 @@ Create a URL that can be shared online. If no ID is provided, promptfoo shares t
 
 ## `promptfoo update`
 
-Update promptfoo to the latest version. The command automatically detects how promptfoo was installed (npm, yarn, pnpm, bun, homebrew, etc.) and uses the appropriate update method.
+Update promptfoo to the latest version. The command automatically detects how promptfoo was installed (npm, yarn, pnpm, bun, Homebrew, etc.) and uses the appropriate update method.
 
 | Option    | Description                                    |
 | --------- | ---------------------------------------------- |
@@ -271,7 +271,7 @@ promptfoo update --force
 
 The update command will:
 
-1. Detect your installation method (npm global, yarn global, homebrew, etc.)
+1. Detect your installation method (npm global, yarn global, Homebrew, etc.)
 2. Show you what it detected and which command it will run
 3. Execute the appropriate update command for your system
 4. Provide manual instructions if automatic update is not possible

@@ -51,7 +51,9 @@ Note: This only disables the notification. You can still manually update using `
 ## Automatic Updates
 
 :::caution Experimental Feature
+
 Automatic background updates are **disabled by default** and considered experimental. This is an opt-in feature. Use with caution in production environments.
+
 :::
 
 When enabled, promptfoo schedules an automatic update when a new version is detected. It starts the update only after the current CLI invocation finishes, so a running eval or server does not use files while they are being replaced. The new version will be available on your next command.

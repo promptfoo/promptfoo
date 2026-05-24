@@ -10,7 +10,7 @@ import {
   pathContains,
   pathStartsWith,
 } from '../util/installationDetection';
-import { getPackageManagerExecutable } from './updateCommandUtils';
+import { getPackageManagerExecutable, parseUpdateCommandForSpawn } from './updateCommandUtils';
 
 // Re-export for backward compatibility
 export { PackageManager };
@@ -114,7 +114,8 @@ function getNpmInstallationInfo(
 
   try {
     const npmExecutable = getPackageManagerExecutable('npm');
-    const globalRoot = execFileSync(npmExecutable, ['root', '--global'], {
+    const { command, args } = parseUpdateCommandForSpawn(`${npmExecutable} root --global`);
+    const globalRoot = execFileSync(command, args, {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 1000,
