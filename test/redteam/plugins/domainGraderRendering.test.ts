@@ -3,9 +3,15 @@ import { getGraderById } from '../../../src/redteam/graders';
 import { CoppaGrader } from '../../../src/redteam/plugins/compliance/coppa';
 import { FinancialCalculationErrorPluginGrader } from '../../../src/redteam/plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from '../../../src/redteam/plugins/financial/financialComplianceViolation';
+import { FinancialConfidentialDisclosurePluginGrader } from '../../../src/redteam/plugins/financial/financialConfidentialDisclosure';
+import { FinancialCounterfactualPluginGrader } from '../../../src/redteam/plugins/financial/financialCounterfactual';
 import { FinancialDataLeakagePluginGrader } from '../../../src/redteam/plugins/financial/financialDataLeakage';
+import { FinancialDefamationPluginGrader } from '../../../src/redteam/plugins/financial/financialDefamation';
 import { FinancialHallucinationPluginGrader } from '../../../src/redteam/plugins/financial/financialHallucination';
+import { FinancialImpartialityPluginGrader } from '../../../src/redteam/plugins/financial/financialImpartiality';
 import { FinancialJapanFieaSuitabilityPluginGrader } from '../../../src/redteam/plugins/financial/financialJapanFieaSuitability';
+import { FinancialMisconductPluginGrader } from '../../../src/redteam/plugins/financial/financialMisconduct';
+import { FinancialSoxCompliancePluginGrader } from '../../../src/redteam/plugins/financial/financialSoxCompliance';
 import { FinancialSycophancyPluginGrader } from '../../../src/redteam/plugins/financial/financialSycophancy';
 import { InsuranceCoverageDiscriminationPluginGrader } from '../../../src/redteam/plugins/insurance/coverageDiscrimination';
 import { InsuranceDataDisclosurePluginGrader } from '../../../src/redteam/plugins/insurance/dataDisclosure';
@@ -54,9 +60,24 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
     FinancialComplianceViolationPluginGrader,
   ],
   [
+    'financial confidential disclosure',
+    'promptfoo:redteam:financial:confidential-disclosure',
+    FinancialConfidentialDisclosurePluginGrader,
+  ],
+  [
+    'financial counterfactual',
+    'promptfoo:redteam:financial:counterfactual',
+    FinancialCounterfactualPluginGrader,
+  ],
+  [
     'financial data leakage',
     'promptfoo:redteam:financial:data-leakage',
     FinancialDataLeakagePluginGrader,
+  ],
+  [
+    'financial defamation',
+    'promptfoo:redteam:financial:defamation',
+    FinancialDefamationPluginGrader,
   ],
   [
     'financial hallucination',
@@ -64,9 +85,24 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
     FinancialHallucinationPluginGrader,
   ],
   [
+    'financial impartiality',
+    'promptfoo:redteam:financial:impartiality',
+    FinancialImpartialityPluginGrader,
+  ],
+  [
     'financial japan fiea suitability',
     'promptfoo:redteam:financial:japan-fiea-suitability',
     FinancialJapanFieaSuitabilityPluginGrader,
+  ],
+  [
+    'financial misconduct',
+    'promptfoo:redteam:financial:misconduct',
+    FinancialMisconductPluginGrader,
+  ],
+  [
+    'financial sox compliance',
+    'promptfoo:redteam:financial:sox-compliance',
+    FinancialSoxCompliancePluginGrader,
   ],
   [
     'financial sycophancy',
@@ -172,6 +208,18 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
 const COMPACT_DOMAIN_GRADERS: [string, new () => RenderingGrader][] = [
   ['coppa', CoppaGrader],
   ['reasoning dos', ReasoningDosGrader],
+  ['financial calculation error', FinancialCalculationErrorPluginGrader],
+  ['financial compliance violation', FinancialComplianceViolationPluginGrader],
+  ['financial confidential disclosure', FinancialConfidentialDisclosurePluginGrader],
+  ['financial counterfactual', FinancialCounterfactualPluginGrader],
+  ['financial data leakage', FinancialDataLeakagePluginGrader],
+  ['financial defamation', FinancialDefamationPluginGrader],
+  ['financial hallucination', FinancialHallucinationPluginGrader],
+  ['financial impartiality', FinancialImpartialityPluginGrader],
+  ['financial japan fiea suitability', FinancialJapanFieaSuitabilityPluginGrader],
+  ['financial misconduct', FinancialMisconductPluginGrader],
+  ['financial sox compliance', FinancialSoxCompliancePluginGrader],
+  ['financial sycophancy', FinancialSycophancyPluginGrader],
   ['insurance coverage discrimination', InsuranceCoverageDiscriminationPluginGrader],
   ['insurance data disclosure', InsuranceDataDisclosurePluginGrader],
   ['insurance network misinformation', InsuranceNetworkMisinformationPluginGrader],
