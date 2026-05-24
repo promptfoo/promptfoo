@@ -7,7 +7,7 @@ import {
   isJsonAssertion,
   tryParseJson,
 } from './jsonDiff';
-import type { GradingResult } from '@promptfoo/types';
+import type { Assertion, GradingResult } from '@promptfoo/types';
 
 describe('computeJsonDiff', () => {
   it('returns empty array for identical objects', () => {
@@ -277,8 +277,7 @@ describe('isJsonAssertion', () => {
       reason: 'test',
       assertion: {
         type: 'equals',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        value: null as any, // Test runtime null handling
+        value: null as unknown as Assertion['value'],
       },
     };
     expect(isJsonAssertion(result)).toBe(false);

@@ -3515,6 +3515,34 @@ describe('runAssertion', () => {
       );
     });
 
+    it('should handle file references in nested object values', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: {
+          expected: 'file://expected_output.txt',
+        },
+      };
+
+      const expectedContent = 'Expected output';
+      vi.mocked(fs.readFileSync).mockReturnValue(expectedContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: '{"expected":"Expected output"}' },
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/expected_output.txt', 'utf8');
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.renderedAssertionValue).toEqual({
+        expected: 'Expected output',
+      });
+    });
+
     it('should handle file reference in object value', async () => {
       const assertion: Assertion = {
         type: 'is-json',

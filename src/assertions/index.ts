@@ -338,17 +338,15 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function renderNestedAssertionValue(value: unknown, vars: Record<string, VarValue>): unknown {
   if (typeof value === 'string') {
+    if (value.startsWith('file://')) {
+      return processFileReference(value);
+    }
+
     return nunjucks.renderString(value, vars);
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => {
-      if (typeof item === 'string' && item.startsWith('file://')) {
-        return processFileReference(item);
-      }
-
-      return renderNestedAssertionValue(item, vars);
-    });
+    return value.map((item) => renderNestedAssertionValue(item, vars));
   }
 
   if (isPlainRecord(value)) {
