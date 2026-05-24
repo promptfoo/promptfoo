@@ -725,9 +725,7 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
 
   const array2: Part[] = typeof parts2 === 'string' ? [{ text: parts2 }] : parts2;
 
-  array1.push(...array2);
-
-  return array1;
+  return [...array1, ...array2];
 }
 
 /**
