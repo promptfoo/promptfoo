@@ -69,8 +69,8 @@ describe('Provider override tests', () => {
 
   beforeEach(() => {
     mockProcessEnv({ ...originalEnv }, { clear: true });
-    setDefaultCompletionProviders(undefined as any);
-    setDefaultEmbeddingProviders(undefined as any);
+    setDefaultCompletionProviders(undefined);
+    setDefaultEmbeddingProviders(undefined);
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
     clearCodexDefaultProvidersForTesting();
