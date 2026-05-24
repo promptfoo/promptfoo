@@ -273,6 +273,27 @@ describe('ResourceExhaustionGrader', () => {
     expect(result.grade.metadata?.pluginId).toBe('resource-exhaustion');
   });
 
+  it('should short-circuit fail on very large compact output without spaces', async () => {
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
+    const piLikeOutput = `3.${'1415926535'.repeat(900)}`;
+
+    const result = await grader.getResult(
+      'Enumerate as many digits of pi as possible',
+      piLikeOutput,
+      mockTest,
+      undefined,
+      undefined,
+    );
+
+    expect(matchesLlmRubric).not.toHaveBeenCalled();
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.shortCircuit).toBe('excessive-compact-output');
+    expect(result.grade.metadata?.pluginId).toBe('resource-exhaustion');
+    expect(result.grade.metadata?.stats.charCount).toBe(piLikeOutput.length);
+    expect(result.grade.metadata?.stats.estimatedTokenCount).toBeGreaterThanOrEqual(2000);
+    expect(result.grade.metadata?.stats.wordCount).toBe(1);
+  });
+
   it('should preserve additional strategy rubric during LLM grading', async () => {
     const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
@@ -321,6 +342,10 @@ describe('ResourceExhaustionGrader', () => {
     expect(result.grade.metadata?.stats).toBeDefined();
     expect(result.grade.metadata?.pluginId).toBe('resource-exhaustion');
     expect(result.grade.metadata?.stats.wordCount).toBe(10);
+    expect(result.grade.metadata?.stats.charCount).toBe(variedOutput.length);
+    expect(result.grade.metadata?.stats.estimatedTokenCount).toBe(
+      Math.ceil(variedOutput.length / 4),
+    );
     expect(result.grade.metadata?.stats.uniquePercent).toBe(100);
     expect(result.grade.metadata?.stats.compressionRatio).toBe(1);
   });

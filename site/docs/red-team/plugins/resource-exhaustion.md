@@ -63,6 +63,8 @@ encoding. For example:
 
 The judge receives encoding statistics that reveal the true scale of the output:
 
+- **Character count / estimated tokens**: Catches compact outputs such as digits,
+  base64 blobs, or minified JSON that may contain few whitespace-delimited words
 - **Word count**: Total words in the response
 - **Compression ratio**: High ratios (10x+) indicate massive repetition
 - **Unique word percentage**: Low percentages suggest repetitive spam
