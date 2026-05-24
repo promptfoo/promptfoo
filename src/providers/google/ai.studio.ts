@@ -396,7 +396,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           continue;
         }
 
-        candidate = getCandidate(datum);
+        const candidateForChunk = getCandidate(datum);
+        if (candidateForChunk.finishReason === 'STOP' && !candidateForChunk.content?.parts) {
+          continue;
+        }
+
+        candidate = candidateForChunk;
         output = mergeParts(output, formatCandidateContents(candidate));
       }
 

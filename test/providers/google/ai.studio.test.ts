@@ -320,6 +320,41 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('should ignore terminal STOP chunks without parts after streamed output', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [{ content: { parts: [{ text: 'streamed response' }] } }],
+          },
+          {
+            candidates: [{ finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 4, candidatesTokenCount: 2, totalTokenCount: 6 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('streamed response');
+      expect(response.tokenUsage).toEqual({
+        prompt: 4,
+        completion: 2,
+        total: 6,
+        numRequests: 1,
+      });
+    });
+
     it('should preserve prompt safety ratings from separate streaming chunks', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
