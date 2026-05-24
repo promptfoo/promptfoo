@@ -40,6 +40,28 @@ export function getTransformErrorMessage(error: unknown): string {
   return raw instanceof Error ? raw.message : String(raw);
 }
 
+/**
+ * Keys that should be stripped from context objects before serialization to external
+ * scripts. These contain non-serializable objects like functions, circular
+ * references, or runtime-only state.
+ */
+export const TRANSIENT_CONTEXT_KEYS = [
+  'logger',
+  'getCache',
+  'filters',
+  'originalProvider',
+] as const;
+
+/**
+ * Removes non-serializable transient keys from an object in place.
+ */
+export function sanitizeContext<T extends Record<string, unknown>>(obj: T): T {
+  for (const key of TRANSIENT_CONTEXT_KEYS) {
+    delete obj[key];
+  }
+  return obj;
+}
+
 export const TransformInputType = {
   OUTPUT: 'output',
   VARS: 'vars',
@@ -101,8 +123,30 @@ function getPythonTransformFunction(
   filePath: string,
   functionName: string = 'get_transform',
 ): Function {
-  return async (output: string, context: { vars: Vars }) => {
-    return runPython(filePath, functionName, [output, context]);
+  return async (output: string | object, context: { vars: Vars } | object) => {
+    // Sanitize context (remove non-serializable transient keys like logger, getCache).
+    // Use a shallow copy to avoid mutating the caller's context object.
+    const sanitizedContext =
+      typeof context === 'object' && context !== null && !Array.isArray(context)
+        ? sanitizeContext({ ...context } as Record<string, unknown>)
+        : context;
+
+    // For hook calls, the output arg is the hook context (which contains the JS
+    // logger object and __inject_logger__ marker). Strip the JS logger to avoid
+    // serializing it. Keep __inject_logger__ — wrapper.py needs it to inject the
+    // Python logger, and strips it after use. Regular transform outputs pass through.
+    let sanitizedOutput = output;
+    if (
+      typeof output === 'object' &&
+      output !== null &&
+      !Array.isArray(output) &&
+      Object.prototype.hasOwnProperty.call(output, '__inject_logger__') &&
+      (output as Record<string, unknown>)['__inject_logger__'] === true
+    ) {
+      sanitizedOutput = sanitizeContext({ ...output } as Record<string, unknown>);
+    }
+
+    return runPython(filePath, functionName, [sanitizedOutput, sanitizedContext]);
   };
 }
 

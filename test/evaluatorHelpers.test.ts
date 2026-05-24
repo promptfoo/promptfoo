@@ -682,9 +682,28 @@ describe('evaluatorHelpers', () => {
           const extensions = ['ext1', 'ext2', 'ext3'];
           await runExtensionHook(extensions, hookName, context);
           expect(transform).toHaveBeenCalledTimes(3);
-          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+          // Context now includes logger, so we use objectContaining to match the original context properties
+          expect(transform).toHaveBeenNthCalledWith(
+            1,
+            'ext1',
+            hookName,
+            expect.objectContaining(context),
+            false,
+          );
+          expect(transform).toHaveBeenNthCalledWith(
+            2,
+            'ext2',
+            hookName,
+            expect.objectContaining(context),
+            false,
+          );
+          expect(transform).toHaveBeenNthCalledWith(
+            3,
+            'ext3',
+            hookName,
+            expect.objectContaining(context),
+            false,
+          );
         });
 
         it('should return the original context when extension(s) do not return a value', async () => {
@@ -771,9 +790,28 @@ describe('evaluatorHelpers', () => {
           await runExtensionHook(extensions, hookName, context);
           expect(transform).toHaveBeenCalledTimes(3);
           // LEGACY convention: (extension, hookName, context, false)
-          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+          // Context now includes logger, so we use objectContaining to match the original context properties
+          expect(transform).toHaveBeenNthCalledWith(
+            1,
+            'ext1',
+            hookName,
+            expect.objectContaining(context),
+            false,
+          );
+          expect(transform).toHaveBeenNthCalledWith(
+            2,
+            'ext2',
+            hookName,
+            expect.objectContaining(context),
+            false,
+          );
+          expect(transform).toHaveBeenNthCalledWith(
+            3,
+            'ext3',
+            hookName,
+            expect.objectContaining(context),
+            false,
+          );
         });
 
         it('should return the original context when extension(s) do not return a value', async () => {
@@ -831,9 +869,10 @@ describe('evaluatorHelpers', () => {
       it('should run extension with hook name that matches current hook', async () => {
         // Extension specifies :beforeAll and we're running beforeAll
         await runExtensionHook(['file://path/to/hooks.js:beforeAll'], 'beforeAll', context);
+        // Context now includes logger, so we use objectContaining to match the original context properties
         expect(transform).toHaveBeenCalledWith(
           'file://path/to/hooks.js:beforeAll',
-          context,
+          expect.objectContaining(context),
           { hookName: 'beforeAll' },
           false,
         );
@@ -842,13 +881,14 @@ describe('evaluatorHelpers', () => {
       it('should run extension with custom function name for ALL hooks using LEGACY convention', async () => {
         // Extension specifies :myHandler (custom name) - should run for all hooks
         // Uses LEGACY calling convention: (hookName, context)
+        // Context now includes logger, so we use objectContaining to match the original context properties
         const customExtension = 'file://path/to/hooks.js:myHandler';
 
         await runExtensionHook([customExtension], 'beforeAll', context);
         expect(transform).toHaveBeenCalledWith(
           customExtension,
           'beforeAll', // LEGACY: hookName as first arg
-          context, // LEGACY: context as second arg
+          expect.objectContaining(context), // LEGACY: context as second arg (with logger added)
           false,
         );
 
@@ -858,7 +898,7 @@ describe('evaluatorHelpers', () => {
         expect(transform).toHaveBeenCalledWith(
           customExtension,
           'beforeEach',
-          beforeEachContext,
+          expect.objectContaining(beforeEachContext),
           false,
         );
 
@@ -871,7 +911,7 @@ describe('evaluatorHelpers', () => {
         expect(transform).toHaveBeenCalledWith(
           customExtension,
           'afterEach',
-          afterEachContext,
+          expect.objectContaining(afterEachContext),
           false,
         );
 
@@ -884,19 +924,25 @@ describe('evaluatorHelpers', () => {
           config: {},
         };
         await runExtensionHook([customExtension], 'afterAll', afterAllContext);
-        expect(transform).toHaveBeenCalledWith(customExtension, 'afterAll', afterAllContext, false);
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          'afterAll',
+          expect.objectContaining(afterAllContext),
+          false,
+        );
       });
 
       it('should run extension without function name for ALL hooks using LEGACY convention', async () => {
         // Extension without function name - should run for all hooks
         // Uses LEGACY calling convention: (hookName, context)
+        // Context now includes logger, so we use objectContaining to match the original context properties
         const noFunctionExtension = 'file://path/to/hooks.js';
 
         await runExtensionHook([noFunctionExtension], 'beforeAll', context);
         expect(transform).toHaveBeenCalledWith(
           noFunctionExtension,
           'beforeAll', // LEGACY: hookName as first arg
-          context, // LEGACY: context as second arg
+          expect.objectContaining(context), // LEGACY: context as second arg (with logger added)
           false,
         );
 
@@ -909,7 +955,7 @@ describe('evaluatorHelpers', () => {
         expect(transform).toHaveBeenCalledWith(
           noFunctionExtension,
           'afterEach',
-          afterEachContext,
+          expect.objectContaining(afterEachContext),
           false,
         );
       });
@@ -959,6 +1005,7 @@ describe('evaluatorHelpers', () => {
 
       it('should handle mixed extensions with correct calling conventions', async () => {
         // Mix of hook-specific and generic extensions
+        // Context now includes logger, so we use objectContaining to match the original context properties
         const extensions = [
           'file://hooks.js:beforeAll', // Only runs for beforeAll, NEW convention
           'file://hooks.js:myHandler', // Runs for all hooks, LEGACY convention
@@ -972,7 +1019,7 @@ describe('evaluatorHelpers', () => {
         // First call: :beforeAll uses NEW convention
         expect(transform).toHaveBeenCalledWith(
           'file://hooks.js:beforeAll',
-          context, // NEW: context as first arg
+          expect.objectContaining(context), // NEW: context as first arg (with logger added)
           { hookName: 'beforeAll' }, // NEW: hookName in object as second arg
           false,
         );
@@ -981,9 +1028,45 @@ describe('evaluatorHelpers', () => {
         expect(transform).toHaveBeenCalledWith(
           'file://hooks.js:myHandler',
           'beforeAll', // LEGACY: hookName as first arg
-          context, // LEGACY: context as second arg
+          expect.objectContaining(context), // LEGACY: context as second arg (with logger added)
           false,
         );
+      });
+
+      it('should pass logger instance to hooks in context', async () => {
+        // Verify that the logger is explicitly passed to hooks
+        await runExtensionHook(['file://path/to/hooks.js:beforeAll'], 'beforeAll', context);
+
+        // Get the context that was passed to transform
+        const callArgs = vi.mocked(transform).mock.calls[0];
+        const passedContext = callArgs[1] as Record<string, unknown>;
+
+        // Verify logger is present and has expected methods
+        expect(passedContext).toHaveProperty('logger');
+        expect(passedContext.logger).toHaveProperty('info');
+        expect(passedContext.logger).toHaveProperty('debug');
+        expect(passedContext.logger).toHaveProperty('warn');
+        expect(passedContext.logger).toHaveProperty('error');
+      });
+
+      it('should preserve in-place context mutations from hooks that do not return', async () => {
+        vi.mocked(transform).mockImplementationOnce(async (_extension, hookContext) => {
+          (hookContext as { suite: TestSuite }).suite = {
+            ...(hookContext as { suite: TestSuite }).suite,
+            tests: [{ vars: { mutated_in_place: 'yes' } }],
+          };
+          return undefined;
+        });
+
+        const out = await runExtensionHook(['file://path/to/hooks.js:beforeAll'], 'beforeAll', {
+          suite: {
+            ...context.suite,
+            tests: [{ vars: { original: 'yes' } }],
+          },
+        });
+
+        expect(out).not.toHaveProperty('logger');
+        expect(out.suite.tests).toEqual([{ vars: { mutated_in_place: 'yes' } }]);
       });
     });
 

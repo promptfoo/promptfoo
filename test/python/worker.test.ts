@@ -52,6 +52,23 @@ describe('PythonWorker stderr parsing', () => {
     expect(logger.error).not.toHaveBeenCalled();
   });
 
+  it('routes structured promptfoo logger records before stderr classification', () => {
+    const worker = createTestableWorker();
+    const line = JSON.stringify({
+      marker: '__PROMPTFOO_LOG__',
+      version: 1,
+      level: 'info',
+      message: 'hook-ready',
+      data: { source: 'context' },
+    });
+
+    worker.handleStderr(`${line}\n`);
+
+    expect(logger.info).toHaveBeenCalledWith('[Python] hook-ready {"source":"context"}');
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it('keeps traceback continuation lines at error level and preserves indentation', () => {
     const worker = createTestableWorker();
 

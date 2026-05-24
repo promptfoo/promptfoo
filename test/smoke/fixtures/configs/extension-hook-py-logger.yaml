@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - Python extension hooks with logger'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+extensions:
+  - file://../extensions/logger-hook.py:beforeAll
+  - file://../extensions/logger-hook.py:afterAll
+  - file://../extensions/logger-hook.py:beforeEach
+  - file://../extensions/logger-hook.py:afterEach
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World

@@ -8,7 +8,7 @@ import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
-import { validatePythonPath } from './pythonUtils';
+import { handlePythonLogMessage, validatePythonPath } from './pythonUtils';
 
 export const MAX_STDERR_BUFFER_LENGTH = 16_384;
 
@@ -150,6 +150,11 @@ export class PythonWorker {
   private logStderrLine(line: string): void {
     // Blank lines terminate any in-progress traceback.
     if (!line.trim()) {
+      this.inTraceback = false;
+      return;
+    }
+
+    if (handlePythonLogMessage(line.trim())) {
       this.inTraceback = false;
       return;
     }

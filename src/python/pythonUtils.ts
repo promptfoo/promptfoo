@@ -12,6 +12,42 @@ import { safeJsonStringify } from '../util/json';
 
 const execFileAsync = promisify(execFile);
 
+// Marker used by Python's promptfoo_logger to identify structured log messages
+const PYTHON_LOG_MARKER = '__PROMPTFOO_LOG__';
+
+interface PythonLogMessage {
+  marker: string;
+  version?: number;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Attempts to parse a Python log message and route it to the appropriate logger level.
+ * Supports protocol version 1 (with version field) and version 0 (without version field).
+ * @param line - A line of output from Python stderr
+ * @returns true if the line was a structured log message that was handled, false otherwise
+ */
+export function handlePythonLogMessage(line: string): boolean {
+  try {
+    const parsed = JSON.parse(line) as PythonLogMessage;
+    if (parsed.marker === PYTHON_LOG_MARKER) {
+      const logFn = logger[parsed.level] || logger.info;
+      // Format message with structured data included in the message string
+      let logMessage = `[Python] ${parsed.message}`;
+      if (parsed.data && Object.keys(parsed.data).length > 0) {
+        logMessage += ` ${JSON.stringify(parsed.data)}`;
+      }
+      logFn.call(logger, logMessage);
+      return true;
+    }
+  } catch {
+    // Not a JSON log message, fall through to default handling
+  }
+  return false;
+}
+
 import type { Options as PythonShellOptions } from 'python-shell';
 
 /**
@@ -336,11 +372,33 @@ export async function runPython<T = unknown>(
           logger.debug(chunk.toString('utf-8').trim());
         });
 
+        let stderrBuffer = '';
         pyshell.stderr?.on('data', (chunk: Buffer) => {
-          logger.error(chunk.toString('utf-8').trim());
+          // Buffer stderr to handle chunks that split across line boundaries
+          stderrBuffer += chunk.toString('utf-8');
+          const lines = stderrBuffer.split('\n');
+          // Keep the last element (incomplete line) in the buffer
+          stderrBuffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) {
+              continue;
+            }
+            // Try to parse as structured log message from promptfoo_logger
+            if (!handlePythonLogMessage(trimmed)) {
+              // Fall back to error logging for unstructured stderr output
+              logger.error(trimmed);
+            }
+          }
         });
 
         pyshell.end((err) => {
+          // Flush any remaining buffered stderr
+          if (stderrBuffer.trim()) {
+            if (!handlePythonLogMessage(stderrBuffer.trim())) {
+              logger.error(stderrBuffer.trim());
+            }
+          }
           if (err) {
             reject(err);
           } else {

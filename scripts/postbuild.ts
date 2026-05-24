@@ -35,7 +35,7 @@ type WrapperType = (typeof WRAPPER_TYPES)[number];
  * Maps wrapper type to the list of files that should be copied.
  */
 const WRAPPER_FILES: Record<WrapperType, string[]> = {
-  python: ['wrapper.py', 'persistent_wrapper.py'],
+  python: ['wrapper.py', 'persistent_wrapper.py', 'promptfoo_logger.py'],
   ruby: ['wrapper.rb'],
   golang: ['wrapper.go'],
 };
