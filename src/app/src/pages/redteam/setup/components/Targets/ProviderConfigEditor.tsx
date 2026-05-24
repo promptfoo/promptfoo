@@ -730,7 +730,7 @@ function ProviderConfigEditor({
   };
 
   const updateWebSocketTarget = (field: string, value: unknown) => {
-    const updatedTarget = { ...provider } as ProviderOptions;
+    const updatedTarget = cloneProvider(latestProviderRef.current);
     if (field === 'url') {
       updatedTarget.config.url = value as string;
       if (validateUrl(value as string, 'websocket')) {
@@ -747,6 +747,7 @@ function ProviderConfigEditor({
     } else if (field === 'label') {
       updatedTarget.label = value as string;
     }
+    latestProviderRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
 

@@ -49,8 +49,24 @@ vi.mock('./HttpEndpointConfiguration', () => ({
   ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
-  default: ({ urlError }: { urlError?: string | null }) => (
+  default: ({
+    urlError,
+    updateWebSocketTarget,
+  }: {
+    urlError?: string | null;
+    updateWebSocketTarget?: (field: string, value: unknown) => void;
+  }) => (
     <div data-testid="ws-config">
+      <button
+        type="button"
+        data-testid="enable-websocket-streaming"
+        onClick={() => {
+          updateWebSocketTarget?.('streamResponse', 'return [accumulator + event.data, true];');
+          updateWebSocketTarget?.('transformResponse', undefined);
+        }}
+      >
+        Enable streaming
+      </button>
       {urlError && <div data-testid="ws-url-error">{urlError}</div>}
     </div>
   ),
@@ -488,6 +504,42 @@ describe('ProviderConfigEditor', () => {
       expect(screen.getByTestId('ws-url-error')).toHaveTextContent(
         'Valid WebSocket URL is required',
       );
+    });
+
+    it('preserves sequential WebSocket updates without mutating the provider prop', async () => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+      const provider: ProviderOptions = {
+        id: 'websocket',
+        config: {
+          url: 'wss://example.com/socket',
+          transformResponse: 'json.message',
+        },
+      };
+
+      renderWithProviders(
+        <ProviderConfigEditor
+          provider={provider}
+          setProvider={setProvider}
+          providerType="websocket"
+          mode="eval"
+        />,
+      );
+
+      await user.click(screen.getByTestId('enable-websocket-streaming'));
+
+      expect(setProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            streamResponse: 'return [accumulator + event.data, true];',
+            transformResponse: undefined,
+          }),
+        }),
+      );
+      expect(provider.config).toEqual({
+        url: 'wss://example.com/socket',
+        transformResponse: 'json.message',
+      });
     });
 
     it('requires browser users to replace the starter application URL before saving', async () => {
