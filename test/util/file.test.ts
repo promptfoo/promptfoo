@@ -1112,6 +1112,42 @@ describe('file utilities', () => {
       ]);
     });
 
+    it('should preserve literal template text inside injected tool schemas', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Must include {{literal}} braces',
+            enum: ['{{literal}}'],
+          },
+        },
+      };
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'search',
+            description: '{{ schema | dump | safe }}',
+            parameters: '{{ schema }}',
+          },
+        },
+      ];
+
+      expect(await maybeLoadToolsFromExternalFile(tools, { schema, literal: 'rewritten' })).toEqual(
+        [
+          {
+            type: 'function',
+            function: {
+              name: 'search',
+              description: JSON.stringify(schema),
+              parameters: schema,
+            },
+          },
+        ],
+      );
+    });
+
     it('should render variables and load from external file', async () => {
       const tools = 'file://{{ file_path }}.json';
       const vars = { file_path: 'tools' };
@@ -1386,6 +1422,60 @@ describe('file utilities', () => {
         type: 'json_schema',
         name: 'my_custom_schema',
         schema: { type: 'object' },
+      });
+    });
+
+    it('should preserve literal template text inside injected top-level schemas', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+          },
+        },
+      };
+      const format = {
+        type: 'json_schema',
+        name: 'literal_schema',
+        schema: '{{ schema }}',
+      };
+
+      expect(
+        maybeLoadResponseFormatFromExternalFile(format, { schema, literal: 'rewritten' }),
+      ).toEqual({
+        type: 'json_schema',
+        name: 'literal_schema',
+        schema,
+      });
+    });
+
+    it('should preserve literal template text inside injected json_schema schemas', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Return {{literal}} exactly',
+          },
+        },
+      };
+      const format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'literal_schema',
+          schema: '{{ schema }}',
+        },
+      };
+
+      expect(
+        maybeLoadResponseFormatFromExternalFile(format, { schema, literal: 'rewritten' }),
+      ).toEqual({
+        type: 'json_schema',
+        json_schema: {
+          name: 'literal_schema',
+          schema,
+        },
       });
     });
 

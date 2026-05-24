@@ -480,10 +480,14 @@ export function maybeLoadResponseFormatFromExternalFile(
     const nestedSchema = loaded.schema || loaded.json_schema?.schema;
 
     if (nestedSchema) {
-      // Render and load the nested schema
-      const loadedSchema = maybeLoadFromExternalFile(
-        renderVarsInObject(nestedSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS),
-      );
+      // The outer render may have already injected an object-valued schema.
+      // Only strings can still contain template/file references; object schemas
+      // should be preserved as data so literal "{{...}}" examples survive.
+      const schemaForLoading =
+        typeof nestedSchema === 'string'
+          ? renderVarsInObject(nestedSchema, vars, STRUCTURED_SCHEMA_RENDER_OPTIONS)
+          : nestedSchema;
+      const loadedSchema = maybeLoadFromExternalFile(schemaForLoading);
 
       // Return with the loaded schema in place
       if (loaded.schema !== undefined) {
@@ -608,7 +612,9 @@ export async function maybeLoadToolsFromExternalFile(
   // Handle arrays by recursively processing each item
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars)),
+      rendered.map((item) =>
+        maybeLoadToolsFromExternalFile(item, typeof item === 'string' ? vars : undefined),
+      ),
     );
     // Flatten if all items are arrays (common case: multiple file:// references)
     if (results.every((r) => Array.isArray(r))) {
