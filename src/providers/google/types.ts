@@ -1,6 +1,7 @@
 import type { GoogleAuthOptions } from 'google-auth-library';
 
 import type { MCPConfig } from '../mcp/types';
+import type { ModelCost } from '../shared';
 
 /**
  * Model Armor configuration for Vertex AI integration.
@@ -118,8 +119,8 @@ export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
   apiBaseUrl?: string;
-  /** Custom per-token cost override for both input and output tokens. */
-  cost?: number;
+  /** Custom per-token cost override for both input and output tokens, or separate input/output rates. */
+  cost?: number | ModelCost;
   /** Custom per-token input cost override. Takes precedence over cost. */
   inputCost?: number;
   /** Custom per-token output cost override. Takes precedence over cost. */

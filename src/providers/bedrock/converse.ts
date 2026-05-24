@@ -1284,24 +1284,19 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
+    const promptConfig = this.getPromptConfig(context);
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
     // Build the request
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(
-      context?.vars,
-      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-    );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolConfig = await this.buildToolConfig(context?.vars, promptConfig);
+    const toolsDisabled = isDisabledToolChoice(this.getEffectiveToolChoice(promptConfig));
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
     const serviceTier = this.buildServiceTier();
+    const costConfig = this.getCostConfig(promptConfig);
 
     const converseInput: ConverseCommandInput = {
       modelId: this.modelName,
@@ -1340,7 +1335,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, toolsDisabled);
+        const result = await this.parseResponse(parsed, toolsDisabled, costConfig);
         return { ...result, cached: true };
       }
     }
@@ -1390,7 +1385,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, toolsDisabled);
+    return await this.parseResponse(response, toolsDisabled, costConfig);
   }
 
   /**
@@ -1399,11 +1394,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * tool-disabled requests so a hung MCP transport never stalls them.
    */
   private isRequestToolsDisabled(context?: CallApiContextParams): boolean {
-    return isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    return isDisabledToolChoice(this.getEffectiveToolChoice(this.getPromptConfig(context)));
+  }
+
+  private getPromptConfig(
+    context?: CallApiContextParams,
+  ): Partial<BedrockConverseOptions> | undefined {
+    return context?.prompt?.config as Partial<BedrockConverseOptions> | undefined;
+  }
+
+  private getCostConfig(promptConfig?: Partial<BedrockConverseOptions>): BedrockConverseOptions {
+    return promptConfig ? { ...this.config, ...promptConfig } : this.config;
   }
 
   /**
@@ -1540,6 +1541,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async parseResponse(
     response: ConverseCommandOutput,
     toolsDisabled = false,
+    costConfig: BedrockConverseOptions = this.config,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1564,7 +1566,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Calculate cost
     const cost = calculateBedrockConverseCost(
       this.modelName,
-      this.config,
+      costConfig,
       promptTokens,
       completionTokens,
     );
@@ -1766,24 +1768,20 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       return initErrorResponse;
     }
 
+    const promptConfig = this.getPromptConfig(context);
+
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
     // Build the request (same as non-streaming)
     const inferenceConfig = this.buildInferenceConfig();
-    const toolConfig = await this.buildToolConfig(
-      context?.vars,
-      context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-    );
-    const toolsDisabled = isDisabledToolChoice(
-      this.getEffectiveToolChoice(
-        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-      ),
-    );
+    const toolConfig = await this.buildToolConfig(context?.vars, promptConfig);
+    const toolsDisabled = isDisabledToolChoice(this.getEffectiveToolChoice(promptConfig));
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
     const serviceTier = this.buildServiceTier();
+    const costConfig = this.getCostConfig(promptConfig);
 
     const converseStreamInput: ConverseStreamCommandInput = {
       modelId: this.modelName,
@@ -1909,7 +1907,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       const cost = calculateBedrockConverseCost(
         this.modelName,
-        this.config,
+        costConfig,
         usage.inputTokens,
         usage.outputTokens,
       );

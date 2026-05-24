@@ -255,6 +255,19 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
+    it('should apply object cost overrides to non-tiered cache pricing', () => {
+      const cost = calculateAnthropicCost(
+        'claude-3-5-sonnet-20241022',
+        { cost: { input: 0.01, output: 0.03 } },
+        100,
+        200,
+        50,
+        30,
+      );
+      const expected = 100 * 0.01 + 50 * 0.01 * 0.1 + 30 * 0.01 * 1.25 + 200 * 0.03;
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
     it('should apply cache pricing for Sonnet 4.5 tiered model with cache tokens', () => {
       // Sonnet 4.5 below 200k threshold: $3/MTok input, $15/MTok output
       // 100k uncached input, 20k cache_read, 10k cache_write, 10k output
@@ -279,6 +292,19 @@ describe('Anthropic utilities', () => {
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { inputCost: 0.01, outputCost: 0.03 },
+        100_000,
+        10_000,
+        20_000,
+        10_000,
+      );
+      const expected = 100_000 * 0.01 + 20_000 * 0.01 * 0.1 + 10_000 * 0.01 * 1.25 + 10_000 * 0.03;
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('should apply object cost overrides to tiered cache pricing', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { cost: { input: 0.01, output: 0.03 } },
         100_000,
         10_000,
         20_000,
@@ -346,8 +372,8 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
-    it('should fall back to base cost when config.cost overrides cache pricing', () => {
-      // config.cost overrides everything
+    it('should fall back to base cost when numeric config.cost overrides cache pricing', () => {
+      // Numeric config.cost preserves legacy behavior and bypasses cache math.
       const cost = calculateAnthropicCost(
         'claude-sonnet-4-5-20250929',
         { cost: 0.01 },

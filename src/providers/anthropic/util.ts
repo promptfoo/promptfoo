@@ -316,7 +316,7 @@ export function calculateAnthropicCost(
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
 ): number | undefined {
-  if (config.cost != null && config.inputCost == null && config.outputCost == null) {
+  if (typeof config.cost === 'number' && config.inputCost == null && config.outputCost == null) {
     return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
   }
 

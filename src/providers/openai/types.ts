@@ -2,6 +2,7 @@ import { type OpenAiFunction, type OpenAiTool } from './util';
 import type OpenAI from 'openai';
 
 import type { MCPConfig } from '../mcp/types';
+import type { ModelCost } from '../shared';
 
 /**
  * Context provided to function callbacks for assistant providers
@@ -33,8 +34,8 @@ export interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
-  /** Custom per-token cost override for both input and output tokens. */
-  cost?: number;
+  /** Custom per-token cost override for both input and output tokens, or separate input/output rates. */
+  cost?: number | ModelCost;
   /** Custom per-token input cost override. Takes precedence over cost. */
   inputCost?: number;
   /** Custom per-token output cost override. Takes precedence over cost. */

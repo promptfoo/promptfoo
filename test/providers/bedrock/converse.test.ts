@@ -1180,6 +1180,29 @@ describe('AwsBedrockConverseProvider', () => {
 
       expect(result.cost).toBe(20);
     });
+
+    it('should prefer prompt-level cost overrides for Converse models', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { cost: { input: 0.001, output: 0.002 }, region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 500, totalTokens: 1500 },
+        }),
+      );
+
+      const result = await provider.callApi('Test', {
+        vars: {},
+        prompt: {
+          raw: 'Test',
+          label: 'test',
+          config: { inputCost: 0.01, outputCost: 0.02 },
+        },
+      });
+
+      expect(result.cost).toBe(20);
+    });
   });
 
   describe('MCP helper functions (via Converse command input)', () => {
@@ -2711,6 +2734,37 @@ Third line`;
       expect(result.output).toBe('Hello World');
       expect(result.tokenUsage?.prompt).toBe(10);
       expect(result.tokenUsage?.completion).toBe(5);
+    });
+
+    it('should prefer prompt-level cost overrides for streaming Converse models', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          cost: { input: 0.001, output: 0.002 },
+          region: 'us-east-1',
+          streaming: true,
+        },
+      });
+
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Hello' } } },
+        { metadata: { usage: { inputTokens: 1000, outputTokens: 500 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('Test', {
+        vars: {},
+        prompt: {
+          raw: 'Test',
+          label: 'test',
+          config: { inputCost: 0.01, outputCost: 0.02 },
+        },
+      });
+
+      expect(result.cost).toBe(20);
     });
 
     it('should handle streaming tool use response', async () => {

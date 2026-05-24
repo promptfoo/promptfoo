@@ -13,6 +13,7 @@ import {
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
+import type { ModelCost } from '../shared';
 import type { ClaudeCodeOAuthCredential } from './claudeCodeAuth';
 
 /**
@@ -33,7 +34,7 @@ interface AnthropicBaseOptions {
    */
   apiKeyRequired?: boolean;
   headers?: Record<string, string>;
-  cost?: number;
+  cost?: number | ModelCost;
   inputCost?: number;
   outputCost?: number;
 }
