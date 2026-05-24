@@ -13,7 +13,12 @@ import * as path from 'path';
 
 import logger from '../../../logger';
 import { getConfigDirectoryPath } from '../../../util/config/manage';
-import { type PendingReconConfig, PendingReconConfigSchema } from '../../../validators/recon';
+import {
+  type PendingReconConfig,
+  PendingReconConfigSchema,
+  type ReconResult,
+} from '../../../validators/recon';
+import { buildApplicationDefinition } from './config';
 
 /** Filename for pending recon config */
 export const PENDING_RECON_FILENAME = 'pending-recon.json';
@@ -192,38 +197,12 @@ export function hasPendingReconConfig(): boolean {
  */
 export function buildPendingConfig(
   config: Record<string, unknown>,
-  result: {
-    purpose?: string;
-    features?: string;
-    industry?: string;
-    systemPrompt?: string;
-    hasAccessTo?: string;
-    doesNotHaveAccessTo?: string;
-    userTypes?: string;
-    securityRequirements?: string;
-    sensitiveDataTypes?: string;
-    exampleIdentifiers?: string;
-    criticalActions?: string;
-    forbiddenTopics?: string;
-    attackConstraints?: string;
-    competitors?: string;
-    connectedSystems?: string;
-    redteamUser?: string;
-    stateful?: boolean;
-    entities?: string[];
-    discoveredTools?: Array<{
-      name: string;
-      description: string;
-      file?: string;
-      parameters?: string;
-    }>;
-    securityNotes?: string[];
-    keyFiles?: string[];
-    suggestedPlugins?: string[];
-  },
+  result: ReconResult,
   codebaseDirectory: string,
   handoffToken = createReconHandoffToken(),
 ): PendingReconConfig {
+  const applicationDefinition = buildApplicationDefinition(result);
+
   return {
     handoffToken,
     config,
@@ -232,24 +211,7 @@ export function buildPendingConfig(
       timestamp: Date.now(),
       codebaseDirectory,
       keyFilesAnalyzed: result.keyFiles?.length || 0,
-      applicationDefinition: {
-        purpose: result.purpose,
-        features: result.features,
-        industry: result.industry,
-        systemPrompt: result.systemPrompt,
-        hasAccessTo: result.hasAccessTo,
-        doesNotHaveAccessTo: result.doesNotHaveAccessTo,
-        userTypes: result.userTypes,
-        securityRequirements: result.securityRequirements,
-        sensitiveDataTypes: result.sensitiveDataTypes,
-        exampleIdentifiers: result.exampleIdentifiers,
-        criticalActions: result.criticalActions,
-        forbiddenTopics: result.forbiddenTopics,
-        attackConstraints: result.attackConstraints,
-        competitors: result.competitors,
-        connectedSystems: result.connectedSystems,
-        redteamUser: result.redteamUser,
-      },
+      applicationDefinition,
       reconDetails: {
         stateful: result.stateful,
         entities: result.entities,

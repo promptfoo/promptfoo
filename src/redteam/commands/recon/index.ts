@@ -33,8 +33,8 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function pluralize(count: number, singular: string): string {
-  return count === 1 ? singular : `${singular}s`;
+function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return count === 1 ? singular : plural;
 }
 
 /**
@@ -111,7 +111,7 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
   }
 
   logger.info(`\nReconnaissance target: ${chalk.cyan(directory)}`);
-  logger.info(chalk.dim('Agent can read files and search documentation in a read-only run\n'));
+  logger.info(chalk.dim('Agent reads a filtered snapshot in a read-only run\n'));
 
   // Create an isolated temporary working directory and always remove it afterward.
   const scratchpad = createScratchpad();
@@ -124,7 +124,11 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
         `Prepared filtered analysis snapshot with ${reconTarget.copiedFiles} ${pluralize(
           reconTarget.copiedFiles,
           'file',
-        )} (${reconTarget.skippedEntries} ${pluralize(reconTarget.skippedEntries, 'entry')} excluded).`,
+        )} (${reconTarget.skippedEntries} ${pluralize(
+          reconTarget.skippedEntries,
+          'entry',
+          'entries',
+        )} excluded).`,
       ),
     );
 

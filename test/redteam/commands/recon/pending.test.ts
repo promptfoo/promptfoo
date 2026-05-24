@@ -90,6 +90,24 @@ describe('pending recon config helpers', () => {
     expect(hasPendingReconConfig()).toBe(false);
   });
 
+  it('populates handoff access context from discovered tools when hasAccessTo is missing', () => {
+    const config = buildPendingConfig(
+      { description: 'Recon config' },
+      {
+        purpose: 'Support assistant',
+        discoveredTools: [
+          { name: 'lookupOrder', description: 'Reads order status' },
+          { name: 'cancelOrder', description: 'Cancels pending orders' },
+        ],
+      },
+      '/repo',
+      'b'.repeat(43),
+    );
+
+    expect(config.metadata.applicationDefinition?.hasAccessTo).toContain('lookupOrder');
+    expect(config.metadata.applicationDefinition?.hasAccessTo).toContain('cancelOrder');
+  });
+
   it('returns null when no pending config exists', () => {
     expect(readPendingReconConfig()).toBeNull();
   });

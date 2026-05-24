@@ -62,6 +62,11 @@ interface ReconApplicationDefinition {
   redteamUser?: string;
 }
 
+type ApplicationDefinitionSectionKey = Extract<
+  keyof ReconApplicationDefinition,
+  keyof typeof SECTION_HEADERS
+>;
+
 /**
  * Recon details for YAML metadata output.
  * Mirrors the reconDetails structure from validators/recon.ts.
@@ -216,7 +221,7 @@ export function filterValidPlugins(suggestedPlugins: string[]): string[] {
 /**
  * Formats discovered tools as a string for the hasAccessTo field
  */
-function formatToolsForAccessDescription(
+export function formatToolsForAccessDescription(
   tools: ReconResult['discoveredTools'],
 ): string | undefined {
   if (!tools || tools.length === 0) {
@@ -340,7 +345,7 @@ export function buildReconMetadata(result: ReconResult, scannedDirectory: string
  * Uses the shared SECTION_HEADERS constant for consistency with the parser.
  */
 function formatSection(
-  field: keyof typeof SECTION_HEADERS,
+  field: ApplicationDefinitionSectionKey,
   value: string | undefined,
 ): string | null {
   if (!isValueMeaningful(value)) {
@@ -365,7 +370,7 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
   // - competitors: often empty/not applicable
   // - systemPrompt: handled separately in the config, not in purpose string
   // - UI aliases (accessToData, forbiddenData, accessToActions, forbiddenActions): not used in CLI output
-  const fieldsToInclude: (keyof typeof SECTION_HEADERS)[] = [
+  const fieldsToInclude: ApplicationDefinitionSectionKey[] = [
     'purpose',
     'features',
     'industry',
@@ -380,11 +385,33 @@ export function applicationDefinitionToPurpose(result: ReconResult): string {
     'connectedSystems',
   ];
 
+  const applicationDefinition = buildApplicationDefinition(result);
   const sections = fieldsToInclude
-    .map((field) => formatSection(field, result[field]))
+    .map((field) => formatSection(field, applicationDefinition[field]))
     .filter((section): section is string => section !== null);
 
   return sections.join('\n\n');
+}
+
+const NEGATED_CAPABILITY_PATTERN =
+  /\b(no|not|none|without|lacks?|does\s+not|doesn't|do\s+not|don't|cannot|can't|never)\b/i;
+
+function hasAffirmedKeyword(value: string | undefined, keywords: string[]): boolean {
+  if (typeof value !== 'string' || !isValueMeaningful(value)) {
+    return false;
+  }
+
+  return value
+    .toLowerCase()
+    .split(/(?:[.;\n\r]|\bbut\b|\bhowever\b)/)
+    .some((segment) => {
+      const trimmed = segment.trim();
+      return (
+        trimmed.length > 0 &&
+        !NEGATED_CAPABILITY_PATTERN.test(trimmed) &&
+        keywords.some((keyword) => trimmed.includes(keyword))
+      );
+    });
 }
 
 /**
@@ -410,15 +437,33 @@ function isValidSystemPrompt(systemPrompt: string | undefined): boolean {
 }
 
 function addSensitiveDataPlugins(pluginIds: Set<string>, sensitiveDataTypes: string | undefined) {
-  if (!sensitiveDataTypes) {
+  if (
+    !hasAffirmedKeyword(sensitiveDataTypes, [
+      'account',
+      'card',
+      'credit',
+      'customer',
+      'data',
+      'email',
+      'financial',
+      'health',
+      'medical',
+      'payment',
+      'personal',
+      'phi',
+      'pii',
+      'ssn',
+      'social security',
+      'user',
+    ])
+  ) {
     return;
   }
 
-  const data = sensitiveDataTypes.toLowerCase();
   pluginIds.add('pii:direct');
   pluginIds.add('pii:session');
 
-  if (data.includes('credit card') || data.includes('payment') || data.includes('financial')) {
+  if (hasAffirmedKeyword(sensitiveDataTypes, ['credit card', 'payment', 'financial'])) {
     pluginIds.add('pii:api-db');
   }
 }
@@ -430,20 +475,27 @@ function addConnectedSystemPlugins(pluginIds: Set<string>, connectedSystems: str
 
   const systems = connectedSystems.toLowerCase();
 
-  if (systems.includes('database') || systems.includes('sql')) {
+  if (
+    hasAffirmedKeyword(systems, [
+      'database',
+      'sql',
+      'postgres',
+      'postgresql',
+      'mysql',
+      'sqlite',
+      'mssql',
+    ])
+  ) {
     pluginIds.add('sql-injection');
   }
 
   if (
-    systems.includes('http') ||
-    systems.includes('api') ||
-    systems.includes('webhook') ||
-    systems.includes('external')
+    hasAffirmedKeyword(systems, ['http', 'api', 'webhook', 'external', 'url', 'fetch', 'request'])
   ) {
     pluginIds.add('ssrf');
   }
 
-  if (systems.includes('shell') || systems.includes('command') || systems.includes('exec')) {
+  if (hasAffirmedKeyword(systems, ['shell', 'command', 'exec'])) {
     pluginIds.add('shell-injection');
   }
 }
@@ -455,11 +507,11 @@ function addAuthorizationPlugins(pluginIds: Set<string>, userTypes: string | und
 
   const users = userTypes.toLowerCase();
 
-  if (users.includes('admin') || users.includes('role') || users.includes('permission')) {
+  if (hasAffirmedKeyword(users, ['admin', 'role', 'permission'])) {
     pluginIds.add('rbac');
   }
 
-  if (users.includes('user') && (users.includes('admin') || users.includes('different'))) {
+  if (hasAffirmedKeyword(users, ['user']) && hasAffirmedKeyword(users, ['admin', 'different'])) {
     pluginIds.add('bola');
     pluginIds.add('bfla');
   }
@@ -503,33 +555,28 @@ function addSecurityNotePlugins(pluginIds: Set<string>, securityNotes: string[] 
     return;
   }
 
-  const notes = securityNotes.join(' ').toLowerCase();
+  const notes = securityNotes.join('. ').toLowerCase();
 
-  if (
-    notes.includes('credential') ||
-    notes.includes('auth') ||
-    notes.includes('password') ||
-    notes.includes('plaintext')
-  ) {
+  if (hasAffirmedKeyword(notes, ['credential', 'auth', 'password', 'plaintext'])) {
     pluginIds.add('rbac');
     pluginIds.add('bola');
     pluginIds.add('bfla');
   }
 
-  if (notes.includes('database') || notes.includes('sql') || notes.includes('query')) {
+  if (hasAffirmedKeyword(notes, ['database', 'sql', 'query'])) {
     pluginIds.add('sql-injection');
   }
 
-  if (notes.includes('payment') || notes.includes('pci') || notes.includes('card')) {
+  if (hasAffirmedKeyword(notes, ['payment', 'pci', 'card'])) {
     pluginIds.add('pii:direct');
     pluginIds.add('pii:api-db');
   }
 
-  if (notes.includes('session') || notes.includes('persist') || notes.includes('history')) {
+  if (hasAffirmedKeyword(notes, ['session', 'persist', 'history'])) {
     pluginIds.add('cross-session-leak');
   }
 
-  if (notes.includes('shell') || notes.includes('command') || notes.includes('exec')) {
+  if (hasAffirmedKeyword(notes, ['shell', 'command', 'exec'])) {
     pluginIds.add('shell-injection');
   }
 }

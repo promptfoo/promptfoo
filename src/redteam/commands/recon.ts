@@ -33,7 +33,8 @@ export function reconCommand(program: Command): void {
         Uses OpenAI Codex SDK or Claude Agent SDK to analyze source code and extract
         information about the application's purpose, security boundaries, and attack surface.
 
-        The agent can read files and search the web for documentation in a read-only analysis run.
+        OpenAI can use provider-approved documentation search. Claude runs with
+        read-only workspace tools and web tools disabled.
 
         Budget: Anthropic provider is capped at $${DEFAULT_ANTHROPIC_BUDGET_USD} per run.
 

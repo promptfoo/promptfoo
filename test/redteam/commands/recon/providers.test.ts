@@ -653,9 +653,11 @@ describe('recon provider factories', () => {
         additional_directories: ['/repo'],
         model: 'opus-test',
         max_budget_usd: 25,
+        disallowed_tools: ['WebFetch', 'WebSearch'],
         permission_mode: 'default',
       }),
     );
+    expect(providerMocks.anthropicConfig).not.toHaveProperty('append_allowed_tools');
     expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Reading: src/app.ts' });
     expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Searching for: router' });
     expect(onProgress).toHaveBeenCalledWith({ type: 'tool', message: 'Finding files: **/*.ts' });

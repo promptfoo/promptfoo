@@ -73,6 +73,20 @@ describe('applicationDefinitionToPurpose', () => {
     expect(result).toContain('Filesystem');
   });
 
+  it('should include discovered tools as access context when hasAccessTo is missing', () => {
+    const result = applicationDefinitionToPurpose({
+      purpose: 'Test',
+      discoveredTools: [
+        { name: 'lookupOrder', description: 'Reads order status by order ID' },
+        { name: 'refundOrder', description: 'Creates a refund request' },
+      ],
+    });
+
+    expect(result).toContain('Systems and Data the Application Has Access To:');
+    expect(result).toContain('lookupOrder: Reads order status by order ID');
+    expect(result).toContain('refundOrder: Creates a refund request');
+  });
+
   it('should skip placeholder values like "not specified"', () => {
     const result = applicationDefinitionToPurpose({
       purpose: 'Test purpose',
@@ -140,6 +154,18 @@ describe('buildRedteamConfig', () => {
     expect(config.redteam?.plugins).toContainEqual({ id: 'pii:session' });
   });
 
+  it('should not add PII plugins when sensitive data text is negated', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      sensitiveDataTypes: 'No PII, payment data, or account data is handled.',
+    };
+    const config = buildRedteamConfig(result);
+
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'pii:direct' });
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'pii:session' });
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'pii:api-db' });
+  });
+
   it('should add SQL injection plugin when database detected', () => {
     const result: ReconResult = {
       purpose: 'Test',
@@ -158,6 +184,42 @@ describe('buildRedteamConfig', () => {
     const config = buildRedteamConfig(result);
 
     expect(config.redteam?.plugins).toContainEqual({ id: 'ssrf' });
+  });
+
+  it('should not infer connected-system plugins from negated recon text', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      connectedSystems: 'No database or external API access. No shell commands are available.',
+      securityNotes: ['No SQL queries, webhook calls, or command execution were found.'],
+    };
+    const config = buildRedteamConfig(result);
+
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'sql-injection' });
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'ssrf' });
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'shell-injection' });
+  });
+
+  it('should still infer capabilities after a negated clause when later text affirms them', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      connectedSystems: 'No database access, but the app calls an external webhook.',
+    };
+    const config = buildRedteamConfig(result);
+
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'sql-injection' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'ssrf' });
+  });
+
+  it('should infer capabilities from later security notes after an earlier negated note', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      securityNotes: ['No SQL queries were found', 'Payment card numbers are logged for debugging'],
+    };
+    const config = buildRedteamConfig(result);
+
+    expect(config.redteam?.plugins).not.toContainEqual({ id: 'sql-injection' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:direct' });
+    expect(config.redteam?.plugins).toContainEqual({ id: 'pii:api-db' });
   });
 
   it('should add RBAC plugins when admin users detected', () => {

@@ -194,15 +194,16 @@ export async function createAnthropicReconProvider(
       }
     : undefined;
 
-  // SECURITY: The default Claude workspace tools are read-only; only web lookup
-  // tools are appended. Never opt into editing tools for reconnaissance.
+  // SECURITY: The default Claude workspace tools are read-only. Do not append
+  // web tools here: untrusted source files can prompt-inject an agent into
+  // exfiltrating copied source through WebFetch/WebSearch.
   const provider = new ClaudeCodeSDKProvider({
     config: {
       working_dir: scratchpad.dir,
       additional_directories: [directory],
       model: model || DEFAULT_ANTHROPIC_MODEL,
       max_budget_usd: DEFAULT_ANTHROPIC_BUDGET_USD,
-      append_allowed_tools: ['WebFetch', 'WebSearch'],
+      disallowed_tools: ['WebFetch', 'WebSearch'],
       permission_mode: 'default',
       output_format: {
         type: 'json_schema',

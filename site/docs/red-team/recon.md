@@ -104,15 +104,15 @@ Model defaults may change. See [OpenAI Codex SDK](/docs/providers/openai-codex-s
 
 The recon agent has limited, read-only access to your codebase:
 
-| Capability        | Status    | Notes                                                                |
-| ----------------- | --------- | -------------------------------------------------------------------- |
-| File read         | Yes       | Reads source files needed to characterize the application            |
-| File write        | No        | OpenAI runs in a read-only sandbox; Claude is given no editing tools |
-| Command execution | Read-only | Codex may run inspection commands; it cannot modify the checkout     |
-| Web search        | Yes       | Can search web for API docs and library documentation                |
-| Web fetch         | Yes       | Can fetch web content for context                                    |
+| Capability        | Status        | Notes                                                                |
+| ----------------- | ------------- | -------------------------------------------------------------------- |
+| File read         | Yes           | Reads source files needed to characterize the application            |
+| File write        | No            | OpenAI runs in a read-only sandbox; Claude is given no editing tools |
+| Command execution | Read-only     | Codex may run inspection commands; it cannot modify the checkout     |
+| Web search        | OpenAI only   | Dedicated documentation lookup; arbitrary network egress is disabled |
+| Web fetch         | No by default | Claude WebFetch/WebSearch tools are disallowed during recon          |
 
-The agent cannot modify your code. The OpenAI provider runs under a read-only sandbox with non-interactive approvals disabled; the Claude provider receives read-only workspace tools. Both providers analyze the filtered snapshot, not your original checkout, so excluded files are not reachable by file tools. Web access is limited to documentation lookups.
+The agent cannot modify your code. The OpenAI provider runs under a read-only sandbox with non-interactive approvals disabled and arbitrary network egress disabled; the Claude provider receives read-only workspace tools and no web tools. Both providers analyze the filtered snapshot, not your original checkout, so excluded files are not reachable by file tools.
 
 :::note Cost Consideration
 Recon uses advanced AI models for code analysis. Large codebases may incur significant API costs. Use `--exclude` patterns to limit scope.

@@ -49,7 +49,8 @@ describe('buildReconPrompt', () => {
   it('should include tool instructions', () => {
     const prompt = buildPrompt();
     expect(prompt).toContain('Read, Grep, Glob, LS');
-    expect(prompt).toContain('WebFetch, WebSearch');
+    expect(prompt).toContain('provider-approved documentation search tools');
+    expect(prompt).toContain('Do not fetch arbitrary URLs or use shell/network egress');
   });
 
   it('should include output rules for blackbox perspective', () => {
