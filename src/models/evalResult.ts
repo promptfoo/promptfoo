@@ -4,6 +4,7 @@ import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { clearCountCache } from './evalPerformance';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import {
@@ -482,6 +483,7 @@ export default class EvalResult {
       args.gradingResult = sanitizeGradingResultForDb(args.gradingResult);
       args.metadata = sanitizeMetadataForDb(args.metadata);
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
+      clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
     return new EvalResult(args);
@@ -532,6 +534,7 @@ export default class EvalResult {
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
       }
     });
+    clearCountCache(evalId);
     return returnResults;
   }
 
