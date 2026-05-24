@@ -28,6 +28,7 @@ import { getGitHubContext, getPRFiles } from './github';
 interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
+  minimumSeverityInputProvided: boolean;
   configPath: string;
   diffsOnly: boolean;
   guidanceText: string;
@@ -54,7 +55,12 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function resolveMinimumSeverityInput(): string {
+interface MinimumSeverityInput {
+  value: string;
+  provided: boolean;
+}
+
+function resolveMinimumSeverityInput(): MinimumSeverityInput {
   const minSeverity = core.getInput('min-severity');
   const minimumSeverity = core.getInput('minimum-severity');
 
@@ -62,13 +68,19 @@ function resolveMinimumSeverityInput(): string {
     core.warning('Both min-severity and minimum-severity were provided; using min-severity.');
   }
 
-  return minSeverity || minimumSeverity || 'medium';
+  return {
+    value: minSeverity || minimumSeverity || 'medium',
+    provided: Boolean(minSeverity || minimumSeverity),
+  };
 }
 
 function getActionInputs(): ActionInputs {
+  const minimumSeverity = resolveMinimumSeverityInput();
+
   return {
     apiHost: core.getInput('api-host'),
-    minimumSeverity: resolveMinimumSeverityInput(),
+    minimumSeverity: minimumSeverity.value,
+    minimumSeverityInputProvided: minimumSeverity.provided,
     configPath: core.getInput('config-path'),
     diffsOnly: core.getBooleanInput('diffs-only'),
     guidanceText: core.getInput('guidance'),
@@ -438,7 +450,7 @@ async function postFallbackComments(
   context: PullRequestContext,
   comments: Comment[],
   review: string | undefined,
-  minimumSeverity: string,
+  minimumSeverity: string | undefined,
 ): Promise<void> {
   core.info('📝 Server could not post comments - posting as fallback...');
 
@@ -458,6 +470,17 @@ async function postFallbackComments(
     core.error(`Failed to post comments: ${formatError(error)}`);
     core.warning('Comments could not be posted to PR');
   }
+}
+
+function getFallbackMinimumSeverity(
+  inputs: ActionInputs,
+  configPath: ResolvedConfigPath,
+): string | undefined {
+  if (configPath.shouldCleanup || inputs.minimumSeverityInputProvided) {
+    return inputs.minimumSeverity;
+  }
+
+  return undefined;
 }
 
 // The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
@@ -598,6 +621,7 @@ function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInp
 async function handleScanResponse(
   scanResponse: ScanResponse,
   inputs: ActionInputs,
+  finalConfigPath: ResolvedConfigPath,
   context: PullRequestContext,
 ): Promise<void> {
   const { comments, commentsPosted, review } = scanResponse;
@@ -611,7 +635,7 @@ async function handleScanResponse(
       context,
       comments,
       review,
-      inputs.minimumSeverity,
+      getFallbackMinimumSeverity(inputs, finalConfigPath),
     );
     return;
   }
@@ -699,7 +723,7 @@ async function runCodeScan(): Promise<void> {
       return;
     }
 
-    await handleScanResponse(scanResponse, inputs, context);
+    await handleScanResponse(scanResponse, inputs, finalConfigPath, context);
     logActCommentPreview(scanResponse.comments);
   } finally {
     cleanupConfig(finalConfigPath);

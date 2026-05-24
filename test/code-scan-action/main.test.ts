@@ -196,9 +196,6 @@ function setupMocks() {
     if (name === 'github-token') {
       return 'fake-token';
     }
-    if (name === 'min-severity' || name === 'minimum-severity') {
-      return 'medium';
-    }
     return '';
   });
   mocks.core.getBooleanInput.mockReturnValue(false);
@@ -353,6 +350,42 @@ function mockInheritedActionAuthEnv() {
     'INPUT_GITHUB-TOKEN': 'input-github-token',
     INPUT_GITHUB_TOKEN: 'input-github-token-compat',
   });
+}
+
+function mockPromptfooScanResponse(response: unknown) {
+  mocks.exec.exec.mockImplementation(
+    async (
+      command: string,
+      _args: string[] | undefined,
+      options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+    ) => {
+      if (command === 'promptfoo' && options?.listeners?.stdout) {
+        options.listeners.stdout(Buffer.from(JSON.stringify(response)));
+      }
+      return 0;
+    },
+  );
+}
+
+function mockOctokitForFallbackPost() {
+  const createReview = vi.fn().mockResolvedValue({});
+  const createComment = vi.fn().mockResolvedValue({});
+
+  mocks.github.getOctokit.mockReturnValue({
+    rest: {
+      pulls: {
+        get: vi.fn().mockResolvedValue({
+          data: { base: { ref: 'main' } },
+        }),
+        createReview,
+      },
+      issues: {
+        createComment,
+      },
+    },
+  });
+
+  return { createComment, createReview };
 }
 
 function expectNoActionAuthEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
@@ -677,6 +710,66 @@ describe('code-scan-action main', () => {
       expectCliArg(args, '--github-pr', 'test-owner/test-repo#123');
       expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
       expect(mocks.core.getIDToken).toHaveBeenCalled();
+    });
+  });
+
+  describe('fallback review comments', () => {
+    it('omits the severity footer when an explicit config path controls severity', async () => {
+      const { createReview } = mockOctokitForFallbackPost();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [],
+        commentsPosted: false,
+        review: 'Fallback review from scan server',
+      });
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        return '';
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(createReview).toHaveBeenCalled();
+      });
+      expect(createReview.mock.calls[0][0].body).toBe('Fallback review from scan server');
+      expect(createReview.mock.calls[0][0].body).not.toContain('Minimum severity threshold');
+    });
+
+    it('keeps the severity footer when config-path is paired with an explicit override', async () => {
+      const { createReview } = mockOctokitForFallbackPost();
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [],
+        commentsPosted: false,
+        review: 'Fallback review from scan server',
+      });
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        if (name === 'min-severity') {
+          return 'high';
+        }
+        return '';
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(createReview).toHaveBeenCalled();
+      });
+      expect(createReview.mock.calls[0][0].body).toContain('Fallback review from scan server');
+      expect(createReview.mock.calls[0][0].body).toContain('Minimum severity threshold:');
+      expect(createReview.mock.calls[0][0].body).toContain('High');
     });
   });
 
