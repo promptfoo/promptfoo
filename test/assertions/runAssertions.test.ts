@@ -957,6 +957,43 @@ describe('runAssertions', () => {
     expect(result.componentResults?.[1].componentResults).toHaveLength(1);
   });
 
+  it('should keep weighted metric-only assert-sets from inflating partial aggregate scores', async () => {
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'javascript',
+          value: '0.5',
+          threshold: 0.5,
+        },
+        {
+          type: 'assert-set',
+          metric: 'cost_metrics',
+          weight: 5,
+          assert: [
+            {
+              type: 'cost',
+              metric: 'total_cost',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output', cost: 0.25 },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.5);
+    expect(result.namedScores).toEqual({
+      cost_metrics: 1,
+      total_cost: 0.25,
+    });
+  });
+
   it('should reject not-cost without a threshold', async () => {
     const test: AtomicTestCase = {
       assert: [
