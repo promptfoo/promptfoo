@@ -11,25 +11,37 @@ interface SkillCountValue {
 
 function getSkillCalls(params: AssertionParams): SkillCallEntry[] {
   const metadata = params.providerResponse?.metadata;
-  // Codex providers expose unsuccessful reads only in attemptedSkillCalls,
-  // which is the complete attempted-read set when it is present.
-  const rawSkillCalls =
-    params.inverse === true && Array.isArray(metadata?.attemptedSkillCalls)
-      ? metadata.attemptedSkillCalls
-      : metadata?.skillCalls;
+  const skillCalls = normalizeSkillCalls(metadata?.skillCalls);
+
+  if (params.inverse === true) {
+    return dedupeSkillCalls([...skillCalls, ...normalizeSkillCalls(metadata?.attemptedSkillCalls)]);
+  }
+
+  // skill-used counts only confirmed successful invocations.
+  return skillCalls.filter((entry) => entry.is_error !== true);
+}
+
+function normalizeSkillCalls(rawSkillCalls: unknown): SkillCallEntry[] {
   if (!Array.isArray(rawSkillCalls)) {
     return [];
   }
 
-  // skill-used counts only confirmed successful invocations, while
-  // not-skill-used must flag forbidden attempts even if they errored.
   return rawSkillCalls.filter(
     (entry): entry is SkillCallEntry =>
-      Boolean(entry) &&
-      typeof entry === 'object' &&
-      typeof entry.name === 'string' &&
-      (params.inverse === true || entry.is_error !== true),
+      Boolean(entry) && typeof entry === 'object' && typeof entry.name === 'string',
   );
+}
+
+function dedupeSkillCalls(skillCalls: SkillCallEntry[]): SkillCallEntry[] {
+  const seen = new Set<string>();
+  return skillCalls.filter((skillCall) => {
+    const key = [skillCall.name, skillCall.source, skillCall.path, skillCall.is_error].join('\0');
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function matchesSkill(skillCall: SkillCallEntry, matcher: { name?: string; pattern?: string }) {
