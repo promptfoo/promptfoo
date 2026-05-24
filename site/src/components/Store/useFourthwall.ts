@@ -355,6 +355,86 @@ const HTML_ENTITIES: Record<string, string> = {
   '&trade;': '™',
 };
 
+function removeTagBlocks(html: string, tags: string[]): string {
+  let result = html;
+
+  for (const tag of tags) {
+    let safety = 0;
+    while (safety++ < 100) {
+      const lowerResult = result.toLowerCase();
+      const openTag = lowerResult.indexOf(`<${tag}`);
+      if (openTag === -1) {
+        break;
+      }
+      const closeTag = lowerResult.indexOf(`</${tag}`, openTag);
+      if (closeTag === -1) {
+        break;
+      }
+      const closeEnd = result.indexOf('>', closeTag);
+      if (closeEnd === -1) {
+        break;
+      }
+      result = result.substring(0, openTag) + result.substring(closeEnd + 1);
+    }
+  }
+
+  return result;
+}
+
+function removeHtmlTags(html: string): string {
+  let result = html;
+  let safety = 0;
+
+  while (safety++ < 1000) {
+    const start = result.indexOf('<');
+    if (start === -1) {
+      break;
+    }
+    const end = result.indexOf('>', start);
+    if (end === -1) {
+      break;
+    }
+    result = result.substring(0, start) + result.substring(end + 1);
+  }
+
+  return result;
+}
+
+function decodeNamedHtmlEntities(html: string): string {
+  let result = html;
+
+  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
+    result = result.split(entity).join(char);
+  }
+
+  return result;
+}
+
+function decodeNumericHtmlEntities(html: string): string {
+  let result = html;
+  let numericSafety = 0;
+
+  while (numericSafety++ < 500) {
+    const start = result.indexOf('&#');
+    if (start === -1) {
+      break;
+    }
+    const end = result.indexOf(';', start);
+    if (end === -1 || end - start > 10) {
+      break;
+    }
+    const numStr = result.substring(start + 2, end);
+    const isHex = numStr.toLowerCase().startsWith('x');
+    const num = isHex ? Number.parseInt(numStr.substring(1), 16) : Number.parseInt(numStr, 10);
+    if (Number.isNaN(num) || num <= 0 || num >= 0x10ffff) {
+      break;
+    }
+    result = result.substring(0, start) + String.fromCodePoint(num) + result.substring(end + 1);
+  }
+
+  return result;
+}
+
 /**
  * Strip HTML tags from a string using indexOf (no regex for tag stripping).
  * Uses DOMParser in browser (safe), string-based fallback for SSR.
@@ -374,53 +454,10 @@ export function stripHtml(html: string): string {
   // SSR fallback: String-based stripping for trusted Fourthwall API content.
   // Uses indexOf/substring instead of regex to avoid CodeQL js/bad-tag-filter alerts.
   // The browser path (above) uses safe DOMParser for client-side rendering.
-  let result = html;
-
-  // Remove script/style tags and contents using indexOf (no regex)
-  for (const tag of ['script', 'style']) {
-    let safety = 0;
-    while (safety++ < 100) {
-      const openTag = result.toLowerCase().indexOf(`<${tag}`);
-      if (openTag === -1) break;
-      const closeTag = result.toLowerCase().indexOf(`</${tag}`, openTag);
-      if (closeTag === -1) break;
-      const closeEnd = result.indexOf('>', closeTag);
-      if (closeEnd === -1) break;
-      result = result.substring(0, openTag) + result.substring(closeEnd + 1);
-    }
-  }
-
-  // Remove remaining HTML tags using indexOf (no regex)
-  let safety = 0;
-  while (safety++ < 1000) {
-    const start = result.indexOf('<');
-    if (start === -1) break;
-    const end = result.indexOf('>', start);
-    if (end === -1) break;
-    result = result.substring(0, start) + result.substring(end + 1);
-  }
-
-  // Decode common HTML entities (using string split/join, not regex)
-  for (const [entity, char] of Object.entries(HTML_ENTITIES)) {
-    result = result.split(entity).join(char);
-  }
-
-  // Decode numeric entities (&#123; format) - simple parsing without regex
-  let numericSafety = 0;
-  while (numericSafety++ < 500) {
-    const start = result.indexOf('&#');
-    if (start === -1) break;
-    const end = result.indexOf(';', start);
-    if (end === -1 || end - start > 10) break;
-    const numStr = result.substring(start + 2, end);
-    const isHex = numStr.toLowerCase().startsWith('x');
-    const num = isHex ? Number.parseInt(numStr.substring(1), 16) : Number.parseInt(numStr, 10);
-    if (!Number.isNaN(num) && num > 0 && num < 0x10ffff) {
-      result = result.substring(0, start) + String.fromCodePoint(num) + result.substring(end + 1);
-    } else {
-      break; // Invalid entity, stop processing
-    }
-  }
+  let result = removeTagBlocks(html, ['script', 'style']);
+  result = removeHtmlTags(result);
+  result = decodeNamedHtmlEntities(result);
+  result = decodeNumericHtmlEntities(result);
 
   return result.trim();
 }
