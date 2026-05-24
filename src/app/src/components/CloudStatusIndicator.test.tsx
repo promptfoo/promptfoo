@@ -262,6 +262,31 @@ describe('CloudStatusIndicator', () => {
     ).toBeInTheDocument();
   });
 
+  it('links to the enterprise app when enterprise is unconfigured', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useCloudConfig).mockReturnValue({
+      data: {
+        isEnabled: false,
+        appUrl: 'https://enterprise.company.com',
+        isEnterprise: true,
+      },
+      isLoading: false,
+      error: null,
+      refetch: mockRefetch,
+    });
+
+    renderCloudStatusIndicator();
+
+    await user.click(
+      screen.getByRole('button', { name: /promptfoo enterprise is not configured/i }),
+    );
+
+    expect(screen.getByRole('link', { name: 'enterprise.company.com' })).toHaveAttribute(
+      'href',
+      'https://enterprise.company.com',
+    );
+  });
+
   it('closes dialog when close button is clicked', async () => {
     const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({

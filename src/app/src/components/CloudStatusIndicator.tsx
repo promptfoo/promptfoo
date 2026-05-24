@@ -29,6 +29,24 @@ function getServiceName(isEnterprise: boolean) {
   return isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
 }
 
+function getConnectDestination(isEnterprise: boolean, appUrl: string | null) {
+  if (isEnterprise && appUrl) {
+    try {
+      return {
+        href: appUrl,
+        label: new URL(appUrl).hostname,
+      };
+    } catch {
+      // Fall back to the public signup page when older API responses contain an invalid URL.
+    }
+  }
+
+  return {
+    href: 'https://www.promptfoo.app/welcome',
+    label: 'promptfoo.app',
+  };
+}
+
 export default function CloudStatusIndicator() {
   const { data, isLoading, error, refetch } = useCloudConfig();
   const [showDialog, setShowDialog] = useState(false);
@@ -41,6 +59,7 @@ export default function CloudStatusIndicator() {
   const teamName = isEnterprise ? 'organization' : 'team';
   const hasInvalidAppUrl = isConfigured && !appUrl;
   const canOpenDashboard = isConfigured && Boolean(appUrl) && !error;
+  const connectDestination = getConnectDestination(isEnterprise, appUrl);
 
   const statusLabel = (() => {
     if (isLoading) {
@@ -154,13 +173,13 @@ export default function CloudStatusIndicator() {
                   Run <code className="rounded bg-muted px-1 py-0.5">promptfoo auth login</code> or
                   visit{' '}
                   <a
-                    href="https://www.promptfoo.app/welcome"
+                    href={connectDestination.href}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={handlePromptfooAppClick}
                     className="font-medium underline text-primary hover:text-primary/80"
                   >
-                    promptfoo.app
+                    {connectDestination.label}
                   </a>
                   .
                 </AlertDescription>

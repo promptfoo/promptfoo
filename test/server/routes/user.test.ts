@@ -253,8 +253,8 @@ describe('User Routes', () => {
       }
     });
 
-    it('should reject invalid or non-http app URLs for enterprise detection', async () => {
-      const invalidUrls = ['not-a-url', 'javascript:alert(1)'];
+    it('should reject invalid, non-http, or credentialed app URLs for enterprise detection', async () => {
+      const invalidUrls = ['not-a-url', 'javascript:alert(1)', 'https://user:password@example.com'];
 
       for (const url of invalidUrls) {
         mockedCloudConfig.isEnabled.mockReturnValue(true);

@@ -125,6 +125,10 @@ function getHttpAppUrl(url: string | null): string | null {
       return null;
     }
 
+    if (parsedUrl.username || parsedUrl.password) {
+      return null;
+    }
+
     return appUrl;
   } catch {
     return null;
