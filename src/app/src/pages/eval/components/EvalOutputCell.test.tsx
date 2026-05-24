@@ -17,12 +17,13 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata, onClose, prompt }) => (
+  default: vi.fn(({ gradingResults, metadata, onClose, prompt, variables }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
       data-prompt={prompt}
+      data-variables={JSON.stringify(variables)}
     >
       Mocked Dialog Component
       <button type="button" onClick={onClose}>
@@ -352,6 +353,44 @@ describe('EvalOutputCell', () => {
         'Expanded prompt after click',
       );
     });
+  });
+
+  it('uses lazy-loaded test variables for trimmed comparison cells', async () => {
+    const user = userEvent.setup();
+    mockFetchCellDetail.mockResolvedValue({
+      prompt: 'Expanded prompt after click',
+      response: { output: 'Expanded output' },
+      testCase: { vars: { city: 'Boulder', source: 'comparison-eval' } },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="page-eval-id"
+        testVars={{ city: 'Denver', source: 'base-eval' }}
+        output={{
+          ...defaultProps.output,
+          evalId: 'comparison-eval-id',
+          isTruncated: true,
+          prompt: '',
+          testCase: { provider: 'comparison-provider' },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dialog-component')).toHaveAttribute(
+        'data-prompt',
+        'Expanded prompt after click',
+      );
+    });
+
+    const passedVariables = JSON.parse(
+      screen.getByTestId('dialog-component').getAttribute('data-variables') || '{}',
+    );
+    expect(passedVariables).toEqual({ city: 'Boulder', source: 'comparison-eval' });
   });
 
   it('clears the row hint when closing a deep-linked prompt dialog', async () => {

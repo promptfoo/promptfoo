@@ -1099,6 +1099,13 @@ function renderOutputActions({
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const detailVars =
+    cellDetail?.testCase?.vars &&
+    typeof cellDetail.testCase.vars === 'object' &&
+    !Array.isArray(cellDetail.testCase.vars)
+      ? (cellDetail.testCase.vars as Vars)
+      : undefined;
+
   return (
     <div
       className="cell-actions"
@@ -1248,7 +1255,9 @@ function renderOutputActions({
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
-              variables={output.metadata?.inputVars || testVars || output.testCase?.vars}
+              variables={
+                output.metadata?.inputVars || detailVars || testVars || output.testCase?.vars
+              }
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
