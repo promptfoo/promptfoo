@@ -250,9 +250,10 @@ function parseAgentEvidenceCandidates(
     }
 
     for (const object of extractJsonObjects(untaggedValue)) {
-      const evidence = parseAgentEvidenceCandidates(object)[0];
-      if (evidence?.findings) {
-        candidates.push(evidence);
+      for (const evidence of parseAgentEvidenceCandidates(object)) {
+        if (evidence?.findings) {
+          candidates.push(evidence);
+        }
       }
     }
 

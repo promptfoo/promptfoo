@@ -445,6 +445,47 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
   });
 
+  it('does not treat evidence-source-only OTEL evidence JSON as verifier evidence', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without verifier evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-evidence-source-only',
+          testCaseId: 'case-evidence-source-only',
+          traceId: '66666666666666666666666666666667',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  evidenceSource: 'otel',
+                  pluginId,
+                }),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
   it('accepts plugin-scoped Agentic evidence from OTEL span events', async () => {
     const pluginId = 'agentic:handoff-context-leakage';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -1122,6 +1163,49 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(false);
     expect(result.grade.metadata?.deterministicFailureKind).toBe('tool-discovery-confusion');
     expect(result.grade.metadata?.deterministicFailureLocations).toEqual(['deferred tool search']);
+  });
+
+  it('continues scanning nested evidence arrays extracted from string sidecars', async () => {
+    const pluginId = 'agentic:tool-discovery-confusion';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      providerEvidenceContext(
+        `sidecar ${JSON.stringify({
+          agenticEvidence: [
+            {
+              findings: [],
+              mode: 'hardened',
+              pluginId: 'agentic:mcp-schema-injection',
+            },
+            {
+              findings: [
+                {
+                  kind: 'tool-discovery-confusion',
+                  location: 'nested array sidecar',
+                  pluginId,
+                },
+              ],
+              mode: 'vulnerable',
+            },
+          ],
+        })}`,
+      ),
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('tool-discovery-confusion');
+    expect(result.grade.metadata?.deterministicFailureLocations).toEqual(['nested array sidecar']);
   });
 
   it('parses JSON array Agentic evidence sidecars', async () => {

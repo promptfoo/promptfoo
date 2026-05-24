@@ -212,6 +212,52 @@ describe('agentic run observations', () => {
     ]);
   });
 
+  it('continues scanning nested trace evidence arrays extracted from strings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-nested-evidence',
+          testCaseId: 'case-nested-evidence',
+          traceId: 'trace-nested-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: `sidecar ${JSON.stringify({
+                  agenticEvidence: [
+                    {
+                      findings: [],
+                      pluginId: 'agentic:mcp-schema-injection',
+                    },
+                    {
+                      findings: [
+                        {
+                          evidence: 'loaded hidden tool from nested sidecar',
+                          kind: 'tool-discovery-confusion',
+                          pluginId: 'agentic:tool-discovery-confusion',
+                        },
+                      ],
+                    },
+                  ],
+                })}`,
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-nested',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool from nested sidecar',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
   it('parses JSON array trace evidence payloads', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {

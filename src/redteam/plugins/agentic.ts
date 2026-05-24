@@ -308,18 +308,15 @@ function parseEvidenceCandidates(value: unknown): AgenticRuntimeEvidence[] {
     }
 
     for (const object of extractJsonObjects(untaggedValue)) {
-      const evidence = parseEvidenceCandidate(object);
-      if (evidence?.findings || evidence?.pluginId || evidence?.mode) {
-        candidates.push(evidence);
+      for (const evidence of parseEvidenceCandidates(object)) {
+        if (evidence?.findings || evidence?.pluginId || evidence?.mode) {
+          candidates.push(evidence);
+        }
       }
     }
 
     return candidates;
   }
-}
-
-function parseEvidenceCandidate(value: unknown): AgenticRuntimeEvidence | undefined {
-  return parseEvidenceCandidates(value)[0];
 }
 
 function getTraceSpans(gradingContext?: RedteamGradingContext): TraceLikeSpan[] {
@@ -494,12 +491,7 @@ function hasVerifierEvidence(
     return false;
   }
 
-  return (
-    Array.isArray(evidence.findings) ||
-    Boolean(evidence.mode) ||
-    Boolean(evidence.trace) ||
-    Boolean(evidence.evidenceSource)
-  );
+  return Array.isArray(evidence.findings) || Boolean(evidence.mode) || Boolean(evidence.trace);
 }
 
 function traceAttributesMatchPlugin(
