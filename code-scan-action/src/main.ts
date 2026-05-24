@@ -284,7 +284,7 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+): Promise<ScanResponse> {
   const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
@@ -320,10 +320,7 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
@@ -670,10 +667,6 @@ async function runCodeScan(): Promise<void> {
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken);
-
-    if (!scanResponse) {
-      return;
-    }
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
