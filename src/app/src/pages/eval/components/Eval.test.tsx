@@ -32,14 +32,24 @@ vi.mock('./FilterModeProvider', () => ({
   }),
 }));
 vi.mock('./ResultsView', () => ({
-  default: ({ defaultEvalId }: { defaultEvalId: string }) => {
+  default: ({
+    defaultEvalId,
+    onRecentEvalSelected,
+  }: {
+    defaultEvalId: string;
+    onRecentEvalSelected: (evalId: string) => void;
+  }) => {
     const [mountId] = React.useState(() => Math.random().toString(36).slice(2));
     return (
-      <div
-        data-testid="results-view"
-        data-default-eval-id={defaultEvalId}
-        data-mount-id={mountId}
-      />
+      <div data-testid="results-view" data-default-eval-id={defaultEvalId} data-mount-id={mountId}>
+        <button
+          type="button"
+          data-testid="select-recent-eval"
+          onClick={() => onRecentEvalSelected('eval-2')}
+        >
+          Select eval
+        </button>
+      </div>
     );
   },
 }));
@@ -61,7 +71,6 @@ vi.mock('react-router-dom', async () => {
   return {
     ...actual,
     useNavigate: () => mockNavigate,
-    useSearchParams: () => [new URLSearchParams(window.location.search), vi.fn()],
     useParams: () => ({}),
   };
 });
@@ -382,6 +391,41 @@ describe('Eval', () => {
     const resultsView = container.querySelector('[data-testid="results-view"]');
     expect(resultsView).toBeInTheDocument();
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
+  });
+
+  it('clears a details row hint from a selected eval without rewriting the source URL', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      ...baseMockTableStore,
+      table: mockTable,
+    });
+
+    const initialUrl = '/eval/test-eval?rowId=51&search=weather#details-row-51-prompt-1';
+    window.history.replaceState({}, '', initialUrl);
+
+    const { getByTestId } = render(
+      <MemoryRouter initialEntries={[initialUrl]}>
+        <Eval fetchId="test-eval" />
+      </MemoryRouter>,
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+      getByTestId('select-recent-eval').click();
+    });
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    const [nextLocation] = mockNavigate.mock.calls[0];
+    expect(nextLocation).toEqual(
+      expect.objectContaining({
+        pathname: '/eval/eval-2',
+        hash: '',
+      }),
+    );
+    expect(new URLSearchParams(nextLocation.search).get('search')).toBe('weather');
+    expect(new URLSearchParams(nextLocation.search).has('rowId')).toBe(false);
+    expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
+      initialUrl,
+    );
   });
 
   it('does not rewrite a details hash on a zero-filter store update', async () => {
