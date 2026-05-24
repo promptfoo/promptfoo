@@ -628,16 +628,21 @@ export async function optimizePromptTestSuite(
   const { searchTestSuite, validationTestSuite, searchTestCount, validationTestCount } =
     createValidationPartition(selectedTestSuite, options.validationSplit);
 
+  // Internal optimizer evals are intermediate runs and must not write to the user's
+  // configured output. Strip outputPath so the Evaluator does not append baseline or
+  // candidate result rows to a .jsonl file the user expects only `eval` to populate.
+  const optimizationConfig: Partial<UnifiedConfig> = { ...config, outputPath: undefined };
+
   logger.info('Running baseline evaluation for prompt optimization...');
   const baselineEval = await evaluate(
     cloneOptimizationTestSuite(searchTestSuite),
-    new Eval(config, { persisted: false }),
+    new Eval(optimizationConfig, { persisted: false }),
     createEvaluationOptions(config),
   );
   const baselineValidationEval = validationTestSuite
     ? await evaluate(
         cloneOptimizationTestSuite(validationTestSuite),
-        new Eval(config, { persisted: false }),
+        new Eval(optimizationConfig, { persisted: false }),
         createEvaluationOptions(config),
       )
     : undefined;
@@ -700,7 +705,7 @@ export async function optimizePromptTestSuite(
     );
     const candidateEval = await evaluate(
       cloneOptimizationTestSuite(candidateSearchSuite),
-      new Eval(config, { persisted: false }),
+      new Eval(optimizationConfig, { persisted: false }),
       createEvaluationOptions(config),
     );
     const candidateValidationEval = validationTestSuite
@@ -713,7 +718,7 @@ export async function optimizePromptTestSuite(
               candidates,
             ),
           ),
-          new Eval(config, { persisted: false }),
+          new Eval(optimizationConfig, { persisted: false }),
           createEvaluationOptions(config),
         )
       : undefined;
