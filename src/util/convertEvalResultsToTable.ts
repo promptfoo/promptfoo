@@ -175,9 +175,12 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
 
   const rows = Object.values(rowMap);
-  const sortedVars = [...varsForHeader].sort();
+  // Preserve the order in which variable names were first seen in the results
+  // (typically the config order) instead of sorting alphabetically, so the
+  // web UI columns match how the user defined their test cases. See #244, #1320.
+  const orderedVars = [...varsForHeader];
   for (const row of rows) {
-    row.vars = sortedVars.map((varName) => {
+    row.vars = orderedVars.map((varName) => {
       const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';
       if (typeof varValue === 'string') {
         return varValue;
@@ -189,7 +192,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   return {
     head: {
       prompts: eval_.prompts,
-      vars: [...varsForHeader].sort(),
+      vars: orderedVars,
     },
     body: rows,
   };

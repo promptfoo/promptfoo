@@ -1150,8 +1150,9 @@ export default class Eval {
       return (hasSessionIds || hasSessionId) && notInVars;
     });
     if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
+      // Append sessionId instead of re-sorting so we preserve the variable
+      // order the user defined in their config. See #244, #1320.
       vars.push('sessionId');
-      vars.sort();
     }
 
     // Group results by test index
