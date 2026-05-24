@@ -57,6 +57,34 @@ function getVars(testCase: Record<string, unknown>): Record<string, unknown> {
   return isRecord(testCase.vars) ? testCase.vars : {};
 }
 
+function hasExternalVarsReference(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim() !== '';
+  }
+
+  return (
+    Array.isArray(value) && value.some((entry) => typeof entry === 'string' && entry.trim() !== '')
+  );
+}
+
+function getTopLevelVariable(variable: string): string {
+  return variable.split(/[.\[\]\s]/, 1)[0] || variable;
+}
+
+function hasConfigVariable(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+  variable: string,
+): boolean {
+  const topLevelVariable = getTopLevelVariable(variable);
+  return (
+    hasExternalVarsReference(testCase.vars) ||
+    hasExternalVarsReference(defaultTest.vars) ||
+    topLevelVariable in getVars(testCase) ||
+    topLevelVariable in getVars(defaultTest)
+  );
+}
+
 function isProviderMapShape(value: Record<string, unknown>): boolean {
   const entries = Object.entries(value);
   if (entries.length === 0) {
@@ -134,9 +162,7 @@ function referenceMatchesValue(reference: string, value: string | undefined): bo
 
 function promptMatchesReference(prompt: NormalizedPrompt, reference: string): boolean {
   return (
-    referenceMatchesValue(reference, prompt.raw) ||
-    referenceMatchesValue(reference, prompt.label) ||
-    referenceMatchesValue(reference, prompt.id)
+    referenceMatchesValue(reference, prompt.label) || referenceMatchesValue(reference, prompt.id)
   );
 }
 
@@ -159,20 +185,31 @@ function isAllowedByReferences<T>(
   return references.some((reference) => typeof reference === 'string' && matches(item, reference));
 }
 
+function getEffectiveReferences(
+  testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
+  key: 'prompts' | 'providers',
+): unknown {
+  return Array.isArray(testCase[key]) ? testCase[key] : defaultTest[key];
+}
+
 function getRunnablePromptsForTest(
   testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
   providers: ProviderOptions[],
   prompts: NormalizedPrompt[],
 ): NormalizedPrompt[] {
+  const promptReferences = getEffectiveReferences(testCase, defaultTest, 'prompts');
+  const providerReferences = getEffectiveReferences(testCase, defaultTest, 'providers');
   const promptsAllowedByTest = prompts.filter((prompt) =>
-    isAllowedByReferences(prompt, testCase.prompts, promptMatchesReference),
+    isAllowedByReferences(prompt, promptReferences, promptMatchesReference),
   );
   if (providers.length === 0) {
     return promptsAllowedByTest;
   }
 
   const selectedProviders = providers.filter((provider) =>
-    isAllowedByReferences(provider, testCase.providers, providerMatchesReference),
+    isAllowedByReferences(provider, providerReferences, providerMatchesReference),
   );
   return promptsAllowedByTest.filter((prompt) =>
     selectedProviders.some((provider) =>
@@ -183,19 +220,23 @@ function getRunnablePromptsForTest(
 
 function countOutputsForTest(
   testCase: Record<string, unknown>,
+  defaultTest: Record<string, unknown>,
   providers: ProviderOptions[],
   prompts: NormalizedPrompt[],
 ): number {
+  const promptReferences = getEffectiveReferences(testCase, defaultTest, 'prompts');
+  const providerReferences = getEffectiveReferences(testCase, defaultTest, 'providers');
+
   return providers
     .filter((provider) =>
-      isAllowedByReferences(provider, testCase.providers, providerMatchesReference),
+      isAllowedByReferences(provider, providerReferences, providerMatchesReference),
     )
     .reduce(
       (count, provider) =>
         count +
         prompts.filter(
           (prompt) =>
-            isAllowedByReferences(prompt, testCase.prompts, promptMatchesReference) &&
+            isAllowedByReferences(prompt, promptReferences, promptMatchesReference) &&
             isAllowedByReferences(prompt, provider.prompts, promptMatchesReference),
         ).length,
       0,
@@ -204,17 +245,16 @@ function countOutputsForTest(
 
 function hasMaxScoreWithoutScoringAssertion(
   tests: UnifiedConfig['tests'] | undefined,
+  defaultTest: Record<string, unknown>,
   defaultAssertions: AssertionOrSet[],
 ): boolean {
-  if (!Array.isArray(tests)) {
-    return false;
-  }
+  const testCases = Array.isArray(tests)
+    ? tests.map((testCase) => (isRecord(testCase) ? testCase : {}))
+    : countTests(tests) > 0
+      ? [defaultTest]
+      : [];
 
-  return tests.some((testCase) => {
-    if (!isRecord(testCase)) {
-      return false;
-    }
-
+  return testCases.some((testCase) => {
     const assertions = getEffectiveAssertions(testCase, defaultAssertions);
     return (
       containsComparisonAssertion(assertions, 'max-score') &&
@@ -229,6 +269,7 @@ function getComparisonSetupIssues(
   providers: ProviderOptions[],
   prompts: NormalizedPrompt[],
   tests: UnifiedConfig['tests'] | undefined,
+  defaultTest: Record<string, unknown>,
   defaultAssertions: AssertionOrSet[],
 ): SetupIssue[] {
   const issues: SetupIssue[] = [];
@@ -238,21 +279,20 @@ function getComparisonSetupIssues(
   let hasInsufficientMaxScore = false;
 
   if (Array.isArray(tests)) {
-    for (const testCase of tests) {
-      if (!isRecord(testCase)) {
-        continue;
-      }
-
+    for (const testCase of tests.map((testCase) => (isRecord(testCase) ? testCase : {}))) {
       const assertions = getEffectiveAssertions(testCase, defaultAssertions);
-      const outputCount = countOutputsForTest(testCase, providers, prompts);
+      const outputCount = countOutputsForTest(testCase, defaultTest, providers, prompts);
       hasInsufficientSelectBest ||=
         outputCount < 2 && containsComparisonAssertion(assertions, 'select-best');
       hasInsufficientMaxScore ||=
         outputCount < 2 && containsComparisonAssertion(assertions, 'max-score');
     }
-  } else if (countTests(tests) > 0 && providerCount * promptCount < 2) {
+  } else if (countTests(tests) > 0) {
+    const outputCount = countOutputsForTest(defaultTest, {}, providers, prompts);
     hasInsufficientSelectBest = containsComparisonAssertion(defaultAssertions, 'select-best');
     hasInsufficientMaxScore = containsComparisonAssertion(defaultAssertions, 'max-score');
+    hasInsufficientSelectBest &&= outputCount < 2;
+    hasInsufficientMaxScore &&= outputCount < 2;
   }
 
   if (hasInsufficientSelectBest || hasInsufficientMaxScore) {
@@ -266,7 +306,7 @@ function getComparisonSetupIssues(
     });
   }
 
-  if (hasMaxScoreWithoutScoringAssertion(tests, defaultAssertions)) {
+  if (hasMaxScoreWithoutScoringAssertion(tests, defaultTest, defaultAssertions)) {
     issues.push({
       id: 'comparisonScoring',
       message: 'Choose highest score needs at least one other assertion to score each output.',
@@ -279,24 +319,104 @@ function getComparisonSetupIssues(
 
 export function extractVariablesFromPrompts(prompts: string[]): string[] {
   const variables = new Set<string>();
-  const expressionPattern = /{{\s*([^{}\s|]+)\s*(?:\|[^}]+)?}}|{%\s*(?:if|elif)\s+([^{}\s]+).*?%}/g;
-  const forLoopPattern = /{%\s*for\s+(\w+)\s+in\s+([^{}\s]+).*?%}/g;
 
   for (const prompt of prompts) {
     const uncommentedPrompt = prompt.replace(/{#[\s\S]*?#}/g, '');
-    for (const match of uncommentedPrompt.matchAll(expressionPattern)) {
-      const variable = match[1] || match[2];
-      if (variable) {
-        variables.add(variable);
-      }
-    }
-    for (const match of uncommentedPrompt.matchAll(forLoopPattern)) {
-      variables.delete(match[1]);
-      variables.add(match[2]);
-    }
+    collectTemplateVariables(uncommentedPrompt, variables);
   }
 
   return Array.from(variables);
+}
+
+const VARIABLE_TAG_PATTERN = /{{\s*([\s\S]*?)\s*}}/g;
+const CONDITIONAL_TAG_PATTERN = /{%\s*(?:if|elif)\s+([\s\S]*?)%}/g;
+const LOOP_BLOCK_PATTERN =
+  /{%\s*for\s+([\s\S]*?)\s+in\s+([\s\S]*?)\s*%}([\s\S]*?){%\s*endfor\s*%}/g;
+const STRING_LITERAL_PATTERN = /(["'])(?:\\.|(?!\1)[\s\S])*\1/g;
+const IDENTIFIER_PATTERN = /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g;
+const IGNORED_NUNJUCKS_IDENTIFIERS = new Set([
+  'and',
+  'defined',
+  'else',
+  'false',
+  'for',
+  'if',
+  'in',
+  'is',
+  'loop',
+  'none',
+  'not',
+  'null',
+  'or',
+  'true',
+  'undefined',
+]);
+
+function addVariablesFromExpression(
+  expression: string,
+  variables: Set<string>,
+  localVariables: Set<string>,
+): void {
+  const expressionWithoutStrings = expression.replace(STRING_LITERAL_PATTERN, '');
+  for (const match of expressionWithoutStrings.matchAll(IDENTIFIER_PATTERN)) {
+    const variable = getTopLevelVariable(match[0]);
+    if (variable && !localVariables.has(variable) && !IGNORED_NUNJUCKS_IDENTIFIERS.has(variable)) {
+      variables.add(variable);
+    }
+  }
+}
+
+function addVariablesFromVariableTags(
+  template: string,
+  variables: Set<string>,
+  localVariables: Set<string>,
+): void {
+  for (const match of template.matchAll(VARIABLE_TAG_PATTERN)) {
+    const expression = match[1].split('|', 1)[0].trim();
+    if (expression !== '' && !/\s/.test(expression)) {
+      addVariablesFromExpression(expression, variables, localVariables);
+    }
+  }
+}
+
+function addVariablesFromConditionalTags(
+  template: string,
+  variables: Set<string>,
+  localVariables: Set<string>,
+): void {
+  for (const match of template.matchAll(CONDITIONAL_TAG_PATTERN)) {
+    addVariablesFromExpression(match[1], variables, localVariables);
+  }
+}
+
+function getLoopVariables(loopTarget: string): string[] {
+  return loopTarget
+    .split(',')
+    .map((target) => target.trim())
+    .filter((target) => /^[A-Za-z_$][\w$]*$/.test(target));
+}
+
+function collectTemplateVariables(
+  template: string,
+  variables: Set<string>,
+  localVariables = new Set<string>(),
+): void {
+  let cursor = 0;
+  for (const match of template.matchAll(LOOP_BLOCK_PATTERN)) {
+    const matchIndex = match.index ?? 0;
+    const beforeLoop = template.slice(cursor, matchIndex);
+    addVariablesFromVariableTags(beforeLoop, variables, localVariables);
+    addVariablesFromConditionalTags(beforeLoop, variables, localVariables);
+
+    addVariablesFromExpression(match[2], variables, localVariables);
+    const nestedLocalVariables = new Set([...localVariables, ...getLoopVariables(match[1])]);
+    collectTemplateVariables(match[3], variables, nestedLocalVariables);
+    cursor = matchIndex + match[0].length;
+  }
+
+  const afterLastLoop = template.slice(cursor);
+  addVariablesFromVariableTags(afterLastLoop, variables, localVariables);
+  addVariablesFromConditionalTags(afterLastLoop, variables, localVariables);
 }
 
 export function normalizeProviders(
@@ -445,6 +565,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
   const testCount = countTests(config.tests);
   const requiredVariables = extractVariablesFromPrompts(prompts);
   const issues: SetupIssue[] = [];
+  const defaultTest = isRecord(config.defaultTest) ? config.defaultTest : {};
 
   if (providerCount === 0) {
     issues.push({
@@ -468,10 +589,7 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
     });
   }
 
-  const defaultVars =
-    isRecord(config.defaultTest) && isRecord(config.defaultTest.vars)
-      ? config.defaultTest.vars
-      : {};
+  const defaultVars = getVars(defaultTest);
   const testCasesMissingVariables =
     requiredVariables.length > 0 && Array.isArray(config.tests)
       ? config.tests.flatMap((testCase, index) => {
@@ -479,14 +597,13 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
             return [];
           }
 
-          const testVars = getVars(testCase);
           const testRequiredVariables = extractVariablesFromPrompts(
-            getRunnablePromptsForTest(testCase, providers, promptCandidates).map(
+            getRunnablePromptsForTest(testCase, defaultTest, providers, promptCandidates).map(
               (prompt) => prompt.raw,
             ),
           );
           const hasMissingVariables = testRequiredVariables.some(
-            (variable) => !(variable in testVars) && !(variable in defaultVars),
+            (variable) => !hasConfigVariable(testCase, defaultTest, variable),
           );
           return hasMissingVariables ? [index] : [];
         })
@@ -506,7 +623,13 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
 
   const defaultAssertions = getAssertions(config.defaultTest);
   issues.push(
-    ...getComparisonSetupIssues(providers, promptCandidates, config.tests, defaultAssertions),
+    ...getComparisonSetupIssues(
+      providers,
+      promptCandidates,
+      config.tests,
+      defaultTest,
+      defaultAssertions,
+    ),
   );
 
   const assertionVariableIssues = Array.isArray(config.tests)
@@ -515,12 +638,18 @@ export function getSetupReadiness(config: Partial<UnifiedConfig>): SetupReadines
           return [];
         }
 
-        const testVars = getVars(testCase);
-        const assertions = getEffectiveAssertions(testCase, defaultAssertions);
-        const missingVariables = getMissingAssertionVariables(assertions, {
-          ...defaultVars,
-          ...testVars,
-        });
+        const testCaseRecord = testCase as Record<string, unknown>;
+        const testVars = getVars(testCaseRecord);
+        const assertions = getEffectiveAssertions(testCaseRecord, defaultAssertions);
+        const missingVariables = getMissingAssertionVariables(
+          assertions,
+          {
+            ...defaultVars,
+            ...testVars,
+          },
+          hasExternalVarsReference(defaultTest.vars) ||
+            hasExternalVarsReference(testCaseRecord.vars),
+        );
         return missingVariables.length > 0 ? [{ index, missingVariables }] : [];
       })
     : [];

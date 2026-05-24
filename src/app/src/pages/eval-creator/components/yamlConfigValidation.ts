@@ -43,8 +43,7 @@ export function isFullYamlConfig(value: unknown): value is Partial<UnifiedConfig
   const looksLikeSingleTestCase =
     keys.length > 0 &&
     keys.every((key) => TEST_CASE_FIELDS.has(key)) &&
-    !keys.some((key) => FULL_CONFIG_ONLY_FIELDS.has(key)) &&
-    !(keys.includes('providers') && keys.includes('prompts'));
+    !keys.some((key) => FULL_CONFIG_ONLY_FIELDS.has(key));
 
   return !looksLikeSingleTestCase;
 }
