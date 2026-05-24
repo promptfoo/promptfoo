@@ -83,7 +83,7 @@ describe('EvaluationPanel', () => {
     expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
   });
 
-  it('falls back to assertion value when rendered assertion value is null', () => {
+  it('renders null rendered assertion values explicitly', () => {
     const gradingResults: GradingResult[] = [
       {
         pass: true,
@@ -101,9 +101,9 @@ describe('EvaluationPanel', () => {
 
     render(<EvaluationPanel gradingResults={gradingResults} />);
 
+    expect(screen.getByText('null')).toBeInTheDocument();
+    expect(screen.getByText('Template:')).toBeInTheDocument();
     expect(screen.getByText('Hello world')).toBeInTheDocument();
-    expect(screen.queryByText('null')).not.toBeInTheDocument();
-    expect(screen.queryByText('Template:')).not.toBeInTheDocument();
   });
 
   it('does not show template line when rendered value matches assertion value', () => {
@@ -450,6 +450,26 @@ describe('EvaluationPanel', () => {
 
     expect(screen.getByText('expected: "Jane"')).toBeInTheDocument();
     expect(screen.queryByText('expected: "{{expectedName}}"')).not.toBeInTheDocument();
+  });
+
+  it('does not show a raw-template JSON diff when a JSON assertion renders to null', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Objects do not match',
+        assertion: { type: 'equals', value: { name: '{{expectedName}}' } },
+        metadata: {
+          renderedAssertionValue: null,
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} actualOutput='{"name":"John"}' />);
+
+    expect(screen.queryByText(/difference found/)).not.toBeInTheDocument();
+    expect(screen.getByText('null')).toBeInTheDocument();
+    expect(screen.getByText('Template:')).toBeInTheDocument();
   });
 
   it('does not show a misleading JSON diff for output with surrounding text', () => {

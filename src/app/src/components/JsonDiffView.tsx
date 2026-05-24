@@ -109,12 +109,14 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
 
             {/* Show more button */}
             {!showAllDiffs && hiddenCount > 0 && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowAllDiffs(true)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="h-auto px-0 py-0 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
               >
                 ...and {hiddenCount} more difference{hiddenCount === 1 ? '' : 's'}
-              </button>
+              </Button>
             )}
           </div>
 

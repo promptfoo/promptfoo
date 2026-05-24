@@ -3618,6 +3618,49 @@ describe('runAssertion', () => {
       expect(result.assertion?.value).toEqual(['{{ expected_name }}']);
     });
 
+    it('should render nested object assertion values', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: {
+          user: {
+            name: '{{ expected_name }}',
+            roles: ['{{ expected_role }}'],
+          },
+        },
+      };
+
+      const test: AtomicTestCase = {
+        vars: {
+          expected_name: 'Jane',
+          expected_role: 'admin',
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: '{"user":{"name":"John","roles":["admin"]}}' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.metadata?.renderedAssertionValue).toEqual({
+        user: {
+          name: 'Jane',
+          roles: ['admin'],
+        },
+      });
+      expect(result.reason).toContain('"Jane"');
+      expect(result.reason).not.toContain('{{ expected_name }}');
+      expect(result.assertion?.value).toEqual({
+        user: {
+          name: '{{ expected_name }}',
+          roles: ['{{ expected_role }}'],
+        },
+      });
+    });
+
     it('should not store rendered value when template equals original', async () => {
       const assertion: Assertion = {
         type: 'contains',

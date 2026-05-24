@@ -3,6 +3,7 @@ import {
   buildUnifiedJsonDiff,
   computeJsonDiff,
   formatDiffValue,
+  getJsonDiffExpectedValue,
   isJsonAssertion,
   tryParseJson,
 } from './jsonDiff';
@@ -329,6 +330,24 @@ describe('isJsonAssertion', () => {
       reason: 'test',
     };
     expect(isJsonAssertion(result)).toBe(false);
+  });
+
+  it('does not fall back to raw JSON templates when the rendered value is null', () => {
+    const result: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'test',
+      assertion: {
+        type: 'equals',
+        value: { name: '{{expectedName}}' },
+      },
+      metadata: {
+        renderedAssertionValue: null,
+      },
+    };
+
+    expect(isJsonAssertion(result)).toBe(false);
+    expect(getJsonDiffExpectedValue(result)).toBeUndefined();
   });
 });
 

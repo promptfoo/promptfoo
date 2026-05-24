@@ -146,10 +146,13 @@ export function getJsonDiffExpectedValue(result: GradingResult): unknown | undef
     return undefined;
   }
 
-  const value =
-    result.metadata?.renderedAssertionValue == null
-      ? result.assertion?.value
-      : result.metadata.renderedAssertionValue;
+  const hasRenderedAssertionValue =
+    result.metadata !== undefined &&
+    Object.prototype.hasOwnProperty.call(result.metadata, 'renderedAssertionValue') &&
+    result.metadata.renderedAssertionValue !== undefined;
+  const value = hasRenderedAssertionValue
+    ? result.metadata?.renderedAssertionValue
+    : result.assertion?.value;
 
   // Only equals with object or array values benefits from JSON diff view
   if (typeof value === 'object' && value !== null) {

@@ -327,6 +327,39 @@ function canStoreRenderedAssertionValue(value: unknown): boolean {
   }
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function renderNestedAssertionValue(value: unknown, vars: Record<string, VarValue>): unknown {
+  if (typeof value === 'string') {
+    return nunjucks.renderString(value, vars);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (typeof item === 'string' && item.startsWith('file://')) {
+        return processFileReference(item);
+      }
+
+      return renderNestedAssertionValue(item, vars);
+    });
+  }
+
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, renderNestedAssertionValue(item, vars)]),
+    );
+  }
+
+  return value;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -553,17 +586,8 @@ export async function runAssertion({
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
-  } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
-      if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return processFileReference(v);
-        }
-        return nunjucks.renderString(v, resolvedVars);
-      }
-      return v;
-    });
+  } else if (Array.isArray(renderedValue) || isPlainRecord(renderedValue)) {
+    renderedValue = renderNestedAssertionValue(renderedValue, resolvedVars) as AssertionValue;
   }
 
   // Centralized script output resolution

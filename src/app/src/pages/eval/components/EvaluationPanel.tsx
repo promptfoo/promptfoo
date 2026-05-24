@@ -94,7 +94,22 @@ function getAssertionType(result: GradingResult): string {
 }
 
 export function stringifyAssertionValue(value: unknown): string {
-  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
+  return typeof value === 'object'
+    ? (JSON.stringify(value, null, 2) ?? String(value))
+    : String(value);
+}
+
+export function getRenderedAssertionValue(result: GradingResult): { value: unknown } | undefined {
+  const metadata = result.metadata;
+  if (
+    metadata &&
+    Object.prototype.hasOwnProperty.call(metadata, 'renderedAssertionValue') &&
+    metadata.renderedAssertionValue !== undefined
+  ) {
+    return { value: metadata.renderedAssertionValue };
+  }
+
+  return undefined;
 }
 
 function isMatchingAssertion(
@@ -201,8 +216,9 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   }
 
   // Prefer rendered assertion value with substituted variables over raw template
-  if (result.metadata?.renderedAssertionValue != null) {
-    const renderedValue = stringifyAssertionValue(result.metadata.renderedAssertionValue);
+  const renderedAssertionValue = getRenderedAssertionValue(result);
+  if (renderedAssertionValue) {
+    const renderedValue = stringifyAssertionValue(renderedAssertionValue.value);
     const rawAssertionValue =
       result.assertion?.value === undefined
         ? undefined
