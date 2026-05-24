@@ -294,6 +294,7 @@ describeOrSkip('PythonWorker', () => {
   let embeddingsOnlyWorker: PythonWorker;
   let loggingWorker: PythonWorker;
   let protocolCollisionWorker: PythonWorker;
+  let wrongPathCollisionWorker: PythonWorker;
   const fixturesDir = path.join(__dirname, 'fixtures');
   const testScriptPath = path.join(__dirname, 'fixtures', 'simple_provider.py');
   const multiApiPath = path.join(__dirname, 'fixtures', 'multi_api_provider.py');
@@ -303,6 +304,11 @@ describeOrSkip('PythonWorker', () => {
   const embeddingsOnlyPath = path.join(__dirname, 'fixtures', 'test_embeddings_only.py');
   const loggingPath = path.join(__dirname, 'fixtures', 'logging_provider.py');
   const protocolCollisionPath = path.join(__dirname, 'fixtures', 'protocol_collision_provider.py');
+  const wrongPathCollisionPath = path.join(
+    __dirname,
+    'fixtures',
+    'wrong_path_collision_provider.py',
+  );
 
   beforeAll(async () => {
     // Create test fixture
@@ -368,6 +374,21 @@ def call_api(prompt, options, context):
 `,
     );
 
+    // Emits a DONE| line with an attacker-supplied path. The wrapper's real
+    // DONE|<response_file> message must still resolve the request, and the
+    // unrelated path must be ignored.
+    await fs.promises.writeFile(
+      wrongPathCollisionPath,
+      `
+import time
+
+def call_api(prompt, options, context):
+    print("DONE|/tmp/promptfoo-not-a-real-response.json", flush=True)
+    time.sleep(0.02)
+    return {"output": f"Completed: {prompt}"}
+`,
+    );
+
     await Promise.all([
       fs.promises.access(nonexistentPath),
       fs.promises.access(wrongNamePath),
@@ -382,6 +403,7 @@ def call_api(prompt, options, context):
     embeddingsOnlyWorker = new PythonWorker(embeddingsOnlyPath, 'call_api');
     loggingWorker = new PythonWorker(loggingPath, 'call_api');
     protocolCollisionWorker = new PythonWorker(protocolCollisionPath, 'call_api');
+    wrongPathCollisionWorker = new PythonWorker(wrongPathCollisionPath, 'call_api');
 
     await Promise.all([
       sharedWorker.initialize(),
@@ -392,6 +414,7 @@ def call_api(prompt, options, context):
       embeddingsOnlyWorker.initialize(),
       loggingWorker.initialize(),
       protocolCollisionWorker.initialize(),
+      wrongPathCollisionWorker.initialize(),
     ]);
   });
 
@@ -406,6 +429,7 @@ def call_api(prompt, options, context):
         embeddingsOnlyWorker,
         loggingWorker,
         protocolCollisionWorker,
+        wrongPathCollisionWorker,
       ]
         .filter((worker): worker is PythonWorker => Boolean(worker))
         .map((worker) => worker.shutdown()),
@@ -417,6 +441,7 @@ def call_api(prompt, options, context):
       errorPath,
       loggingPath,
       protocolCollisionPath,
+      wrongPathCollisionPath,
     ]) {
       if (fs.existsSync(fixturePath)) {
         fs.unlinkSync(fixturePath);
@@ -511,6 +536,25 @@ def call_api(prompt, options, context):
         output: string;
       };
 
+      expect(result.output).toBe('Completed: hello');
+      expect(secondResult.output).toBe('Completed: again');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should ignore DONE| markers whose path does not match the in-flight request',
+    async () => {
+      const result = (await wrongPathCollisionWorker.call('call_api', ['hello', {}, {}])) as {
+        output: string;
+      };
+      const secondResult = (await wrongPathCollisionWorker.call('call_api', ['again', {}, {}])) as {
+        output: string;
+      };
+
+      // If the worker accepted the script's DONE|/tmp/promptfoo-not-a-real-response.json
+      // marker, executeCall would resolve early, read the empty reserved response
+      // file, and either throw or return undefined.
       expect(result.output).toBe('Completed: hello');
       expect(secondResult.output).toBe('Completed: again');
     },

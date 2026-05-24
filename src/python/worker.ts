@@ -352,7 +352,15 @@ export class PythonWorker {
     if (this.pendingRequest?.responseFile === responseFile) {
       this.pendingRequest.resolve(undefined);
       this.pendingRequest = null;
+      return;
     }
+    // Either no request is in flight, or the path does not match the one we
+    // dispatched. Surface a breadcrumb so operators can distinguish "provider
+    // script printed DONE| to stdout" from "wrapper completed correctly".
+    logger.debug('Python worker ignored DONE marker that did not match the in-flight request', {
+      received: responseFile,
+      pending: this.pendingRequest?.responseFile ?? null,
+    });
   }
 
   private handleCrash(): void {

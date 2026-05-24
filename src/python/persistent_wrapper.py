@@ -467,8 +467,11 @@ def handle_call(command_line, user_module, default_function_name):
                     flush=True,
                 )
 
-        # Signal done after attempting to write error
-        print(f"DONE|{response_file}", flush=True)
+            # Signal done so Node can read the error response.
+            print(f"DONE|{response_file}", flush=True)
+        # If response_file could not be parsed from the CALL command, do not
+        # emit "DONE|None" — Node's path match will fail and the request will
+        # only resolve via timeout. The stderr above gives the real reason.
 
 
 if __name__ == "__main__":

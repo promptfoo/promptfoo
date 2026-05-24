@@ -473,7 +473,7 @@ class TestHandleCall(unittest.TestCase):
         self.assertEqual(response["data"], 30)
 
     def test_invalid_format_writes_error(self) -> None:
-        """Tests that invalid command format writes error response."""
+        """Tests that invalid command format reports the error without emitting a bogus DONE marker."""
         stdout_capture = io.StringIO()
         stderr_capture = io.StringIO()
 
@@ -485,7 +485,11 @@ class TestHandleCall(unittest.TestCase):
                     "test_func",
                 )
 
-        self.assertIn("DONE", stdout_capture.getvalue())
+        # response_file could not be parsed, so emitting "DONE|None" would only
+        # waste a control-channel cycle: Node's path match against the in-flight
+        # response file would fail and the call would still resolve via timeout.
+        # The stderr ERROR line is the real signal here.
+        self.assertNotIn("DONE", stdout_capture.getvalue())
         self.assertIn("Invalid CALL command format", stderr_capture.getvalue())
 
     def test_function_execution_error(self) -> None:
