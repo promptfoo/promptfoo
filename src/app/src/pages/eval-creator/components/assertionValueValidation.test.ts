@@ -51,6 +51,15 @@ describe('getRunnableAssertionValueError', () => {
         getRunnableAssertionValueError(make({ type: 'contains-any', value: ['a', 'b'] })),
       ).toBeUndefined();
     });
+
+    it('accepts runtime comma-separated strings for contains-any/all variants', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'contains-any', value: 'a, b' })),
+      ).toBeUndefined();
+      expect(
+        getRunnableAssertionValueError(make({ type: 'not-icontains-all', value: 'a, b' })),
+      ).toBeUndefined();
+    });
   });
 
   describe('regex assertions', () => {
@@ -189,6 +198,17 @@ describe('structured value assertions', () => {
     ).toBeUndefined();
   });
 
+  it('rejects unsupported trajectory:tool-args-match modes', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-args-match',
+          value: { name: 'find', args: { q: 'x' }, mode: 'contains' } as any,
+        }),
+      ),
+    ).toMatch(/partial.*exact/);
+  });
+
   it('rejects trajectory:step-count without min or max', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'trajectory:step-count', value: {} as any })),
@@ -207,6 +227,40 @@ describe('structured value assertions', () => {
     expect(
       getRunnableAssertionValueError(
         make({ type: 'trajectory:tool-sequence', value: ['toolA'] as any }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('rejects trajectory:tool-sequence object steps without a name or pattern', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-sequence', value: [{ args: { q: 'x' } }] as any }),
+      ),
+    ).toMatch(/name or pattern/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-sequence', value: { steps: [{ pattern: 'search.*' }] } }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('validates trace span assertion value shapes', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'trace-span-count', value: { max: 2 } as any })),
+    ).toMatch(/span name pattern/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-count', value: { pattern: 'fetch*', min: 1 } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-duration', value: { pattern: 'fetch*' } as any }),
+      ),
+    ).toMatch(/maximum trace span duration/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-span-duration', value: { pattern: 'fetch*', max: 250 } as any }),
       ),
     ).toBeUndefined();
   });
@@ -236,6 +290,27 @@ describe('required string assertions', () => {
       /criteria for Pi Labs/,
     );
   });
+
+  it('requires values for script and specialized model-graded assertions', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'javascript', value: '' }))).toMatch(
+      /expected value/,
+    );
+    expect(
+      getRunnableAssertionValueError(make({ type: 'model-graded-factuality', value: '' })),
+    ).toMatch(/expected value/);
+    expect(getRunnableAssertionValueError(make({ type: 'search-rubric', value: '' }))).toMatch(
+      /expected value/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'tool-call-f1', value: '' }))).toMatch(
+      /reference answer/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'gleu', value: '' }))).toMatch(
+      /reference answer/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'meteor', value: '' }))).toMatch(
+      /reference answer/,
+    );
+  });
 });
 
 describe('moderation', () => {
@@ -248,6 +323,13 @@ describe('moderation', () => {
   it('accepts an undefined value (all categories)', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'moderation', value: undefined as any })),
+    ).toBeUndefined();
+  });
+
+  it('accepts a blank value as the runtime default categories', () => {
+    expect(getRunnableAssertionValueError(make({ type: 'moderation', value: '' }))).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(make({ type: 'not-moderation', value: '   ' })),
     ).toBeUndefined();
   });
 });
@@ -300,6 +382,15 @@ describe('getFirstRunnableAssertionValueError', () => {
   it('flags entries that are not real assertion objects', () => {
     expect(getFirstRunnableAssertionValueError([null, undefined])).toMatch(/valid assertion type/);
     expect(getFirstRunnableAssertionValueError([{}])).toMatch(/valid assertion type/);
+  });
+
+  it('rejects unsupported assertion type names before running', () => {
+    expect(getFirstRunnableAssertionValueError([{ type: 'containz', value: 'hello' }])).toMatch(
+      /supported assertion type/,
+    );
+    expect(getRunnableAssertionValueError(make({ type: 'containz' as any }))).toMatch(
+      /supported assertion type/,
+    );
   });
 
   it('returns the first error it sees', () => {

@@ -30,8 +30,18 @@ describe('isFullYamlConfig', () => {
     expect(isFullYamlConfig({ prompts: ['Greeting prompt'] })).toBe(false);
   });
 
+  it('rejects a single test case that includes both provider and prompt filters', () => {
+    expect(
+      isFullYamlConfig({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Greeting prompt'],
+        vars: { topic: 'reliability' },
+      }),
+    ).toBe(false);
+  });
+
   it('accepts full configurations and ambiguous objects with full-config keys', () => {
-    expect(isFullYamlConfig({ providers: ['echo'], prompts: ['hello'] })).toBe(true);
+    expect(isFullYamlConfig({ providers: ['echo'], prompts: ['hello'], tests: [] })).toBe(true);
     expect(isFullYamlConfig({ tests: [{ vars: { a: 1 } }] })).toBe(true);
     expect(isFullYamlConfig({ redteam: { plugins: [] } })).toBe(true);
     expect(isFullYamlConfig({ vars: { a: 1 }, tests: [] })).toBe(true);
