@@ -31,15 +31,15 @@ To use assertions in your test cases, add an `assert` property to the test case 
 
 Common assertion types:
 
-| Type | Description |
-|------|-------------|
-| `equals` | Exact string match |
-| `contains` | Output includes substring |
+| Type          | Description                           |
+| ------------- | ------------------------------------- |
+| `equals`      | Exact string match                    |
+| `contains`    | Output includes substring             |
 | `containsAny` | Output includes any of the substrings |
-| `icontains` | Case-insensitive contains |
-| `regex` | Regex pattern match |
-| `is-json` | Valid JSON output |
-| `similar` | Semantic similarity score |
+| `icontains`   | Case-insensitive contains             |
+| `regex`       | Regex pattern match                   |
+| `is-json`     | Valid JSON output                     |
+| `similar`     | Semantic similarity score             |
 
 Example:
 
