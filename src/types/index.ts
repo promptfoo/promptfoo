@@ -741,7 +741,9 @@ export const AssertionSchema = z
     if (
       assertion.xfail !== undefined &&
       typeof assertion.type === 'string' &&
-      (assertion.type.startsWith('select-') || assertion.type === 'max-score')
+      (assertion.type.startsWith('select-') ||
+        assertion.type === 'max-score' ||
+        assertion.type === 'human')
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

@@ -105,6 +105,19 @@ describe('AssertionSchema', () => {
     });
   });
 
+  it('should reject xfail on human assertions', () => {
+    const result = AssertionSchema.safeParse({
+      type: 'human',
+      xfail: true,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const xfailIssue = result.error.issues.find((issue) => issue.path.includes('xfail'));
+      expect(xfailIssue?.message).toBe('xfail is not supported for human assertions');
+    }
+  });
+
   it('should validate all base assertion types', () => {
     const baseTypes = BaseAssertionTypesSchema.options;
 
