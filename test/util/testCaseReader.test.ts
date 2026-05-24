@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -109,9 +110,7 @@ vi.mock('../../src/integrations/huggingfaceDatasets', () => ({
 }));
 
 vi.mock('../../src/util/azureBlob', async () => ({
-  ...(await vi.importActual<typeof import('../../src/util/azureBlob')>(
-    '../../src/util/azureBlob',
-  )),
+  ...(await vi.importActual<typeof import('../../src/util/azureBlob')>('../../src/util/azureBlob')),
   readAzureBlobText: vi.fn(),
 }));
 
@@ -410,9 +409,7 @@ describe('readStandaloneTestsFile', () => {
 
   it('should read CSV test sets from Azure Blob Storage URIs', async () => {
     const blobUri = 'az://account/container/tests.csv';
-    vi.mocked(readAzureBlobText).mockResolvedValue(
-      'review_id,__expected\nreview-004,ready',
-    );
+    vi.mocked(readAzureBlobText).mockResolvedValue('review_id,__expected\nreview-004,ready');
 
     const result = await readStandaloneTestsFile(blobUri);
 
@@ -646,7 +643,6 @@ describe('readStandaloneTestsFile', () => {
 
   it('should read real XLSX file from examples (integration test)', async () => {
     // Integration test using the actual Excel file from examples
-    const path = require('path');
     const exampleFile = path.join(__dirname, '../../examples/simple-csv/tests.xlsx');
 
     // Only run if read-excel-file is actually installed (in dev environment)
