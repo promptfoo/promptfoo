@@ -340,6 +340,29 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByDisplayValue('/etc/ssl/custom-ca.pem')).toBeInTheDocument();
     });
 
+    it('should auto-open sections when TLS config is applied to the same target', () => {
+      const { rerender } = renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={{ id: 'http-provider', config: {} }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.queryByDisplayValue('/etc/ssl/custom-ca.pem')).not.toBeInTheDocument();
+
+      rerender(
+        <TlsHttpsConfigTab
+          selectedTarget={{
+            id: 'http-provider',
+            config: { tls: { rejectUnauthorized: true, caPath: '/etc/ssl/custom-ca.pem' } },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByDisplayValue('/etc/ssl/custom-ca.pem')).toBeInTheDocument();
+    });
+
     it('should auto-open Advanced section when advanced config exists', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
@@ -752,6 +775,27 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByText('PFX/PKCS#12 Certificate Bundle')).toBeInTheDocument();
       // Check for Base64 button which is unique to PFX configuration
       expect(screen.getByRole('button', { name: /Base64/i })).toBeInTheDocument();
+    });
+
+    it('should treat legacy certificateType "none" as no client certificate', () => {
+      const selectedTarget = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            rejectUnauthorized: true,
+            certificateType: 'none',
+          },
+        },
+      } as unknown as HttpProviderOptions;
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.queryByText('Certificate Type')).not.toBeInTheDocument();
     });
   });
 });

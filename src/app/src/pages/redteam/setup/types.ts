@@ -27,7 +27,7 @@ interface TlsConfigUI {
  */
 interface HttpProviderConfigUI extends Omit<HttpProviderConfig, 'signatureAuth' | 'tls'> {
   signatureAuth?: HttpProviderConfig['signatureAuth'];
-  tls?: HttpProviderConfig['tls'] & TlsConfigUI;
+  tls?: Partial<NonNullable<HttpProviderConfig['tls']>> & TlsConfigUI;
 }
 
 /**

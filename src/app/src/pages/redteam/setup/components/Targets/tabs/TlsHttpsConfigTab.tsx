@@ -81,17 +81,23 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 }) => {
   const { showToast } = useToast();
   const tls = selectedTarget.config?.tls;
+  const rawCertificateType = tls?.certificateType as
+    | TlsConfig['certificateType']
+    | 'none'
+    | undefined;
   const certificateType =
-    tls?.certificateType === 'pkcs12'
-      ? 'pfx'
-      : (tls?.certificateType ??
-        (tls?.jksPath || tls?.jksContent || tls?.keyAlias
-          ? 'jks'
-          : tls?.pfx || tls?.pfxPath
-            ? 'pfx'
-            : tls?.cert || tls?.certPath || tls?.key || tls?.keyPath
-              ? 'pem'
-              : undefined));
+    rawCertificateType === 'none'
+      ? undefined
+      : rawCertificateType === 'pkcs12'
+        ? 'pfx'
+        : (rawCertificateType ??
+          (tls?.jksPath || tls?.jksContent || tls?.keyAlias
+            ? 'jks'
+            : tls?.pfx || tls?.pfxPath
+              ? 'pfx'
+              : tls?.cert || tls?.certPath || tls?.key || tls?.keyPath
+                ? 'pem'
+                : undefined));
   const caInputType = tls?.caInputType ?? (tls?.caPath ? 'path' : tls?.ca ? 'inline' : undefined);
   const certInputType =
     tls?.certInputType ?? (tls?.certPath ? 'path' : tls?.cert ? 'inline' : undefined);
@@ -126,16 +132,27 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   const [clientCertOpen, setClientCertOpen] = useState(hasClientCert);
   const [advancedOpen, setAdvancedOpen] = useState(hasAdvanced);
 
-  // Re-sync section state when switching targets without overriding manual toggles
-  // while editing the same target.
+  // Re-sync section state when switching targets, and auto-open sections when
+  // real TLS data is applied to the current target without overriding manual
+  // toggles during ordinary edits.
   useEffect(() => {
-    if (prevTargetKey.current === targetKey) {
+    if (prevTargetKey.current !== targetKey) {
+      prevTargetKey.current = targetKey;
+      setCaOpen(hasCA);
+      setClientCertOpen(hasClientCert);
+      setAdvancedOpen(hasAdvanced);
       return;
     }
-    prevTargetKey.current = targetKey;
-    setCaOpen(hasCA);
-    setClientCertOpen(hasClientCert);
-    setAdvancedOpen(hasAdvanced);
+
+    if (hasCA) {
+      setCaOpen(true);
+    }
+    if (hasClientCert) {
+      setClientCertOpen(true);
+    }
+    if (hasAdvanced) {
+      setAdvancedOpen(true);
+    }
   }, [targetKey, hasCA, hasClientCert, hasAdvanced]);
 
   return (
