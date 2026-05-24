@@ -477,11 +477,13 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     // VAD events
     this.simulatedUserConnection.on('speech_started', () => {
       this.isSimulatedUserSpeaking = true;
+      this.turnDetector.onSpeechStart();
       this.emit('simulated_user_speech_started');
     });
 
     this.simulatedUserConnection.on('speech_stopped', () => {
       this.isSimulatedUserSpeaking = false;
+      this.turnDetector.onSpeechEnd();
       this.emit('simulated_user_speech_stopped');
     });
 

@@ -304,6 +304,27 @@ describe('VoiceConversationOrchestrator', () => {
     await expect(result).resolves.toEqual(expect.objectContaining({ stopReason: 'timeout' }));
   });
 
+  it('arms the detector timeout for simulated-user VAD turns', async () => {
+    vi.useFakeTimers();
+    const orchestrator = new VoiceConversationOrchestrator(
+      config({
+        turnDetection: {
+          ...config().turnDetection,
+          maxTurnDurationMs: 25,
+        },
+        timeoutMs: 1000,
+      }),
+    );
+    const { result, user } = await startConversation(orchestrator);
+
+    user.emit('speech_started');
+    await vi.advanceTimersByTimeAsync(25);
+    expect(user.cancelResponse).toHaveBeenCalled();
+
+    await orchestrator.stop('user_hangup');
+    await expect(result).resolves.toEqual(expect.objectContaining({ stopReason: 'user_hangup' }));
+  });
+
   it('rejects invalid start states, unknown providers, and connection errors', async () => {
     const active = new VoiceConversationOrchestrator(config());
     const activeStart = await startConversation(active);
