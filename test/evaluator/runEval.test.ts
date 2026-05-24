@@ -97,6 +97,57 @@ describe('runEval', () => {
     );
   });
 
+  it('excludes eval runtime vars from the persisted result', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      promptIdx: 4,
+      provider: mockProvider,
+      prompt: {
+        raw: '{{__evalStepId}} {{topic}}',
+        label: 'test-label',
+      },
+      repeatIndex: 2,
+      test: {
+        vars: { topic: 'weather' },
+      },
+      testIdx: 3,
+      conversations: {},
+      registers: {},
+    });
+
+    // The reserved __eval* runtime vars must not be persisted on result.vars:
+    // they would pollute stored results and, being _-prefixed, be restored
+    // onto re-run test.vars by --filter-* re-runs. Real test vars are kept.
+    expect(results[0].vars).toEqual({ topic: 'weather' });
+  });
+
+  it('excludes eval runtime vars from assertion context', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      evalId: 'eval-runtime-vars',
+      provider: mockProvider,
+      prompt: { raw: '{{topic}}', label: 'test-label' },
+      test: {
+        vars: { topic: 'weather' },
+        assert: [
+          {
+            type: 'javascript',
+            value:
+              "!('__evalId' in context.vars) && !('__evalStepId' in context.vars) && !('__repeatIndex' in context.vars) && context.vars.topic === 'weather'",
+          },
+        ],
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    // The assertion passes only if context.vars carries the real test var but
+    // none of the reserved __eval* runtime vars.
+    expect(results[0].gradingResult?.pass).toBe(true);
+    expect(results[0].success).toBe(true);
+  });
+
   it('warns once when test vars collide with reserved runtime var names', async () => {
     const logger = (await import('../../src/logger')).default;
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
@@ -597,9 +648,10 @@ describe('runEval', () => {
 
     const results = await runEval({
       ...defaultOptions,
+      evalId: 'eval-runtime-vars',
       provider: errorProvider,
-      prompt: { raw: 'Test prompt', label: 'test-label' },
-      test: {},
+      prompt: { raw: '{{__evalStepId}} {{topic}}', label: 'test-label' },
+      test: { vars: { topic: 'weather' } },
       conversations: {},
       registers: {},
     });
@@ -607,6 +659,7 @@ describe('runEval', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('API Error');
     expect(result.failureReason).toBe(ResultFailureReason.ERROR);
+    expect(result.vars).toEqual({ topic: 'weather' });
   });
 
   it('should handle null output differently for red team tests', async () => {
