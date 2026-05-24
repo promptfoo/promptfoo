@@ -10,7 +10,7 @@ import StrategyTable from '../\_shared/StrategyTable';
 
 # Red team Configuration
 
-The `redteam` section in your `promptfooconfig.yaml` file is used when generating redteam tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your red team tests.
+The `redteam` section in your `promptfooconfig.yaml` file is used when generating red team tests via `promptfoo redteam run` or `promptfoo redteam generate`. It allows you to specify the plugins and other parameters of your red team tests.
 
 The most important components of your red team configuration are:
 
@@ -817,7 +817,7 @@ A common use case is to use an alternative platform like [Azure](/docs/providers
 You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
 :::warning
-Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4.1.
+Your choice of attack provider is critical to the quality of your red team tests. We recommend using a state-of-the-art model such as GPT-5.5 or Claude Sonnet 4.6.
 :::
 
 ### How attacks are generated
@@ -847,7 +847,7 @@ redteam:
       temperature: 0.5
 ```
 
-A local model via [ollama](/docs/providers/ollama/) would look similar:
+A local model via [Ollama](/docs/providers/ollama/) looks similar:
 
 ```yaml
 redteam:
@@ -866,12 +866,12 @@ redteam:
 ```
 
 :::warning
-Some providers such as Anthropic may disable your account for generating harmful test cases. We recommend using the default OpenAI provider.
+Some providers, such as Anthropic, may restrict accounts that generate harmful test cases. We recommend using the default OpenAI provider.
 :::
 
 ### Remote Generation
 
-By default, promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
 
 :::info Cloud Users
 If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.

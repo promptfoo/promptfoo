@@ -249,7 +249,7 @@ Promptfoo hooks directly into your existing LLM app to attack targets via Python
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control
-- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
+- [Javascript](/docs/providers/custom-api/), [any executable](/docs/providers/custom-script/), local providers like [Ollama](/docs/providers/ollama/), or other [provider types](/docs/providers/)
 
 ## Continuous improvement
 
