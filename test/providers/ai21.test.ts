@@ -259,9 +259,13 @@ describe('AI21ChatCompletionProvider', () => {
     );
   });
 
-  it('should not call API twice for same provider config', async () => {
+  it('invokes fetchWithCache once per call site even for duplicate provider configs', async () => {
     const mockResponse = {
-      body: JSON.stringify({ completions: [{ output: { text: 'test' } }] }),
+      data: {
+        choices: [{ message: { content: 'test response' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      },
+      cached: false,
       status: 200,
       statusText: 'OK',
     };
@@ -277,7 +281,8 @@ describe('AI21ChatCompletionProvider', () => {
 
     await Promise.all([provider1.callApi('test prompt'), provider2.callApi('test prompt')]);
 
-    // Both calls should use the same cache key, but each should still call fetchWithCache
+    // Each provider call delegates to fetchWithCache; the cache layer itself
+    // is responsible for collapsing identical requests, not the provider.
     expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2);
   });
 });
