@@ -80,7 +80,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    min-severity: medium # Report medium, high and critical severity issues only (if omitted, all severity levels are reported)
+    min-severity: medium # Report medium, high and critical issues (also the default when omitted)
 ```
 
 **Use custom guidance:**
