@@ -142,10 +142,14 @@ export interface TokenUsage {
 export type BaseTokenUsage = TokenUsage;
 
 type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
-function assert<_T extends true>() {}
+type Assert<_T extends true> = true;
 
-assert<AssertEqual<CompletionTokenDetails, z.infer<typeof CompletionTokenDetailsSchema>>>();
-assert<AssertEqual<TokenUsage, z.infer<typeof BaseTokenUsageSchema>>>();
+type _AssertCompletionTokenDetailsSchema = Assert<
+  AssertEqual<CompletionTokenDetails, z.infer<typeof CompletionTokenDetailsSchema>>
+>;
+type _AssertTokenUsageSchema = Assert<
+  AssertEqual<TokenUsage, z.infer<typeof BaseTokenUsageSchema>>
+>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
