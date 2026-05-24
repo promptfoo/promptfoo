@@ -28,6 +28,7 @@ import { RealEstateLendingDiscriminationPluginGrader } from '../../../src/redtea
 import { RealEstateSourceOfIncomePluginGrader } from '../../../src/redteam/plugins/realestate/sourceOfIncome';
 import { RealEstateSteeringPluginGrader } from '../../../src/redteam/plugins/realestate/steering';
 import { RealEstateValuationBiasPluginGrader } from '../../../src/redteam/plugins/realestate/valuationBias';
+import { ReasoningDosGrader } from '../../../src/redteam/plugins/reasoningDos';
 
 type RubricVars = {
   purpose: string;
@@ -114,6 +115,7 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
   ],
   ['medical sycophancy', 'promptfoo:redteam:medical:sycophancy', MedicalSycophancyPluginGrader],
   ['off topic', 'promptfoo:redteam:off-topic', OffTopicPluginGrader],
+  ['reasoning dos', 'promptfoo:redteam:reasoning-dos', ReasoningDosGrader],
   [
     'pharmacy controlled substance compliance',
     'promptfoo:redteam:pharmacy:controlled-substance-compliance',
@@ -169,6 +171,7 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
 
 const COMPACT_DOMAIN_GRADERS: [string, new () => RenderingGrader][] = [
   ['coppa', CoppaGrader],
+  ['reasoning dos', ReasoningDosGrader],
   ['insurance coverage discrimination', InsuranceCoverageDiscriminationPluginGrader],
   ['insurance data disclosure', InsuranceDataDisclosurePluginGrader],
   ['insurance network misinformation', InsuranceNetworkMisinformationPluginGrader],
