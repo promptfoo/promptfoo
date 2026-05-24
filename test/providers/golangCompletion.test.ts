@@ -141,9 +141,11 @@ describe('GolangProvider', () => {
           extension: 'go',
         };
       }
+      const normalizedPath = runPath.replace(/^(file:\/\/|golang:)/, '');
+      const [filePath, functionName] = normalizedPath.split(':');
       return {
-        filePath: runPath.replace(/^(file:\/\/|golang:)/, '').split(':')[0],
-        functionName: runPath.includes(':') ? runPath.split(':')[1] : undefined,
+        filePath,
+        functionName,
         isPathPattern: false,
         extension: 'go',
       };
@@ -293,12 +295,21 @@ describe('GolangProvider', () => {
       expect(provider.id()).toBe('testId');
     });
 
-    it('should initialize with file:// prefix and function name', () => {
-      const provider = new GolangProvider('file://script.go:function_name', {
+    it('should initialize with file:// prefix and CallApi function name', () => {
+      const provider = new GolangProvider('file://script.go:CallApi', {
         id: 'testId',
         config: { basePath: '/base' },
       });
       expect(provider.id()).toBe('testId');
+    });
+
+    it('should reject function names that the Go wrapper cannot invoke', () => {
+      expect(
+        () =>
+          new GolangProvider('file://script.go:function_name', {
+            config: { basePath: '/base' },
+          }),
+      ).toThrow('The Golang provider only supports the CallApi function');
     });
 
     it('should handle undefined basePath and use default id', () => {
@@ -308,8 +319,8 @@ describe('GolangProvider', () => {
     });
 
     it('should use class id() method when no id is provided in options', () => {
-      const provider = new GolangProvider('script.go:custom_function');
-      expect(provider.id()).toBe('golang:script.go:custom_function');
+      const provider = new GolangProvider('script.go:CallApi');
+      expect(provider.id()).toBe('golang:script.go:CallApi');
     });
 
     it('should allow id() override and later retrieval', () => {
@@ -525,7 +536,6 @@ describe('GolangProvider', () => {
         expect.objectContaining({
           vars: expect.objectContaining({ circular: expect.anything() }),
         }),
-        'call_api',
       );
 
       spy.mockRestore();
@@ -601,68 +611,12 @@ describe('GolangProvider', () => {
   });
 
   describe('API methods', () => {
-    it('should call callEmbeddingApi successfully', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
-      mockExecFile.mockImplementation(((
-        file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => {
-          callback(
-            null,
-            {
-              stdout: file.includes('golang_wrapper') ? '{"embedding":[0.1,0.2,0.3]}' : '',
-              stderr: '',
-            },
-            '',
-          );
-        });
-        return {} as any;
-      }) as any);
+    it('should expose only the implemented text completion method', () => {
+      const provider = new GolangProvider('script.go');
 
-      const result = await provider.callEmbeddingApi('test prompt');
-      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
-    });
-
-    it('should call callClassificationApi successfully', async () => {
-      const provider = new GolangProvider('script.go', {
-        config: { basePath: '/absolute/path/to' },
-      });
-      mockExecFile.mockImplementation(((
-        file: string,
-        _args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        setImmediate(() => {
-          callback(
-            null,
-            {
-              stdout: file.includes('golang_wrapper') ? '{"classification":"test_class"}' : '',
-              stderr: '',
-            },
-            '',
-          );
-        });
-        return {} as any;
-      }) as any);
-
-      const result = await provider.callClassificationApi('test prompt');
-      expect(result).toEqual({ classification: 'test_class' });
+      expect(provider.callApi).toBeTypeOf('function');
+      expect(provider).not.toHaveProperty('callEmbeddingApi');
+      expect(provider).not.toHaveProperty('callClassificationApi');
     });
 
     it('should handle stderr output without failing', async () => {
@@ -795,7 +749,7 @@ describe('GolangProvider', () => {
       await expect(provider.callApi('test prompt')).rejects.toThrow('Error running Golang script');
     });
 
-    it('should use custom function name when specified', async () => {
+    it('should reject a custom function name before executing a Go binary', async () => {
       const mockParsePathOrGlob = vi.mocked((await import('../../src/util')).parsePathOrGlob);
       mockParsePathOrGlob.mockReturnValueOnce({
         filePath: '/absolute/path/to/script.go',
@@ -804,31 +758,13 @@ describe('GolangProvider', () => {
         extension: 'go',
       });
 
-      const provider = new GolangProvider('script.go:custom_function', {
-        config: { basePath: '/absolute/path/to' },
-      });
-
-      let executedFunctionName = '';
-      mockExecFile.mockImplementation(((
-        file: string,
-        args: any[],
-        optionsOrCallback: any,
-        maybeCallback?: any,
-      ) => {
-        const callback =
-          typeof optionsOrCallback === 'function' ? optionsOrCallback : maybeCallback;
-        if (!callback) {
-          return {} as any;
-        }
-        if (file.includes('golang_wrapper')) {
-          executedFunctionName = args[1]; // args[1] is the function name
-        }
-        setImmediate(() => callback(null, { stdout: '{"output":"test"}', stderr: '' }, ''));
-        return {} as any;
-      }) as any);
-
-      await provider.callApi('test prompt');
-      expect(executedFunctionName).toBe('custom_function');
+      expect(
+        () =>
+          new GolangProvider('script.go:custom_function', {
+            config: { basePath: '/absolute/path/to' },
+          }),
+      ).toThrow('The Golang provider only supports the CallApi function');
+      expect(mockExecFile).not.toHaveBeenCalled();
     });
 
     it('should use custom go executable when specified', async () => {
@@ -892,7 +828,6 @@ describe('GolangProvider', () => {
         expect.objectContaining({
           vars: expect.objectContaining({ circular: expect.anything() }),
         }),
-        'call_api',
       );
 
       // Restore the original implementation
