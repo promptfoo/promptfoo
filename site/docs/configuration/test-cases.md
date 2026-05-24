@@ -718,6 +718,28 @@ See [Google Sheets integration](/docs/integrations/google-sheets) for details on
 
 See [SharePoint integration](/docs/integrations/sharepoint) for details on loading test data from Microsoft SharePoint document libraries.
 
+### Azure Blob Storage
+
+Promptfoo can read test sets directly from Azure Blob Storage:
+
+```yaml
+tests: az://myaccount/evals/tests.json
+```
+
+Use `az://<account>/<container>/<blob>`. Promptfoo supports CSV, JSON, JSONL, YAML, and YML test-set blobs. Blob names may keep the original extension and append a suffix, such as `tests.json.<sha256>`.
+
+Authentication uses the first available option:
+
+1. A SAS query string on the URI, such as `az://myaccount/evals/tests.json?<sas-token>`
+2. `AZURE_STORAGE_CONNECTION_STRING`
+3. Azure identity credentials through `DefaultAzureCredential`, such as Azure CLI login, managed identity, or service principal environment variables
+
+When using `AZURE_STORAGE_CONNECTION_STRING`, the storage account comes from the connection string. Keep the `az://` account segment aligned with that account so the URI remains self-describing; Promptfoo rejects clearly mismatched `AccountName` values. Query strings are interpreted as SAS tokens and must include `sig`.
+
+SAS query strings and `DefaultAzureCredential` use the standard public Azure Blob endpoint for the named account. For Azure Government, Azure operated by 21Vianet, or custom blob endpoints, use `AZURE_STORAGE_CONNECTION_STRING` with the appropriate `EndpointSuffix` or explicit `BlobEndpoint`.
+
+Blob-hosted YAML, JSON, and JSONL files are treated as remote test-case data. Promptfoo does not expand local file references or provider references found inside those blob contents.
+
 ### HuggingFace Datasets
 
 See [HuggingFace Datasets](/docs/configuration/huggingface-datasets) for instructions on importing test cases from existing datasets.
