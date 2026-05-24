@@ -8,9 +8,15 @@ import EvalsTable from './EvalsTable';
 // Mock the API
 vi.mock('@app/utils/api');
 
+// Mock useToast so EvalsTable doesn't require a ToastProvider wrapper
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({ showToast: vi.fn() }),
+}));
+
 // Mock the DataTable component to simplify testing
 vi.mock('@app/components/data-table/data-table', () => ({
   DataTable: ({
+    columns,
     data,
     isLoading,
     error,
@@ -40,6 +46,14 @@ vi.mock('@app/components/data-table/data-table', () => ({
         {data.map((row: any) => {
           const rowId = getRowId ? getRowId(row) : row.evalId;
           const isSelected = rowSelection?.[rowId] || false;
+          const testsColumn = columns?.find((column: any) => column.accessorKey === 'numTests');
+          const renderCell = (column: any) =>
+            typeof column.cell === 'function'
+              ? column.cell({
+                  getValue: () => row[column.accessorKey],
+                  row: { original: row },
+                })
+              : row[column.accessorKey];
           return (
             <div key={rowId} data-testid={`row-${rowId}`}>
               {enableRowSelection && (
@@ -61,6 +75,7 @@ vi.mock('@app/components/data-table/data-table', () => ({
               <button data-testid={`select-${rowId}`} onClick={() => onRowClick?.(row)}>
                 {row.description || row.label}
               </button>
+              {testsColumn && <div data-testid={`tests-${rowId}`}>{renderCell(testsColumn)}</div>}
             </div>
           );
         })}
@@ -215,6 +230,34 @@ describe('EvalsTable', () => {
     await user.click(screen.getByTestId('select-eval-1'));
 
     expect(onEvalSelected).toHaveBeenCalledWith('eval-1');
+  });
+
+  it('should show completed result rows for incomplete eval test counts', async () => {
+    const mockResponse = {
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: [
+          {
+            ...mockEvals[0],
+            completedTestCount: 4,
+            evalStatus: 'canceled',
+            expectedTestCount: 8,
+            numTests: 2,
+          },
+        ],
+      }),
+    };
+    vi.mocked(callApi).mockResolvedValue(mockResponse as any);
+
+    render(
+      <MemoryRouter>
+        <EvalsTable onEvalSelected={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tests-eval-1')).toHaveTextContent('4 / 8');
+    });
   });
 
   it('should delete selected evals when delete button is clicked', async () => {

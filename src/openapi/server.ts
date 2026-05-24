@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -466,6 +466,24 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('GetJobResponse', EvalSchemas.GetJob.Response),
       400: validationError(),
       404: notFound('Job not found'),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{id}/resume',
+    operationId: 'resumeEval',
+    tags: ['Eval'],
+    summary: 'Resume an incomplete evaluation',
+    request: {
+      params: params('ResumeEvalParams', EvalSchemas.Resume.Params),
+    },
+    responses: {
+      200: jsonResponse('ResumeEvalResponse', EvalSchemas.Resume.Response),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
+      409: errorResponse('Evaluation is already running'),
+      500: serverError(),
     },
   });
 

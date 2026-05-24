@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { evaluate as doEvaluate } from '../../evaluator';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
-import { EvalSchemas } from '../../types/api/eval';
+import { EvalIdParamSchema, EvalSchemas } from '../../types/api/eval';
+import { resolveConfigs } from '../../util/config/load';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
@@ -39,6 +41,12 @@ export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+function hasActiveResumeJob(evalId: string): boolean {
+  return Array.from(evalJobs.values()).some(
+    (job) => job.evalId === evalId && job.status === 'in-progress',
+  );
+}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -237,6 +245,100 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
         logs: job.logs,
       }),
     );
+  }
+});
+
+evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void> => {
+  const { id: evalId } = EvalIdParamSchema.parse(req.params);
+
+  try {
+    const eval_ = await Eval.findById(evalId);
+    if (!eval_) {
+      res.status(404).json({ success: false, error: 'Eval not found' });
+      return;
+    }
+
+    if (hasActiveResumeJob(evalId)) {
+      res.status(409).json({ success: false, error: 'Evaluation is already running' });
+      return;
+    }
+
+    const jobId = crypto.randomUUID();
+    evalJobs.set(jobId, {
+      evalId,
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      result: null,
+      logs: [],
+    });
+
+    // Reconstruct test suite from the eval's stored config after claiming the resume slot.
+    const { testSuite } = await resolveConfigs({}, eval_.config);
+
+    // Restore prompts from the eval to preserve IDs and ordering
+    if (Array.isArray(eval_.prompts) && eval_.prompts.length > 0) {
+      testSuite.prompts = eval_.prompts.map((p) => ({
+        raw: p.raw,
+        label: p.label,
+        id: p.id,
+      }));
+    }
+
+    // Persist the claim before the evaluator is dispatched so concurrent resume
+    // attempts cannot both observe a non-running eval and launch duplicate work.
+    eval_.setEvalStatus('running');
+    await eval_.save();
+
+    // Pass resume as a per-evaluation option to avoid mutating global cliState
+    doEvaluate(testSuite, eval_, {
+      eventSource: 'web',
+      resume: true,
+      progressCallback: (progress: number, total: number) => {
+        const job = evalJobs.get(jobId);
+        invariant(job, 'Job not found');
+        job.progress = progress;
+        job.total = total;
+      },
+    })
+      .then(async (result) => {
+        const job = evalJobs.get(jobId);
+        invariant(job, 'Job not found');
+        job.status = 'complete';
+        job.result = await result.toEvaluateSummary();
+        job.evalId = result.id;
+      })
+      .catch(async (error) => {
+        logger.error('[Eval] Failed to resume eval', { error, jobId, evalId });
+        const job = evalJobs.get(jobId);
+        invariant(job, 'Job not found');
+        job.status = 'error';
+        job.result = null;
+        job.logs = [String(error)];
+        try {
+          const canceledEval = await Eval.findById(evalId);
+          if (canceledEval) {
+            canceledEval.setEvalStatus('canceled');
+            await canceledEval.save();
+          }
+        } catch (cleanupError) {
+          logger.error('[Eval] Failed to update eval status after error', {
+            error: cleanupError,
+            evalId,
+          });
+        }
+      });
+
+    res.json({ success: true, data: { id: jobId, evalId } });
+  } catch (error) {
+    const activeResumeJob = Array.from(evalJobs.entries()).find(
+      ([, job]) => job.evalId === evalId && job.status === 'in-progress',
+    );
+    if (activeResumeJob) {
+      evalJobs.delete(activeResumeJob[0]);
+    }
+    logger.error('[Eval] Failed to set up resume', { error, evalId });
+    res.status(500).json({ success: false, error: 'Failed to resume evaluation' });
   }
 });
 

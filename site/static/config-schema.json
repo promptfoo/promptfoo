@@ -3124,6 +3124,9 @@
         "silent": {
           "type": "boolean"
         },
+        "resume": {
+          "type": "boolean"
+        },
         "filterRange": {
           "$ref": "#/definitions/__schema42"
         }

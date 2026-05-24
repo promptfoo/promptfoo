@@ -36,9 +36,8 @@ describe('evaluate SIGINT/abort handling', () => {
       callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         providerCallCount++;
         if (providerCallCount === 1) {
-          // First call succeeds, then we trigger abort to simulate user SIGINT
-          // Use setImmediate to abort after this call resolves
-          setTimeout(() => abortController.abort(), 0);
+          // First call succeeds, then we trigger abort to simulate user SIGINT.
+          abortController.abort();
           return {
             output: 'First response',
             tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -76,6 +75,8 @@ describe('evaluate SIGINT/abort handling', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: mockSetVars,
       setDurationMs: vi.fn(),
+      setExpectedTestCount: vi.fn(),
+      setEvalStatus: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -86,6 +87,7 @@ describe('evaluate SIGINT/abort handling', () => {
 
     const result = await evaluate(testSuite, mockEvalRecord as unknown as Eval, {
       abortSignal: abortController.signal,
+      maxConcurrency: 1,
     });
 
     // Should return the eval record
@@ -94,6 +96,8 @@ describe('evaluate SIGINT/abort handling', () => {
 
     // When user aborts (not timeout), should update signal file for resume
     expect(updateSignalFile).toHaveBeenCalledWith('test-eval-abort-123');
+    expect(mockEvalRecord.setEvalStatus).toHaveBeenCalledWith('running');
+    expect(mockEvalRecord.setEvalStatus).toHaveBeenCalledWith('canceled');
 
     // Should persist vars and prompts before early return
     expect(mockSetVars).toHaveBeenCalled();
@@ -170,6 +174,8 @@ describe('evaluate SIGINT/abort handling', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn(),
       setDurationMs: vi.fn(),
+      setExpectedTestCount: vi.fn(),
+      setEvalStatus: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -257,6 +263,8 @@ describe('evaluate SIGINT/abort handling', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn(),
       setDurationMs: vi.fn(),
+      setExpectedTestCount: vi.fn(),
+      setEvalStatus: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -267,6 +275,7 @@ describe('evaluate SIGINT/abort handling', () => {
 
     await evaluate(testSuite, mockEvalRecord as unknown as Eval, {
       abortSignal: abortController.signal,
+      maxConcurrency: 1,
     });
 
     // Should have added at least one result before abort
@@ -274,5 +283,7 @@ describe('evaluate SIGINT/abort handling', () => {
 
     // Signal file should be updated for resume capability
     expect(updateSignalFile).toHaveBeenCalledWith('test-eval-partial-123');
+    expect(mockEvalRecord.setEvalStatus).toHaveBeenCalledWith('running');
+    expect(mockEvalRecord.setEvalStatus).toHaveBeenCalledWith('canceled');
   });
 });

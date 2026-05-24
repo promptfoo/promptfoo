@@ -9,6 +9,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { mockApiProvider, resetMockProviders, toPrompt } from './helpers';
@@ -408,6 +409,65 @@ describe('Evaluator with external defaultTest', () => {
       // Always restore original state
       cliState.resume = originalResume;
     }
+  });
+
+  it('should honor per-evaluation resume option without mutating global cliState', async () => {
+    const provider: ApiProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'should be skipped by resume',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ vars: { var: 'value1' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const getCompletedIndexPairsSpy = vi
+      .spyOn(EvalResult, 'getCompletedIndexPairs')
+      .mockResolvedValue(new Set(['0:0']));
+
+    try {
+      cliState.resume = false;
+      await evaluate(testSuite, evalRecord, { resume: true });
+
+      expect(cliState.resume).toBe(false);
+      expect(getCompletedIndexPairsSpy).toHaveBeenCalledWith(evalRecord.id, {
+        excludeErrors: cliState.retryMode,
+      });
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      getCompletedIndexPairsSpy.mockRestore();
+    }
+  });
+
+  it('tracks expected test count across every prompt/provider/test row', async () => {
+    const providerA: ApiProvider = {
+      id: () => 'provider-a',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const providerB: ApiProvider = {
+      id: () => 'provider-b',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerA, providerB],
+      prompts: [toPrompt('Prompt 1 {{var}}'), toPrompt('Prompt 2 {{var}}')],
+      tests: [{ vars: { var: 'one' } }, { vars: { var: 'two' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    expect(evalRecord.getStats().expectedTestCount).toBe(8);
   });
 
   it('should backfill legacy named score weights when resuming evaluation', async () => {

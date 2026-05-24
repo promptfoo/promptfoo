@@ -183,6 +183,21 @@ export const GetJobResponseSchema = z.discriminatedUnion('status', [
 export type GetJobParams = z.infer<typeof GetJobParamsSchema>;
 export type GetJobResponse = z.infer<typeof GetJobResponseSchema>;
 
+// POST /api/eval/:id/resume
+
+export const ResumeEvalParamsSchema = EvalIdParamSchema;
+
+export const ResumeEvalResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    id: z.string().uuid(),
+    evalId: z.string().min(1),
+  }),
+});
+
+export type ResumeEvalParams = z.infer<typeof ResumeEvalParamsSchema>;
+export type ResumeEvalResponse = z.infer<typeof ResumeEvalResponseSchema>;
+
 // PATCH /api/eval/:id
 
 export const UpdateEvalParamsSchema = EvalIdParamSchema;
@@ -339,6 +354,10 @@ export const EvalSchemas = {
   GetJob: {
     Params: GetJobParamsSchema,
     Response: GetJobResponseSchema,
+  },
+  Resume: {
+    Params: ResumeEvalParamsSchema,
+    Response: ResumeEvalResponseSchema,
   },
   Update: {
     Params: UpdateEvalParamsSchema,

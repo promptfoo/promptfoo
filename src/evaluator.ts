@@ -1488,6 +1488,10 @@ async function runEvalInternal({
 
     return [ret];
   } catch (err) {
+    if (abortSignal?.aborted) {
+      throw err;
+    }
+
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
@@ -1941,9 +1945,9 @@ function createDefaultPromptMetrics(): PromptMetrics {
   };
 }
 
-function buildExistingPromptsMap(evalRecord: Eval) {
+function buildExistingPromptsMap(evalRecord: Eval, resume: boolean) {
   const existingPromptsMap = new Map<string, CompletedPrompt>();
-  if (cliState.resume && evalRecord.persisted && evalRecord.prompts.length > 0) {
+  if (resume && evalRecord.persisted && evalRecord.prompts.length > 0) {
     logger.debug('Resuming evaluation: preserving metrics from previous run');
     for (const existingPrompt of evalRecord.prompts) {
       existingPromptsMap.set(`${existingPrompt.provider}:${existingPrompt.id}`, existingPrompt);
@@ -1952,9 +1956,13 @@ function buildExistingPromptsMap(evalRecord: Eval) {
   return existingPromptsMap;
 }
 
-function buildCompletedPrompts(testSuite: TestSuite, evalRecord: Eval): CompletedPrompt[] {
+function buildCompletedPrompts(
+  testSuite: TestSuite,
+  evalRecord: Eval,
+  resume = Boolean(cliState.resume),
+): CompletedPrompt[] {
   const prompts: CompletedPrompt[] = [];
-  const existingPromptsMap = buildExistingPromptsMap(evalRecord);
+  const existingPromptsMap = buildExistingPromptsMap(evalRecord, resume);
 
   for (const provider of testSuite.providers) {
     for (const prompt of testSuite.prompts) {
@@ -2581,8 +2589,12 @@ function buildRepeatCacheContextByTestIdx(runEvalOptions: RunEvalOptions[]) {
   return repeatCacheContextByTestIdx;
 }
 
-async function filterCompletedResumeSteps(runEvalOptions: RunEvalOptions[], evalRecord: Eval) {
-  if (!cliState.resume || !evalRecord.persisted) {
+async function filterCompletedResumeSteps(
+  runEvalOptions: RunEvalOptions[],
+  evalRecord: Eval,
+  resume = cliState.resume,
+) {
+  if (!resume || !evalRecord.persisted) {
     return;
   }
 
@@ -3494,6 +3506,16 @@ class Evaluator {
       }
     }
 
+    if (combinedAbortSignal.aborted && !isEvalTimedOut() && !processingContext.targetUnavailable) {
+      return this.saveInterruptedEval({
+        ciProgressReporter,
+        globalTimeout,
+        processingContext,
+        progressBarManager,
+        prompts,
+      });
+    }
+
     return this.saveTargetUnavailableEvalIfNeeded({
       ciProgressReporter,
       globalTimeout,
@@ -3718,7 +3740,11 @@ class Evaluator {
     progressBarManager?.stop();
     ciProgressReporter?.finish();
     this.evalRecord.setVars(Array.from(processingContext.vars));
+    this.evalRecord.setEvalStatus('canceled');
     await this.evalRecord.addPrompts(prompts);
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
     updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
@@ -3745,7 +3771,11 @@ class Evaluator {
     progressBarManager?.stop();
     ciProgressReporter?.error(`Target unavailable (HTTP ${processingContext.targetErrorStatus})`);
     this.evalRecord.setVars(Array.from(processingContext.vars));
+    this.evalRecord.setEvalStatus('canceled');
     await this.evalRecord.addPrompts(prompts);
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
     updateSignalFile(this.evalRecord.id);
     return this.evalRecord;
   }
@@ -4147,6 +4177,7 @@ class Evaluator {
     }
 
     this.evalRecord.setVars(Array.from(vars));
+    this.evalRecord.setEvalStatus('complete');
     await this.runAfterAllExtensions(testSuite);
     this.recordEvalTelemetry({
       assertionTypes,
@@ -4359,7 +4390,8 @@ class Evaluator {
       return this.evalRecord;
     }
 
-    prompts.push(...buildCompletedPrompts(testSuite, this.evalRecord));
+    const resumeEnabled = Boolean(options.resume || cliState.resume);
+    prompts.push(...buildCompletedPrompts(testSuite, this.evalRecord, resumeEnabled));
     const promptIndexMap = buildPromptIndexMap(prompts);
 
     await this.evalRecord.addPrompts(prompts);
@@ -4384,7 +4416,14 @@ class Evaluator {
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
-    await filterCompletedResumeSteps(runEvalOptions, this.evalRecord);
+
+    // Track eval lifecycle against expected result rows, not just distinct test indexes.
+    this.evalRecord.setExpectedTestCount(runEvalOptions.length);
+    this.evalRecord.setEvalStatus('running');
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
+    await filterCompletedResumeSteps(runEvalOptions, this.evalRecord, resumeEnabled);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,

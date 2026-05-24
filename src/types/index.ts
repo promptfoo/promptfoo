@@ -298,6 +298,7 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  resume: z.boolean().optional(),
   /**
    * Zero-based test index range in start:end format (end exclusive).
    * Persisted on the eval record so resume runs reproduce the original slice.
@@ -467,6 +468,8 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  expectedTestCount?: number;
+  status?: 'running' | 'complete' | 'canceled';
 }
 
 export interface EvaluateSummaryV3 {
@@ -1368,11 +1371,14 @@ export type EvalSummary = ResultLightweightWithLabel & {
   isRedteam: boolean;
   passRate: number;
   label: string;
+  completedTestCount?: number;
   providers: {
     id: string;
     label: string | null;
   }[];
   attackSuccessRate?: number;
+  expectedTestCount?: number;
+  evalStatus?: 'running' | 'complete' | 'canceled';
 };
 
 export interface OutputMetadata {
