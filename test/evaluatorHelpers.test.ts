@@ -490,6 +490,55 @@ describe('evaluatorHelpers', () => {
       expect(vars.bundle[1].chunks[0].inner).toBe('content-c');
     });
 
+    it('should resolve both branches when the same object is shared (non-cyclic) across keys (issue #1613)', async () => {
+      // A shared (aliased) sub-object that is NOT cyclic must be fully resolved in
+      // every branch it appears in.  Previously the global-seen WeakSet caused the
+      // second branch to return the object untouched because it was already visited.
+      const shared = { report: 'file:///path/to/shared.txt' };
+      const vars: Record<string, any> = {
+        ctx: { first: shared, second: shared },
+      };
+
+      vi.spyOn(fsPromises, 'readFile')
+        .mockResolvedValueOnce('content-first')
+        .mockResolvedValueOnce('content-second');
+
+      await renderPrompt(toPrompt('{{ ctx.first.report }} {{ ctx.second.report }}'), vars, {});
+
+      // Both branches must be resolved — not just the first encountered.
+      expect(vars.ctx.first.report).toBe('content-first');
+      expect(vars.ctx.second.report).toBe('content-second');
+    });
+
+    it('should leave non-plain object vars (Date, Map) untouched (issue #1613)', async () => {
+      const date = new Date('2024-01-01');
+      const map = new Map([['key', 'value']]);
+      const vars: Record<string, any> = {
+        meta: { created: date, index: map, label: 'plain' },
+      };
+
+      // No file:// refs present — hasNestedFileRef should short-circuit and leave
+      // the object entirely unmodified, preserving prototype-bearing instances.
+      await renderPrompt(toPrompt('{{ meta.label }}'), vars, {});
+
+      expect(vars.meta.created).toBe(date);        // same Date reference
+      expect(vars.meta.created instanceof Date).toBe(true);
+      expect(vars.meta.index).toBe(map);           // same Map reference
+    });
+
+    it('should not traverse deeply-nested vars that contain no file:// refs (issue #1613)', async () => {
+      // Build a structure that exceeds NESTED_FILE_REFS_MAX_DEPTH with zero file:// refs.
+      // Previously the depth guard would throw; now the hasNestedFileRef fast-path
+      // prevents entry into the recursive walk entirely.
+      let deep: Record<string, unknown> = { value: 'leaf' };
+      for (let i = 0; i < 40; i++) deep = { child: deep };
+
+      const vars: Record<string, any> = { deep };
+
+      // Must not throw even though nesting exceeds 32.
+      await expect(renderPrompt(toPrompt('{{ deep | dump }}'), vars, {})).resolves.toBeDefined();
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
         mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
