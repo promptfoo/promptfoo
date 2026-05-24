@@ -546,6 +546,35 @@ describe('FunctionCallbackHandler', () => {
       expect(result.mcpErrors).toEqual(['MCP Tool Error (failing_tool): Tool execution failed']);
     });
 
+    it('processCalls returns formatted output when multiple MCP tools all fail', async () => {
+      mockMCPClient.getAllTools.mockReturnValue([
+        { name: 'read_file', description: 'Read a file' },
+        { name: 'write_file', description: 'Write a file' },
+      ]);
+      mockMCPClient.callTool
+        .mockResolvedValueOnce({
+          content: 'Path traversal not allowed',
+          isError: true,
+        })
+        .mockRejectedValueOnce({ code: 'EACCES' });
+
+      const result = await handler.processCalls(
+        [
+          { name: 'read_file', arguments: '{"path":"../secret"}' },
+          { name: 'write_file', arguments: '{"path":"/root/out"}' },
+        ],
+        {},
+      );
+
+      expect(result.output).toBe(
+        'MCP Tool Error (read_file): Path traversal not allowed\nMCP Tool Error (write_file): {"code":"EACCES"}',
+      );
+      expect(result.mcpErrors).toEqual([
+        'MCP Tool Error (read_file): Path traversal not allowed',
+        'MCP Tool Error (write_file): {"code":"EACCES"}',
+      ]);
+    });
+
     it('processCalls reports no mcpErrors for a successful MCP tool call', async () => {
       mockMCPClient.getAllTools.mockReturnValue([
         { name: 'list_resources', description: 'List available resources' },

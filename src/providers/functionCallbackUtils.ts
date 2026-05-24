@@ -117,12 +117,14 @@ export class FunctionCallbackHandler {
 
     const mcpErrors = results.filter((r) => r.isError && r.isMcpError).map((r) => String(r.output));
 
-    // If any callback succeeded, return processed results
+    // If any callback succeeded, or any MCP tool failed, return processed
+    // results. MCP failures are intentional user-facing output, unlike regular
+    // callback failures that preserve the original tool calls.
     const hasSuccess = results.some(
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
 
-    if (hasSuccess) {
+    if (hasSuccess || mcpErrors.length > 0) {
       const outputs = results.map((r) => r.output);
       // For single call with successful callback, return just the output
       if (!isArray && outputs.length === 1) {
