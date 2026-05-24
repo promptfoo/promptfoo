@@ -811,6 +811,50 @@ describe('OTLPReceiver', () => {
         },
       );
     });
+
+    it('persists command tool-name policy for receiver-created traces', async () => {
+      const commandAwareReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        commandToolNames: ['bash', 'shell'],
+      });
+      (commandAwareReceiver as any).traceStore = mockTraceStore;
+
+      await request(commandAwareReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'e'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      attributes: [
+                        { key: 'evaluation.id', value: { stringValue: 'receiver-created-eval' } },
+                        { key: 'test.case.id', value: { stringValue: 'receiver-created-test' } },
+                        { key: 'tool.name', value: { stringValue: 'bash' } },
+                        { key: 'tool.arguments', value: { stringValue: '{"cmd":"npm test"}' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.createTrace).toHaveBeenCalledWith({
+        traceId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+        evaluationId: 'receiver-created-eval',
+        testCaseId: 'receiver-created-test',
+        metadata: { commandToolNames: ['bash', 'shell'] },
+      });
+    });
   });
 
   describe('Singleton startup recovery', () => {

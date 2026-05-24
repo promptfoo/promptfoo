@@ -308,6 +308,7 @@ describe('evaluatorTracing', () => {
       await startOtlpReceiverIfNeeded(testSuite);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf'], {
+        commandToolNames: undefined,
         redactAttributes: undefined,
       });
     });
@@ -428,7 +429,33 @@ describe('evaluatorTracing', () => {
       await startOtlpReceiverIfNeeded(testSuite);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json', 'protobuf'], {
+        commandToolNames: undefined,
         redactAttributes: ['tool.arguments', 'authorization'],
+      });
+    });
+
+    it('should pass commandToolNames to the OTLP receiver', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash', 'shell'],
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json', 'protobuf'], {
+        commandToolNames: ['bash', 'shell'],
+        redactAttributes: undefined,
       });
     });
 
@@ -451,6 +478,7 @@ describe('evaluatorTracing', () => {
       await startOtlpReceiverIfNeeded(testSuite);
 
       expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf'], {
+        commandToolNames: undefined,
         redactAttributes: undefined,
       });
     });
