@@ -17,7 +17,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   );
   // first we need to get our prompts, we can get that from any of the results in each column
   const results = eval_.results;
-  const varsForHeader = new Set<string>();
+  const varsForHeader = new Set<string>(eval_.vars);
   const varValuesForRow = new Map<number, Record<string, string>>();
 
   const rowMap: Record<number, EvaluateTableRow> = {};
@@ -175,10 +175,10 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
 
   const rows = Object.values(rowMap);
-  // Preserve the order in which variable names were first seen in the results
-  // (typically the config order) instead of sorting alphabetically, so the
-  // web UI columns match how the user defined their test cases. See #244, #1320.
-  const orderedVars = [...varsForHeader];
+  // Current result payloads carry the configured display order from the eval record.
+  // Keep alphabetical ordering for older payloads that cannot provide a stable order.
+  const orderedVars =
+    eval_.vars && eval_.vars.length > 0 ? [...varsForHeader] : [...varsForHeader].sort();
   for (const row of rows) {
     row.vars = orderedVars.map((varName) => {
       const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';

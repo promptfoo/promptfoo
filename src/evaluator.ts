@@ -4330,7 +4330,9 @@ class Evaluator {
       }, maxEvalTimeMs);
     }
 
-    const vars = new Set<string>();
+    // Preserve configured/transformed variable order before concurrent rows finish.
+    // Result-only variables discovered at runtime are appended as they appear.
+    const vars = new Set<string>(varNames);
     const checkAbort = () => {
       if (combinedAbortSignal.aborted) {
         throw new Error('Operation cancelled');

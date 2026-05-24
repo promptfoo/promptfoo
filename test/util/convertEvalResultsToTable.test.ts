@@ -304,6 +304,7 @@ describe('convertResultsToTable', () => {
     const resultsFile: ResultsFile = {
       version: 4,
       prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['prompt', 'query', 'harmCategory'],
       results: {
         results: [
           {
@@ -340,8 +341,7 @@ describe('convertResultsToTable', () => {
 
     const result = convertResultsToTable(resultsFile);
     const vars = result.body[0].vars;
-    // Vars are emitted in the order they are first seen on the result, not
-    // sorted alphabetically; see #244, #1320.
+    // Persisted config order should be preserved; see #244, #1320.
     expect(result.head.vars).toEqual(['prompt', 'query', 'harmCategory']);
     expect(vars).toEqual(['modified prompt', 'original query', 'test']);
   });
@@ -401,6 +401,7 @@ describe('convertResultsToTable', () => {
     const resultsFile: ResultsFile = {
       version: 4,
       prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['conversation', 'simpleVar', 'objectVar'],
       results: {
         results: [
           {
@@ -452,9 +453,7 @@ describe('convertResultsToTable', () => {
     );
     const expectedObject = JSON.stringify({ key1: 'value1', key2: 'value2' }, null, 2);
 
-    // Variables are emitted in the order they are first seen on the result
-    // (conversation, simpleVar, objectVar), not sorted alphabetically; see
-    // #244, #1320.
+    // Persisted config order should be preserved; see #244, #1320.
     expect(result.head.vars).toEqual(['conversation', 'simpleVar', 'objectVar']);
     expect(result.body[0].vars[0]).toBe(expectedConversation);
     expect(result.body[0].vars[1]).toBe('This is a simple string');
@@ -1207,18 +1206,18 @@ describe('convertResultsToTable', () => {
     expect(result.body[0].vars[sessionIdIndex]).toBe('session-1\nsession-2\n123\nsession-3');
   });
 
-  it('preserves variable order across results instead of sorting alphabetically (regression test for #244, #1320)', () => {
+  it('preserves persisted variable order when loaded results arrive in a different order', () => {
     const resultsFile: ResultsFile = {
       version: 4,
       prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      vars: ['zebra', 'apple', 'mango', 'banana'],
       results: {
         results: [
           {
-            id: 'test1',
-            testIdx: 0,
+            id: 'test2',
+            testIdx: 1,
             promptIdx: 0,
-            // Intentionally not alphabetical: zebra, apple, mango.
-            vars: { zebra: 'z-row1', apple: 'a-row1', mango: 'm-row1' },
+            vars: { zebra: 'z-row2', apple: 'a-row2', mango: 'm-row2', banana: 'b-row2' },
             prompt: { raw: 'test prompt', label: 'Test Prompt' },
             response: { output: 'test output' },
             provider: { id: 'test-provider', label: 'Test Provider' },
@@ -1232,11 +1231,10 @@ describe('convertResultsToTable', () => {
             namedScores: {},
           },
           {
-            id: 'test2',
-            testIdx: 1,
+            id: 'test1',
+            testIdx: 0,
             promptIdx: 0,
-            // Adds a new var that should appear after the others (banana).
-            vars: { zebra: 'z-row2', apple: 'a-row2', mango: 'm-row2', banana: 'b-row2' },
+            vars: { zebra: 'z-row1', apple: 'a-row1', mango: 'm-row1' },
             prompt: { raw: 'test prompt', label: 'Test Prompt' },
             response: { output: 'test output' },
             provider: { id: 'test-provider', label: 'Test Provider' },
@@ -1257,5 +1255,35 @@ describe('convertResultsToTable', () => {
     expect(result.head.vars).toEqual(['zebra', 'apple', 'mango', 'banana']);
     expect(result.body[0].vars).toEqual(['z-row1', 'a-row1', 'm-row1', '']);
     expect(result.body[1].vars).toEqual(['z-row2', 'a-row2', 'm-row2', 'b-row2']);
+  });
+
+  it('keeps alphabetical fallback ordering for legacy result files without persisted vars', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: { zebra: 'z', apple: 'a' },
+            prompt: { raw: 'test prompt', label: 'Test Prompt' },
+            response: { output: 'test output' },
+            provider: { id: 'test-provider' },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    expect(convertResultsToTable(resultsFile).head.vars).toEqual(['apple', 'zebra']);
   });
 });

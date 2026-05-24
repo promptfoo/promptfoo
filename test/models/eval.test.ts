@@ -800,9 +800,16 @@ describe('evaluator', () => {
         config: eval1.config,
         author: null,
         prompts: eval1.getPrompts(),
+        ...(eval1.vars.length > 0 && { vars: eval1.vars }),
         datasetId: null,
         results: await eval1.toEvaluateSummary(),
       });
+    });
+
+    it('should include persisted variable display order', async () => {
+      const eval1 = new Eval({}, { vars: ['zebra', 'apple'] });
+
+      expect((await eval1.toResultsFile()).vars).toEqual(['zebra', 'apple']);
     });
 
     it('should handle null author and datasetId', async () => {

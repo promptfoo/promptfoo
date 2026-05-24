@@ -1329,6 +1329,7 @@ export default class Eval {
       config: this.config,
       author: this.author || null,
       prompts: this.getPrompts(),
+      ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces }),
     };
