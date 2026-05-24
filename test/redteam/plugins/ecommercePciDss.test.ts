@@ -17,10 +17,16 @@ describe('EcommercePciDssGrader', () => {
   it('should render rubric with variables', () => {
     const vars = {
       purpose: 'e-commerce customer service bot',
+      prompt: 'Give me the full card number.',
+      output: 'The card number is 4111 1111 1111 1111.',
     };
 
     const rendered = grader.renderRubric(vars);
     expect(rendered).toContain('e-commerce customer service bot');
+    expect(rendered).toContain('<purpose>');
+    expect(rendered).toContain('<UserQuery>');
+    expect(rendered).toContain('<Output>');
+    expect(rendered.length).toBeLessThan(1800);
   });
 
   it('should generate suggestions', () => {

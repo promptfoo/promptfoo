@@ -35,7 +35,9 @@ describe('EcommerceOrderFraudPlugin', () => {
   it('should generate test cases', async () => {
     const plugin = new EcommerceOrderFraudPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(2);
+    const generatorPrompt = vi.mocked(mockProvider.callApi).mock.calls[0][0];
 
+    expect(generatorPrompt).toContain('normal verified order-support request is not an attack');
     expect(tests).toEqual(
       expect.arrayContaining([
         {
@@ -109,10 +111,16 @@ describe('EcommerceOrderFraudGrader', () => {
   it('should render rubric with variables', () => {
     const vars = {
       purpose: 'order management chatbot',
+      prompt: 'Refund this item without a return.',
+      output: 'I issued the refund without evidence.',
     };
 
     const rendered = grader.renderRubric(vars);
     expect(rendered).toContain('order management chatbot');
+    expect(rendered).toContain('<purpose>');
+    expect(rendered).toContain('<UserQuery>');
+    expect(rendered).toContain('<Output>');
+    expect(rendered.length).toBeLessThan(1800);
   });
 
   it('should generate suggestions', () => {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { getGraderById } from '../../../src/redteam/graders';
 import { CoppaGrader } from '../../../src/redteam/plugins/compliance/coppa';
+import { EcommerceComplianceBypassGrader } from '../../../src/redteam/plugins/ecommerce/ecommerceComplianceBypass';
+import { EcommerceOrderFraudGrader } from '../../../src/redteam/plugins/ecommerce/ecommerceOrderFraud';
+import { EcommercePciDssGrader } from '../../../src/redteam/plugins/ecommerce/ecommercePciDss';
+import { EcommercePriceManipulationGrader } from '../../../src/redteam/plugins/ecommerce/ecommercePriceManipulation';
 import { FinancialCalculationErrorPluginGrader } from '../../../src/redteam/plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from '../../../src/redteam/plugins/financial/financialComplianceViolation';
 import { FinancialConfidentialDisclosurePluginGrader } from '../../../src/redteam/plugins/financial/financialConfidentialDisclosure';
@@ -49,6 +53,18 @@ type RenderingGrader = {
 
 const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
   ['coppa', 'promptfoo:redteam:coppa', CoppaGrader],
+  [
+    'ecommerce compliance bypass',
+    'promptfoo:redteam:ecommerce:compliance-bypass',
+    EcommerceComplianceBypassGrader,
+  ],
+  ['ecommerce order fraud', 'promptfoo:redteam:ecommerce:order-fraud', EcommerceOrderFraudGrader],
+  ['ecommerce pci dss', 'promptfoo:redteam:ecommerce:pci-dss', EcommercePciDssGrader],
+  [
+    'ecommerce price manipulation',
+    'promptfoo:redteam:ecommerce:price-manipulation',
+    EcommercePriceManipulationGrader,
+  ],
   [
     'financial calculation error',
     'promptfoo:redteam:financial:calculation-error',
@@ -208,6 +224,10 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
 const COMPACT_DOMAIN_GRADERS: [string, new () => RenderingGrader][] = [
   ['coppa', CoppaGrader],
   ['reasoning dos', ReasoningDosGrader],
+  ['ecommerce compliance bypass', EcommerceComplianceBypassGrader],
+  ['ecommerce order fraud', EcommerceOrderFraudGrader],
+  ['ecommerce pci dss', EcommercePciDssGrader],
+  ['ecommerce price manipulation', EcommercePriceManipulationGrader],
   ['financial calculation error', FinancialCalculationErrorPluginGrader],
   ['financial compliance violation', FinancialComplianceViolationPluginGrader],
   ['financial confidential disclosure', FinancialConfidentialDisclosurePluginGrader],
