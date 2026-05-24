@@ -251,16 +251,16 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
 
   let reason = `Tokens used: ${total} (source=${usedSource})`;
   if (min !== undefined && max !== undefined) {
-    reason += ` — expected ${min}-${max}`;
+    reason += ` - expected ${min}-${max}`;
   } else if (min !== undefined) {
-    reason += ` — expected at least ${min}`;
+    reason += ` - expected at least ${min}`;
   } else if (max !== undefined) {
-    reason += ` — expected at most ${max}`;
+    reason += ` - expected at most ${max}`;
   }
   if (params.inverse) {
     reason = basePass
       ? `tokens-used: ${total} satisfied the budget (source=${usedSource}), which violates the inverse assertion`
-      : `tokens-used: ${total} did not satisfy the budget (source=${usedSource}) — inverse assertion passes`;
+      : `tokens-used: ${total} did not satisfy the budget (source=${usedSource}) - inverse assertion passes`;
   }
 
   return {
