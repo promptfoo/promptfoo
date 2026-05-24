@@ -619,6 +619,12 @@ describe('envars', () => {
       expect(result).toBe(780_000);
     });
 
+    it('should count comparison grading steps after target batches', () => {
+      // 4 concurrent target steps at concurrency 4 plus 3 sequential comparison rows = 4 batches.
+      const result = calculateDefaultMaxEvalTimeMs(4, 4, 0, false, 0, 3);
+      expect(result).toBe(780_000);
+    });
+
     it('should cap at worst case plus buffer when calculated time exceeds it', () => {
       // 2 tests, concurrency 2, very short timeout (1 second)
       // batchCount = 1
@@ -682,6 +688,10 @@ describe('envars', () => {
 
     it('should pass serial step count to calculateDefaultMaxEvalTimeMs', () => {
       expect(getDefaultMaxEvalTimeMs(5, 4, 0, false, 3)).toBe(780_000);
+    });
+
+    it('should pass comparison step count to calculateDefaultMaxEvalTimeMs', () => {
+      expect(getDefaultMaxEvalTimeMs(4, 4, 0, false, 0, 3)).toBe(780_000);
     });
   });
 });

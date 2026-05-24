@@ -622,7 +622,8 @@ export const MAX_EVAL_TIME_BUFFER_MS = 60_000;
  * @param maxConcurrency Maximum concurrent test executions
  * @param testCaseTimeoutMs Timeout per individual test case
  * @param isRedteam Whether this is a redteam evaluation
- * @param serialEvalSteps Number of steps that must execute serially
+ * @param serialEvalSteps Number of eval steps that must execute serially
+ * @param comparisonEvalSteps Number of post-target comparison grading steps
  * @returns Calculated max eval time in milliseconds
  */
 export function calculateDefaultMaxEvalTimeMs(
@@ -631,11 +632,15 @@ export function calculateDefaultMaxEvalTimeMs(
   testCaseTimeoutMs: number,
   isRedteam: boolean = false,
   serialEvalSteps: number = 0,
+  comparisonEvalSteps: number = 0,
 ): number {
   const normalizedSerialSteps = Math.min(Math.max(0, serialEvalSteps), totalEvalSteps);
+  const normalizedComparisonSteps = Math.max(0, comparisonEvalSteps);
   const concurrentEvalSteps = totalEvalSteps - normalizedSerialSteps;
   const batchCount =
-    normalizedSerialSteps + Math.ceil(concurrentEvalSteps / Math.max(1, maxConcurrency));
+    normalizedSerialSteps +
+    normalizedComparisonSteps +
+    Math.ceil(concurrentEvalSteps / Math.max(1, maxConcurrency));
 
   // Expected time per test - longer for redteam due to multi-turn strategies
   const expectedTimePerTest = isRedteam
@@ -676,7 +681,8 @@ export function calculateDefaultMaxEvalTimeMs(
  * @param maxConcurrency Maximum concurrent test executions
  * @param testCaseTimeoutMs Timeout per individual test case
  * @param isRedteam Whether this is a redteam evaluation
- * @param serialEvalSteps Number of steps that must execute serially
+ * @param serialEvalSteps Number of eval steps that must execute serially
+ * @param comparisonEvalSteps Number of post-target comparison grading steps
  * @returns Max eval time in milliseconds, or 0 if disabled
  */
 export function getDefaultMaxEvalTimeMs(
@@ -685,6 +691,7 @@ export function getDefaultMaxEvalTimeMs(
   testCaseTimeoutMs: number,
   isRedteam: boolean = false,
   serialEvalSteps: number = 0,
+  comparisonEvalSteps: number = 0,
 ): number {
   // Check if explicitly set (including 0 to disable)
   const explicitValue = getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS');
@@ -699,6 +706,7 @@ export function getDefaultMaxEvalTimeMs(
     testCaseTimeoutMs,
     isRedteam,
     serialEvalSteps,
+    comparisonEvalSteps,
   );
 }
 

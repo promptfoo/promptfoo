@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import {
@@ -883,6 +884,48 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('starts explicit maxEvalTimeMs before setup hooks finish', async () => {
+    vi.useFakeTimers();
+    let releaseBeforeAll!: () => void;
+    const beforeAllGate = new Promise<void>((resolve) => {
+      releaseBeforeAll = resolve;
+    });
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        await beforeAllGate;
+      }
+      return context;
+    });
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      extensions: ['file://slow-setup.js:beforeAll'],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      const evalPromise = evaluate(testSuite, evalRecord, {
+        maxEvalTimeMs: 50,
+        timeoutMs: 0,
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      releaseBeforeAll();
+
+      await expect(evalPromise).rejects.toThrow('Operation cancelled');
+      expect(provider.callApi).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses longer redteam timeout defaults for direct redteam suite evaluation', async () => {
     const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
@@ -1223,6 +1266,9 @@ describeEvaluator('evaluator execution control', () => {
             result.gradingResult === null,
         ),
       ).toBe(true);
+      if (!('prompts' in summary)) {
+        throw new Error('Expected V3 summary with prompt metrics');
+      }
       expect(summary.prompts.map((prompt) => prompt.metrics)).toEqual([
         expect.objectContaining({
           assertFailCount: 0,
@@ -1255,6 +1301,44 @@ describeEvaluator('evaluator execution control', () => {
         clearTimeout(comparisonTimer);
       }
       vi.useRealTimers();
+    }
+  });
+
+  it('budgets select-best comparison rows in automatic max timeout sizing', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const matchers = await import('../../src/matchers/comparison');
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockResolvedValue([
+      { pass: true, score: 1, reason: 'Selected as best' },
+      { pass: false, score: 0, reason: 'Not selected' },
+    ]);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [{ assert: [{ type: 'select-best', value: 'pick the best response' }] }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 2,
+        timeoutMs: 0,
+      });
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'per-test=0ms, max=420000ms, steps=2, serialSteps=0, concurrency=2, comparisonSteps=1',
+        ),
+      );
+    } finally {
+      matchesSelectBestSpy.mockRestore();
+      debugSpy.mockRestore();
     }
   });
 

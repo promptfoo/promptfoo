@@ -2875,16 +2875,90 @@ function createTimeoutMetrics(timeoutMs: number): PromptMetrics {
   };
 }
 
+type EvaluationTimeoutState = {
+  abortController: AbortController;
+  globalTimeout: NodeJS.Timeout;
+  isEvalTimedOut: () => boolean;
+  maxEvalTimeMs: number;
+};
+
+function createEvaluationTimeoutState(maxEvalTimeMs: number): EvaluationTimeoutState {
+  const abortController = new AbortController();
+  let evalTimedOut = false;
+  const timeoutDelayMs = Math.min(maxEvalTimeMs, MAX_NODE_TIMEOUT_MS);
+  if (timeoutDelayMs < maxEvalTimeMs) {
+    logger.debug(
+      `Max eval timeout ${maxEvalTimeMs}ms exceeds Node's timer limit; scheduling ${timeoutDelayMs}ms`,
+    );
+  }
+  const globalTimeout = setTimeout(() => {
+    evalTimedOut = true;
+    abortController.abort();
+  }, timeoutDelayMs);
+
+  return {
+    abortController,
+    globalTimeout,
+    isEvalTimedOut: () => evalTimedOut,
+    maxEvalTimeMs,
+  };
+}
+
+function clearEvaluationTimeoutState(timeoutState?: EvaluationTimeoutState) {
+  if (timeoutState) {
+    clearTimeout(timeoutState.globalTimeout);
+  }
+}
+
+function getExplicitMaxEvalTimeMs(options: InternalEvaluateOptions): number | undefined {
+  return options.maxEvalTimeMs ?? getEnvInt('PROMPTFOO_MAX_EVAL_TIME_MS');
+}
+
+function configureExplicitEvaluationTimeout({
+  combinedAbortSignal,
+  options,
+}: {
+  combinedAbortSignal: AbortSignal;
+  options: InternalEvaluateOptions;
+}): {
+  combinedAbortSignal: AbortSignal;
+  explicitTimeoutState?: EvaluationTimeoutState;
+} {
+  const explicitMaxEvalTimeMs = getExplicitMaxEvalTimeMs(options);
+  if (explicitMaxEvalTimeMs === undefined || explicitMaxEvalTimeMs <= 0) {
+    return { combinedAbortSignal };
+  }
+
+  const explicitTimeoutState = createEvaluationTimeoutState(explicitMaxEvalTimeMs);
+  return {
+    combinedAbortSignal: AbortSignal.any([
+      combinedAbortSignal,
+      explicitTimeoutState.abortController.signal,
+    ]),
+    explicitTimeoutState,
+  };
+}
+
+function throwIfAbortSignalAborted(signal: AbortSignal) {
+  if (signal.aborted) {
+    throw new Error('Operation cancelled');
+  }
+}
+
 function configureEvaluationTimeout({
   combinedAbortSignal,
+  comparisonEvalSteps,
   concurrency,
+  existingTimeoutState,
   options,
   providerAbortSignal,
   runEvalOptions,
   testSuite,
 }: {
   combinedAbortSignal: AbortSignal;
+  comparisonEvalSteps: number;
   concurrency: number;
+  existingTimeoutState?: EvaluationTimeoutState;
   options: InternalEvaluateOptions;
   providerAbortSignal?: AbortSignal;
   runEvalOptions: RunEvalOptions[];
@@ -2906,6 +2980,7 @@ function configureEvaluationTimeout({
     (evalOption) => evalOption.test.options?.runSerially,
   ).length;
   const maxEvalTimeMs =
+    existingTimeoutState?.maxEvalTimeMs ??
     options.maxEvalTimeMs ??
     getDefaultMaxEvalTimeMs(
       runEvalOptions.length,
@@ -2913,44 +2988,35 @@ function configureEvaluationTimeout({
       testCaseTimeoutMs,
       isRedteamEval,
       serialEvalSteps,
+      comparisonEvalSteps,
     );
 
-  let evalTimedOut = false;
-  let globalTimeout: NodeJS.Timeout | undefined;
+  let timeoutState = existingTimeoutState;
   let configuredAbortSignal = combinedAbortSignal;
   let configuredProviderAbortSignal = providerAbortSignal;
 
   if (maxEvalTimeMs > 0) {
-    const globalAbortController = new AbortController();
+    timeoutState ??= createEvaluationTimeoutState(maxEvalTimeMs);
+    const maxEvalAbortSignal = timeoutState.abortController.signal;
     for (const evalOption of runEvalOptions) {
       evalOption.abortSignal = evalOption.abortSignal
-        ? AbortSignal.any([evalOption.abortSignal, globalAbortController.signal])
-        : globalAbortController.signal;
+        ? AbortSignal.any([evalOption.abortSignal, maxEvalAbortSignal])
+        : maxEvalAbortSignal;
     }
-    configuredAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
+    configuredAbortSignal = AbortSignal.any([combinedAbortSignal, maxEvalAbortSignal]);
     configuredProviderAbortSignal = providerAbortSignal
-      ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
-      : globalAbortController.signal;
-    const timeoutDelayMs = Math.min(maxEvalTimeMs, MAX_NODE_TIMEOUT_MS);
-    if (timeoutDelayMs < maxEvalTimeMs) {
-      logger.debug(
-        `Max eval timeout ${maxEvalTimeMs}ms exceeds Node's timer limit; scheduling ${timeoutDelayMs}ms`,
-      );
-    }
-    globalTimeout = setTimeout(() => {
-      evalTimedOut = true;
-      globalAbortController.abort();
-    }, timeoutDelayMs);
+      ? AbortSignal.any([providerAbortSignal, maxEvalAbortSignal])
+      : maxEvalAbortSignal;
   }
 
   logger.debug(
-    `Evaluation timeout settings: per-test=${testCaseTimeoutMs}ms, max=${maxEvalTimeMs}ms, steps=${runEvalOptions.length}, serialSteps=${serialEvalSteps}, concurrency=${concurrency}`,
+    `Evaluation timeout settings: per-test=${testCaseTimeoutMs}ms, max=${maxEvalTimeMs}ms, steps=${runEvalOptions.length}, serialSteps=${serialEvalSteps}, concurrency=${concurrency}, comparisonSteps=${comparisonEvalSteps}`,
   );
 
   return {
     combinedAbortSignal: configuredAbortSignal,
-    globalTimeout,
-    isEvalTimedOut: () => evalTimedOut,
+    globalTimeout: timeoutState?.globalTimeout,
+    isEvalTimedOut: timeoutState?.isEvalTimedOut ?? (() => false),
     maxEvalTimeMs,
     providerAbortSignal: configuredProviderAbortSignal,
     testCaseTimeoutMs,
@@ -4500,13 +4566,15 @@ class Evaluator {
     let combinedAbortSignal: AbortSignal = options.abortSignal
       ? AbortSignal.any([options.abortSignal, targetErrorAbortController.signal])
       : targetErrorAbortController.signal;
+    const explicitTimeoutConfig = configureExplicitEvaluationTimeout({
+      combinedAbortSignal,
+      options,
+    });
+    combinedAbortSignal = explicitTimeoutConfig.combinedAbortSignal;
+    const { explicitTimeoutState } = explicitTimeoutConfig;
 
     const vars = new Set<string>();
-    const checkAbort = () => {
-      if (combinedAbortSignal.aborted) {
-        throw new Error('Operation cancelled');
-      }
-    };
+    const checkAbort = () => throwIfAbortSignalAborted(combinedAbortSignal);
 
     if (!options.silent) {
       logger.info(`Starting evaluation ${this.evalRecord.id}`);
@@ -4520,244 +4588,258 @@ class Evaluator {
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
 
-    ensureDefaultTestForExtensions(testSuite);
-    const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
-      suite: testSuite,
-    });
-    testSuite = beforeAllOut.suite;
-
-    if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
-      return this.evalRecord;
-    }
-
-    prompts.push(...buildCompletedPrompts(testSuite, this.evalRecord));
-    const promptIndexMap = buildPromptIndexMap(prompts);
-
-    await this.evalRecord.addPrompts(prompts);
-
-    let tests = buildTestsFromSuite(testSuite);
-    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
-    maybeEmitAzureOpenAiWarning(testSuite, tests);
-
-    const varNames = await prepareTestVariables(tests, testSuite);
-    let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const runEvalOptions = await buildRunEvalOptions({
-      concurrency,
-      conversations: this.conversations,
-      evalId: this.evalRecord.id,
-      options,
-      promptIndexMap,
-      providerAbortSignal,
-      rateLimitRegistry: this.rateLimitRegistry,
-      registers: this.registers,
-      testSuite,
-      tests,
-    });
-    markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
-    const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
-    await filterCompletedResumeSteps(runEvalOptions, this.evalRecord);
-
-    const concurrencySettings = adjustConcurrencyForSerialFeatures({
-      concurrency,
-      prompts,
-      tests,
-    });
-    concurrency = concurrencySettings.concurrency;
-    const { usesConversationVar } = concurrencySettings;
-
-    const timeoutConfig = configureEvaluationTimeout({
-      combinedAbortSignal,
-      concurrency,
-      options,
-      providerAbortSignal,
-      runEvalOptions,
-      testSuite,
-    });
-    combinedAbortSignal = timeoutConfig.combinedAbortSignal;
-    const { globalTimeout, maxEvalTimeMs } = timeoutConfig;
-
     try {
-      const processingContext: EvalProcessingContext = {
-        assertionTypes,
-        concurrency,
-        numComplete: 0,
-        options,
-        promptEvalCounts: createPromptEvalCounts(prompts),
-        prompts,
-        rowsWithMaxScoreAssertion,
-        rowsWithSelectBestAssertion,
-        runEvalOptionsLength: runEvalOptions.length,
-        targetErrorAbortController,
-        targetErrorStatus: undefined,
-        targetUnavailable: false,
-        testCaseTimeoutMs: timeoutConfig.testCaseTimeoutMs,
-        testSuite,
-        vars,
-      };
-
-      // Set up progress tracking
-      const originalProgressCallback = this.options.progressCallback;
-      const isWebUI = Boolean(cliState.webUI);
-
-      // Choose appropriate progress reporter
-      logger.debug(
-        `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
-      );
-
-      if (isCI() && !isWebUI) {
-        // Use CI-friendly progress reporter
-        ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
-        ciProgressReporter.start();
-      } else if (this.options.showProgressBar && process.stderr.isTTY) {
-        // Use visual progress bars
-        progressBarManager = new ProgressBarManager(isWebUI);
-      }
-
-      this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
-        if (originalProgressCallback) {
-          originalProgressCallback(completed, total, index, evalStep, metrics);
-        }
-
-        if (isWebUI) {
-          const provider = evalStep.provider.label || evalStep.provider.id();
-          const vars = formatVarsForDisplay(evalStep.test.vars, 50);
-          logger.info(
-            `[${processingContext.numComplete}/${total}] Running ${provider} with vars: ${vars}`,
-          );
-        } else if (progressBarManager) {
-          // Progress bar update is handled by the manager
-          const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
-          progressBarManager.updateProgress(index, evalStep, phase, metrics);
-        } else if (ciProgressReporter) {
-          // CI progress reporter update
-          ciProgressReporter.update(processingContext.numComplete);
-        } else {
-          logger.debug(
-            `Eval #${index + 1} complete (${processingContext.numComplete} of ${runEvalOptions.length})`,
-          );
-        }
-      };
-
-      // Separate serial and concurrent eval options
-      const serialRunEvalOptions: RunEvalOptions[] = [];
-      const concurrentRunEvalOptions: RunEvalOptions[] = [];
-      // O(1) lookup for the original index of each eval step (avoids O(n) indexOf in hot loop)
-      const evalStepIndexMap = new Map<RunEvalOptions, number>();
-
-      for (let i = 0; i < runEvalOptions.length; i++) {
-        const evalOption = runEvalOptions[i];
-        evalStepIndexMap.set(evalOption, i);
-        if (evalOption.test.options?.runSerially) {
-          serialRunEvalOptions.push(evalOption);
-        } else {
-          concurrentRunEvalOptions.push(evalOption);
-        }
-      }
-      const hasEvalStepTimeout = timeoutConfig.testCaseTimeoutMs > 0;
-      const shouldGroupGradingByProvider =
-        concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
-
-      // Print info messages before starting progress bar
-      if (!this.options.silent) {
-        if (serialRunEvalOptions.length > 0) {
-          logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
-        }
-        if (concurrentRunEvalOptions.length > 0) {
-          logger.info(
-            `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-          );
-        }
-
-        logGroupedGradingStatus({
-          concurrency,
-          hasEvalStepTimeout,
-          runEvalOptions,
-          shouldGroupGradingByProvider,
-          usesConversationVar,
-        });
-      }
-
-      // Now start the progress bar after info messages
-      if (this.options.showProgressBar && progressBarManager) {
-        await progressBarManager.initialize(runEvalOptions, concurrency, 0);
-        progressBarManager.installLogInterceptor();
-      }
-
-      const interruptedEval = await this.executeEvalSteps({
-        checkAbort,
-        ciProgressReporter,
-        combinedAbortSignal,
-        concurrentRunEvalOptions,
-        evalStepIndexMap,
-        globalTimeout,
-        groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-        isEvalTimedOut: timeoutConfig.isEvalTimedOut,
-        isWebUI,
-        maxEvalTimeMs,
-        processingContext,
-        processedIndices,
-        progressBarManager,
-        prompts,
-        serialRunEvalOptions,
-        shouldGroupGradingByProvider,
+      ensureDefaultTestForExtensions(testSuite);
+      const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
+        suite: testSuite,
       });
-      if (interruptedEval) {
-        return interruptedEval;
+      checkAbort();
+      testSuite = beforeAllOut.suite;
+
+      if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
+        clearEvaluationTimeoutState(explicitTimeoutState);
+        return this.evalRecord;
       }
+      checkAbort();
+
+      prompts.push(...buildCompletedPrompts(testSuite, this.evalRecord));
+      const promptIndexMap = buildPromptIndexMap(prompts);
+
+      await this.evalRecord.addPrompts(prompts);
+      checkAbort();
+
+      let tests = buildTestsFromSuite(testSuite);
+      tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
+      maybeEmitAzureOpenAiWarning(testSuite, tests);
+
+      const varNames = await prepareTestVariables(tests, testSuite);
+      checkAbort();
+      let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
+      const runEvalOptions = await buildRunEvalOptions({
+        concurrency,
+        conversations: this.conversations,
+        evalId: this.evalRecord.id,
+        options,
+        promptIndexMap,
+        providerAbortSignal,
+        rateLimitRegistry: this.rateLimitRegistry,
+        registers: this.registers,
+        testSuite,
+        tests,
+      });
+      checkAbort();
+      markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+      const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
+      await filterCompletedResumeSteps(runEvalOptions, this.evalRecord);
+      checkAbort();
+
+      const concurrencySettings = adjustConcurrencyForSerialFeatures({
+        concurrency,
+        prompts,
+        tests,
+      });
+      concurrency = concurrencySettings.concurrency;
+      const { usesConversationVar } = concurrencySettings;
+
+      const timeoutConfig = configureEvaluationTimeout({
+        combinedAbortSignal,
+        comparisonEvalSteps: rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size,
+        concurrency,
+        existingTimeoutState: explicitTimeoutState,
+        options,
+        providerAbortSignal,
+        runEvalOptions,
+        testSuite,
+      });
+      combinedAbortSignal = timeoutConfig.combinedAbortSignal;
+      const { globalTimeout, maxEvalTimeMs } = timeoutConfig;
 
       try {
-        if (!timeoutConfig.isEvalTimedOut()) {
-          await this.processComparisonAssertions({
-            ciProgressReporter,
-            isWebUI,
-            progressBarManager,
-            prompts,
-            providerAbortSignal: timeoutConfig.providerAbortSignal,
-            repeatCacheContextByTestIdx,
-            rowsWithMaxScoreAssertion,
-            rowsWithSelectBestAssertion,
-            runEvalOptions,
-          });
-        }
-      } catch (err) {
-        if (!timeoutConfig.isEvalTimedOut()) {
-          throw err;
-        }
-        logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
-      }
-      if (timeoutConfig.isEvalTimedOut()) {
-        await this.addComparisonTimeoutResults({
-          maxEvalTimeMs,
+        const processingContext: EvalProcessingContext = {
+          assertionTypes,
+          concurrency,
+          numComplete: 0,
+          options,
+          promptEvalCounts: createPromptEvalCounts(prompts),
           prompts,
           rowsWithMaxScoreAssertion,
           rowsWithSelectBestAssertion,
-        });
-      }
+          runEvalOptionsLength: runEvalOptions.length,
+          targetErrorAbortController,
+          targetErrorStatus: undefined,
+          targetUnavailable: false,
+          testCaseTimeoutMs: timeoutConfig.testCaseTimeoutMs,
+          testSuite,
+          vars,
+        };
 
-      await this.finalizeEvaluation({
-        assertionTypes,
-        ciProgressReporter,
-        concurrency,
-        evalTimedOut: timeoutConfig.isEvalTimedOut(),
-        globalTimeout,
-        maxEvalTimeMs,
-        options,
-        processedIndices,
-        progressBarManager,
-        prompts,
-        runEvalOptions,
-        startTime,
-        testSuite,
-        tests,
-        usesConversationVar,
-        varNames,
-        vars,
-      });
-      return this.evalRecord;
-    } catch (error) {
-      if (globalTimeout) {
-        clearTimeout(globalTimeout);
+        // Set up progress tracking
+        const originalProgressCallback = this.options.progressCallback;
+        const isWebUI = Boolean(cliState.webUI);
+
+        // Choose appropriate progress reporter
+        logger.debug(
+          `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
+        );
+
+        if (isCI() && !isWebUI) {
+          // Use CI-friendly progress reporter
+          ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
+          ciProgressReporter.start();
+        } else if (this.options.showProgressBar && process.stderr.isTTY) {
+          // Use visual progress bars
+          progressBarManager = new ProgressBarManager(isWebUI);
+        }
+
+        this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
+          if (originalProgressCallback) {
+            originalProgressCallback(completed, total, index, evalStep, metrics);
+          }
+
+          if (isWebUI) {
+            const provider = evalStep.provider.label || evalStep.provider.id();
+            const vars = formatVarsForDisplay(evalStep.test.vars, 50);
+            logger.info(
+              `[${processingContext.numComplete}/${total}] Running ${provider} with vars: ${vars}`,
+            );
+          } else if (progressBarManager) {
+            // Progress bar update is handled by the manager
+            const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
+            progressBarManager.updateProgress(index, evalStep, phase, metrics);
+          } else if (ciProgressReporter) {
+            // CI progress reporter update
+            ciProgressReporter.update(processingContext.numComplete);
+          } else {
+            logger.debug(
+              `Eval #${index + 1} complete (${processingContext.numComplete} of ${runEvalOptions.length})`,
+            );
+          }
+        };
+
+        // Separate serial and concurrent eval options
+        const serialRunEvalOptions: RunEvalOptions[] = [];
+        const concurrentRunEvalOptions: RunEvalOptions[] = [];
+        // O(1) lookup for the original index of each eval step (avoids O(n) indexOf in hot loop)
+        const evalStepIndexMap = new Map<RunEvalOptions, number>();
+
+        for (let i = 0; i < runEvalOptions.length; i++) {
+          const evalOption = runEvalOptions[i];
+          evalStepIndexMap.set(evalOption, i);
+          if (evalOption.test.options?.runSerially) {
+            serialRunEvalOptions.push(evalOption);
+          } else {
+            concurrentRunEvalOptions.push(evalOption);
+          }
+        }
+        const hasEvalStepTimeout = timeoutConfig.testCaseTimeoutMs > 0;
+        const shouldGroupGradingByProvider =
+          concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
+
+        // Print info messages before starting progress bar
+        if (!this.options.silent) {
+          if (serialRunEvalOptions.length > 0) {
+            logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+          }
+          if (concurrentRunEvalOptions.length > 0) {
+            logger.info(
+              `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+            );
+          }
+
+          logGroupedGradingStatus({
+            concurrency,
+            hasEvalStepTimeout,
+            runEvalOptions,
+            shouldGroupGradingByProvider,
+            usesConversationVar,
+          });
+        }
+
+        // Now start the progress bar after info messages
+        if (this.options.showProgressBar && progressBarManager) {
+          await progressBarManager.initialize(runEvalOptions, concurrency, 0);
+          progressBarManager.installLogInterceptor();
+        }
+
+        const interruptedEval = await this.executeEvalSteps({
+          checkAbort,
+          ciProgressReporter,
+          combinedAbortSignal,
+          concurrentRunEvalOptions,
+          evalStepIndexMap,
+          globalTimeout,
+          groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+          isEvalTimedOut: timeoutConfig.isEvalTimedOut,
+          isWebUI,
+          maxEvalTimeMs,
+          processingContext,
+          processedIndices,
+          progressBarManager,
+          prompts,
+          serialRunEvalOptions,
+          shouldGroupGradingByProvider,
+        });
+        if (interruptedEval) {
+          return interruptedEval;
+        }
+
+        try {
+          if (!timeoutConfig.isEvalTimedOut()) {
+            await this.processComparisonAssertions({
+              ciProgressReporter,
+              isWebUI,
+              progressBarManager,
+              prompts,
+              providerAbortSignal: timeoutConfig.providerAbortSignal,
+              repeatCacheContextByTestIdx,
+              rowsWithMaxScoreAssertion,
+              rowsWithSelectBestAssertion,
+              runEvalOptions,
+            });
+          }
+        } catch (err) {
+          if (!timeoutConfig.isEvalTimedOut()) {
+            throw err;
+          }
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        }
+        if (timeoutConfig.isEvalTimedOut()) {
+          await this.addComparisonTimeoutResults({
+            maxEvalTimeMs,
+            prompts,
+            rowsWithMaxScoreAssertion,
+            rowsWithSelectBestAssertion,
+          });
+        }
+
+        await this.finalizeEvaluation({
+          assertionTypes,
+          ciProgressReporter,
+          concurrency,
+          evalTimedOut: timeoutConfig.isEvalTimedOut(),
+          globalTimeout,
+          maxEvalTimeMs,
+          options,
+          processedIndices,
+          progressBarManager,
+          prompts,
+          runEvalOptions,
+          startTime,
+          testSuite,
+          tests,
+          usesConversationVar,
+          varNames,
+          vars,
+        });
+        return this.evalRecord;
+      } catch (error) {
+        if (globalTimeout) {
+          clearTimeout(globalTimeout);
+        }
+        throw error;
       }
+    } catch (error) {
+      clearEvaluationTimeoutState(explicitTimeoutState);
       throw error;
     }
   }
