@@ -466,6 +466,32 @@ describe('Cloud blob upload', () => {
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
   });
 
+  it('should preserve URL siblings when storing mixed b64_json and URL output items', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largePngBase64 = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(2000),
+    ]).toString('base64');
+    const imageUrl = 'https://example.com/generated.png';
+    const response: ProviderResponse = {
+      output: JSON.stringify({
+        data: [{ url: imageUrl }, { b64_json: largePngBase64 }],
+      }),
+      isBase64: true,
+      format: 'json',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(JSON.parse(result?.output as string)).toEqual([
+      imageUrl,
+      'promptfoo://blob/abc123def456',
+    ]);
+    expect(result?.metadata?.blobUris).toEqual(['promptfoo://blob/abc123def456']);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+  });
+
   it('should record blob references embedded in output text', async () => {
     const blobIndexModule = await import('../../src/blobs/index');
     const mockRecordBlobReference = vi.mocked(blobIndexModule.recordBlobReference);
@@ -867,17 +893,21 @@ describe('Inline b64_json conversion (PROMPTFOO_INLINE_MEDIA=true)', () => {
     expect(result?.output).toBe(response.output);
   });
 
-  it('should skip items without b64_json field', async () => {
+  it('should preserve URL siblings alongside inline b64_json conversion', async () => {
     const pngBase64 = 'iVBORw0KGgoAAAANSUhEUg';
+    const imageUrl = 'https://example.com/image.png';
     const response: ProviderResponse = {
       output: JSON.stringify({
-        data: [{ url: 'https://example.com/image.png' }, { b64_json: pngBase64 }],
+        data: [{ url: imageUrl }, { b64_json: pngBase64 }],
       }),
       isBase64: true,
       format: 'json',
     };
 
     const result = await extractAndStoreBinaryData(response);
-    expect(result?.output).toBe(`data:image/png;base64,${pngBase64}`);
+    expect(JSON.parse(result?.output as string)).toEqual([
+      imageUrl,
+      `data:image/png;base64,${pngBase64}`,
+    ]);
   });
 });

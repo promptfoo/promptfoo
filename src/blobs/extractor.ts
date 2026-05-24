@@ -434,10 +434,24 @@ export function detectImageMimeType(b64: string): string {
   return 'image/png';
 }
 
-function extractB64Items(data: Array<Record<string, unknown>>): string[] {
-  return data.flatMap((item) =>
-    item?.b64_json && typeof item.b64_json === 'string' ? [item.b64_json] : [],
-  );
+type ImageOutputItem = { type: 'b64'; value: string } | { type: 'url'; value: string };
+
+function extractImageOutputItems(data: Array<Record<string, unknown>>): ImageOutputItem[] | null {
+  const items: ImageOutputItem[] = [];
+
+  for (const item of data) {
+    if (typeof item?.b64_json === 'string') {
+      items.push({ type: 'b64', value: item.b64_json });
+      continue;
+    }
+    if (typeof item?.url === 'string') {
+      items.push({ type: 'url', value: item.url });
+      continue;
+    }
+    return null;
+  }
+
+  return items.some((item) => item.type === 'b64') ? items : null;
 }
 
 function setOutputFromUris(next: ProviderResponse, uris: string[]): void {
@@ -458,47 +472,56 @@ async function handleB64JsonOutput(
       return false;
     }
 
-    const b64Items = extractB64Items(parsed.data);
-    if (b64Items.length === 0) {
+    const imageItems = extractImageOutputItems(parsed.data);
+    if (!imageItems) {
       return false;
     }
 
     if (!isBlobStorageEnabled()) {
-      const dataUris = b64Items.map((b64) => `data:${detectImageMimeType(b64)};base64,${b64}`);
-      setOutputFromUris(next, dataUris);
+      const inlineUris = imageItems.map((item) =>
+        item.type === 'b64'
+          ? `data:${detectImageMimeType(item.value)};base64,${item.value}`
+          : item.value,
+      );
+      setOutputFromUris(next, inlineUris);
       logger.debug('[BlobExtractor] Converted b64_json to inline data URI', {
         ...context,
-        count: dataUris.length,
+        count: inlineUris.length,
       });
       return true;
     }
 
-    const storedUris: string[] = [];
-    for (const b64 of b64Items) {
+    const outputUris: string[] = [];
+    for (const item of imageItems) {
+      if (item.type === 'url') {
+        outputUris.push(item.value);
+        continue;
+      }
       const stored = await storeOnce(
-        b64,
-        detectImageMimeType(b64),
+        item.value,
+        detectImageMimeType(item.value),
         'response.output.data[].b64_json',
         'image',
       );
       if (!stored) {
+        const storedCount = outputUris.filter((uri) => uri.startsWith(BLOB_SCHEME)).length;
         logger.debug('[BlobExtractor] Preserving b64_json output after partial blob storage', {
           ...context,
-          storedCount: storedUris.length,
-          totalCount: b64Items.length,
+          storedCount,
+          totalCount: imageItems.length,
         });
         return false;
       }
-      storedUris.push(stored.uri);
+      outputUris.push(stored.uri);
       logger.debug('[BlobExtractor] Stored image blob from b64_json', {
         ...context,
         hash: stored.hash,
       });
     }
-    setOutputFromUris(next, storedUris);
+    setOutputFromUris(next, outputUris);
     next.metadata = {
       ...(response.metadata || {}),
-      blobUris: storedUris,
+      blobUris: outputUris.filter((uri) => uri.startsWith(BLOB_SCHEME)),
       originalFormat: response.format,
     };
     return true;
