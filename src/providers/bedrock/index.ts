@@ -2371,9 +2371,17 @@ ${prompt}
             })
             .join('\n');
 
-          // If there's also content, combine them
+          // If there's also content, strip any think blocks before combining it
+          // with tool-call details so hidden reasoning never leaks through output.
           if (choice.message.content) {
-            return `${choice.message.content}\n\n${toolCalls}`;
+            const parsedContent = parseThinkBlocks(choice.message.content, showThinking);
+            const textOutput =
+              typeof parsedContent.output === 'string' ? parsedContent.output.trim() : '';
+
+            return {
+              output: textOutput ? `${textOutput}\n\n${toolCalls}` : toolCalls,
+              reasoning: parsedContent.reasoning,
+            };
           }
           return toolCalls;
         }

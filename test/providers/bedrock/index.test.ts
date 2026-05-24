@@ -3869,6 +3869,39 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result).toContain('15 * 8 + 42');
     });
 
+    it('should strip think blocks before returning tool call content', async () => {
+      const responseJson = {
+        choices: [
+          {
+            message: {
+              content: '<think>Private tool planning</think>I will call the calculator.',
+              tool_calls: [
+                {
+                  type: 'function',
+                  function: {
+                    name: 'calculate',
+                    arguments: '{"expression": "15 * 8 + 42"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+
+      expect(qwenHandler.output({ showThinking: false }, responseJson)).toEqual({
+        output:
+          'I will call the calculator.\n\nCalled function calculate with arguments: {"expression": "15 * 8 + 42"}',
+        reasoning: undefined,
+      });
+
+      expect(qwenHandler.output({ showThinking: true }, responseJson)).toEqual({
+        output:
+          'I will call the calculator.\n\nCalled function calculate with arguments: {"expression": "15 * 8 + 42"}',
+        reasoning: [{ type: 'think', content: 'Private tool planning' }],
+      });
+    });
+
     it('should handle thinking mode response', async () => {
       const config = { showThinking: true };
       const responseJson = {
