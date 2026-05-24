@@ -70,6 +70,7 @@ afterAll(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -250,7 +251,7 @@ describe('auth command', () => {
       vi.useFakeTimers();
       vi.mocked(isNonInteractive).mockReturnValue(false);
       vi.mocked(select).mockResolvedValueOnce('cloud');
-      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://proxy.promptfoo.example/root/');
+      vi.stubEnv('PROMPTFOO_CLOUD_API_URL', 'https://proxy.promptfoo.example/root/');
       vi.mocked(fetchWithTimeout)
         .mockResolvedValueOnce(
           createMockResponse({
@@ -291,6 +292,54 @@ describe('auth command', () => {
       expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
         'device-token',
         'https://proxy.promptfoo.example/root',
+      );
+    });
+
+    it('should ignore a saved enterprise host for the cloud device-code option', async () => {
+      vi.useFakeTimers();
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValueOnce('cloud');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://enterprise.example.com/root');
+      vi.mocked(fetchWithTimeout)
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              device_code: 'device-code',
+              user_code: 'ABCD-EFGH',
+              verification_uri: 'https://www.promptfoo.app/device',
+              verification_uri_complete: 'https://www.promptfoo.app/device?code=ABCD-EFGH',
+              expires_in: 60,
+              interval: 0,
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          createMockResponse({
+            ok: true,
+            body: {
+              access_token: 'device-token',
+              token_type: 'Bearer',
+            },
+          }),
+        );
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      const loginPromise = loginCmd!.parseAsync(['node', 'test']);
+      await vi.advanceTimersByTimeAsync(5000);
+      await loginPromise;
+
+      expect(fetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://api.promptfoo.app/api/v1/auth/device/code',
+        expect.objectContaining({ skipCloudAuth: true }),
+        expect.any(Number),
+      );
+      expect(cloudConfig.validateApiToken).toHaveBeenCalledWith(
+        'device-token',
+        'https://api.promptfoo.app',
       );
     });
 

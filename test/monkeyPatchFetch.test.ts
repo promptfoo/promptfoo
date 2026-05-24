@@ -178,6 +178,28 @@ describe('monkeyPatchFetch', () => {
     });
   });
 
+  it('should preserve explicit Authorization for cloud API requests', async () => {
+    const mockResponse = createMockResponse({ ok: true, status: 200 });
+    mockOriginalFetch.mockResolvedValue(mockResponse);
+
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('cached-api-key');
+
+    const url = CLOUD_API_HOST + '/api/test';
+    await monkeyPatchFetch(url, {
+      headers: {
+        authorization: 'Bearer device-token',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
+      headers: {
+        authorization: 'Bearer device-token',
+        'Content-Type': 'application/json',
+      },
+    });
+  });
+
   it('should log errors with request details', async () => {
     const error = new Error('Network error');
     mockOriginalFetch.mockRejectedValue(error);

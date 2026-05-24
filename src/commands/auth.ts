@@ -5,9 +5,9 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import opener from 'opener';
 import ora from 'ora';
-import { isNonInteractive } from '../envars';
+import { getEnvString, isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
-import { cloudConfig } from '../globalConfig/cloud';
+import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import {
@@ -476,6 +476,12 @@ function validateHttpUrl(value: string): true | string {
   }
 }
 
+function getPromptfooCloudApiHost(): string {
+  return normalizeApiHost(
+    getEnvString('PROMPTFOO_CLOUD_API_URL') || getEnvString('API_HOST', CLOUD_API_HOST),
+  );
+}
+
 async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<string> {
   if (cmdObj.host) {
     return normalizeApiHost(cmdObj.host);
@@ -498,7 +504,7 @@ async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<st
   });
 
   if (instanceType === 'cloud') {
-    return normalizeApiHost(cloudConfig.getApiHost());
+    return getPromptfooCloudApiHost();
   }
 
   const enterpriseUrl = await input({

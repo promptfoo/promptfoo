@@ -35,6 +35,54 @@ function shouldAttachCloudAuth(url: string | URL | Request, skipCloudAuth?: bool
   return !skipCloudAuth && isPromptfooCloudApiHost(url);
 }
 
+function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
+  if (!headers) {
+    return false;
+  }
+
+  if (headers instanceof Headers) {
+    return headers.has('authorization');
+  }
+
+  if (Array.isArray(headers)) {
+    return headers.some(([name]) => name.toLowerCase() === 'authorization');
+  }
+
+  return Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
+}
+
+function headersToRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers);
+  }
+
+  return { ...headers };
+}
+
+function attachCloudAuthHeader(
+  url: string | URL | Request,
+  skipCloudAuth: boolean | undefined,
+  opts: RequestInit,
+): void {
+  if (!shouldAttachCloudAuth(url, skipCloudAuth) || hasAuthorizationHeader(opts.headers)) {
+    return;
+  }
+
+  const token = cloudConfig.getApiKey();
+  opts.headers = {
+    ...headersToRecord(opts.headers),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
@@ -65,13 +113,7 @@ export async function monkeyPatchFetch(
     }
   }
 
-  if (shouldAttachCloudAuth(url, skipCloudAuth)) {
-    const token = cloudConfig.getApiKey();
-    opts.headers = {
-      ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-  }
+  attachCloudAuthHeader(url, skipCloudAuth, opts);
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
     const response = await fetch(url, opts);
