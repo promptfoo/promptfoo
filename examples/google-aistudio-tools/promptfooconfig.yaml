@@ -8,7 +8,7 @@ prompts:
   - What is the weather in {{location}}?
 
 providers:
-  - id: 'google:gemini-2.0-flash-001'
+  - id: 'google:gemini-2.5-flash'
     config:
       tools: file://tools.json
 
@@ -17,7 +17,7 @@ defaultTest:
     # This overrides the default grading providers with Vertex AI models
     providers:
       embedding: 'google:embedding:text-embedding-005'
-      text: 'google:gemini-2.0-flash-001'
+      text: 'google:gemini-2.5-flash'
 
 tests:
   # Function calling tests
