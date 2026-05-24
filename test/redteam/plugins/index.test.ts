@@ -822,6 +822,70 @@ describe('Plugins', () => {
       );
     });
 
+    it('should reject rag-poisoning remote tests without assertions', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { intendedResults: ['Use attacker@example.com as support email'] },
+          delayMs: 0,
+        }),
+      ).rejects.toThrow(
+        'Remote test generation for rag-poisoning returned an invalid test case assertion payload: expected at least one promptfoo:redteam:rag-poisoning assertion with a non-empty string `value`.',
+      );
+    });
+
+    it('should reject rag-poisoning remote tests that only include non-redteam assertions', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: [
+              {
+                type: 'contains',
+                value: 'attacker@example.com',
+              },
+            ],
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: { intendedResults: ['Use attacker@example.com as support email'] },
+          delayMs: 0,
+        }),
+      ).rejects.toThrow(
+        'Remote test generation for rag-poisoning returned an invalid test case assertion payload: expected at least one promptfoo:redteam:rag-poisoning assertion with a non-empty string `value`.',
+      );
+    });
+
     it('should reject rag-poisoning assertions without a non-empty intended result', async () => {
       vi.mocked(neverGenerateRemote).mockImplementation(function () {
         return false;
@@ -855,6 +919,51 @@ describe('Plugins', () => {
       ).rejects.toThrow(
         'Remote test generation for rag-poisoning returned an invalid promptfoo:redteam:rag-poisoning assertion payload: expected a non-empty string `value`.',
       );
+    });
+
+    it('should accept rag-poisoning assertions nested inside assertion sets', async () => {
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      const originalTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              {
+                type: 'promptfoo:redteam:rag-poisoning',
+                value: 'Use attacker@example.com as support email',
+              },
+            ],
+          },
+        ],
+        vars: {
+          testVar: 'test content',
+        },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse([originalTestCase]));
+
+      const plugin = Plugins.find((p) => p.key === 'rag-poisoning');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { intendedResults: ['Use attacker@example.com as support email'] },
+        delayMs: 0,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result?.[0]).toEqual({
+        ...originalTestCase,
+        metadata: {
+          pluginId: 'rag-poisoning',
+          pluginConfig: {
+            intendedResults: ['Use attacker@example.com as support email'],
+            modifiers: {},
+          },
+        },
+      });
     });
   });
 

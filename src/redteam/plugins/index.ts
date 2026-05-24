@@ -341,10 +341,12 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
   key: string,
   assertions: unknown,
   unsupportedAssertionTypes: Set<string>,
-): void {
+): boolean {
   if (!Array.isArray(assertions)) {
-    return;
+    return false;
   }
+
+  let hasRagPoisoningAssertion = false;
 
   for (const assertion of assertions) {
     if (!assertion || typeof assertion !== 'object') {
@@ -360,11 +362,12 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
         );
       }
 
-      collectUnsupportedRemoteRedteamAssertionTypes(
-        key,
-        assertion.assert,
-        unsupportedAssertionTypes,
-      );
+      hasRagPoisoningAssertion =
+        collectUnsupportedRemoteRedteamAssertionTypes(
+          key,
+          assertion.assert,
+          unsupportedAssertionTypes,
+        ) || hasRagPoisoningAssertion;
       continue;
     }
 
@@ -382,15 +385,19 @@ function collectUnsupportedRemoteRedteamAssertionTypes(
           'expected a non-empty string `value`',
         );
       }
+      hasRagPoisoningAssertion = true;
     }
     if (!getGraderById(assertionType)) {
       unsupportedAssertionTypes.add(assertionType);
     }
   }
+
+  return hasRagPoisoningAssertion;
 }
 
 function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): void {
   const unsupportedAssertionTypes = new Set<string>();
+  const requiresRagPoisoningAssertion = key === 'rag-poisoning';
 
   for (const testCase of testCases) {
     if (testCase.assert !== undefined && !Array.isArray(testCase.assert)) {
@@ -401,7 +408,18 @@ function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): vo
       );
     }
 
-    collectUnsupportedRemoteRedteamAssertionTypes(key, testCase.assert, unsupportedAssertionTypes);
+    const hasRagPoisoningAssertion = collectUnsupportedRemoteRedteamAssertionTypes(
+      key,
+      testCase.assert,
+      unsupportedAssertionTypes,
+    );
+    if (requiresRagPoisoningAssertion && !hasRagPoisoningAssertion) {
+      throw new InvalidRemoteRedteamAssertionPayloadError(
+        key,
+        'test case',
+        'expected at least one promptfoo:redteam:rag-poisoning assertion with a non-empty string `value`',
+      );
+    }
   }
 
   if (unsupportedAssertionTypes.size > 0) {
