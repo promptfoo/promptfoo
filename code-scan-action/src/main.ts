@@ -53,10 +53,40 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const DEFAULT_MINIMUM_SEVERITY = 'medium';
+
+/**
+ * Resolve the effective minimum severity from the two supported inputs.
+ *
+ * The two inputs do NOT carry defaults in `action.yml`. That keeps
+ * `core.getInput()` returning `''` when a workflow has not set the input,
+ * which is what lets a workflow that only sets the alias (`minimum-severity`)
+ * actually take effect. Precedence is:
+ *
+ *   1. `min-severity` if set
+ *   2. `minimum-severity` if set
+ *   3. fallback to `DEFAULT_MINIMUM_SEVERITY`
+ *
+ * If both are set to different values, `min-severity` wins and a warning is
+ * emitted so the workflow author can collapse the inputs.
+ */
+function resolveMinimumSeverityInput(): string {
+  const primary = core.getInput('min-severity').trim();
+  const alias = core.getInput('minimum-severity').trim();
+
+  if (primary && alias && primary !== alias) {
+    core.warning(
+      `Both min-severity (${primary}) and minimum-severity (${alias}) are set; using min-severity. minimum-severity is an alias and should only be set when min-severity is unset.`,
+    );
+  }
+
+  return primary || alias || DEFAULT_MINIMUM_SEVERITY;
+}
+
 function getActionInputs(): ActionInputs {
   return {
     apiHost: core.getInput('api-host'),
-    minimumSeverity: core.getInput('min-severity') || core.getInput('minimum-severity'),
+    minimumSeverity: resolveMinimumSeverityInput(),
     configPath: core.getInput('config-path'),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
