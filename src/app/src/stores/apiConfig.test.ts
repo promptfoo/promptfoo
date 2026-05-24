@@ -49,4 +49,25 @@ describe('mergeApiConfigPersistedState', () => {
 
     expect(merged.apiBaseUrl).toBe('http://localhost:15500');
   });
+
+  it('ignores malformed persisted state', () => {
+    const currentState = createApiConfig('http://localhost:18601');
+    const merged = mergeApiConfigPersistedState('not-json-state', currentState);
+
+    expect(merged.apiBaseUrl).toBe('http://localhost:18601');
+  });
+
+  it('does not let persisted state overwrite store actions', () => {
+    const currentState = createApiConfig('http://localhost:18601');
+    const merged = mergeApiConfigPersistedState(
+      {
+        apiBaseUrl: 'https://api.example.com',
+        setApiBaseUrl: 'not-a-function',
+      },
+      currentState,
+    );
+
+    expect(merged.apiBaseUrl).toBe('https://api.example.com');
+    expect(merged.setApiBaseUrl).toBe(currentState.setApiBaseUrl);
+  });
 });

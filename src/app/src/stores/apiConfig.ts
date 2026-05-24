@@ -12,6 +12,21 @@ export interface ApiConfig {
 
 const LEGACY_LOCAL_API_PORT = '15500';
 
+type PersistedApiConfig = Pick<Partial<ApiConfig>, 'apiBaseUrl'>;
+
+function getPersistedApiConfig(persistedState: unknown): PersistedApiConfig {
+  if (
+    typeof persistedState !== 'object' ||
+    persistedState === null ||
+    Array.isArray(persistedState)
+  ) {
+    return {};
+  }
+
+  const apiBaseUrl = (persistedState as { apiBaseUrl?: unknown }).apiBaseUrl;
+  return typeof apiBaseUrl === 'string' ? { apiBaseUrl } : {};
+}
+
 function isLegacyLocalApiBaseUrl(apiBaseUrl: unknown) {
   if (typeof apiBaseUrl !== 'string') {
     return false;
@@ -21,7 +36,7 @@ function isLegacyLocalApiBaseUrl(apiBaseUrl: unknown) {
     const url = new URL(apiBaseUrl);
     return (
       url.protocol === 'http:' &&
-      ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) &&
+      ['localhost', '127.0.0.1', '[::1]', '::1'].includes(url.hostname) &&
       url.port === LEGACY_LOCAL_API_PORT &&
       ['', '/'].includes(url.pathname)
     );
@@ -34,7 +49,7 @@ export function mergeApiConfigPersistedState(
   persistedState: unknown,
   currentState: ApiConfig,
 ): ApiConfig {
-  const persistedConfig = persistedState as Partial<ApiConfig> | undefined;
+  const persistedConfig = getPersistedApiConfig(persistedState);
   const currentApiBaseUrl = currentState.apiBaseUrl;
 
   if (
