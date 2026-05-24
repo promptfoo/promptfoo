@@ -58,6 +58,20 @@ describe('Dialog', () => {
     );
   });
 
+  it('keeps aria-describedby unset when visible descriptions are enabled but absent', () => {
+    render(
+      <Dialog defaultOpen>
+        <DialogContent hideDescription={false}>
+          <DialogTitle>Undescribed dialog</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    expect(screen.getByRole('dialog', { name: 'Undescribed dialog' })).not.toHaveAttribute(
+      'aria-describedby',
+    );
+  });
+
   it('closes dialog on close button click', async () => {
     const user = userEvent.setup();
     render(

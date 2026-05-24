@@ -171,6 +171,75 @@ describe('setupReadiness', () => {
       expect(readiness.testCasesMissingVariables).toEqual([]);
     });
 
+    it('checks variables only for prompts allowed by default test prompt filters', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: [
+          { raw: 'Write about {{topic}}', label: 'Topic prompt' },
+          { raw: 'Reveal {{secret}}', label: 'Secret prompt' },
+        ],
+        defaultTest: { prompts: ['Topic prompt'] },
+        tests: [{ vars: { topic: 'reliability' } }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.requiredVariables).toEqual(['topic', 'secret']);
+      expect(readiness.testCasesMissingVariables).toEqual([]);
+    });
+
+    it('uses top-level vars for property paths in prompt templates', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write for {{ user.name }}'],
+        tests: [{ vars: { user: { name: 'Ada' } } }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.requiredVariables).toEqual(['user']);
+      expect(readiness.testCasesMissingVariables).toEqual([]);
+    });
+
+    it('does not treat raw prompt text as a prompt reference label', () => {
+      const readiness = getSetupReadiness({
+        providers: [{ id: 'openai:gpt-4.1', prompts: ['Reveal {{secret}}'] }],
+        prompts: [{ raw: 'Reveal {{secret}}' } as any],
+        tests: [{}],
+      });
+
+      expect(readiness.testCasesMissingVariables).toEqual([]);
+    });
+
+    it('treats file-backed vars as externally supplied instead of missing', () => {
+      expect(
+        getSetupReadiness({
+          providers: ['openai:gpt-4.1'],
+          prompts: ['Write about {{topic}} for {{audience}}'],
+          defaultTest: { vars: 'file://defaults.yaml' } as any,
+          tests: [{ vars: { topic: 'reliability' } }],
+        }).testCasesMissingVariables,
+      ).toEqual([]);
+
+      expect(
+        getSetupReadiness({
+          providers: ['openai:gpt-4.1'],
+          prompts: ['Write about {{topic}}'],
+          tests: [{ vars: ['file://case-vars.yaml'] } as any],
+        }).testCasesMissingVariables,
+      ).toEqual([]);
+    });
+
+    it('treats file-backed vars as supplying context assertion prerequisites', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Answer with context'],
+        defaultTest: { vars: ['file://defaults.yaml'] } as any,
+        tests: [{ assert: [{ type: 'context-faithfulness' }] }],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.testCasesMissingAssertionVariables).toEqual([]);
+    });
+
     it('blocks context assertions until required query and context values are supplied', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],
@@ -199,7 +268,7 @@ describe('setupReadiness', () => {
       expect(readiness.testCasesMissingAssertionVariables).toEqual([]);
     });
 
-    it('requires context assertion queries to be strings at readiness time', () => {
+    it('accepts query arrays because runtime variable expansion can scalarize them', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],
         prompts: ['Answer using retrieved material'],
@@ -207,6 +276,22 @@ describe('setupReadiness', () => {
           {
             assert: [{ type: 'context-faithfulness' }],
             vars: { query: ['not a runtime query'], context: ['retrieved passage'] },
+          },
+        ],
+      });
+
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.testCasesMissingAssertionVariables).toEqual([]);
+    });
+
+    it('treats a blank context transform as missing context for RAG assertions', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Answer using retrieved material'],
+        tests: [
+          {
+            assert: [{ type: 'context-faithfulness', contextTransform: '   ' }],
+            vars: { query: 'What changed?' },
           },
         ],
       });
@@ -480,6 +565,38 @@ describe('setupReadiness', () => {
       ).toBe(true);
     });
 
+    it('blocks unsupported assertion types and malformed trace assertions', () => {
+      const baseConfig = {
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Use tracing'],
+      };
+
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'containz' as any, value: 'hello' }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [{ assert: [{ type: 'trace-span-count' as const, value: { max: 1 } }] }],
+        }).isReadyToRun,
+      ).toBe(false);
+      expect(
+        getSetupReadiness({
+          ...baseConfig,
+          tests: [
+            {
+              assert: [
+                { type: 'trace-span-duration' as const, value: { pattern: 'fetch*', max: 250 } },
+              ],
+            },
+          ],
+        }).isReadyToRun,
+      ).toBe(true);
+    });
+
     it('validates trajectory goal content and normalized score thresholds', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],
@@ -607,6 +724,23 @@ describe('setupReadiness', () => {
       expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
     });
 
+    it('requires multiple outputs after applying default test provider and prompt filters', () => {
+      const readiness = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        prompts: [
+          { raw: 'Write a concise reply', label: 'Short prompt' },
+          { raw: 'Write a detailed reply', label: 'Long prompt' },
+        ],
+        defaultTest: {
+          providers: ['openai:gpt-4.1'],
+          prompts: ['Short prompt'],
+        },
+        tests: [{ assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] }],
+      });
+
+      expect(readiness.issues).toContainEqual(expect.objectContaining({ id: 'comparisonOutputs' }));
+    });
+
     it('routes select-best fixes to the axis the user can still grow', () => {
       // One provider, no prompts → the comparisonOutputs fix is in step 2.
       const oneProviderNoPrompts = getSetupReadiness({
@@ -665,7 +799,31 @@ describe('setupReadiness', () => {
       });
     });
 
-    it('rejects authored moderation categories unless they use runtime array form', () => {
+    it('validates default max-score assertions for external and string-array tests', () => {
+      const externalTests = getSetupReadiness({
+        providers: ['openai:gpt-4.1', 'anthropic:messages:claude-sonnet-4'],
+        prompts: ['Write a reply'],
+        defaultTest: { assert: [{ type: 'max-score' }] },
+        tests: 'file://tests.csv',
+      });
+      expect(externalTests.issues).toContainEqual({
+        id: 'comparisonScoring',
+        message: 'Choose highest score needs at least one other assertion to score each output.',
+        stepId: 3,
+      });
+
+      const stringArrayTests = getSetupReadiness({
+        providers: ['openai:gpt-4.1'],
+        prompts: ['Write a reply'],
+        defaultTest: { assert: [{ type: 'select-best', value: 'Choose the clearer reply' }] },
+        tests: ['file://tests.csv'] as any,
+      });
+      expect(stringArrayTests.issues).toContainEqual(
+        expect.objectContaining({ id: 'comparisonOutputs' }),
+      );
+    });
+
+    it('accepts blank moderation categories and runtime array form', () => {
       const baseConfig = {
         providers: ['openai:gpt-4.1'],
         prompts: ['Write a reply'],
@@ -674,9 +832,9 @@ describe('setupReadiness', () => {
       expect(
         getSetupReadiness({
           ...baseConfig,
-          tests: [{ assert: [{ type: 'moderation', value: 'hate' }] }],
+          tests: [{ assert: [{ type: 'moderation', value: '' }] }],
         }).isReadyToRun,
-      ).toBe(false);
+      ).toBe(true);
       expect(
         getSetupReadiness({
           ...baseConfig,
@@ -712,9 +870,18 @@ describe('setupReadiness', () => {
       expect(
         extractVariablesFromPrompts([
           '{{ topic | lower }} {{ user.name }}',
-          '{% if audience %}Tailor the response{% endif %}',
+          '{% if not audience %}Tailor the response{% endif %}',
         ]),
-      ).toEqual(['topic', 'user.name', 'audience']);
+      ).toEqual(['topic', 'user', 'audience']);
+    });
+
+    it('does not treat loop locals as required vars inside loops only', () => {
+      expect(
+        extractVariablesFromPrompts([
+          '{% for item in items %}{{ item }}{% endfor %}Afterward: {{ item }}',
+          '{% for key, value in entries %}{{ key }}={{ value }}{% endfor %}',
+        ]),
+      ).toEqual(['items', 'item', 'entries']);
     });
   });
 });

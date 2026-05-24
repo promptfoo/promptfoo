@@ -37,9 +37,10 @@ export function getRequiredAssertionVariables(assertions: unknown[] | undefined)
   // unpacks any assert-set wrappers above, so any remaining item with a context type
   // is an Assertion, but TypeScript can't narrow that through Set.has — read defensively.
   if (
-    contextAssertions.some(
-      (assertion) => (assertion as { contextTransform?: unknown }).contextTransform === undefined,
-    )
+    contextAssertions.some((assertion) => {
+      const contextTransform = (assertion as { contextTransform?: unknown }).contextTransform;
+      return typeof contextTransform !== 'string' || contextTransform.trim() === '';
+    })
   ) {
     requiredVariables.push('context');
   }
@@ -58,17 +59,16 @@ function hasUsableVariable(value: unknown): boolean {
   );
 }
 
-function hasUsableAssertionVariable(variable: string, value: unknown): boolean {
-  return variable === 'query'
-    ? typeof value === 'string' && value.trim() !== ''
-    : hasUsableVariable(value);
-}
-
 export function getMissingAssertionVariables(
   assertions: unknown[] | undefined,
   vars: Record<string, unknown>,
+  varsMayComeFromExternalFile = false,
 ): string[] {
+  if (varsMayComeFromExternalFile) {
+    return [];
+  }
+
   return getRequiredAssertionVariables(assertions).filter(
-    (variable) => !hasUsableAssertionVariable(variable, vars[variable]),
+    (variable) => !hasUsableVariable(vars[variable]),
   );
 }

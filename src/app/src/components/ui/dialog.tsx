@@ -12,6 +12,20 @@ const DialogPortal = DialogPrimitive.Portal;
 
 const DialogClose = DialogPrimitive.Close;
 
+function containsDialogDescription(children: React.ReactNode): boolean {
+  return React.Children.toArray(children).some((child) => {
+    if (!React.isValidElement(child)) {
+      return false;
+    }
+
+    if (child.type === DialogDescription) {
+      return true;
+    }
+
+    return containsDialogDescription((child.props as { children?: React.ReactNode }).children);
+  });
+}
+
 function DialogOverlay({
   className,
   ref,
@@ -42,12 +56,14 @@ function DialogContent({
   /** When true, hides the default close button (useful when providing a custom close button) */
   hideCloseButton?: boolean;
 }) {
+  const hasVisibleDescription = !hideDescription && containsDialogDescription(children);
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         ref={ref}
-        {...(hideDescription ? { 'aria-describedby': undefined } : {})}
+        {...(hasVisibleDescription ? {} : { 'aria-describedby': undefined })}
         className={cn(
           'fixed left-[50%] top-[50%] z-(--z-modal) grid w-full max-w-lg max-h-[calc(100vh-4rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto bg-card p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
           className,
