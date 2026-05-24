@@ -121,7 +121,19 @@ export default function ConfigAgentDrawer({
     0,
     PHASES.findIndex((phase) => phase.key === session?.phase),
   );
-  const canApplyConfig = session?.phase === 'complete' && finalConfig;
+  const canApplyConfig = session?.phase === 'complete' && Boolean(finalConfig);
+
+  const handleSelectOption = useCallback(
+    (optionId: string) => {
+      if (optionId === 'apply' && canApplyConfig) {
+        handleApplyConfig();
+        return;
+      }
+
+      selectOption(optionId);
+    },
+    [canApplyConfig, handleApplyConfig, selectOption],
+  );
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -211,7 +223,7 @@ export default function ConfigAgentDrawer({
                     messages={messages}
                     isLoading={isLoading}
                     onSendMessage={sendMessage}
-                    onSelectOption={selectOption}
+                    onSelectOption={handleSelectOption}
                     onSubmitApiKey={submitApiKey}
                   />
                 </div>

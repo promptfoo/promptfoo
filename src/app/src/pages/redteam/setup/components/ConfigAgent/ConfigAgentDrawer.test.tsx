@@ -181,4 +181,39 @@ describe('ConfigAgentDrawer', () => {
     expect(hookState.reset).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('applies a completed config from the chat apply option', async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const onConfigDiscovered = vi.fn();
+
+    mockUseConfigAgent.mockReturnValue({
+      ...hookState,
+      session: {
+        id: 'session-1',
+        baseUrl: 'https://api.example.com',
+        phase: 'complete',
+        verified: true,
+        finalConfig,
+      },
+      isComplete: true,
+      finalConfig,
+    });
+
+    render(
+      <ConfigAgentDrawer
+        open
+        onClose={onClose}
+        initialUrl="https://api.example.com"
+        onConfigDiscovered={onConfigDiscovered}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /start auto-discovery/i }));
+    await user.click(screen.getByRole('button', { name: 'choose option' }));
+
+    expect(hookState.selectOption).not.toHaveBeenCalled();
+    expect(onConfigDiscovered).toHaveBeenCalledWith(finalConfig, 'https://api.example.com');
+    expect(onClose).toHaveBeenCalled();
+  });
 });
