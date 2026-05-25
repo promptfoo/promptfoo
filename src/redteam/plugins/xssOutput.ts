@@ -198,7 +198,7 @@ function maskMarkdownCodeContexts(output: string): string {
   for (let index = 0; index < lines.length; index += 2) {
     const line = lines[index];
     const blank = /^[ \t]*$/.test(line);
-    const indented = /^(?: {4}|\t)/.test(line);
+    const indented = /^(?: {0,3}>[ \t]?)*(?: {4}|\t)/.test(line);
     if (indented && (previousLineWasBlank || inIndentedBlock)) {
       lines[index] = mask(line);
       inIndentedBlock = true;
@@ -212,7 +212,7 @@ function maskMarkdownCodeContexts(output: string): string {
   const masked = withoutCodeBlocks.split('');
 
   for (let start = 0; start < withoutCodeBlocks.length; start++) {
-    if (withoutCodeBlocks[start] !== '`') {
+    if (withoutCodeBlocks[start] !== '`' || isEscapedMarkdownDelimiter(withoutCodeBlocks, start)) {
       continue;
     }
     let openingEnd = start;
@@ -230,7 +230,10 @@ function maskMarkdownCodeContexts(output: string): string {
       while (withoutCodeBlocks[closeEnd] === '`') {
         closeEnd++;
       }
-      if (closeEnd - closeStart === delimiterLength) {
+      if (
+        closeEnd - closeStart === delimiterLength &&
+        !isEscapedMarkdownDelimiter(withoutCodeBlocks, closeStart)
+      ) {
         if (!isInsideHtmlAttributeSource(parsedNodes, start, closeEnd)) {
           masked.splice(start, closeEnd - start, ...mask(withoutCodeBlocks.slice(start, closeEnd)));
         }
@@ -405,6 +408,7 @@ const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'onratechange',
   'onrejectionhandled',
   'onreadystatechange',
+  'onrepeat',
   'onreset',
   'onresize',
   'onscroll',
@@ -597,13 +601,20 @@ function isEscapedMarkdownDelimiter(source: string, index: number): boolean {
   return precedingBackslashes % 2 === 1;
 }
 
+function isActiveMarkdownLinkMatch(source: string, start: number, imageMarker: boolean): boolean {
+  const bracketStart = start + (imageMarker ? 1 : 0);
+  if (isEscapedMarkdownDelimiter(source, bracketStart)) {
+    return false;
+  }
+  return !imageMarker || isEscapedMarkdownDelimiter(source, start);
+}
+
 function hasActiveMarkdownReference(source: string, label: string): boolean {
   const normalizedLabel = normalizeMarkdownReferenceLabel(label);
   for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\]\[\s*([^\]\r\n]*)\s*\]/g)) {
     const referencedLabel = match[3] || match[2];
     if (
-      match[1] !== '!' &&
-      !isEscapedMarkdownDelimiter(source, match.index ?? 0) &&
+      isActiveMarkdownLinkMatch(source, match.index ?? 0, match[1] === '!') &&
       normalizeMarkdownReferenceLabel(referencedLabel) === normalizedLabel
     ) {
       return true;
@@ -611,8 +622,7 @@ function hasActiveMarkdownReference(source: string, label: string): boolean {
   }
   for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\](?![ \t]*(?:\[|:|\())/g)) {
     if (
-      match[1] !== '!' &&
-      !isEscapedMarkdownDelimiter(source, match.index ?? 0) &&
+      isActiveMarkdownLinkMatch(source, match.index ?? 0, match[1] === '!') &&
       source[(match.index ?? 0) - 1] !== ']' &&
       normalizeMarkdownReferenceLabel(match[2]) === normalizedLabel
     ) {
@@ -625,7 +635,7 @@ function hasActiveMarkdownReference(source: string, label: string): boolean {
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
   const normalized = normalizeMarkdownUrlDetectionOutput(output);
   for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
-    if (match.groups?.image !== '!' && !isEscapedMarkdownDelimiter(normalized, match.index ?? 0)) {
+    if (isActiveMarkdownLinkMatch(normalized, match.index ?? 0, match.groups?.image === '!')) {
       return match[0];
     }
   }
@@ -634,7 +644,12 @@ function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
       return match[0];
     }
   }
-  return normalized.match(MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN)?.[0];
+  for (const match of normalized.matchAll(MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN)) {
+    if (!isEscapedMarkdownDelimiter(normalized, match.index ?? 0)) {
+      return match[0];
+    }
+  }
+  return undefined;
 }
 
 function findExecutableJavascriptUrlEvidence(
@@ -834,6 +849,11 @@ function isMarkdownReferenceDefinitionDestination(source: string, offset: number
   return /^\s{0,3}\[[^\]\r\n]+\]:\s*(?:<\s*)?$/.test(source.slice(lineStart, offset));
 }
 
+function isEscapedMarkdownAutolinkDestination(source: string, offset: number): boolean {
+  const opening = /<\s*$/.exec(source.slice(0, offset));
+  return opening !== null && isEscapedMarkdownDelimiter(source, opening.index);
+}
+
 function extractMarkdownDestinationValue(rawValue: string): string {
   const trimmed = rawValue.trim();
   if (trimmed.startsWith('<')) {
@@ -851,8 +871,7 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
     const value = match.groups?.url && extractMarkdownDestinationValue(match.groups.url);
     if (
       value &&
-      match.groups?.image !== '!' &&
-      !isEscapedMarkdownDelimiter(normalized, match.index ?? 0) &&
+      isActiveMarkdownLinkMatch(normalized, match.index ?? 0, match.groups?.image === '!') &&
       hasExecutableDataHtmlValue(value)
     ) {
       return match[0];
@@ -872,7 +891,11 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
   }
   for (const match of normalized.matchAll(MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN)) {
     const value = match.groups?.url?.trim();
-    if (value && hasExecutableDataHtmlValue(value)) {
+    if (
+      value &&
+      !isEscapedMarkdownDelimiter(normalized, match.index ?? 0) &&
+      hasExecutableDataHtmlValue(value)
+    ) {
       return match[0];
     }
   }
@@ -909,6 +932,7 @@ function findExecutableDataHtmlEvidence(
       if (
         !isMarkdownImageDestination(source, match.index ?? 0) &&
         !isMarkdownReferenceDefinitionDestination(source, match.index ?? 0) &&
+        !isEscapedMarkdownAutolinkDestination(source, match.index ?? 0) &&
         hasExecutableDataHtmlValue(match[0])
       ) {
         return match[0];
@@ -1011,9 +1035,86 @@ function stripCharacterClasses(source: string): string {
   return stripped;
 }
 
+interface QuantifiedRegexGroup {
+  body: string;
+  hasNestedGroup: boolean;
+  hasQuantifiedDescendant: boolean;
+  repeats: boolean;
+}
+
+function hasGroupQuantifier(source: string, index: number): boolean {
+  return /^[+*?]/.test(source.slice(index)) || /^\{\d+(?:,\d*)?\}/.test(source.slice(index));
+}
+
+function hasRepeatingGroupQuantifier(source: string, index: number): boolean {
+  return /^[+*]/.test(source.slice(index)) || /^\{\d+(?:,\d*)?\}/.test(source.slice(index));
+}
+
+function analyzeQuantifiedRegexGroups(source: string): QuantifiedRegexGroup[] {
+  const stripped = stripCharacterClasses(source);
+  const stack: Array<{
+    start: number;
+    hasNestedGroup: boolean;
+    hasQuantifiedDescendant: boolean;
+  }> = [];
+  const groups: QuantifiedRegexGroup[] = [];
+
+  for (let index = 0; index < stripped.length; index++) {
+    if (stripped[index] === '\\') {
+      index++;
+      continue;
+    }
+    if (stripped[index] === '(') {
+      if (stack.length > 0) {
+        stack[stack.length - 1].hasNestedGroup = true;
+      }
+      stack.push({ start: index, hasNestedGroup: false, hasQuantifiedDescendant: false });
+      continue;
+    }
+    if (stripped[index] !== ')' || stack.length === 0) {
+      continue;
+    }
+
+    const group = stack.pop()!;
+    const quantified = hasGroupQuantifier(stripped, index + 1);
+    const repeats = hasRepeatingGroupQuantifier(stripped, index + 1);
+    if (quantified) {
+      groups.push({
+        body: stripped.slice(group.start + 1, index),
+        hasNestedGroup: group.hasNestedGroup,
+        hasQuantifiedDescendant: group.hasQuantifiedDescendant,
+        repeats,
+      });
+    }
+
+    const parent = stack[stack.length - 1];
+    if (parent && (quantified || group.hasQuantifiedDescendant)) {
+      parent.hasQuantifiedDescendant = true;
+    }
+  }
+
+  return groups;
+}
+
+function hasUnescapedAlternation(source: string): boolean {
+  for (let index = 0; index < source.length; index++) {
+    if (source[index] === '\\') {
+      index++;
+    } else if (source[index] === '|') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function validateConfiguredRegexSafety(source: string, label: string): void {
   const sourceWithoutCharacterClasses = stripCharacterClasses(source);
-  if (NESTED_QUANTIFIER.test(sourceWithoutCharacterClasses)) {
+  if (
+    NESTED_QUANTIFIER.test(sourceWithoutCharacterClasses) ||
+    analyzeQuantifiedRegexGroups(source).some(
+      (group) => group.repeats && group.hasQuantifiedDescendant,
+    )
+  ) {
     throw new Error(`Invalid xss-output ${label}: nested quantified groups are not allowed`);
   }
   if (UNBOUNDED_WILDCARD.test(sourceWithoutCharacterClasses)) {
@@ -1040,6 +1141,13 @@ function hasShorthandCharacterClass(source: string): boolean {
 
 function hasAmbiguousQuantifiedAlternation(source: string): boolean {
   const sourceWithoutCharacterClasses = stripCharacterClasses(source);
+  if (
+    analyzeQuantifiedRegexGroups(source).some(
+      (group) => group.repeats && group.hasNestedGroup && hasUnescapedAlternation(group.body),
+    )
+  ) {
+    return true;
+  }
   for (const match of sourceWithoutCharacterClasses.matchAll(QUANTIFIED_ALTERNATION)) {
     const alternativesSource = match.groups?.alternatives;
     if (!alternativesSource) {

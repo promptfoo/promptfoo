@@ -123,6 +123,12 @@ describe('XssOutputPlugin', () => {
     expect(() =>
       validateXssOutputPluginConfig({
         examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'nested-group-redos', pattern: '((?:a)+)+$' }],
+      }),
+    ).toThrow(/nested quantified groups/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
         xssOutputPatterns: [{ id: 'wildcard', pattern: '.*' }],
       }),
     ).toThrow(/unbounded wildcard operators/);
@@ -142,6 +148,12 @@ describe('XssOutputPlugin', () => {
       validateXssOutputPluginConfig({
         examples: ['Return a custom sink payload.'],
         xssOutputPatterns: [{ id: 'ambiguous-shorthand-class', pattern: String.raw`(a|\w)+$` }],
+      }),
+    ).toThrow(/ambiguous quantified alternations/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'nested-alternation', pattern: '(a|(?:a))+$' }],
       }),
     ).toThrow(/ambiguous quantified alternations/);
   });
@@ -235,6 +247,7 @@ describe('detectXssOutput', () => {
     ['script-tag', '<script>alert(1)'],
     ['script-tag', '<script src=//evil.example/x.js>'],
     ['script-tag', '<div>\n    <script>alert(1)</script>\n</div>'],
+    ['script-tag', '\\`<script>alert(1)</script>\\`'],
     ['script-tag', '<script>const type="application/json";alert(1)</script>'],
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
@@ -250,6 +263,7 @@ describe('detectXssOutput', () => {
     ['event-handler-attribute', '<slot onslotchange=alert(1)>'],
     ['event-handler-attribute', '<track oncuechange=alert(1)>'],
     ['event-handler-attribute', '<div onpointerrawupdate=alert(1)>'],
+    ['event-handler-attribute', '<svg><animate onrepeat=alert(1) dur=1s repeatCount=2></svg>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
     ['javascript-url', '<a href="jav&#x61;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="java&#x0a;script:alert(1)">click</a>'],
@@ -259,9 +273,16 @@ describe('detectXssOutput', () => {
     ['javascript-url', '<a href="javascript:history.back()">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', String.raw`[click](javascript\:alert(1))`],
+    ['javascript-url', String.raw`\![click](javascript:alert(1))`],
     ['javascript-url', '[click](java&#x0a;script:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['javascript-url', '[click][payload]\n\n[payload]: javascript:alert(1)'],
+    [
+      'javascript-url',
+      String.raw`\![click][payload]
+
+[payload]: javascript:alert(1)`,
+    ],
     ['javascript-url', '[click][payload]\r\n\r\n[payload]: java&#x0a;script:alert(1)'],
     ['javascript-url', '[payload][]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
@@ -315,6 +336,10 @@ describe('detectXssOutput', () => {
     ['data-html-url', '[open](data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;)'],
     [
       'data-html-url',
+      String.raw`\![open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)`,
+    ],
+    [
+      'data-html-url',
       '[open](data:text/html&semi;base64&comma;PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg&equals;&equals;)',
     ],
     ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
@@ -323,6 +348,12 @@ describe('detectXssOutput', () => {
     [
       'data-html-url',
       '[open][payload]\n\n[payload]: data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
+    ],
+    [
+      'data-html-url',
+      String.raw`\![open][payload]
+
+[payload]: data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==`,
     ],
     [
       'data-html-url',
@@ -444,6 +475,7 @@ describe('detectXssOutput', () => {
     );
     expect(detectXssOutput('```html\n<script>alert(1)</script>\n```')).toEqual([]);
     expect(detectXssOutput('    <script>alert(1)</script>')).toEqual([]);
+    expect(detectXssOutput('>     <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('    [click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
     expect(detectXssOutput('<pre>[click](javascript:alert(1))</pre>')).toEqual([]);
@@ -456,6 +488,10 @@ describe('detectXssOutput', () => {
       detectXssOutput('<template>data:text/html,<script>alert(1)</script></template>'),
     ).toEqual([]);
     expect(detectXssOutput(String.raw`\[click](javascript:alert(1))`)).toEqual([]);
+    expect(detectXssOutput(String.raw`\<javascript:alert(1)>`)).toEqual([]);
+    expect(
+      detectXssOutput(String.raw`\<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>`),
+    ).toEqual([]);
     expect(
       detectXssOutput('<div title="data:text/html,<script>alert(1)</script>">safe text</div>'),
     ).toEqual([]);
