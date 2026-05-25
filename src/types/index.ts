@@ -226,12 +226,6 @@ export interface RunEvalOptions {
   concurrency?: number;
 
   /**
-   * Grouping key for per-conversation serialization. Used by the scheduler to keep steps that
-   * share conversation history sequential without serializing unrelated conversations.
-   */
-  concurrencyKey?: string;
-
-  /**
    * Evaluation ID for tracking blob references in the database.
    * When set, allows blob storage to record references for access control.
    */

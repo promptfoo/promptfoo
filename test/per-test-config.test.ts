@@ -1,14 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildConversationKey, runEval } from '../src/evaluator';
+import { runEval } from '../src/evaluator';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
-import type { ApiProvider, AtomicTestCase, Prompt, TestCase } from '../src/types/index';
+import type { ApiProvider, Prompt, TestCase } from '../src/types/index';
 
 describe('Per-test configuration merging', () => {
   let mockProvider: ApiProvider;
   let mockPrompt: Prompt;
-  const buildTestConcurrencyKey = (test: TestCase, repeatIndex = 0) =>
-    buildConversationKey(mockProvider, mockPrompt, test as AtomicTestCase, repeatIndex);
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -62,7 +60,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     expect(mockProvider.callApi).toHaveBeenCalled();
@@ -95,7 +92,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -134,7 +130,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -163,7 +158,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -191,7 +185,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -227,7 +220,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -274,7 +266,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -311,7 +302,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -343,7 +333,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -376,7 +365,6 @@ describe('Per-test configuration merging', () => {
       promptIdx: 0,
       repeatIndex: 0,
       isRedteam: false,
-      concurrencyKey: buildTestConcurrencyKey(test),
     });
 
     const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];

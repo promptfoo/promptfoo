@@ -635,19 +635,14 @@ interface ProviderCallResult {
 }
 
 function createRunEvalState({
-  concurrencyKey,
   provider,
   prompt,
   repeatIndex,
   test,
-}: Pick<
-  RunEvalOptions,
-  'concurrencyKey' | 'provider' | 'prompt' | 'repeatIndex' | 'test'
->): RunEvalState {
+}: Pick<RunEvalOptions, 'provider' | 'prompt' | 'repeatIndex' | 'test'>): RunEvalState {
   const vars = structuredClone(test.vars || {});
   const fileMetadata = collectFileMetadata(vars);
-  const conversationKey =
-    concurrencyKey ?? buildConversationKey(provider, prompt, test, repeatIndex);
+  const conversationKey = buildConversationKey(provider, prompt, test, repeatIndex);
 
   const setup = createRunEvalSetup({
     provider,
@@ -1372,7 +1367,6 @@ async function runEvalInternal({
   registers,
   isRedteam,
   abortSignal,
-  concurrencyKey,
   deferGrading,
   evalId,
   providerCallQueue,
@@ -1384,7 +1378,7 @@ async function runEvalInternal({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  const state = createRunEvalState({ concurrencyKey, provider, prompt, repeatIndex, test });
+  const state = createRunEvalState({ provider, prompt, repeatIndex, test });
   attachConversationVar({
     conversations,
     conversationKey: state.conversationKey,
@@ -2531,7 +2525,6 @@ function createRunEvalOption({
     isRedteam: testSuite.redteam != null,
     concurrency,
     abortSignal: providerAbortSignal,
-    concurrencyKey: buildConversationKey(provider, evalPrompt, evalTest, repeatIndex),
     evalId,
     rateLimitRegistry,
   };
@@ -2708,14 +2701,12 @@ function groupConcurrentRunEvalOptions(
       continue;
     }
 
-    const key =
-      evalOption.concurrencyKey ??
-      buildConversationKey(
-        evalOption.provider,
-        evalOption.prompt,
-        evalOption.test,
-        evalOption.repeatIndex,
-      );
+    const key = buildConversationKey(
+      evalOption.provider,
+      evalOption.prompt,
+      evalOption.test,
+      evalOption.repeatIndex,
+    );
     const existingGroup = groups.get(key);
     if (existingGroup) {
       existingGroup.steps.push(evalOption);
