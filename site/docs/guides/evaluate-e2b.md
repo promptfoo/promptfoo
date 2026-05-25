@@ -52,7 +52,7 @@ Create a Python virtual environment and install the E2B SDK:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'e2b-code-interpreter>=2.7.0'
+pip install 'e2b-code-interpreter==2.6.2'
 ```
 
 Export the credentials and tell promptfoo to use that virtual environment for

@@ -169,20 +169,15 @@ def _run_code_in_sandbox(sbx, code: str):
 
 def get_assert(output, context):
     """Execute the generated function in E2B and compare stdout with expected output."""
-    task_id = context.get("id", str(time.time()))
-    provider = context.get("provider", "unknown")
-    model = context.get("model", "unknown")
-
     fn_name = context["vars"]["function_name"]
+    task_id = context.get("id") or f"{fn_name}-{time.time_ns()}"
     test_input = context["vars"]["test_input"]
     expected = str(context["vars"]["expected_output"])
 
     function_code = _extract_function(output, fn_name)
     if not function_code:
         snippet = output.strip()[:300].replace("\n", " ")
-        write_metrics(
-            task_id, provider, model, False, 0.0, extra={"reason": "no_code_found"}
-        )
+        write_metrics(task_id, False, 0.0, extra={"reason": "no_code_found"})
         return {
             "pass": False,
             "score": 0,
@@ -191,9 +186,7 @@ def get_assert(output, context):
 
     # Defense in depth only; the E2B sandbox is the execution boundary.
     if is_unsafe(function_code):
-        write_metrics(
-            task_id, provider, model, False, 0.0, extra={"reason": "unsafe_pattern"}
-        )
+        write_metrics(task_id, False, 0.0, extra={"reason": "unsafe_pattern"})
         return {
             "pass": False,
             "score": 0,
@@ -206,19 +199,17 @@ print({fn_name}({test_input}))
 """
 
     start = time.time()
-    with Sandbox.create(allow_internet_access=False) as sbx:
-        try:
+    try:
+        with Sandbox.create(allow_internet_access=False) as sbx:
             res = _run_code_in_sandbox(sbx, test_program)
-        except Exception as e:
-            duration = time.time() - start
-            write_metrics(
-                task_id, provider, model, False, duration, extra={"error": str(e)}
-            )
-            return {
-                "pass": False,
-                "score": 0,
-                "reason": f"Sandbox execution error: {e}",
-            }
+    except Exception as e:
+        duration = time.time() - start
+        write_metrics(task_id, False, duration, extra={"error": str(e)})
+        return {
+            "pass": False,
+            "score": 0,
+            "reason": f"Sandbox execution error: {e}",
+        }
 
     duration = time.time() - start
     stdout, stderr = _stdout_from_result(res)
@@ -234,14 +225,7 @@ print({fn_name}({test_input}))
             )
         except Exception:
             dbg = str(getattr(res, "logs", ""))[:800]
-        write_metrics(
-            task_id,
-            provider,
-            model,
-            False,
-            duration,
-            extra={"error": err_obj or stderr, "debug": dbg},
-        )
+        write_metrics(task_id, False, duration, extra={"error": err_obj or stderr, "debug": dbg})
         return {
             "pass": False,
             "score": 0,
@@ -249,9 +233,7 @@ print({fn_name}({test_input}))
         }
 
     success = stdout == expected
-    write_metrics(
-        task_id, provider, model, success, duration, extra={"stdout": stdout[:500]}
-    )
+    write_metrics(task_id, success, duration, extra={"stdout": stdout[:500]})
     if success:
         return {"pass": True, "score": 1, "reason": f"Correct output: {stdout}"}
     logs_preview = getattr(res, "logs", None)

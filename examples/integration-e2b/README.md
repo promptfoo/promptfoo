@@ -18,7 +18,7 @@ cd integration-e2b
 
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'e2b-code-interpreter>=2.7.0'
+pip install 'e2b-code-interpreter==2.6.2'
 
 export E2B_API_KEY="e2b_your_key"
 export OPENAI_API_KEY="sk_your_key"

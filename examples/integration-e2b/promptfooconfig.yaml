@@ -6,6 +6,11 @@ prompts: file://code_generation_prompt_fs.txt
 providers:
   - openai:chat:gpt-5.4-mini
 
+defaultTest:
+  assert:
+    - type: python
+      value: file://validate_and_run_code_e2b.py
+
 tests:
   - vars:
       problem: 'Write a Python function to calculate the factorial of a number'
@@ -24,8 +29,3 @@ tests:
       function_name: 'find_largest'
       test_input: '[1, 5, 3, 9, 2]'
       expected_output: '9'
-
-defaultTest:
-  assert:
-    - type: python
-      value: file://validate_and_run_code_e2b.py
