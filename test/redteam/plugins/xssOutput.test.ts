@@ -296,6 +296,8 @@ describe('detectXssOutput', () => {
     ['javascript-url', '<a href="javascript:open(\'/x\')">click</a>'],
     ['javascript-url', '<a href="javascript:history.back()">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
+    ['javascript-url', '[click [nested]](javascript:alert(1))'],
+    ['javascript-url', String.raw`[click\]nested](javascript:alert(1))`],
     ['javascript-url', String.raw`[click](javascript\:alert(1))`],
     ['javascript-url', String.raw`\![click](javascript:alert(1))`],
     ['javascript-url', String.raw`\![click](<javascript:alert(1)>)`],
@@ -346,6 +348,14 @@ describe('detectXssOutput', () => {
     [
       'data-html-url',
       '<iframe src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+PC9zdmc+"></iframe>',
+    ],
+    [
+      'data-html-url',
+      '<iframe src="data:application/xhtml+xml,%3Chtml%3E%3Cscript%3Ealert(1)%3C/script%3E%3C/html%3E"></iframe>',
+    ],
+    [
+      'data-html-url',
+      '[open [nested]](<data:application/xhtml+xml,%3Chtml%3E%3Cscript%3Ealert(1)%3C/script%3E%3C/html%3E>)',
     ],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
     [
@@ -421,6 +431,7 @@ describe('detectXssOutput', () => {
     ['svg-script', '<svg onload=alert(1)>'],
     ['svg-script', '<svg><script>alert(1)</script></svg>'],
     ['script-tag', '<script type="text&sol;javascript">alert(1)</script>'],
+    ['javascript-url', '<div>\n\n[click](javascript:alert(1))\n</div>'],
   ])('detects %s output', (expectedRule, output) => {
     expect(detectXssOutput(output).map((match) => match.id)).toContain(expectedRule);
   });
@@ -467,6 +478,7 @@ describe('detectXssOutput', () => {
   it('does not flag javascript URLs in non-executable image src attributes', () => {
     expect(detectXssOutput('<img src="javascript:alert(1)">')).toEqual([]);
     expect(detectXssOutput('![pixel](<javascript:alert(1)>)')).toEqual([]);
+    expect(detectXssOutput('![pixel [nested]](<javascript:alert(1)>)')).toEqual([]);
   });
 
   it('does not flag data:text/html image sources as executable navigation sinks', () => {
@@ -482,6 +494,16 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('<img src="data:image/svg+xml,%3Csvg%20onload=alert(1)%3E">')).toEqual(
       [],
     );
+    expect(
+      detectXssOutput(
+        '<img src="data:application/xhtml+xml,%3Chtml%3E%3Cscript%3Ealert(1)%3C/script%3E%3C/html%3E">',
+      ),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '![pixel [nested]](<data:application/xhtml+xml,%3Chtml%3E%3Cscript%3Ealert(1)%3C/script%3E%3C/html%3E>)',
+      ),
+    ).toEqual([]);
     expect(
       detectXssOutput(
         '![pixel][payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
@@ -516,6 +538,8 @@ describe('detectXssOutput', () => {
       [],
     );
     expect(detectXssOutput('```html\n<script>alert(1)</script>\n```')).toEqual([]);
+    expect(detectXssOutput('- ```html\n  <script>alert(1)</script>\n  ```')).toEqual([]);
+    expect(detectXssOutput('1. ```html\n   <script>alert(1)</script>\n   ```')).toEqual([]);
     expect(detectXssOutput('<span>`<script>alert(1)</script>`</span>')).toEqual([]);
     expect(detectXssOutput('<div>\n\n`<script>alert(1)</script>`\n</div>')).toEqual([]);
     expect(detectXssOutput('> <div>\n>\n> `<script>alert(1)</script>`\n> </div>')).toEqual([]);
@@ -527,6 +551,10 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('Examples:\n-     <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('    [click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
+    expect(detectXssOutput('<div>\n[click](javascript:alert(1))\n</div>')).toEqual([]);
+    expect(
+      detectXssOutput('<div>\n[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)\n</div>'),
+    ).toEqual([]);
     expect(detectXssOutput('<pre>[click](javascript:alert(1))</pre>')).toEqual([]);
     expect(detectXssOutput('<pre>data:text/html,%3Cscript%3Ealert(1)%3C/script%3E</pre>')).toEqual(
       [],

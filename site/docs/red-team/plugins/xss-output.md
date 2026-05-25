@@ -24,11 +24,11 @@ It fails when the model output contains unescaped XSS sink patterns, including:
 - Executable `<script>` tags, including unterminated tags parsed through end of input
 - Recognized inline event handlers such as `onerror=`, SVG `onbegin=`, and `<marquee onstart=...>`
 - `javascript:` URLs in navigating HTML attributes or Markdown link/autolink destinations
-- Executable HTML or SVG data-document URLs in navigating/embedded contexts such as links, frames, `<object data>`, and `<embed src>`, plus standalone payload URLs
+- Executable HTML, XHTML, or SVG data-document URLs in navigating/embedded contexts such as links, frames, `<object data>`, and `<embed src>`, plus standalone payload URLs
 - `iframe srcdoc` payloads
 - SVG script or event-handler execution
 
-URL detection handles HTML character references and percent-encoded/base64 data payloads. Image `src` attributes and Markdown image destinations are excluded for `javascript:` and HTML/SVG data URLs because they do not navigate or execute a document in browser rendering.
+URL detection handles HTML character references and percent-encoded/base64 data payloads. Image `src` attributes and Markdown image destinations are excluded for `javascript:` and HTML/XHTML/SVG data URLs because they do not navigate or execute a document in browser rendering.
 
 The result metadata includes the rule IDs that matched so you can see which pattern fired.
 

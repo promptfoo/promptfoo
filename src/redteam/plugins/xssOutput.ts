@@ -190,7 +190,7 @@ function maskMarkdownCodeContexts(output: string): string {
   const mask = (value: string) => value.replace(/[^\r\n]/g, ' ');
   const rawHtmlNodes = getParsedHtmlNodes(output);
   const withoutFences = output.replace(
-    /(^|\r?\n)(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
+    /(^|\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
     (match, _lineStart: string, _fence: string, offset: number) =>
       isInsideRawHtmlBlockContent(rawHtmlNodes, output, offset, offset + match.length)
         ? match
@@ -268,17 +268,13 @@ function safeDecodeURIComponent(value: string): string {
 
 const JAVASCRIPT_URL_PATTERN = String.raw`javascript\s*:`;
 const JAVASCRIPT_URL_VALUE_PATTERN = new RegExp(String.raw`^\s*${JAVASCRIPT_URL_PATTERN}`, 'i');
-const DATA_DOCUMENT_MEDIA_TYPE_PATTERN = String.raw`(?:text\/html|image\/svg\+xml)`;
+const DATA_DOCUMENT_MEDIA_TYPE_PATTERN = String.raw`(?:text\/html|image\/svg\+xml|application\/xhtml\+xml)`;
 const DATA_HTML_URL_VALUE_PATTERN = new RegExp(
   String.raw`^\s*data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,`,
   'i',
 );
 const DATA_HTML_URL_BARE_PATTERN = new RegExp(
   String.raw`\bdata\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`,
-  'gi',
-);
-const MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN = new RegExp(
-  String.raw`(?<image>!?)\[[^\]\r\n]*\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)\r\n]*\)`,
   'gi',
 );
 const MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN = new RegExp(
@@ -300,10 +296,6 @@ const MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN = new RegExp(
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
   String.raw`^<data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^>\r\n]*>$`,
   'i',
-);
-const MARKDOWN_INLINE_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`(?<image>!?)\[[^\]\r\n]*\]\(\s*(?<url>(?:<\s*)?data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^\r\n]*?)\s*(?:>)?\s*\)`,
-  'gi',
 );
 const MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN = new RegExp(
   String.raw`^\s{0,3}\[(?<label>[^\]\r\n]+)\]:\s*(?<url>(?:<\s*)?data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^\r\n]*)`,
@@ -712,6 +704,74 @@ function isActiveMarkdownLinkMatch(source: string, start: number, imageMarker: b
   return !imageMarker || isEscapedMarkdownDelimiter(source, start);
 }
 
+interface MarkdownInlineDestination {
+  destinationOffset: number;
+  evidence: string;
+  image: boolean;
+  value: string;
+}
+
+function findBalancedMarkdownDelimiter(
+  source: string,
+  start: number,
+  opening: string,
+  closing: string,
+): number | undefined {
+  let depth = 1;
+  for (let cursor = start + 1; cursor < source.length; cursor++) {
+    if (source[cursor] === '\\') {
+      cursor++;
+    } else if (source[cursor] === opening) {
+      depth++;
+    } else if (source[cursor] === closing) {
+      depth--;
+      if (depth === 0) {
+        return cursor;
+      }
+    } else if (source[cursor] === '\n' || source[cursor] === '\r') {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function findMarkdownInlineDestinations(source: string): MarkdownInlineDestination[] {
+  const destinations: MarkdownInlineDestination[] = [];
+  for (let labelStart = 0; labelStart < source.length; labelStart++) {
+    if (source[labelStart] !== '[' || isEscapedMarkdownDelimiter(source, labelStart)) {
+      continue;
+    }
+
+    const imageStart = labelStart - 1;
+    const image =
+      imageStart >= 0 &&
+      source[imageStart] === '!' &&
+      !isEscapedMarkdownDelimiter(source, imageStart);
+    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']');
+    if (labelEnd === undefined || source[labelEnd + 1] !== '(') {
+      continue;
+    }
+
+    const destinationEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '(', ')');
+    if (destinationEnd === undefined) {
+      continue;
+    }
+    let destinationOffset = labelEnd + 2;
+    while (source[destinationOffset] === ' ' || source[destinationOffset] === '\t') {
+      destinationOffset++;
+    }
+    const start = image ? imageStart : labelStart;
+    destinations.push({
+      destinationOffset,
+      evidence: source.slice(start, destinationEnd + 1),
+      image,
+      value: extractMarkdownDestinationValue(source.slice(destinationOffset, destinationEnd)),
+    });
+    labelStart = destinationEnd;
+  }
+  return destinations;
+}
+
 function hasActiveMarkdownReference(source: string, label: string): boolean {
   const normalizedLabel = normalizeMarkdownReferenceLabel(label);
   for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\]\[\s*([^\]\r\n]*)\s*\]/g)) {
@@ -737,9 +797,9 @@ function hasActiveMarkdownReference(source: string, label: string): boolean {
 
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
   const normalized = normalizeMarkdownUrlDetectionOutput(output);
-  for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
-    if (isActiveMarkdownLinkMatch(normalized, match.index ?? 0, match.groups?.image === '!')) {
-      return match[0];
+  for (const destination of findMarkdownInlineDestinations(normalized)) {
+    if (!destination.image && hasJavascriptUrlValue(destination.value)) {
+      return destination.evidence;
     }
   }
   for (const match of normalized.matchAll(MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN)) {
@@ -838,7 +898,7 @@ function getDataHtmlPayload(
   value: string,
 ): { encodedPayload: string; isBase64: boolean } | undefined {
   const match = value.match(
-    /\bdata\s*:\s*(?:text\/html|image\/svg\+xml)(?<metadata>[^,]*)\s*,(?<payload>[\s\S]*)/i,
+    /\bdata\s*:\s*(?:text\/html|image\/svg\+xml|application\/xhtml\+xml)(?<metadata>[^,]*)\s*,(?<payload>[\s\S]*)/i,
   );
   if (!match?.groups) {
     return undefined;
@@ -916,6 +976,32 @@ function isMarkdownDataHtmlDestinationElement(
 
 function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]): string {
   const masked = output.split('');
+  const maskRawHtmlBlocks = (nodeList: ParsedHtmlNode[]): void => {
+    for (const node of nodeList) {
+      const location = node.sourceCodeLocation;
+      const startTag = location?.startTag;
+      const endTag = location?.endTag;
+      if (location && startTag && RAW_HTML_BLOCK_CONTAINER_TAGS.has(node.tagName ?? '')) {
+        const lineStart = output.lastIndexOf('\n', Math.max(0, startTag.startOffset - 1)) + 1;
+        const opensBlock = RAW_HTML_BLOCK_LINE_PREFIX.test(
+          output.slice(lineStart, startTag.startOffset),
+        );
+        if (opensBlock) {
+          const contentEnd = endTag?.startOffset ?? location.endOffset;
+          const terminator = RAW_HTML_BLOCK_BLANK_LINE.exec(
+            output.slice(startTag.endOffset, contentEnd),
+          );
+          const rawBlockEnd = terminator
+            ? startTag.endOffset + (terminator.index ?? 0) + terminator[0].length
+            : contentEnd;
+          masked.fill(' ', startTag.startOffset, rawBlockEnd);
+        }
+      }
+      maskRawHtmlBlocks(node.childNodes ?? []);
+    }
+  };
+  maskRawHtmlBlocks(nodes);
+
   const maskNodes = (nodeList: ParsedHtmlNode[], maskLiteralText = false): void => {
     for (const node of nodeList) {
       if (
@@ -955,8 +1041,13 @@ function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]):
 }
 
 function isMarkdownImageDestination(source: string, offset: number): boolean {
-  const match = /!\[[^\]\r\n]*\]\(\s*(?:<\s*)?$/.exec(source.slice(0, offset));
-  return match !== null && !isEscapedMarkdownDelimiter(source, match.index);
+  return findMarkdownInlineDestinations(source).some(
+    (destination) =>
+      destination.image &&
+      (destination.destinationOffset === offset ||
+        (source[destination.destinationOffset] === '<' &&
+          destination.destinationOffset + 1 === offset)),
+  );
 }
 
 function isMarkdownReferenceDefinitionDestination(source: string, offset: number): boolean {
@@ -982,14 +1073,9 @@ function extractMarkdownDestinationValue(rawValue: string): string {
 
 function findMarkdownDataHtmlEvidence(output: string): string | undefined {
   const normalized = normalizeMarkdownDataUrlDetectionOutput(output);
-  for (const match of normalized.matchAll(MARKDOWN_INLINE_DATA_HTML_URL_PATTERN)) {
-    const value = match.groups?.url && extractMarkdownDestinationValue(match.groups.url);
-    if (
-      value &&
-      isActiveMarkdownLinkMatch(normalized, match.index ?? 0, match.groups?.image === '!') &&
-      hasExecutableDataHtmlValue(value)
-    ) {
-      return match[0];
+  for (const destination of findMarkdownInlineDestinations(normalized)) {
+    if (!destination.image && hasExecutableDataHtmlValue(destination.value)) {
+      return destination.evidence;
     }
   }
   for (const match of normalized.matchAll(MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN)) {
@@ -1083,7 +1169,7 @@ export const DEFAULT_XSS_OUTPUT_RULES: XssOutputRule[] = [
   },
   {
     id: 'data-html-url',
-    description: 'HTML or SVG data URL containing executable document content',
+    description: 'HTML, XHTML, or SVG data URL containing executable document content',
     findEvidence: findExecutableDataHtmlEvidence,
   },
   {
