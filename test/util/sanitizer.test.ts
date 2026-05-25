@@ -1027,6 +1027,20 @@ describe('sanitizeObject', () => {
       const result = sanitizeUrlEncodedString(body);
       expect(result).toBe('cursor=%5BREDACTED%5D&page=2');
     });
+
+    it('should accept `;` as a pair separator (PHP/CGI behavior)', () => {
+      // Without this, `[^&]*` would swallow the trailing `;password=...` as
+      // part of the first value and never see the password pair.
+      const body = 'a=1;password=hunter2';
+      expect(sanitizeUrlEncodedString(body)).toBe('a=1;password=%5BREDACTED%5D');
+    });
+
+    it('should redact when key uses percent-encoded `=` (e.g. api%3Dkey)', () => {
+      // `api%3Dkey` decodes to `api=key`; normalizeFieldName must collapse it
+      // to `apikey` so the SECRET_FIELD_NAMES lookup matches.
+      const body = 'api%3Dkey=mysecretvalue';
+      expect(sanitizeUrlEncodedString(body)).toBe('api%3Dkey=%5BREDACTED%5D');
+    });
   });
 });
 

@@ -78,12 +78,13 @@ export const SECRET_FIELD_NAMES = new Set([
 ]);
 
 /**
- * Normalize field names for comparison (lowercase, no hyphens/underscores/whitespace).
- * Whitespace is stripped so that `Api Key` and `api+key` (which URL-decodes to
- * `api key`) both collapse to `apikey` and match SECRET_FIELD_NAMES.
+ * Normalize field names for comparison (lowercase, drop hyphens, underscores,
+ * whitespace, and stray `=`). Whitespace covers `Api Key` and `api+key` (which
+ * URL-decodes to `api key`); the `=` strip covers `api%3Dkey` (decodes to
+ * `api=key`). All collapse to `apikey` and match SECRET_FIELD_NAMES.
  */
 export function normalizeFieldName(fieldName: string): string {
-  return fieldName.toLowerCase().replace(/[-_\s]/g, '');
+  return fieldName.toLowerCase().replace(/[-_\s=]/g, '');
 }
 
 /**
@@ -227,31 +228,32 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
-// for PHP/qs-style nested keys) and the value runs to the next `&`. The first
-// `=` is the separator; subsequent `=` (e.g. base64 padding) belong to the
-// value.
-const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%\[\]-]+=[^&]*$/;
+// for PHP/qs-style nested keys) and the value runs to the next separator. The
+// first `=` is the separator within a pair; subsequent `=` (e.g. base64
+// padding) belong to the value. Both `&` and `;` are accepted as pair
+// separators since PHP/CGI/several Java stacks treat `;` as a `&` equivalent.
+const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%\[\]-]+=[^&;]*$/;
 
 function looksLikeUrlEncodedFormData(value: string): boolean {
   // Form-urlencoded data has no raw whitespace (spaces are `+` or `%20`) and
-  // every non-empty `&`-separated chunk is a `key=value` pair with safe key
-  // characters. Empty chunks (leading/trailing/consecutive `&`) are tolerated.
-  // Without this gate, prose containing `=` gets re-serialized and emerges
-  // URL-encoded.
+  // every non-empty separator-delimited chunk is a `key=value` pair with safe
+  // key characters. Empty chunks (leading/trailing/consecutive separators)
+  // are tolerated. Without this gate, prose containing `=` gets re-serialized
+  // and emerges URL-encoded.
   if (!value.includes('=') || /\s/.test(value)) {
     return false;
   }
-  const segments = value.split('&').filter((segment) => segment.length > 0);
+  const segments = value.split(/[&;]/).filter((segment) => segment.length > 0);
   if (segments.length === 0) {
     return false;
   }
   return segments.every((segment) => URL_ENCODED_SEGMENT_RE.test(segment));
 }
 
-// Matches one `key=value` pair. `[^=&]+` for the key ensures we split on the
-// FIRST `=` (so values can contain `=`, e.g. base64 padding); `[^&]*` lets the
-// value run to the next pair.
-const URL_ENCODED_PAIR_RE = /(^|&)([^=&]+)=([^&]*)/g;
+// Matches one `key=value` pair. `[^=&;]+` for the key ensures we split on the
+// FIRST `=` (so values can contain `=`, e.g. base64 padding); `[^&;]*` lets the
+// value run to the next pair separator (`&` or `;`).
+const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
 
 function decodeFormComponent(component: string): string | undefined {
   try {
