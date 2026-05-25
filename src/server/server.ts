@@ -74,6 +74,26 @@ export function setJavaScriptMimeType(
   next();
 }
 
+function handleApiBodyParserError(
+  error: unknown,
+  req: Request,
+  res: Response,
+  next: express.NextFunction,
+): void {
+  if (
+    req.path.startsWith('/api/') &&
+    typeof error === 'object' &&
+    error !== null &&
+    'type' in error &&
+    error.type === 'entity.parse.failed'
+  ) {
+    replyError(res, 400, 'Invalid JSON request body');
+    return;
+  }
+
+  next(error);
+}
+
 import { ServerError, type ServerErrorPhase } from './errors';
 
 export function handleServerError(
@@ -124,6 +144,7 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
+  app.use(handleApiBodyParserError);
   app.get(ApiRoutes.Health.expressPath, (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
