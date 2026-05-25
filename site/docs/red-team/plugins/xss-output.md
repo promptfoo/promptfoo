@@ -38,7 +38,7 @@ The grader checks for these payload patterns:
 | `script-tag`              | `<script>...</script>`             |
 | `javascript-uri`          | `href="javascript:alert(1)"`       |
 | `event-handler-attribute` | `<img src="x" onerror="alert(1)">` |
-| `data-uri-html`           | `data:text/html,...`               |
+| `data-uri-html`           | `src="data:text/html,..."`         |
 | `iframe-srcdoc`           | `<iframe srcdoc="...">`            |
 | `svg-script`              | `<svg><script>...</script></svg>`  |
 

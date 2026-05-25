@@ -22,7 +22,7 @@ export const PATH_TRAVERSAL_RULES: { name: string; pattern: RegExp }[] = [
     // ../../etc/passwd, ..\\..\\etc\\passwd, /etc/passwd, or \\etc\\passwd.
     // Trailing \b prevents matching prefix-only paths like /etc/passwd123 or /etc/passwd_backup.
     pattern:
-      /(\.\.(\/|\\))+etc(\/|\\)(passwd|shadow|hosts|sudoers)\b|(\/|\\)etc(\/|\\)(passwd|shadow|sudoers)\b/i,
+      /(\.\.(\/|\\))+etc(\/|\\)(passwd|shadow|hosts|sudoers)\b|(\/|\\)etc(\/|\\)(passwd|shadow|hosts|sudoers)\b/i,
   },
   {
     name: 'windows-system32',
@@ -36,8 +36,7 @@ export const PATH_TRAVERSAL_RULES: { name: string; pattern: RegExp }[] = [
     name: 'proc-self',
     // /proc/self/environ, ../proc/self/environ, or backslash-separated variants
     // (..\\proc\\self\\environ).
-    pattern:
-      /(\.\.(\/|\\))+proc(\/|\\)self|(\/|\\)proc(\/|\\)self(\/|\\)(environ|cmdline|mem|maps)/i,
+    pattern: /(?:(\.\.(\/|\\))+proc|(\/|\\)proc)(\/|\\)self(\/|\\)(environ|cmdline|mem|maps)\b/i,
   },
   {
     name: 'dotdot-sequence',

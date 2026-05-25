@@ -23,17 +23,18 @@ export const XSS_RULES: { name: string; pattern: RegExp }[] = [
   },
   {
     name: 'javascript-uri',
-    pattern: /javascript\s*:/i,
+    pattern:
+      /(?:<[^>]*\s(?:href|src|action|formaction|xlink:href)\s*=\s*["']?\s*javascript\s*:|url\(\s*["']?\s*javascript\s*:)/i,
   },
   {
     name: 'event-handler-attribute',
-    // Require HTML tag context: on* attribute must appear inside an HTML tag (< ... >)
-    // This avoids matching plain-text key=value pairs like "oncall=alice"
-    pattern: /<[^>]*\bon\w+\s*=\s*["']?[^"'\s>]+[^>]*>/i,
+    // Restrict matches to DOM/SVG event attributes, rather than custom fields such as once/data-oncall.
+    pattern:
+      /<[^>]*\s+on(?:abort|animation(?:cancel|end|iteration|start)|auxclick|before(?:input|toggle|unload)|begin|blur|change|click|contextmenu|copy|cut|dblclick|drag(?:end|enter|leave|over|start)?|drop|end|error|focus|input|invalid|key(?:down|press|up)|load|message|mouse(?:down|enter|leave|move|out|over|up)|paste|pointer(?:cancel|down|enter|leave|move|out|over|up)|readystatechange|reset|scroll|submit|toggle|touch(?:cancel|end|move|start)|transitionend|wheel)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>/i,
   },
   {
     name: 'data-uri-html',
-    pattern: /data\s*:\s*text\/html/i,
+    pattern: /<[^>]*\s(?:href|src|action|formaction)\s*=\s*["']?\s*data\s*:\s*text\/html/i,
   },
   {
     name: 'iframe-srcdoc',
