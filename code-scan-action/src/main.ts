@@ -49,6 +49,9 @@ interface PullRequestForkPayload {
   } | null;
 }
 
+const FORK_PR_AUTH_SKIP_REASON =
+  'Fork PR scanning requires maintainer approval. See PR comment for options.';
+
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -284,7 +287,7 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 async function runPromptfooScan(
   cliArgs: string[],
   oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+): Promise<ScanResponse> {
   const installEnv = createSubprocessEnv();
 
   core.info('📦 Installing promptfoo...');
@@ -315,10 +318,14 @@ async function runPromptfooScan(
     return parseScanOutput(scanOutput);
   }
 
-  // Fork PR auth rejection is expected - server posts helpful comment to PR
-  if (scanOutput.includes('Fork PR scanning not authorized')) {
-    core.info('🔀 Fork PR detected - see PR comment for scan options');
-    return undefined;
+  // Keep compatibility with CLI releases that reported an authorized fork skip as text
+  // while the action and CLI roll out independently.
+  if (`${scanOutput}\n${scanError}`.includes('Fork PR scanning not authorized')) {
+    return {
+      success: true,
+      comments: [],
+      skipReason: FORK_PR_AUTH_SKIP_REASON,
+    };
   }
 
   core.error(`CLI exited with code ${exitCode}`);
@@ -326,10 +333,7 @@ async function runPromptfooScan(
   throw new Error(`Code scan failed with exit code ${exitCode}`);
 }
 
-function getScanResponse(
-  cliArgs: string[],
-  oidcToken: string | undefined,
-): Promise<ScanResponse | undefined> {
+function getScanResponse(cliArgs: string[], oidcToken: string | undefined): Promise<ScanResponse> {
   if (process.env.ACT === 'true') {
     return Promise.resolve(createMockScanResponse());
   }
@@ -577,7 +581,15 @@ async function handleScanResponse(
   inputs: ActionInputs,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review } = scanResponse;
+  const { comments, commentsPosted, review, skipReason } = scanResponse;
+
+  // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
+  // existing Code Scanning findings or imply that authorization-gated work ran.
+  if (skipReason) {
+    core.info(`🔀 Scan skipped: ${skipReason}`);
+    return;
+  }
+
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
   emitConfiguredSarifOutput(scanResponse, inputs);
@@ -666,10 +678,6 @@ async function runCodeScan(): Promise<void> {
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken);
-
-    if (!scanResponse) {
-      return;
-    }
 
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
