@@ -216,6 +216,14 @@ const namedScoreWeightsJson = sql`
   END
 `;
 
+// Keep the SQL fast path aligned with Number.isFinite() in the JavaScript fallback.
+// SQLite classifies valid JSON overflow literals such as 1e999 as REAL Infinity.
+const validNamedScoreWeightSql = sql`
+  weight_entries.type IN ('integer', 'real')
+  AND CAST(weight_entries.value AS REAL)
+    BETWEEN -1.7976931348623157e308 AND 1.7976931348623157e308
+`;
+
 /**
  * Aggregate named scores using SQL json_each().
  * This is MUCH more efficient than fetching all results and parsing in JavaScript.
@@ -249,7 +257,7 @@ async function aggregateNamedScores(
     JOIN json_each(eval_results.named_scores) as score_entries
     JOIN json_each(${namedScoreWeightsJson}) as weight_entries
       ON weight_entries.key = score_entries.key
-      AND weight_entries.type IN ('integer', 'real')
+      AND ${validNamedScoreWeightSql}
     WHERE ${whereSql}
       AND named_scores IS NOT NULL
       AND json_valid(named_scores)
@@ -348,7 +356,7 @@ async function aggregateUnweightedNamedScores(
         LEFT JOIN json_each(${namedScoreWeightsJson}) as weight_entries
           ON weight_entries.key = score_entries.key
         WHERE weight_entries.key IS NULL
-          OR weight_entries.type NOT IN ('integer', 'real')
+          OR NOT (${validNamedScoreWeightSql})
       )
   `;
 

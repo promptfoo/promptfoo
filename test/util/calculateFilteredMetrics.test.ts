@@ -431,6 +431,35 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScoreWeights?.['accuracy:alpha']).toBe(2);
     });
 
+    it('should treat overflowing JSON numeric weights as unweighted', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+      const db = getDb();
+
+      await db.run(`
+        INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, named_scores, grading_result, latency_ms, cost
+        ) VALUES (
+          'overflowing-weight', '${eval_.id}', 0, 0, '{"vars": {}}', '{}', '{}',
+          0, 0.8, '{"accuracy": 0.8}',
+          '{"componentResults": [{"assertion": {"metric": "accuracy"}}, {"assertion": {"metric": "accuracy"}}], "namedScoreWeights": {"accuracy": 1e999}}',
+          100, 0.001
+        )
+      `);
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(0.8, 10);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(2);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+    });
+
     it('should aggregate weighted named scores using grading result denominators', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,

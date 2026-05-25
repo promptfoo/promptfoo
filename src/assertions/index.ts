@@ -41,7 +41,6 @@ import { renderMetricName } from '../util/metricNames';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
-
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
 import { handleBleuScore } from './bleu';
@@ -111,6 +110,8 @@ import type {
   ProviderResponse,
   ScoringFunction,
 } from '../types/index';
+
+export { renderMetricName } from '../util/metricNames';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
 const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
