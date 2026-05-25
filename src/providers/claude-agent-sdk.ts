@@ -208,15 +208,18 @@ function createClaudeResultMetrics(finalMsg: SDKResultMessage): {
   sessionId: string;
   tokenUsage: ProviderResponse['tokenUsage'];
 } {
+  const prompt = finalMsg.usage?.input_tokens;
+  const completion = finalMsg.usage?.output_tokens;
+
   return {
     cost: finalMsg.total_cost_usd ?? 0,
     sessionId: finalMsg.session_id,
     tokenUsage: {
-      prompt: finalMsg.usage?.input_tokens,
-      completion: finalMsg.usage?.output_tokens,
+      prompt,
+      completion,
       total:
-        finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-          ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
+        typeof prompt === 'number' && typeof completion === 'number'
+          ? prompt + completion
           : undefined,
     },
   };
@@ -241,10 +244,9 @@ function createClaudeResultMetadata(
 function createClaudeResultResponse(
   finalMsg: SDKResultMessage,
   metrics: ReturnType<typeof createClaudeResultMetrics>,
-  toolCalls: ToolCallEntry[],
+  metadata: ReturnType<typeof createClaudeResultMetadata>,
 ): ProviderResponse {
   const raw = JSON.stringify(finalMsg);
-  const metadata = createClaudeResultMetadata(finalMsg, toolCalls);
   const response = {
     ...metrics,
     raw,
@@ -1524,6 +1526,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           }
 
           const metrics = createClaudeResultMetrics(finalMsg);
+          const metadata = createClaudeResultMetadata(finalMsg, Array.from(toolCallsMap.values()));
 
           try {
             // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -1571,11 +1574,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               });
             }
 
-            const response = createClaudeResultResponse(
-              finalMsg,
-              metrics,
-              Array.from(toolCallsMap.values()),
-            );
+            const response = createClaudeResultResponse(finalMsg, metrics, metadata);
 
             if (finalMsg.subtype === 'success') {
               logger.debug(`Claude Agent SDK response: ${response.raw}`);
@@ -1588,6 +1587,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             return {
               error: `Error processing Claude Agent SDK result: ${postStreamError}`,
               ...metrics,
+              metadata,
             };
           }
         },

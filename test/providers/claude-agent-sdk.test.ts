@@ -420,7 +420,7 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.tokenUsage).toEqual({
           prompt: 10,
           completion: 0,
-          total: undefined,
+          total: 10,
         });
       });
 
@@ -498,6 +498,13 @@ describe('ClaudeCodeSDKProvider', () => {
           expect(result.cost).toBe(0.002);
           expect(result.sessionId).toBe('test-session-123');
           expect(result.tokenUsage).toEqual({ prompt: 10, completion: 20, total: 30 });
+          expect(result.metadata).toMatchObject({
+            numTurns: 1,
+            durationMs: 1000,
+            durationApiMs: 800,
+            permissionDenials: [],
+          });
+          expect(result.metadata?.structuredOutput).toBeUndefined();
           expect(errorSpy).toHaveBeenCalledWith(
             expect.stringContaining('Error processing Claude Agent SDK result'),
           );
