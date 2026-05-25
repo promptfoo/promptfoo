@@ -24,7 +24,6 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { processConfigFileReferences } from './util/fileReference';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -114,7 +113,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   });
 }
 
-function isPlainObject(value: VarValue): value is Record<string, VarValue> {
+function isPlainObject(value: unknown): value is Record<string, VarValue> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
   }
@@ -235,6 +234,149 @@ function detectMimeFromBase64(base64Data: string): string | null {
   return null;
 }
 
+type PromptFileLoadContext = {
+  basePath: string;
+  basePrompt: string;
+  vars: Record<string, VarValue>;
+  provider?: ApiProvider;
+};
+
+async function loadPromptMultimediaFile(filePath: string): Promise<string> {
+  const fileType = isImageFile(filePath) ? 'image' : isVideoFile(filePath) ? 'video' : 'audio';
+
+  telemetry.record('feature_used', {
+    feature: `load_${fileType}_as_base64`,
+  });
+
+  logger.debug(`Loading ${fileType} as base64: ${filePath}`);
+  try {
+    const fileBuffer = await fs.readFile(filePath);
+    const base64Data = fileBuffer.toString('base64');
+
+    if (fileType !== 'image') {
+      // Keep existing behavior for video/audio files (raw base64).
+      return base64Data;
+    }
+
+    let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+    const extension = path.extname(filePath);
+    const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+    const detectedType = detectMimeFromBase64(base64Data);
+
+    if (detectedType && detectedType !== mimeType) {
+      logger.debug(
+        `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+      );
+      mimeType = detectedType;
+    } else if (!detectedType && extensionWasUnknown) {
+      logger.warn(
+        `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+      );
+    }
+
+    return `data:${mimeType};base64,${base64Data}`;
+  } catch (error) {
+    throw new Error(
+      `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function loadPromptFileVar(
+  value: string,
+  varName: string,
+  context: PromptFileLoadContext,
+): Promise<VarValue> {
+  const filePath = path.resolve(process.cwd(), context.basePath, value.slice('file://'.length));
+  const fileExtension = filePath.split('.').pop();
+
+  logger.debug(`Loading var ${varName} from file: ${filePath}`);
+  if (isJavascriptFile(filePath)) {
+    const javascriptOutput = (await (
+      await importModule(filePath)
+    )(varName, context.basePrompt, context.vars, context.provider)) as {
+      output?: string;
+      error?: string;
+    };
+    if (javascriptOutput.error) {
+      throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
+    }
+    if (!javascriptOutput.output) {
+      throw new Error(
+        `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
+      );
+    }
+    return javascriptOutput.output;
+  }
+
+  if (fileExtension === 'py') {
+    const pythonScriptOutput = (await runPython(filePath, 'get_var', [
+      varName,
+      context.basePrompt,
+      context.vars,
+    ])) as { output?: unknown; error?: string };
+    if (pythonScriptOutput.error) {
+      throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
+    }
+    if (!pythonScriptOutput.output) {
+      throw new Error(`Python script ${filePath} did not return any output`);
+    }
+    invariant(
+      typeof pythonScriptOutput.output === 'string',
+      `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
+    );
+    return pythonScriptOutput.output.trim();
+  }
+
+  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    return JSON.stringify(yaml.load(await fs.readFile(filePath, 'utf8')) as string | object);
+  }
+
+  if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+    telemetry.record('feature_used', {
+      feature: 'extract_text_from_pdf',
+    });
+    return await extractTextFromPDF(filePath);
+  }
+
+  if (
+    (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+    !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+  ) {
+    return await loadPromptMultimediaFile(filePath);
+  }
+
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
+async function loadPromptFileVars(
+  value: unknown,
+  varName: string,
+  context: PromptFileLoadContext,
+): Promise<VarValue> {
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return await loadPromptFileVar(value, varName, context);
+  }
+
+  if (Array.isArray(value)) {
+    const result: VarValue[] = [];
+    for (const [index, item] of value.entries()) {
+      result.push(await loadPromptFileVars(item, `${varName}[${index}]`, context));
+    }
+    return result;
+  }
+
+  if (isPlainObject(value)) {
+    const result: Record<string, VarValue> = {};
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = await loadPromptFileVars(item, `${varName}.${key}`, context);
+    }
+    return result;
+  }
+
+  return value as VarValue;
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -260,129 +402,17 @@ export async function renderPrompt(
   let basePrompt = prompt.raw;
 
   const basePath = cliState.basePath || '';
-  const fileReferenceBasePath = path.resolve(process.cwd(), basePath);
+  const fileLoadContext = { basePath, basePrompt, vars, provider };
 
-  // Load nested file references first while preserving top-level file:// handling below.
+  // Load file-backed values at any depth using the same renderer semantics.
   for (const [varName, value] of Object.entries(vars)) {
     if (skipRenderVars?.includes(varName)) {
       continue;
     }
 
-    if (Array.isArray(value) || isPlainObject(value)) {
-      vars[varName] = await processConfigFileReferences(value, fileReferenceBasePath);
-    }
-  }
+    vars[varName] = await loadPromptFileVars(value, varName, fileLoadContext);
 
-  // Load files
-  for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
-      continue;
-    }
-
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
-
-      logger.debug(`Loading var ${varName} from file: ${filePath}`);
-      if (isJavascriptFile(filePath)) {
-        const javascriptOutput = (await (
-          await importModule(filePath)
-        )(varName, basePrompt, vars, provider)) as {
-          output?: string;
-          error?: string;
-        };
-        if (javascriptOutput.error) {
-          throw new Error(`Error running ${filePath}: ${javascriptOutput.error}`);
-        }
-        if (!javascriptOutput.output) {
-          throw new Error(
-            `Expected ${filePath} to return { output: string } but got ${javascriptOutput}`,
-          );
-        }
-        vars[varName] = javascriptOutput.output;
-      } else if (fileExtension === 'py') {
-        const pythonScriptOutput = (await runPython(filePath, 'get_var', [
-          varName,
-          basePrompt,
-          vars,
-        ])) as { output?: unknown; error?: string };
-        if (pythonScriptOutput.error) {
-          throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
-        }
-        if (!pythonScriptOutput.output) {
-          throw new Error(`Python script ${filePath} did not return any output`);
-        }
-        invariant(
-          typeof pythonScriptOutput.output === 'string',
-          `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
-        );
-        vars[varName] = pythonScriptOutput.output.trim();
-      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        vars[varName] = JSON.stringify(
-          yaml.load(await fs.readFile(filePath, 'utf8')) as string | object,
-        );
-      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', {
-          feature: 'extract_text_from_pdf',
-        });
-        vars[varName] = await extractTextFromPDF(filePath);
-      } else if (
-        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
-        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
-      ) {
-        const fileType = isImageFile(filePath)
-          ? 'image'
-          : isVideoFile(filePath)
-            ? 'video'
-            : 'audio';
-
-        telemetry.record('feature_used', {
-          feature: `load_${fileType}_as_base64`,
-        });
-
-        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
-        try {
-          const fileBuffer = await fs.readFile(filePath);
-          const base64Data = fileBuffer.toString('base64');
-
-          if (fileType === 'image') {
-            // For images, generate data URL with proper MIME type
-            // Use extension first, then magic number detection for accuracy
-            let mimeType = getMimeTypeFromExtension(path.extname(filePath));
-            const extension = path.extname(filePath);
-            const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
-
-            // For better accuracy, use magic number detection
-            const detectedType = detectMimeFromBase64(base64Data);
-            if (detectedType) {
-              // Use detected type if available and different from extension-based guess
-              if (detectedType !== mimeType) {
-                logger.debug(
-                  `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
-                );
-                mimeType = detectedType;
-              }
-            } else if (extensionWasUnknown) {
-              // Could not detect format and extension was unknown/ambiguous
-              logger.warn(
-                `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
-              );
-            }
-
-            vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else {
-            // Keep existing behavior for video/audio files (raw base64)
-            vars[varName] = base64Data;
-          }
-        } catch (error) {
-          throw new Error(
-            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
-      } else {
-        vars[varName] = (await fs.readFile(filePath, 'utf8')).trim();
-      }
-    } else if (isPackagePath(value)) {
+    if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
       const requiredModule = await loadFromPackage(value, basePath);
       if (typeof requiredModule !== 'function') {

@@ -188,7 +188,7 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
-File-backed text values can also be nested inside object or array variables:
+Supported file-backed values can also be nested inside object or array variables:
 
 ```yaml
 prompts:
@@ -199,6 +199,9 @@ tests:
         previous:
           report: file://data/previous-report.txt
 ```
+
+Nested file references use the same loading behavior as top-level variables, including text,
+structured data, scripts, PDFs, and multimedia files.
 
 Javascript and Python variable files are supported. For example:
 

@@ -64,19 +64,12 @@ vi.mock('node:module', () => {
   };
 });
 
-vi.mock('fs', () => {
-  const mockedFs = {
-    ...fsMocks,
-    promises: {
-      readFile: fsMocks.readFileSync,
-    },
-  };
-
-  return {
-    ...mockedFs,
-    default: mockedFs,
-  };
-});
+vi.mock('fs', () => ({
+  ...fsMocks,
+  promises: {
+    readFile: fsMocks.readFileSync,
+  },
+}));
 
 vi.mock('fs/promises', () => ({
   default: {
@@ -144,7 +137,6 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.values(fsMocks).forEach((mock) => mock.mockReset());
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -451,6 +443,42 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(renderedPrompt).toBe('Items: Content 1, Content 2');
+    });
+
+    it('should preserve colons in nested text file paths', async () => {
+      const prompt = toPrompt('Report: {{ history.report }}');
+      const vars = {
+        history: {
+          report: 'file://reports/report:2026.txt',
+        },
+      };
+
+      vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('Colon report content' as any);
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.promises.readFile).toHaveBeenCalledWith(
+        expect.stringContaining('reports/report:2026.txt'),
+        'utf8',
+      );
+      expect(renderedPrompt).toBe('Report: Colon report content');
+    });
+
+    it('should execute nested JavaScript vars with their property path', async () => {
+      const prompt = toPrompt('Generated: {{ context.generated }}');
+      const vars = {
+        context: {
+          generated: 'file:///path/to/nested.js',
+        },
+      };
+
+      mockDynamicModule('/path/to/nested.js', (varName: string) => ({
+        output: `Dynamic value for ${varName}`,
+      }));
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Generated: Dynamic value for context.generated');
     });
 
     it('should not load nested file:// references for skipped top-level vars', async () => {
@@ -1584,6 +1612,15 @@ describe('evaluatorHelpers', () => {
       const prompt = toPrompt('Test prompt with image: {{image}}');
       const renderedPrompt = await renderPrompt(prompt, {
         image: 'file://test-image.png',
+      });
+
+      expect(renderedPrompt).toContain('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA');
+    });
+
+    it('should generate data URLs for image files nested in arrays', async () => {
+      const prompt = toPrompt('Test prompt with image: {{assets.images[0]}}');
+      const renderedPrompt = await renderPrompt(prompt, {
+        assets: { images: ['file://test-image.png'] },
       });
 
       expect(renderedPrompt).toContain('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA');
