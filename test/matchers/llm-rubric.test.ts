@@ -175,6 +175,26 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should fail when provider returns null pass without a score', async () => {
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: null, reason: 'No verdict supplied' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric('Expected output', 'Sample output', options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: "llm-rubric response must contain a 'pass' or 'score' field",
+        metadata: { graderError: true },
+      }),
+    );
+  });
+
   it('should handle when provider returns direct object output instead of string', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';

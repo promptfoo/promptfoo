@@ -247,7 +247,9 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  if (parsed.pass === undefined && parsed.score === undefined) {
+  const hasPass = parsed.pass !== undefined && parsed.pass !== null;
+  const hasScore = parsed.score !== undefined && parsed.score !== null;
+  if (!hasPass && !hasScore) {
     return graderFail(`${label} response must contain a 'pass' or 'score' field`, resp.tokenUsage);
   }
 
