@@ -746,7 +746,7 @@ function getExecutableUrlAttributeValues(
   }
   if (tagName === 'button') {
     const type = getParsedAttributeValue(node, 'type')?.trim().toLowerCase() ?? 'submit';
-    if (type !== 'submit') {
+    if (type === 'button' || type === 'reset') {
       return [];
     }
   }
@@ -832,8 +832,21 @@ function findBalancedMarkdownDelimiter(
   return undefined;
 }
 
+function findMarkdownLabelEnd(source: string, start: number): number | undefined {
+  const labelEnd = findBalancedMarkdownDelimiter(source, start, '[', ']', true, true);
+  if (labelEnd === undefined || /\r?\n[ \t]*\r?\n/.test(source.slice(start + 1, labelEnd))) {
+    return undefined;
+  }
+  return labelEnd;
+}
+
 function findMarkdownImageLabelRanges(source: string): SourceRange[] {
   const imageLabelRanges: SourceRange[] = [];
+  const definedLabels = new Set(
+    findMarkdownReferenceDestinations(source, true).map((destination) =>
+      normalizeMarkdownReferenceLabel(destination.label),
+    ),
+  );
 
   for (let imageStart = 0; imageStart < source.length; imageStart++) {
     if (
@@ -844,21 +857,35 @@ function findMarkdownImageLabelRanges(source: string): SourceRange[] {
       continue;
     }
     const labelStart = imageStart + 1;
-    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
-    if (labelEnd === undefined || source[labelEnd + 1] !== '(') {
+    const labelEnd = findMarkdownLabelEnd(source, labelStart);
+    if (labelEnd === undefined) {
       continue;
     }
-    const destinationEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '(', ')', true);
-    if (destinationEnd === undefined) {
-      continue;
+    let isRenderedImage = false;
+    if (source[labelEnd + 1] === '(') {
+      const destinationEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '(', ')', true);
+      if (destinationEnd !== undefined) {
+        let destinationOffset = labelEnd + 2;
+        while (source[destinationOffset] === ' ' || source[destinationOffset] === '\t') {
+          destinationOffset++;
+        }
+        isRenderedImage =
+          extractMarkdownDestinationValue(source.slice(destinationOffset, destinationEnd)) !==
+          undefined;
+      }
+    } else if (source[labelEnd + 1] === '[') {
+      const referenceEnd = findMarkdownLabelEnd(source, labelEnd + 1);
+      if (referenceEnd !== undefined) {
+        const imageLabel = source.slice(labelStart + 1, labelEnd);
+        const referenceLabel = source.slice(labelEnd + 2, referenceEnd).trim() || imageLabel;
+        isRenderedImage = definedLabels.has(normalizeMarkdownReferenceLabel(referenceLabel));
+      }
+    } else {
+      isRenderedImage = definedLabels.has(
+        normalizeMarkdownReferenceLabel(source.slice(labelStart + 1, labelEnd)),
+      );
     }
-    let destinationOffset = labelEnd + 2;
-    while (source[destinationOffset] === ' ' || source[destinationOffset] === '\t') {
-      destinationOffset++;
-    }
-    if (
-      extractMarkdownDestinationValue(source.slice(destinationOffset, destinationEnd)) !== undefined
-    ) {
+    if (isRenderedImage) {
       imageLabelRanges.push({ start: labelStart + 1, end: labelEnd });
     }
   }
@@ -882,7 +909,7 @@ function findMarkdownInlineDestinations(source: string): MarkdownInlineDestinati
       imageStart >= 0 &&
       source[imageStart] === '!' &&
       !isEscapedMarkdownDelimiter(source, imageStart);
-    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
+    const labelEnd = findMarkdownLabelEnd(source, labelStart);
     if (labelEnd === undefined || source[labelEnd + 1] !== '(') {
       continue;
     }
@@ -915,17 +942,19 @@ function getMarkdownLogicalLines(source: string): MarkdownLogicalLine[] {
     }
     const lineStart = match.index ?? 0;
     const rawLine = match[0].replace(/\r?\n$/, '');
-    const prefix =
+    const containerPrefix =
       rawLine.match(
         /^(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+)[ \t]{0,3})*/,
       )?.[0] ?? '';
+    const indentation = rawLine.slice(containerPrefix.length).match(/^[ \t]{0,3}/)?.[0] ?? '';
+    const prefix = containerPrefix + indentation;
     lines.push({
       content: rawLine.slice(prefix.length),
       contentOffset: lineStart + prefix.length,
       endOffset: lineStart + rawLine.length,
       lineStart,
-      quoteDepth: (prefix.match(/>/g) ?? []).length,
-      startsListItem: /(?:^|[ \t])(?:[-+*]|\d+[.)])[ \t]+/.test(prefix),
+      quoteDepth: (containerPrefix.match(/>/g) ?? []).length,
+      startsListItem: /(?:^|[ \t])(?:[-+*]|\d+[.)])[ \t]+/.test(containerPrefix),
     });
   }
   return lines;
@@ -957,15 +986,21 @@ function findMarkdownReferenceDestinations(
     }
 
     const labelStart = line.contentOffset;
-    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
+    const labelEnd = findMarkdownLabelEnd(source, labelStart);
     if (labelEnd === undefined || source[labelEnd + 1] !== ':') {
       continue;
     }
 
-    let destinationLine = line;
-    let rawValue = source.slice(labelEnd + 2, line.endOffset);
+    const definitionEndLineIndex = lines.findIndex(
+      (candidate) => labelEnd >= candidate.lineStart && labelEnd <= candidate.endOffset,
+    );
+    if (definitionEndLineIndex < lineIndex) {
+      continue;
+    }
+    let destinationLine = lines[definitionEndLineIndex];
+    let rawValue = source.slice(labelEnd + 2, destinationLine.endOffset);
     if (!rawValue.trim()) {
-      const continuation = lines[lineIndex + 1];
+      const continuation = lines[definitionEndLineIndex + 1];
       if (!continuation || continuation.quoteDepth !== line.quoteDepth) {
         continue;
       }
@@ -1001,8 +1036,12 @@ function findMarkdownReferenceDestinations(
 
 function hasActiveMarkdownReference(source: string, label: string): boolean {
   const normalizedLabel = normalizeMarkdownReferenceLabel(label);
+  const imageLabelRanges = findMarkdownImageLabelRanges(source);
   for (let labelStart = 0; labelStart < source.length; labelStart++) {
     if (source[labelStart] !== '[' || isEscapedMarkdownDelimiter(source, labelStart)) {
+      continue;
+    }
+    if (imageLabelRanges.some((range) => labelStart >= range.start && labelStart < range.end)) {
       continue;
     }
     const image =
@@ -1012,20 +1051,13 @@ function hasActiveMarkdownReference(source: string, label: string): boolean {
     if (image) {
       continue;
     }
-    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
+    const labelEnd = findMarkdownLabelEnd(source, labelStart);
     if (labelEnd === undefined) {
       continue;
     }
     const linkLabel = source.slice(labelStart + 1, labelEnd);
     if (source[labelEnd + 1] === '[') {
-      const referenceEnd = findBalancedMarkdownDelimiter(
-        source,
-        labelEnd + 1,
-        '[',
-        ']',
-        false,
-        true,
-      );
+      const referenceEnd = findMarkdownLabelEnd(source, labelEnd + 1);
       if (referenceEnd === undefined) {
         continue;
       }

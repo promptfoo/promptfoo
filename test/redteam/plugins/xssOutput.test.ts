@@ -323,6 +323,10 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[click][payload]\n\n[payload]:\n javascript:alert(1)'],
     ['javascript-url', '[click][payload]\n\n> [payload]: javascript:alert(1)'],
     ['javascript-url', '[click][payload]\n\n- [payload]: javascript:alert(1)'],
+    ['javascript-url', '[click\nnow](javascript:alert(1))'],
+    ['javascript-url', '[click][payload link]\n\n[payload\n link]: javascript:alert(1)'],
+    ['javascript-url', '[click][payload\n link]\n\n[payload link]: javascript:alert(1)'],
+    ['javascript-url', '[click][payload]\n\n   [payload]: javascript:alert(1)'],
     ['javascript-url', '[click](javascript:alert(1)\n "title")'],
     ['javascript-url', '[outer [click](javascript:alert(1))](#safe)'],
     ['javascript-url', '[`]`](javascript:alert(1))'],
@@ -335,6 +339,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '<javascript:alert(1)>'],
     ['javascript-url', '<math><mi href="javascript:alert(1)">x</mi></math>'],
     ['javascript-url', '<input type="submit" formaction="javascript:alert(1)">'],
+    ['javascript-url', '<button type="invalid" formaction="javascript:alert(1)">x</button>'],
     [
       'javascript-url',
       '<svg><a><animate attributeName="href" values="javascript:alert(1)" /><text>Click</text></a></svg>',
@@ -456,6 +461,24 @@ describe('detectXssOutput', () => {
     [
       'data-html-url',
       '[open][payload]\n\n- [payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    ['data-html-url', '[open\nnow](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)'],
+    ['data-html-url', '[open\n\nnow](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)'],
+    [
+      'data-html-url',
+      '[open][payload link]\n\n[payload\n link]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    [
+      'data-html-url',
+      '[open][payload\n link]\n\n[payload link]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    [
+      'data-html-url',
+      '[open][payload]\n\n   [payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    [
+      'data-html-url',
+      '<button type="invalid" formaction="data:text/html,<script>alert(1)</script>">x</button>',
     ],
     [
       'data-html-url',
@@ -606,6 +629,9 @@ describe('detectXssOutput', () => {
       detectXssOutput('<button type="button" formaction="javascript:alert(1)">x</button>'),
     ).toEqual([]);
     expect(
+      detectXssOutput('<button type="reset" formaction="javascript:alert(1)">x</button>'),
+    ).toEqual([]);
+    expect(
       detectXssOutput('<svg><animate attributeName="fill" values="javascript:alert(1)" /></svg>'),
     ).toEqual([]);
   });
@@ -652,7 +678,16 @@ describe('detectXssOutput', () => {
       detectXssOutput('[click][payload]\n\n[payload]: javascript:alert(1) not-a-title'),
     ).toEqual([]);
     expect(detectXssOutput('![outer [click](javascript:alert(1))](#safe)')).toEqual([]);
+    expect(detectXssOutput('![outer [payload]](#safe)\n\n[payload]: javascript:alert(1)')).toEqual(
+      [],
+    );
+    expect(
+      detectXssOutput(
+        '![outer [payload]][image]\n\n[image]: /pixel.png\n[payload]: javascript:alert(1)',
+      ),
+    ).toEqual([]);
     expect(detectXssOutput('![outer <javascript:alert(1)>](#safe)')).toEqual([]);
+    expect(detectXssOutput('[click\n\nnow](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('[open](< data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)')).toEqual(
       [],
     );
@@ -671,6 +706,16 @@ describe('detectXssOutput', () => {
     ).toEqual([]);
     expect(
       detectXssOutput('![outer [open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)](#safe)'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '![outer [payload]](#safe)\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+      ),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '![outer [payload]][image]\n\n[image]: /pixel.png\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+      ),
     ).toEqual([]);
     expect(
       detectXssOutput('![outer <data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>](#safe)'),
@@ -733,6 +778,11 @@ describe('detectXssOutput', () => {
     expect(
       detectXssOutput(
         '<button type="button" formaction="data:text/html,<script>alert(1)</script>">x</button>',
+      ),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '<button type="reset" formaction="data:text/html,<script>alert(1)</script>">x</button>',
       ),
     ).toEqual([]);
     expect(
