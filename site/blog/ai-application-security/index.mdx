@@ -1,6 +1,6 @@
 ---
 title: 'AI Application Security: Tutorial & Best Practices'
-description: 'Learn the differences between AI application security and traditional application security, as well as the key threats and best practices for defending AI systems.'
+description: 'Learn how AI application security differs from traditional security, explore major threats and best practices, and red-team a RAG application with Promptfoo.'
 keywords: [ai application security]
 date: 2026-05-03
 authors: [michael]
@@ -235,13 +235,13 @@ Promptfoo categorizes its findings against security frameworks such as OWASP Top
 
 Let's look at a simple example of how you can use Promptfoo's red-teaming capabilities to exploit security issues in your RAG application. The same technique applies to other types of AI applications as well.
 
-We will run red-team adversarial attacks against a RAG-based chatbot used by a fictional IT company to retrieve HR policies. Developing the RAG chatbot is beyond the scope of this article, but you can download the code for developing and running the chatbot through this [Github repository](https://github.com/usmanmalik57/promptfoo-articles).
+We will run red-team adversarial attacks against a RAG-based chatbot used by a fictional IT company to retrieve HR policies. Developing the RAG chatbot is beyond the scope of this article, but its source is available in the `RAG_APP_PF` directory of this external [GitHub repository](https://github.com/usmanmalik57/promptfoo-articles). The sample app requires an `OPENAI_API_KEY` in a locally created `.env` file. Install its dependencies, start its FastAPI server, and upload a non-sensitive test PDF before running the scan. Because it uses OpenAI for embeddings and chat responses, running the example incurs API usage.
 
 You can test the application first using the FastAPI Swagger interface. The interface allows you to add documents to a vector database via the upload route and query the RAG application using the query route. Here is an example call and the response from the RAG application.
 
 ![FastAPI Swagger interface example call and response](/img/blog/ai-application-security/rag-fastapi-swagger.png)
 
-Promptfoo provides [detailed documentation](/docs/red-team/quickstart/) on how to red-team an AI application. To initialize a red team project, run _promptfoo redteam setup_, and you will see the following window in your local browser.
+Promptfoo provides [detailed documentation](/docs/red-team/quickstart/) on how to red-team an AI application. To initialize a red team project, run `npx promptfoo@latest redteam setup`, and you will see the following window in your local browser.
 
 ![promptfoo redteam setup browser window](/img/blog/ai-application-security/redteam-setup-window.png)
 
@@ -254,6 +254,25 @@ The first step is to name your application and select the target type, which can
 The next step is to configure the target type, which determines the configuration settings. For HTTP endpoints, we need to set the HTTP URL, HTTP method, headers, content type, and request body. The following screenshot shows the configuration to access our RAG application.
 
 ![HTTP target configuration for the RAG application](/img/blog/ai-application-security/step2-target-configuration.png)
+
+The HTTP target portion of the saved configuration is equivalent to:
+
+```yaml
+targets:
+  - id: http
+    label: hr_rag_application
+    config:
+      url: 'http://127.0.0.1:8000/query'
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        question: '{{prompt}}'
+        thread_id: redteam
+      transformResponse: 'json.answer'
+```
+
+The setup UI adds the application purpose, selected plugins, and strategies to the generated configuration.
 
 ### Step 3: Provide application details
 
@@ -286,20 +305,20 @@ Select the red-team strategies that determine how attacks are generated and exec
 
 Finally, review your red-teaming configurations and run the application. You have two options:
 
-- Save the YAML file and run the promptfoo redteam run command via the CLI in the same directory as the YAML file.
+- Save the YAML file and run `npx promptfoo@latest redteam run` via the CLI in the same directory as the YAML file.
 - Run the tests directly in a browser.
 
 ![Review and run red-team configuration](/img/blog/ai-application-security/step6-review-run.png)
 
 ### Step 7: Results and monitoring
 
-The final step is to review the results. You can directly see the results in your browser if you run the tests there. For the command line, run `promptfoo redteam report` after the scan completes to open the results view.
+The final step is to review the results. You can directly see the results in your browser if you run the tests there. For the command line, run `npx promptfoo@latest redteam report` after the scan completes to open the results view.
 
 For our RAG application, we see the following results:
 
 ![Red-team results for the RAG application](/img/blog/ai-application-security/step7-results.png)
 
-You can see the prompts used in the tests, the success rate, and the output of each test. For example, the output above shows that the red-teaming test failed because the RAG application disclosed the international configuration and environment details of the vector database.
+You can see the prompts used in the tests, the success rate, and the output of each test. For example, the output above shows that the red-teaming test failed because the RAG application disclosed the internal configuration and environment details of the vector database.
 
 You can see detailed vulnerability and remediation reports by clicking the corresponding links at the top right. Here is the vulnerability report for our RAG application.
 
