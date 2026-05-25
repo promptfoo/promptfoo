@@ -1167,6 +1167,69 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('expands inline assertion includes relative to each declaring config before merging', async () => {
+    const firstConfigPath = path.resolve('suite', 'first', 'config.json');
+    const secondConfigPath = path.resolve('suite', 'second', 'config.json');
+    const configFor = (prefix: string) => ({
+      providers: [`${prefix}-provider`],
+      prompts: [`${prefix}-prompt`],
+      tests: [
+        {
+          vars: { prefix },
+          assert: [{ value: 'file://assertions/test.yaml' }],
+        },
+      ],
+      scenarios: [
+        {
+          config: [],
+          tests: [
+            {
+              vars: { prefix },
+              assert: [{ value: 'file://assertions/scenario.yaml' }],
+            },
+          ],
+        },
+      ],
+      defaultTest: {
+        assert: [{ value: 'file://assertions/default.yaml' }],
+      },
+    });
+
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [String(pathOrGlob)]);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      const filename = String(filePath);
+      if (filename === firstConfigPath) {
+        return JSON.stringify(configFor('first'));
+      }
+      if (filename === secondConfigPath) {
+        return JSON.stringify(configFor('second'));
+      }
+      for (const prefix of ['first', 'second']) {
+        const baseDir = path.dirname(prefix === 'first' ? firstConfigPath : secondConfigPath);
+        for (const type of ['test', 'scenario', 'default']) {
+          if (filename === path.resolve(baseDir, `assertions/${type}.yaml`)) {
+            return `- type: contains\n  value: ${prefix}-${type}`;
+          }
+        }
+      }
+      throw new Error(`Unexpected test fixture read: ${filename}`);
+    });
+
+    const result = await combineConfigs([firstConfigPath, secondConfigPath]);
+
+    expect((result.tests as any[]).map((test) => test.assert[0].value)).toEqual([
+      'first-test',
+      'second-test',
+    ]);
+    expect((result.defaultTest as any).assert.map((assertion: any) => assertion.value)).toEqual([
+      'first-default',
+      'second-default',
+    ]);
+    expect(
+      (result.scenarios as any[]).map((scenario) => scenario.tests[0].assert[0].value),
+    ).toEqual(['first-scenario', 'second-scenario']);
+  });
+
   it('should handle undefined defaultTest in configs', async () => {
     const config = {
       providers: ['provider1'],

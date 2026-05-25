@@ -78,6 +78,20 @@ describe('expandAssertionFileRefs', () => {
     expect((out?.[0] as any).value).toBe(expected);
   });
 
+  it('rebases namespaced Ruby script refs without splitting their method name', async () => {
+    writeFixture(
+      'assertions/default.yaml',
+      `- type: ruby\n  value: file://scripts/grader.rb:MyModule::Nested.method\n`,
+    );
+
+    const input: AssertionOrSet[] = [{ value: 'file://assertions/default.yaml' } as any];
+    const out = await expandAssertionFileRefs(input);
+
+    expect((out?.[0] as any).value).toBe(
+      `file://${path.resolve(fixtureDir, 'assertions/scripts/grader.rb')}:MyModule::Nested.method`,
+    );
+  });
+
   it('recurses into assert-set entries', async () => {
     writeFixture('assertions/default.yaml', `- type: contains\n  value: hello\n`);
     const input: AssertionOrSet[] = [

@@ -22,6 +22,7 @@ import { readPrompts, readProviderPromptMap } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
+  type AssertionOrSet,
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
@@ -439,6 +440,50 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
+async function expandInlineAssertionIncludes<T>(value: T, baseDir: string): Promise<T> {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !Array.isArray((value as { assert?: unknown }).assert)
+  ) {
+    return value;
+  }
+  const assert = await expandAssertionFileRefs((value as { assert: AssertionOrSet[] }).assert, {
+    baseDir,
+  });
+  return (assert ? { ...value, assert } : value) as T;
+}
+
+async function expandConfigInlineAssertionIncludes(
+  config: UnifiedConfig,
+  baseDir: string,
+): Promise<UnifiedConfig> {
+  const tests = Array.isArray(config.tests)
+    ? await Promise.all(config.tests.map((test) => expandInlineAssertionIncludes(test, baseDir)))
+    : config.tests;
+  const defaultTest =
+    config.defaultTest && typeof config.defaultTest === 'object'
+      ? await expandInlineAssertionIncludes(config.defaultTest, baseDir)
+      : config.defaultTest;
+  const scenarios = Array.isArray(config.scenarios)
+    ? await Promise.all(
+        config.scenarios.map(async (scenario) => {
+          if (typeof scenario === 'string' || !Array.isArray(scenario.tests)) {
+            return scenario;
+          }
+          return {
+            ...scenario,
+            tests: await Promise.all(
+              scenario.tests.map((test) => expandInlineAssertionIncludes(test, baseDir)),
+            ),
+          };
+        }),
+      )
+    : config.scenarios;
+
+  return { ...config, tests, defaultTest, scenarios };
+}
+
 /**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
@@ -461,7 +506,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
-      configs.push(config);
+      configs.push(await expandConfigInlineAssertionIncludes(config, path.dirname(globPath)));
     }
   }
 
