@@ -328,11 +328,10 @@ describe('Script value resolution', () => {
       providerResponse: baseProviderResponse,
     });
 
-    expect(runPython).toHaveBeenCalledWith(
-      expect.stringContaining('C:/suite/assertions/value.py'),
-      'get_assert',
-      expect.any(Array),
-    );
+    const [[scriptPath, functionName, args]] = vi.mocked(runPython).mock.calls;
+    expect(scriptPath.replaceAll('\\', '/')).toContain('C:/suite/assertions/value.py');
+    expect(functionName).toBe('get_assert');
+    expect(args).toEqual(expect.any(Array));
     expect(result.pass).toBe(true);
   });
 
