@@ -690,6 +690,21 @@ describe('xAI Chat Provider', () => {
       // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
       expect(withReasoning).toBeCloseTo(0.0005, 10);
     });
+
+    it('bills a reasoning-only response (no other completion tokens)', () => {
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. A turn whose entire
+      // output is reasoning still has a real cost — the reasoning tokens are
+      // billed at the output rate even though completionTokens is 0.
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 500, 0, 200);
+      // 500 input @ 0.30/M + 200 reasoning @ 0.50/M = 0.00015 + 0.0001
+      expect(cost).toBeCloseTo(0.00025, 10);
+    });
+
+    it('bills output when input tokens are reported as zero', () => {
+      const cost = calculateXAICost('grok-3-mini-beta', {}, 0, 200, 50);
+      // 0 input @ 0.30/M + 250 output @ 0.50/M.
+      expect(cost).toBeCloseTo(0.000125, 10);
+    });
   });
 
   describe('Model constants and configuration', () => {
@@ -873,6 +888,35 @@ describe('xAI Chat Provider', () => {
       expect(result.output).toBe('Test response');
       expect(result.cost).toBeDefined();
       expect(typeof result.cost).toBe('number');
+    });
+
+    it('includes separately reported reasoning tokens in cost', async () => {
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'reasoned answer' } }],
+          usage: {
+            prompt_tokens: 500,
+            completion_tokens: 500,
+            total_tokens: 1000,
+            completion_tokens_details: { reasoning_tokens: 200 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = createXAIProvider('xai:grok-3-mini-beta', {
+        config: { apiKey: 'test-key' } as any,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M. xAI prices
+      // reasoning separately from completion tokens, so bill 700 output tokens:
+      // 500 input @ 0.30/M + 700 output @ 0.50/M = 0.00015 + 0.00035.
+      expect(result.tokenUsage?.completionDetails?.reasoning).toBe(200);
+      expect(result.cost).toBeCloseTo(0.0005, 10);
     });
   });
 });
