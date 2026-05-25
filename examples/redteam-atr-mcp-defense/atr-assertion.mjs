@@ -23,7 +23,7 @@ import { ATREngine } from 'agent-threat-rules';
 /**
  * Rule severities that cause the assertion to fail. Edit to taste.
  *
- * @type {ReadonlyArray<'critical' | 'high' | 'medium' | 'low' | 'info'>}
+ * @type {ReadonlyArray<'critical' | 'high' | 'medium' | 'low' | 'informational'>}
  */
 const FAIL_SEVERITIES = ['critical', 'high'];
 
