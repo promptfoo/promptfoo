@@ -1,12 +1,18 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import { describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
+  buildEvalOutputPromptHash,
+  buildEvalUrlWithSearchParams,
   getDefaultHiddenVarNames,
   getHumanRating,
   getNamedMetricTotal,
   getNamedMetricTotals,
   hasHumanRating,
   hashVarSchema,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
 } from './utils';
 import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
@@ -22,6 +28,173 @@ const createBaseOutput = (): EvaluateTableOutput => ({
   latencyMs: 0,
   namedScores: {},
   testCase: {},
+});
+
+describe('eval output prompt hashes', () => {
+  it('builds a readable one-based hash', () => {
+    expect(buildEvalOutputPromptHash(0, 1)).toBe('#details-row-1-prompt-2');
+  });
+
+  it('parses hashes back to zero-based indexes', () => {
+    expect(parseEvalOutputPromptHash('#details-row-3-prompt-2')).toEqual({
+      rowIndex: 2,
+      promptIndex: 1,
+    });
+  });
+
+  it('rejects malformed or zero-valued hashes', () => {
+    expect(parseEvalOutputPromptHash('#details-row-0-prompt-1')).toBeNull();
+    expect(parseEvalOutputPromptHash('#details-row-1-prompt-0')).toBeNull();
+    expect(parseEvalOutputPromptHash('#other-fragment')).toBeNull();
+  });
+});
+
+describe('buildEvalUrlWithSearchParams', () => {
+  it('preserves the current hash while updating search params', () => {
+    expect(
+      buildEvalUrlWithSearchParams(
+        {
+          pathname: '/eval/eval-1',
+          search: '?view=report',
+          hash: '#details-row-51-prompt-1',
+        },
+        (params) => {
+          params.set('search', 'prompt');
+        },
+      ),
+    ).toEqual({
+      pathname: '/eval/eval-1',
+      search: '?view=report&search=prompt',
+      hash: '#details-row-51-prompt-1',
+    });
+  });
+
+  it('reads the live window hash when source.hash is omitted', () => {
+    const previousUrl = window.location.href;
+    window.history.replaceState({}, '', '/eval/eval-1?view=report#details-row-9-prompt-1');
+    try {
+      expect(
+        buildEvalUrlWithSearchParams(
+          { pathname: '/eval/eval-1', search: '?view=report' },
+          (params) => {
+            params.set('search', 'prompt');
+          },
+        ),
+      ).toEqual({
+        pathname: '/eval/eval-1',
+        search: '?view=report&search=prompt',
+        hash: '#details-row-9-prompt-1',
+      });
+    } finally {
+      window.history.replaceState({}, '', previousUrl);
+    }
+  });
+
+  it('honors an explicit empty hash override', () => {
+    const previousUrl = window.location.href;
+    window.history.replaceState({}, '', '/eval/eval-1#details-row-9-prompt-1');
+    try {
+      expect(
+        buildEvalUrlWithSearchParams({ pathname: '/eval/eval-1', search: '', hash: '' }, () => {}),
+      ).toEqual({ pathname: '/eval/eval-1', search: '', hash: '' });
+    } finally {
+      window.history.replaceState({}, '', previousUrl);
+    }
+  });
+});
+
+describe('eval-details hash store', () => {
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('exposes the live window hash via useEvalDetailsHash', () => {
+    window.history.replaceState({}, '', '/eval/x#details-row-7-prompt-2');
+    const { result } = renderHook(() => useEvalDetailsHash());
+    expect(result.current).toBe('#details-row-7-prompt-2');
+  });
+
+  it('notifies subscribers when setEvalDetailsHash mutates the URL', () => {
+    const { result } = renderHook(() => useEvalDetailsHash());
+    expect(result.current).toBe('');
+
+    act(() => {
+      setEvalDetailsHash('#details-row-3-prompt-1');
+    });
+
+    expect(result.current).toBe('#details-row-3-prompt-1');
+    expect(window.location.hash).toBe('#details-row-3-prompt-1');
+  });
+
+  it('preserves existing history state when mutating the details hash', () => {
+    const state = { from: 'router' };
+    window.history.replaceState(state, '', '/eval/x');
+
+    act(() => {
+      setEvalDetailsHash('#details-row-4-prompt-2');
+    });
+
+    expect(window.history.state).toEqual(state);
+    expect(window.location.hash).toBe('#details-row-4-prompt-2');
+  });
+
+  it('adds a stable row hint while mutating the details hash', () => {
+    window.history.replaceState({}, '', '/eval/x');
+
+    act(() => {
+      setEvalDetailsHash('#details-row-51-prompt-2', 50);
+    });
+
+    expect(window.location.search).toBe('?rowId=51');
+    expect(window.location.hash).toBe('#details-row-51-prompt-2');
+  });
+
+  it('clears the stale row hint when removing the details hash', () => {
+    window.history.replaceState({}, '', '/eval/x?rowId=51#details-row-51-prompt-2');
+
+    act(() => {
+      setEvalDetailsHash('');
+    });
+
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
+  });
+
+  it('coordinates updates across multiple subscribers', () => {
+    const { result: a } = renderHook(() => useEvalDetailsHash());
+    const { result: b } = renderHook(() => useEvalDetailsHash());
+
+    act(() => {
+      setEvalDetailsHash('#details-row-2-prompt-3');
+    });
+
+    expect(a.current).toBe('#details-row-2-prompt-3');
+    expect(b.current).toBe('#details-row-2-prompt-3');
+
+    act(() => {
+      setEvalDetailsHash('');
+    });
+
+    expect(a.current).toBe('');
+    expect(b.current).toBe('');
+    expect(window.location.hash).toBe('');
+  });
+
+  it('responds to native hashchange events', () => {
+    const { result } = renderHook(() => useEvalDetailsHash());
+    act(() => {
+      window.history.replaceState({}, '', '/#details-row-5-prompt-2');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect(result.current).toBe('#details-row-5-prompt-2');
+  });
+
+  it('prepends a missing leading hash before mutating', () => {
+    act(() => {
+      setEvalDetailsHash('details-row-1-prompt-1');
+    });
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
 });
 
 describe('hasHumanRating', () => {
