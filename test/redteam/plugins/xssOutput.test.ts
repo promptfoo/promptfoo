@@ -156,6 +156,20 @@ describe('XssOutputPlugin', () => {
         xssOutputPatterns: [{ id: 'nested-alternation', pattern: '(a|(?:a))+$' }],
       }),
     ).toThrow(/ambiguous quantified alternations/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'hex-escape-alternation', pattern: String.raw`(a|\x61)+$` }],
+      }),
+    ).toThrow(/ambiguous quantified alternations/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [
+          { id: 'unicode-escape-alternation', pattern: String.raw`(a|\u0061)+$` },
+        ],
+      }),
+    ).toThrow(/ambiguous quantified alternations/);
   });
 
   it('accepts literal regex operators inside character classes', () => {
@@ -474,8 +488,11 @@ describe('detectXssOutput', () => {
       [],
     );
     expect(detectXssOutput('```html\n<script>alert(1)</script>\n```')).toEqual([]);
+    expect(detectXssOutput('> ```html\n> <script>alert(1)</script>\n> ```')).toEqual([]);
     expect(detectXssOutput('    <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('>     <script>alert(1)</script>')).toEqual([]);
+    expect(detectXssOutput('-     <script>alert(1)</script>')).toEqual([]);
+    expect(detectXssOutput('1.     <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('    [click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
     expect(detectXssOutput('<pre>[click](javascript:alert(1))</pre>')).toEqual([]);

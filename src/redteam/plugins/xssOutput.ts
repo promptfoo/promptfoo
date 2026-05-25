@@ -189,7 +189,7 @@ function normalizeMarkdownDataUrlDetectionOutput(output: string): string {
 function maskMarkdownCodeContexts(output: string): string {
   const mask = (value: string) => value.replace(/[^\r\n]/g, ' ');
   const withoutFences = output.replace(
-    /(^|\r?\n)[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
+    /(^|\r?\n)(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
     mask,
   );
   const lines = withoutFences.split(/(\r?\n)/);
@@ -198,7 +198,9 @@ function maskMarkdownCodeContexts(output: string): string {
   for (let index = 0; index < lines.length; index += 2) {
     const line = lines[index];
     const blank = /^[ \t]*$/.test(line);
-    const indented = /^(?: {0,3}>[ \t]?)*(?: {4}|\t)/.test(line);
+    const indented = /^(?: {0,3}>[ \t]?)*(?:(?: {0,3}(?:[-+*]|\d+[.)])[ \t]+)?)(?: {4}|\t)/.test(
+      line,
+    );
     if (indented && (previousLineWasBlank || inIndentedBlock)) {
       lines[index] = mask(line);
       inIndentedBlock = true;
@@ -1127,10 +1129,10 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
   }
 }
 
-function hasShorthandCharacterClass(source: string): boolean {
+function hasEscapedRegexAtom(source: string): boolean {
   for (let index = 0; index < source.length; index++) {
     if (source[index] === '\\') {
-      if ('dDsSwW'.includes(source[index + 1] ?? '')) {
+      if (/[A-Za-z0-9]/.test(source[index + 1] ?? '')) {
         return true;
       }
       index++;
@@ -1155,7 +1157,7 @@ function hasAmbiguousQuantifiedAlternation(source: string): boolean {
     }
     const matchIndex = match.index ?? 0;
     const originalGroup = source.slice(matchIndex, matchIndex + match[0].length);
-    if (originalGroup.includes('[') || hasShorthandCharacterClass(originalGroup)) {
+    if (originalGroup.includes('[') || hasEscapedRegexAtom(originalGroup)) {
       return true;
     }
 
