@@ -90,7 +90,7 @@ export async function fetchNovitaModels(env?: EnvOverrides): Promise<NovitaModel
       modelCache = [];
     }
   } catch (err) {
-    logger.warn(`Failed to fetch novita models: ${String(err)}`);
+    logger.warn('[Novita] Failed to fetch models', { error: err });
     modelCache = [];
   }
 

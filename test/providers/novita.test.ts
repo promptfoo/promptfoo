@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   clearNovitaModelsCache,
   createNovitaProvider,
@@ -46,6 +47,7 @@ describe('Novita providers', () => {
 
   afterEach(() => {
     restoreEnv();
+    vi.restoreAllMocks();
   });
 
   describe('createNovitaProvider', () => {
@@ -169,9 +171,12 @@ describe('Novita providers', () => {
     });
 
     it('returns an empty model list when the models request fails', async () => {
-      vi.mocked(fetchWithCache).mockRejectedValue(new Error('network unavailable'));
+      const error = new Error('network unavailable');
+      const warnSpy = vi.spyOn(logger, 'warn');
+      vi.mocked(fetchWithCache).mockRejectedValue(error);
 
       await expect(fetchNovitaModels()).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith('[Novita] Failed to fetch models', { error });
     });
   });
 
