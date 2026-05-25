@@ -36,7 +36,7 @@ describe('N8nProvider', () => {
   describe('constructor', () => {
     it('should create instance with url', () => {
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
+      expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
     });
 
     it('should create instance with custom id', () => {
@@ -46,12 +46,23 @@ describe('N8nProvider', () => {
       expect(provider.id()).toBe('my-n8n-agent');
     });
 
+    it('should replace URL-backed routing IDs with a safe display ID', () => {
+      const endpoint = 'https://n8n.example.com/webhook/private-token?key=secret';
+      const provider = new N8nProvider(endpoint, {
+        id: `n8n:${endpoint}`,
+      });
+
+      expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+      expect(provider.id()).not.toContain('private-token');
+      expect(provider.toString()).not.toContain('secret');
+    });
+
     it('should create instance with url in config', () => {
       const provider = new N8nProvider('', {
         config: { url: 'https://n8n.example.com/webhook/agent' },
       });
-      expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
-      expect(provider.toString()).toBe('[n8n Provider https://n8n.example.com/webhook/agent]');
+      expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+      expect(provider.toString()).toBe(`[n8n Provider ${provider.id()}]`);
     });
 
     it('should throw error when no url provided', () => {
@@ -62,14 +73,14 @@ describe('N8nProvider', () => {
   describe('id', () => {
     it('should return n8n provider id', () => {
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
+      expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
     });
   });
 
   describe('toString', () => {
     it('should return string representation', () => {
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
-      expect(provider.toString()).toBe('[n8n Provider https://n8n.example.com/webhook/agent]');
+      expect(provider.toString()).toBe(`[n8n Provider ${provider.id()}]`);
     });
   });
 
@@ -189,6 +200,28 @@ describe('N8nProvider', () => {
       );
     });
 
+    it('should safely render prompt values in JSON string body templates', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockResponse({ output: 'Response' }));
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: {
+          body: '{"message":"{{prompt}}"}',
+        },
+      });
+      const prompt = 'He said "hello".\nNext line.';
+
+      await provider.callApi(prompt);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          body: JSON.stringify({ message: prompt }),
+        }),
+        expect.any(Number),
+        'text',
+      );
+    });
+
     it('should use custom headers', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
@@ -222,7 +255,7 @@ describe('N8nProvider', () => {
       );
     });
 
-    it('should omit request body for GET requests', async () => {
+    it('should send rendered prompt values as GET query parameters', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -233,7 +266,7 @@ describe('N8nProvider', () => {
       await provider.callApi('Hello');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
-        'https://n8n.example.com/webhook/agent',
+        'https://n8n.example.com/webhook/agent?prompt=Hello',
         {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
@@ -329,6 +362,7 @@ describe('N8nProvider', () => {
       const result = await provider.callApi('Hello');
 
       expect(result.sessionId).toBe('session-abc-123');
+      expect(result.metadata).toBeUndefined();
     });
 
     it('should not reuse a returned session ID for an unrelated call', async () => {
@@ -447,6 +481,22 @@ describe('N8nProvider', () => {
       expect(deleteFromCache).toHaveBeenCalledTimes(1);
     });
 
+    it('should treat nested n8n item error payloads as provider errors', async () => {
+      const deleteFromCache = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockResponse([{ json: { error: 'Nested workflow failed' } }]),
+        deleteFromCache,
+      });
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Hello');
+
+      expect(result).toEqual({
+        error: 'n8n webhook response error: Nested workflow failed',
+      });
+      expect(deleteFromCache).toHaveBeenCalledTimes(1);
+    });
+
     it('should avoid putting webhook credentials or rendered prompt content in provider logs', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue(
         createMockResponse({ output: 'sensitive reply' }),
@@ -458,7 +508,8 @@ describe('N8nProvider', () => {
       await provider.callApi('private customer content');
 
       const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
-      expect(debugLogs).toContain('token=%5BREDACTED%5D');
+      expect(debugLogs).toContain('n8n:webhook:');
+      expect(debugLogs).not.toContain('n8n.example.com');
       expect(debugLogs).not.toContain('webhook-secret-token');
       expect(debugLogs).not.toContain('private customer content');
       expect(debugLogs).not.toContain('sensitive reply');
@@ -510,15 +561,15 @@ describe('createN8nProvider', () => {
 
   it('should create provider from n8n:url format', () => {
     const provider = createN8nProvider('n8n:https://n8n.example.com/webhook/agent');
-    expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
+    expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
   });
 
   it('should create provider with url in config', () => {
     const provider = createN8nProvider('n8n', {
       config: { url: 'https://n8n.example.com/webhook/agent' },
     });
-    expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
-    expect(provider.toString()).toContain('https://n8n.example.com/webhook/agent');
+    expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+    expect(provider.toString()).toBe(`[n8n Provider ${provider.id()}]`);
   });
 
   it('should throw error when no url provided', () => {

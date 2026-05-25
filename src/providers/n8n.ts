@@ -1,6 +1,7 @@
+import { createHash } from 'crypto';
+
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { sanitizeUrl } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
 
@@ -189,6 +190,41 @@ function parseN8nResponseBody(data: unknown): any {
   }
 }
 
+function getN8nError(data: any): unknown | undefined {
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const error = getN8nError(item);
+      if (error !== undefined) {
+        return error;
+      }
+    }
+    return undefined;
+  }
+
+  if (!data || typeof data !== 'object') {
+    return undefined;
+  }
+
+  if ('error' in data && data.error !== undefined) {
+    return data.error;
+  }
+
+  if ('json' in data) {
+    return getN8nError(data.json);
+  }
+
+  return undefined;
+}
+
+function formatN8nError(error: unknown): string {
+  return typeof error === 'string' ? error : JSON.stringify(error);
+}
+
+function getSafeProviderId(url: string): string {
+  const urlFingerprint = createHash('sha256').update(url).digest('hex').slice(0, 12);
+  return `n8n:webhook:${urlFingerprint}`;
+}
+
 /**
  * n8n Provider for calling n8n workflows and AI agents
  *
@@ -222,7 +258,11 @@ export class N8nProvider implements ApiProvider {
       throw new Error('n8n provider requires a webhook URL');
     }
 
-    this.providerId = options.id || `n8n:${this.getUrl()}`;
+    const configuredId = options.id;
+    this.providerId =
+      configuredId && configuredId !== 'n8n' && !configuredId.startsWith('n8n:')
+        ? configuredId
+        : getSafeProviderId(this.getUrl());
   }
 
   id(): string {
@@ -230,7 +270,7 @@ export class N8nProvider implements ApiProvider {
   }
 
   toString(): string {
-    return `[n8n Provider ${this.getUrl()}]`;
+    return `[n8n Provider ${this.providerId}]`;
   }
 
   private getUrl(): string {
@@ -257,6 +297,22 @@ export class N8nProvider implements ApiProvider {
   ): Record<string, any> | string {
     const templateVars = this.getTemplateVars(prompt, context);
     const nunjucks = getNunjucksEngine();
+    const renderValue = (value: any): any => {
+      if (typeof value === 'string') {
+        return nunjucks.renderString(value, templateVars);
+      }
+      if (Array.isArray(value)) {
+        return value.map(renderValue);
+      }
+      if (typeof value === 'object' && value !== null) {
+        const result: Record<string, any> = {};
+        for (const [key, nestedValue] of Object.entries(value)) {
+          result[key] = renderValue(nestedValue);
+        }
+        return result;
+      }
+      return value;
+    };
 
     // Default body structure
     if (!this.config.body) {
@@ -274,33 +330,42 @@ export class N8nProvider implements ApiProvider {
 
     // Custom body template
     if (typeof this.config.body === 'string') {
-      const rendered = nunjucks.renderString(this.config.body, templateVars);
       try {
-        return JSON.parse(rendered);
+        return renderValue(JSON.parse(this.config.body));
       } catch {
-        return rendered;
+        const rendered = nunjucks.renderString(this.config.body, templateVars);
+        try {
+          return JSON.parse(rendered);
+        } catch {
+          if (/^\s*[\[{]/.test(this.config.body)) {
+            throw new Error(
+              'Invalid n8n JSON body template after rendering; use an object body template for string values.',
+            );
+          }
+          return rendered;
+        }
       }
     }
 
     // Object body - render template values
-    const renderValue = (value: any): any => {
-      if (typeof value === 'string') {
-        return nunjucks.renderString(value, templateVars);
-      }
-      if (Array.isArray(value)) {
-        return value.map(renderValue);
-      }
-      if (typeof value === 'object' && value !== null) {
-        const result: Record<string, any> = {};
-        for (const [k, v] of Object.entries(value)) {
-          result[k] = renderValue(v);
-        }
-        return result;
-      }
-      return value;
-    };
-
     return renderValue(this.config.body);
+  }
+
+  private buildGetUrl(body: Record<string, any> | string): string {
+    const requestUrl = new URL(this.getUrl());
+
+    if (typeof body === 'string') {
+      requestUrl.searchParams.set('body', body);
+      return requestUrl.toString();
+    }
+
+    for (const [key, value] of Object.entries(body)) {
+      if (value !== undefined) {
+        requestUrl.searchParams.set(key, typeof value === 'string' ? value : JSON.stringify(value));
+      }
+    }
+
+    return requestUrl.toString();
   }
 
   private buildHeaders(prompt: string, context?: CallApiContextParams): Record<string, string> {
@@ -378,11 +443,11 @@ export class N8nProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const url = this.getUrl();
     const method = this.config.method || 'POST';
     const timeout = this.config.timeout || getRequestTimeoutMs();
 
     const body = this.buildRequestBody(prompt, context);
+    const url = method === 'GET' ? this.buildGetUrl(body) : this.getUrl();
     const headers = this.buildHeaders(prompt, context);
     const renderedBody = typeof body === 'string' ? body : JSON.stringify(body);
     const fetchOptions: { method: string; headers: Record<string, string>; body?: string } = {
@@ -394,10 +459,12 @@ export class N8nProvider implements ApiProvider {
       fetchOptions.body = renderedBody;
     }
 
-    logger.debug(`[n8n] Calling ${method} ${sanitizeUrl(url)}`, {
+    logger.debug('[n8n] Calling webhook', {
       hasBody: method !== 'GET',
       hasCustomHeaders: Object.keys(this.config.headers ?? {}).length > 0,
       hasSessionId: Boolean(this.getRequestSessionId(context)),
+      method,
+      providerId: this.providerId,
     });
 
     let data: any;
@@ -420,10 +487,11 @@ export class N8nProvider implements ApiProvider {
         };
       }
 
-      if (data && typeof data === 'object' && 'error' in data) {
+      const responseError = getN8nError(data);
+      if (responseError !== undefined) {
         await response.deleteFromCache?.();
         return {
-          error: `n8n webhook response error: ${String(data.error)}`,
+          error: `n8n webhook response error: ${formatN8nError(responseError)}`,
         };
       }
     } catch (err) {
@@ -451,15 +519,11 @@ export class N8nProvider implements ApiProvider {
       raw: data,
     };
 
-    // Include tool calls and session in metadata
-    if (toolCalls || sessionId) {
-      response.metadata = {};
-      if (toolCalls) {
-        response.metadata.toolCalls = toolCalls;
-      }
-      if (sessionId) {
-        response.sessionId = sessionId;
-      }
+    if (toolCalls) {
+      response.metadata = { toolCalls };
+    }
+    if (sessionId) {
+      response.sessionId = sessionId;
     }
 
     logger.debug(`[n8n] Response received`, {

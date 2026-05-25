@@ -44,9 +44,9 @@ npx promptfoo view
 ## Configuration Options
 
 - `url`: Webhook URL (alternative to specifying in provider path)
-- `method`: HTTP method (default: `POST`)
+- `method`: HTTP method (default: `POST`); `GET` sends rendered body fields as query parameters
 - `headers`: Additional request headers
-- `body`: Custom request body template with Nunjucks support
+- `body`: Custom request body template with Nunjucks support; prefer object form for JSON payloads
 - `transformResponse`: JavaScript expression to extract output
 - `sessionHeader`: Request header name for the session ID
 - `sessionParser`: JavaScript expression to extract a session ID
@@ -54,7 +54,8 @@ npx promptfoo view
 
 For multi-turn runs, pass `sessionId` in test variables or use a multi-turn strategy so sessions
 remain scoped to one conversation. Keep webhook credentials in environment-backed headers rather
-than embedding them in webhook URLs.
+than embedding them in webhook URLs. The provider uses a fingerprinted display ID; treat debug
+logs as sensitive because request-level logging can include endpoint paths.
 
 ## Response Formats
 

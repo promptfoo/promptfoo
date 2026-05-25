@@ -29,6 +29,8 @@ Promptfoo sends a POST request with:
 ```
 
 The provider automatically extracts output from common n8n response formats including `output`, `response`, `message.content`, `text`, and array responses.
+To avoid exposing webhook URLs in stored results or console output, URL-backed n8n provider routes
+use a stable `n8n:webhook:<fingerprint>` display ID.
 
 ## Configuration
 
@@ -47,16 +49,16 @@ providers:
 
 ### Config Options
 
-| Option              | Type          | Default     | Description                                         |
-| ------------------- | ------------- | ----------- | --------------------------------------------------- |
-| `url`               | string        | -           | Webhook URL (alternative to provider path)          |
-| `method`            | string        | `POST`      | HTTP method                                         |
-| `headers`           | object        | -           | Additional request headers with Nunjucks templating |
-| `body`              | object/string | `{prompt}`  | Request body template                               |
-| `transformResponse` | string        | -           | JavaScript expression to extract output             |
-| `sessionHeader`     | string        | -           | Request header name for the session ID              |
-| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID       |
-| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID           |
+| Option              | Type          | Default     | Description                                                                     |
+| ------------------- | ------------- | ----------- | ------------------------------------------------------------------------------- |
+| `url`               | string        | -           | Webhook URL (alternative to provider path)                                      |
+| `method`            | string        | `POST`      | `GET`, `POST`, `PUT`, or `PATCH`; `GET` encodes body fields as query parameters |
+| `headers`           | object        | -           | Additional request headers with Nunjucks templating                             |
+| `body`              | object/string | `{prompt}`  | Request/body-query template; object form is recommended for JSON requests       |
+| `transformResponse` | string        | -           | JavaScript expression to extract output                                         |
+| `sessionHeader`     | string        | -           | Request header name for the session ID                                          |
+| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID                                   |
+| `sessionField`      | string        | `sessionId` | Body field name for a supplied session ID                                       |
 
 ## Response Formats
 
@@ -68,6 +70,10 @@ The provider handles these n8n response patterns:
 { "message": { "content": "Hello" } }
 [{ "json": { "output": "Result" } }]
 ```
+
+Successful HTTP responses containing an `error` field, including n8n item responses such as
+`[{ "json": { "error": "Workflow failed" } }]`, are reported as provider errors instead of
+evaluation output.
 
 ## Tool Calls
 
@@ -111,7 +117,10 @@ For client-generated sessions, supply `sessionId` in test variables or through `
 :::warning
 
 Webhook URLs and responses can contain sensitive workflow data. Put authentication values in
-templated headers rather than URL query strings, and treat local eval result exports as sensitive.
+templated headers rather than URL query strings or paths, and treat local eval result exports and
+debug logs as sensitive. The provider hides webhook URLs in its display identifier and its own
+status log, but request-level debug logging can include endpoint paths. URLs also remain part of
+your configuration and the outbound request.
 
 :::
 

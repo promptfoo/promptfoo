@@ -658,6 +658,16 @@ describe('loadApiProvider', () => {
     expect(provider).toBeInstanceOf(WebhookProvider);
   });
 
+  it('loadApiProvider with n8n keeps webhook URLs out of provider IDs', async () => {
+    const provider = await loadApiProvider(
+      'n8n:https://example.com/webhook/private-token?key=secret',
+    );
+
+    expect(provider.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
+    expect(provider.id()).not.toContain('private-token');
+    expect(provider.id()).not.toContain('secret');
+  });
+
   it('loadApiProvider with huggingface:text-generation', async () => {
     const provider = await loadApiProvider('huggingface:text-generation:foobar/baz');
     expect(provider).toBeInstanceOf(HuggingfaceTextGenerationProvider);

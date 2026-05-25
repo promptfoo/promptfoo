@@ -251,7 +251,7 @@ describe('Provider Registry', () => {
         n8nOptions,
         mockContext,
       );
-      expect(providerFromPath.id()).toBe('n8n:https://example.com/webhook/agent');
+      expect(providerFromPath.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
 
       const providerFromConfig = await factory!.create(
         'n8n',
@@ -261,7 +261,7 @@ describe('Provider Registry', () => {
         },
         mockContext,
       );
-      expect(providerFromConfig.id()).toBe('n8n:https://example.com/webhook/config-agent');
+      expect(providerFromConfig.id()).toMatch(/^n8n:webhook:[a-f0-9]{12}$/);
 
       await expect(factory!.create('n8n', n8nOptions, mockContext)).rejects.toThrow(
         'n8n provider requires a webhook URL',
