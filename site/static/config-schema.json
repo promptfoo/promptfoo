@@ -3284,6 +3284,15 @@
             "type": "string"
           }
         },
+        "tags": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "generateSuggestions": {
           "type": "boolean"
         },
