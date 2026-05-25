@@ -486,17 +486,17 @@ This is more debuggable—you see exactly which dimension failed.
 Promptfoo's `llm-rubric` returns two values:
 
 - **`pass`**: Boolean that directly controls pass/fail
-- **`score`**: Numeric (0.0-1.0) for metrics and analysis
+- **`score`**: Numeric (0.0-1.0) that is also checked against the score threshold
 
 How they interact:
 
-| Configuration      | Pass/fail determined by                       |
-| ------------------ | --------------------------------------------- |
-| No `threshold` set | `pass` boolean only                           |
-| `threshold` set    | Both `pass === true` AND `score >= threshold` |
+| Configuration                 | Pass/fail determined by                              |
+| ----------------------------- | ---------------------------------------------------- |
+| Default (`threshold` omitted) | Both `pass === true` and `score >= 0.5`              |
+| `threshold` configured        | Both `pass === true` and `score >= configured value` |
 
 :::note
-If you use binary rubrics ("Return pass=true if correct, pass=false otherwise"), you don't need `threshold`. Use `threshold` when you want graduated scores (0.5, 0.8) to control pass/fail.
+The default threshold handles binary scores (`0` or `1`). Use a custom threshold for graduated scores, or set `threshold: 0` when a non-negative score is for analysis only and an explicit `pass` field should control the verdict.
 :::
 
 ## LLM judge prompt template

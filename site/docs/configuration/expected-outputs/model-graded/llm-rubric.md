@@ -317,33 +317,38 @@ This means a result like `{ pass: true, score: 0 }` fails by default because it 
 
 ### Common misconfiguration
 
+The default `0.5` threshold already classifies binary scores correctly: `0` fails and `1` passes. Set a stricter threshold when your grader awards partial credit but the evaluation should accept only high-quality results:
+
 ```yaml
-# Problem: Returns 0/1 scores but needs a stricter cutoff
+# Problem: Partially correct responses can score above the default cutoff
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    # Defaults to threshold: 0.5
+      Score the response quality between 0 and 1.
+      Partially correct responses may score between 0.5 and 0.8.
+    # Defaults to threshold: 0.5, which accepts partial credit
 ```
 
-**Fixes:**
+**Fix:** require the quality level your test needs:
 
 ```yaml
-# Option A: Add threshold
 assert:
   - type: llm-rubric
     value: |
-      Return 0 if the response is incorrect
-      Return 1 if the response is correct
-    threshold: 1
+      Score the response quality between 0 and 1.
+      Partially correct responses may score between 0.5 and 0.8.
+    threshold: 0.9
+```
 
-# Option B: Control pass explicitly
+To preserve legacy boolean-only behavior for a grader that returns both `pass` and a score, set `threshold: 0`. In that mode, a non-negative score no longer vetoes `pass: true`:
+
+```yaml
 assert:
   - type: llm-rubric
     value: |
-      Return {"pass": true, "score": 1} if the response is correct
-      Return {"pass": false, "score": 0} if the response is incorrect
+      Return {"pass": true, "score": 0} when the criterion is met.
+      Return {"pass": false, "score": 0} when the criterion is not met.
+    threshold: 0
 ```
 
 ## Negation with `not-llm-rubric`
