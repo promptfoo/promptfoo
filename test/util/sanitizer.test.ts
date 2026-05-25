@@ -1041,6 +1041,24 @@ describe('sanitizeObject', () => {
       const body = 'api%3Dkey=mysecretvalue';
       expect(sanitizeUrlEncodedString(body)).toBe('api%3Dkey=%5BREDACTED%5D');
     });
+
+    it('should recurse into JSON-shaped form values', () => {
+      // Form value `data` URL-decodes to {"password":"hunter2","user":"alice"}.
+      // The leaf password must get redacted; the user field must survive.
+      const body = 'data=%7B%22password%22%3A%22hunter2%22%2C%22user%22%3A%22alice%22%7D&id=42';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).not.toContain('hunter2');
+      expect(result).toContain('id=42');
+      const sanitizedData = result.match(/data=([^&]+)/)?.[1] ?? '';
+      const decoded = decodeURIComponent(sanitizedData);
+      const parsed = JSON.parse(decoded);
+      expect(parsed).toEqual({ password: '[REDACTED]', user: 'alice' });
+    });
+
+    it('should leave a non-secret JSON form value byte-identical', () => {
+      const body = 'data=%7B%22user%22%3A%22alice%22%7D';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
   });
 });
 

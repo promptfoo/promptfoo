@@ -263,6 +263,36 @@ function decodeFormComponent(component: string): string | undefined {
   }
 }
 
+/**
+ * When a form value URL-decodes to a JSON object/array, recursively sanitize
+ * it and return the serialized result — but only if sanitization actually
+ * changed something. Returns `null` when there is no JSON to sanitize or when
+ * the value is JSON but contains no secrets (so callers can preserve the
+ * original byte-for-byte).
+ */
+function redactNestedJsonValue(decoded: string | undefined): string | null {
+  if (decoded === undefined) {
+    return null;
+  }
+  const trimmed = decoded.trim();
+  if (!trimmed || (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+  const sanitized = sanitizeObject(parsed);
+  const originalSerialized = JSON.stringify(parsed);
+  const sanitizedSerialized = JSON.stringify(sanitized);
+  return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;
+}
+
 export function sanitizeUrlEncodedString(value: string): string {
   if (!value.includes('=')) {
     return value;
@@ -281,6 +311,15 @@ export function sanitizeUrlEncodedString(value: string): string {
       return match;
     }
     const decodedValue = decodeFormComponent(rawValue);
+
+    // Recurse into JSON-shaped values so credentials buried in a
+    // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
+    // redacted at the leaf rather than leaked as opaque bytes.
+    const nestedJson = redactNestedJsonValue(decodedValue);
+    if (nestedJson !== null) {
+      changed = true;
+      return `${separator}${rawKey}=${encodeURIComponent(nestedJson)}`;
+    }
 
     // Check both raw and decoded forms of the value so `+` decoding can't be
     // used to escape pattern-based secret detection (e.g.
