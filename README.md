@@ -72,53 +72,90 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 ## Evaluating Agents, Tool Use, and RAG
 
-Promptfoo can evaluate modern LLM applications that use agents, tool/function calling, structured outputs (JSON mode), and retrieval-augmented generation (RAG).
+Promptfoo evaluates the observable output of agents, tool-calling applications, and retrieval-augmented generation (RAG) pipelines. Put any snippet below in `promptfooconfig.yaml` and run `promptfoo eval`.
 
-### Agent workflows
+### Structured agent output
 
-For agent frameworks (for example, n8n or custom orchestrators), extract the final prompt template and replace framework variables with `{{variable}}` syntax:
+When an agent must return JSON, request structured output from the provider before asserting on the format:
+
+```yaml
+prompts:
+  - 'Return a JSON object with an itinerary for: {{request}}'
+
+providers:
+  - id: openai:chat:gpt-5.4-mini
+    config:
+      response_format:
+        type: json_object
+
+tests:
+  - vars:
+      request: 'Book a flight to Paris.'
+    assert:
+      - type: is-json
+      - type: javascript
+        value: JSON.parse(output).itinerary !== undefined
+```
+
+### Tool calling
+
+Configure the tool schema, require a tool call, and validate the returned call against that schema:
+
+```yaml
+prompts:
+  - 'Schedule a meeting for {{request}} using the schedule_meeting tool.'
+
+providers:
+  - id: openai:chat:gpt-5.4-mini
+    config:
+      tool_choice: required
+      tools:
+        - type: function
+          function:
+            name: schedule_meeting
+            description: Schedule a calendar meeting
+            parameters:
+              type: object
+              properties:
+                when:
+                  type: string
+              required: [when]
+
+tests:
+  - vars:
+      request: 'tomorrow at 3pm'
+    assert:
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'schedule_meeting'
+```
+
+### RAG pipelines
+
+Ground the prompt in retrieved context, then test that the answer contains the fact and stays faithful to that context:
 
 ```yaml
 prompts:
   - |
-    System: {{system_prompt}}
-    User: {{user_input}}
+    Answer the question using only the context.
+    Context: {{context}}
+    Question: {{query}}
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 tests:
   - vars:
-      system_prompt: 'You are a helpful assistant.'
-      user_input: 'Book a flight to Paris.'
+      query: 'Where is the Eiffel Tower?'
+      context: 'The Eiffel Tower is located in Paris.'
     assert:
-      - type: is-json
+      - type: contains
+        value: 'Paris'
+      - type: context-faithfulness
+        threshold: 0.8
 ```
 
-### Tool / function calling
-
-Validate that the correct tool is selected and payload format is valid:
-
-```yaml
-tests:
-  - vars:
-      user_query: 'Schedule a meeting tomorrow at 3pm'
-    assert:
-      - type: is-json
-      - type: contains-json
-        value:
-          name: 'schedule_meeting'
-```
-
-### RAG applications
-
-Ensure expected facts appear in responses and prevent regressions:
-
-```yaml
-assert:
-  - type: contains
-    value: 'The Eiffel Tower is located in Paris'
-```
+See the [RAG evaluation guide](https://www.promptfoo.dev/docs/guides/evaluate-rag/) and the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag-full) for retrieval tests and additional grounding metrics.
 
 ## Why Promptfoo?
 
