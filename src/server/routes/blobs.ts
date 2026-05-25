@@ -12,7 +12,7 @@ import {
 import logger from '../../logger';
 import { BlobsSchemas } from '../../types/api/blobs';
 import { ApiRoutes } from '../../types/api/routes';
-import { replyValidationError, sendError } from '../utils/errors';
+import { replyError, replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
@@ -97,10 +97,7 @@ blobsRouter.get(
     // Validate query parameters
     const parseResult = BlobsSchemas.Library.Query.safeParse(req.query);
     if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid query parameters',
-      });
+      replyError(res, 400, 'Invalid query parameters', { success: false });
       return;
     }
 
@@ -372,10 +369,7 @@ blobsRouter.get(
     // Validate query parameters
     const parseResult = BlobsSchemas.LibraryEvals.Query.safeParse(req.query);
     if (!parseResult.success) {
-      res.status(400).json({
-        success: false,
-        error: 'Invalid query parameters',
-      });
+      replyError(res, 400, 'Invalid query parameters', { success: false });
       return;
     }
 
@@ -428,7 +422,7 @@ blobsRouter.get(
   ApiRoutes.Blobs.Get.routerPath,
   async (req: Request, res: Response): Promise<void> => {
     if (!isBlobStorageEnabled()) {
-      res.status(404).json({ error: 'Blob storage disabled' });
+      replyError(res, 404, 'Blob storage disabled');
       return;
     }
 
@@ -452,7 +446,7 @@ blobsRouter.get(
       .get();
 
     if (!asset) {
-      res.status(404).json({ error: 'Blob not found' });
+      replyError(res, 404, 'Blob not found');
       return;
     }
 
@@ -470,7 +464,7 @@ blobsRouter.get(
 
     if (!reference) {
       logger.warn('[BlobRoute] Missing reference for blob access', { hash });
-      res.status(403).json({ error: 'Not authorized to access this blob' });
+      replyError(res, 403, 'Not authorized to access this blob');
       return;
     }
 
@@ -484,7 +478,7 @@ blobsRouter.get(
       blob = await getBlobByHash(hash);
     } catch (error) {
       logger.error('[BlobRoute] Failed to load blob', { error, hash });
-      res.status(404).json({ error: 'Blob not found' });
+      replyError(res, 404, 'Blob not found');
       return;
     }
 

@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
 import { ApiRoutes } from '../../types/api/routes';
 import { TracesSchemas } from '../../types/api/traces';
-import { replyValidationError } from '../utils/errors';
+import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const tracesRouter = Router();
@@ -27,7 +27,7 @@ tracesRouter.get(ApiRoutes.Traces.GetByEval.routerPath, async (req: Request, res
     res.json(TracesSchemas.GetByEval.Response.parse({ traces }));
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching traces: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch traces' });
+    replyError(res, 500, 'Failed to fetch traces');
   }
 });
 
@@ -47,7 +47,7 @@ tracesRouter.get(ApiRoutes.Traces.Get.routerPath, async (req: Request, res: Resp
     const trace = await traceStore.getTrace(traceId);
 
     if (!trace) {
-      res.status(404).json({ error: 'Trace not found' });
+      replyError(res, 404, 'Trace not found');
       return;
     }
 
@@ -55,6 +55,6 @@ tracesRouter.get(ApiRoutes.Traces.Get.routerPath, async (req: Request, res: Resp
     res.json(TracesSchemas.Get.Response.parse({ trace }));
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching trace: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch trace' });
+    replyError(res, 500, 'Failed to fetch trace');
   }
 });

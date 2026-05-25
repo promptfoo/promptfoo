@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
@@ -14,7 +13,7 @@ import { ApiRoutes } from '../../types/api/routes';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
-import { sendError } from '../utils/errors';
+import { replyError, replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -54,7 +53,7 @@ providersRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.Test.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -107,14 +106,14 @@ providersRouter.post(
   ): Promise<void> => {
     const bodyResult = ProviderSchemas.Discover.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
     const providerOptions = bodyResult.data;
 
     // Check that remote generation is enabled:
     if (neverGenerateRemote()) {
-      res.status(400).json({ error: 'Requires remote generation be enabled.' });
+      replyError(res, 400, 'Requires remote generation be enabled.');
       return;
     }
 
@@ -127,7 +126,7 @@ providersRouter.post(
       if (result) {
         res.json(ProviderSchemas.Discover.Response.parse(result));
       } else {
-        res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
+        replyError(res, 500, "Discovery failed to discover the target's purpose.");
       }
     } catch (e) {
       logger.error('Error calling target purpose discovery', {
@@ -145,13 +144,13 @@ providersRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.HttpGenerator.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
     const { requestExample, responseExample } = bodyResult.data;
 
     if (neverGenerateRemote()) {
-      res.status(400).json({ error: 'Requires remote generation be enabled.' });
+      replyError(res, 400, 'Requires remote generation be enabled.');
       return;
     }
 
@@ -180,9 +179,7 @@ providersRouter.post(
           status: response.status,
           errorText,
         });
-        res.status(response.status).json({
-          error: `HTTP error! status: ${response.status}`,
-        });
+        replyError(res, response.status, `HTTP error! status: ${response.status}`);
         return;
       }
 
@@ -204,7 +201,7 @@ providersRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.TestRequestTransform.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error, { success: false });
       return;
     }
     const { transformCode, prompt } = bodyResult.data;
@@ -256,7 +253,7 @@ providersRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.TestResponseTransform.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error, { success: false });
       return;
     }
     const { transformCode, response: responseText } = bodyResult.data;
@@ -320,7 +317,7 @@ providersRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.TestSession.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
     const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;

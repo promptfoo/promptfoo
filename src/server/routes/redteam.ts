@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import {
@@ -26,6 +25,7 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { replyError, replyValidationError } from '../utils/errors';
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
@@ -40,7 +40,7 @@ redteamRouter.post(
     try {
       const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
       if (!parsedBody.success) {
-        res.status(400).json({ error: z.prettifyError(parsedBody.error) });
+        replyValidationError(res, parsedBody.error);
         return;
       }
 
@@ -58,7 +58,7 @@ redteamRouter.post(
 
       const pluginConfigurationError = getPluginConfigurationError(plugin);
       if (pluginConfigurationError) {
-        res.status(400).json({ error: pluginConfigurationError });
+        replyError(res, 400, pluginConfigurationError);
         return;
       }
 
@@ -103,7 +103,7 @@ redteamRouter.post(
       });
 
       if (testCases.length === 0) {
-        res.status(500).json({ error: 'Failed to generate test case' });
+        replyError(res, 500, 'Failed to generate test case');
         return;
       }
 
@@ -127,9 +127,7 @@ redteamRouter.post(
           }
         } catch (error) {
           logger.error(`Error applying strategy ${strategy.id}`, { error });
-          res.status(500).json({
-            error: `Failed to apply strategy ${strategy.id}`,
-          });
+          replyError(res, 500, `Failed to apply strategy ${strategy.id}`);
           return;
         }
       }
@@ -173,7 +171,7 @@ redteamRouter.post(
           return;
         } catch (error) {
           if (error instanceof RemoteGenerationDisabledError) {
-            res.status(400).json({ error: error.message });
+            replyError(res, 400, error.message);
             return;
           }
 
@@ -181,9 +179,7 @@ redteamRouter.post(
             message: error instanceof Error ? error.message : String(error),
             strategy: strategy.id,
           });
-          res.status(500).json({
-            error: 'Failed to generate multi-turn prompt',
-          });
+          replyError(res, 500, 'Failed to generate multi-turn prompt');
           return;
         }
       }
@@ -221,9 +217,7 @@ redteamRouter.post(
       );
     } catch (error) {
       logger.error('Error generating test case', { error });
-      res.status(500).json({
-        error: 'Failed to generate test case',
-      });
+      replyError(res, 500, 'Failed to generate test case');
     }
   },
 );
@@ -237,7 +231,7 @@ redteamRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error, { success: false });
       return;
     }
 
@@ -327,7 +321,7 @@ redteamRouter.post(
   ApiRoutes.Redteam.Cancel.routerPath,
   async (_req: Request, res: Response): Promise<void> => {
     if (!currentJobId) {
-      res.status(400).json({ error: 'No job currently running' });
+      replyError(res, 400, 'No job currently running');
       return;
     }
 
@@ -370,18 +364,18 @@ redteamRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = RedteamSchemas.Task.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error, { success: false });
       return;
     }
     const bodyResult = RedteamSchemas.Task.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error, { success: false });
       return;
     }
 
     const { taskId } = paramsResult.data;
     if (neverGenerateRemote()) {
-      res.status(400).json({ success: false, error: 'Requires remote generation be enabled.' });
+      replyError(res, 400, 'Requires remote generation be enabled.', { success: false });
       return;
     }
 
@@ -415,7 +409,7 @@ redteamRouter.post(
       res.json(RedteamSchemas.Task.Response.parse(data));
     } catch (error) {
       logger.error(`Error in ${taskId} task: ${error}`);
-      res.status(500).json({ error: `Failed to process ${taskId} task` });
+      replyError(res, 500, `Failed to process ${taskId} task`);
     }
   },
 );

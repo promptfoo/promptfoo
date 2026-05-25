@@ -9,6 +9,7 @@ import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
+import { replyError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 /**
@@ -114,8 +115,7 @@ router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): P
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
 
-    res.status(500).json({
-      error: 'Failed to check version',
+    replyError(res, 500, 'Failed to check version', {
       currentVersion: VERSION,
       latestVersion: VERSION,
       updateAvailable: false,

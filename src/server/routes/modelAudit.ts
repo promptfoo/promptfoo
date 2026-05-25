@@ -5,7 +5,6 @@ import path from 'path';
 import { StringDecoder } from 'string_decoder';
 
 import { Router } from 'express';
-import { z } from 'zod';
 import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
@@ -14,7 +13,7 @@ import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { ApiRoutes } from '../../types/api/routes';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';
-import { replyValidationError, sendError } from '../utils/errors';
+import { replyError, replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -120,9 +119,11 @@ modelAuditRouter.get(
     try {
       const { installed } = await checkModelAuditInstalled();
       if (!installed) {
-        res.status(400).json({
-          error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
-        });
+        replyError(
+          res,
+          400,
+          'ModelAudit is not installed. Please install it using: pip install modelaudit',
+        );
         return;
       }
 
@@ -158,7 +159,7 @@ modelAuditRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ModelAuditSchemas.CheckPath.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -217,9 +218,11 @@ modelAuditRouter.post(
       // Check if modelaudit is installed
       const { installed, version: scannerVersion } = await checkModelAuditInstalled();
       if (!installed) {
-        res.status(400).json({
-          error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
-        });
+        replyError(
+          res,
+          400,
+          'ModelAudit is not installed. Please install it using: pip install modelaudit',
+        );
         return;
       }
 
@@ -249,7 +252,7 @@ modelAuditRouter.post(
             code === 'ENOENT'
               ? `Path does not exist: ${inputPath} (resolved to: ${absolutePath})`
               : `Cannot access path: ${inputPath} (resolved to: ${absolutePath}, ${code ?? 'unknown error'})`;
-          res.status(400).json({ error: message });
+          replyError(res, 400, message);
           return;
         }
 
@@ -257,7 +260,7 @@ modelAuditRouter.post(
       }
 
       if (resolvedPaths.length === 0) {
-        res.status(400).json({ error: 'No valid paths to scan' });
+        replyError(res, 400, 'No valid paths to scan');
         return;
       }
 
@@ -638,7 +641,7 @@ modelAuditRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const queryResult = ModelAuditSchemas.ListScans.Query.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      replyValidationError(res, queryResult.error);
       return;
     }
 
@@ -672,7 +675,7 @@ modelAuditRouter.get(
       const audits = await ModelAudit.getMany(1, 0, 'createdAt', 'desc');
 
       if (audits.length === 0) {
-        res.status(404).json({ error: 'No scans found' });
+        replyError(res, 404, 'No scans found');
         return;
       }
 
@@ -689,7 +692,7 @@ modelAuditRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ModelAuditSchemas.GetScan.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
@@ -697,7 +700,7 @@ modelAuditRouter.get(
       const audit = await ModelAudit.findById(paramsResult.data.id);
 
       if (!audit) {
-        res.status(404).json({ error: 'Model scan not found' });
+        replyError(res, 404, 'Model scan not found');
         return;
       }
 
@@ -714,7 +717,7 @@ modelAuditRouter.delete(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ModelAuditSchemas.DeleteScan.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
@@ -722,7 +725,7 @@ modelAuditRouter.delete(
       const audit = await ModelAudit.findById(paramsResult.data.id);
 
       if (!audit) {
-        res.status(404).json({ error: 'Model scan not found' });
+        replyError(res, 404, 'Model scan not found');
         return;
       }
 

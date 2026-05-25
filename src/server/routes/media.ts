@@ -9,7 +9,7 @@ import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
 import { ApiRoutes } from '../../types/api/routes';
-import { replyValidationError } from '../utils/errors';
+import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
@@ -38,7 +38,7 @@ mediaRouter.get(
       );
     } catch (error) {
       logger.error('[Media API] Error getting storage stats', { error });
-      res.status(500).json({ error: 'Failed to get storage stats' });
+      replyError(res, 500, 'Failed to get storage stats');
     }
   },
 );
@@ -62,7 +62,7 @@ mediaRouter.get(
 
       const exists = await mediaExists(key);
       if (!exists) {
-        res.status(404).json({ error: 'Media not found' });
+        replyError(res, 404, 'Media not found');
         return;
       }
 
@@ -81,7 +81,7 @@ mediaRouter.get(
       );
     } catch (error) {
       logger.error('[Media API] Error getting media info', { error });
-      res.status(500).json({ error: 'Failed to get media info' });
+      replyError(res, 500, 'Failed to get media info');
     }
   },
 );
@@ -110,7 +110,7 @@ mediaRouter.get(
 
       const exists = await mediaExists(key);
       if (!exists) {
-        res.status(404).json({ error: 'Media not found' });
+        replyError(res, 404, 'Media not found');
         return;
       }
 
@@ -140,7 +140,7 @@ mediaRouter.get(
       res.send(data);
     } catch (error) {
       logger.error('[Media API] Error serving media', { error });
-      res.status(500).json({ error: 'Failed to serve media' });
+      replyError(res, 500, 'Failed to serve media');
     }
   },
 );

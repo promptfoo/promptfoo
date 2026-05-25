@@ -13,7 +13,7 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { ApiRoutes } from '../../types/api/routes';
 import { UserSchemas } from '../../types/api/user';
-import { replyValidationError } from '../utils/errors';
+import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -31,7 +31,7 @@ userRouter.get(
       } else {
         logger.error(`Error getting email: ${error}`);
       }
-      res.status(500).json({ error: 'Failed to get email' });
+      replyError(res, 500, 'Failed to get email');
     }
   },
 );
@@ -48,7 +48,7 @@ userRouter.get(
       } else {
         logger.error(`Error getting user ID: ${error}`);
       }
-      res.status(500).json({ error: 'Failed to get user ID' });
+      replyError(res, 500, 'Failed to get user ID');
     }
   },
 );
@@ -81,7 +81,7 @@ userRouter.post(
       });
     } catch (error) {
       logger.error(`Error setting email: ${error}`);
-      res.status(500).json({ error: 'Failed to update email' });
+      replyError(res, 500, 'Failed to update email');
     }
   },
 );
@@ -94,7 +94,7 @@ userRouter.put(
       res.json(UserSchemas.ClearEmail.Response.parse({ success: true, message: 'Email cleared' }));
     } catch (error) {
       logger.error(`Error clearing email: ${error}`);
-      res.status(500).json({ error: 'Failed to clear email' });
+      replyError(res, 500, 'Failed to clear email');
     }
   },
 );
@@ -122,7 +122,7 @@ userRouter.get(
       );
     } catch (error) {
       logger.error(`Error checking email status: ${error}`);
-      res.status(500).json({ error: 'Failed to check email status' });
+      replyError(res, 500, 'Failed to check email status');
     }
   },
 );
@@ -183,7 +183,7 @@ userRouter.post(
         `Error during API key login: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       // Don't expose internal error details to client
-      res.status(401).json({ error: 'Invalid API key or authentication failed' });
+      replyError(res, 401, 'Invalid API key or authentication failed');
     }
   },
 );
@@ -209,7 +209,7 @@ userRouter.post(
       logger.error(
         `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
-      res.status(500).json({ error: 'Logout failed' });
+      replyError(res, 500, 'Logout failed');
     }
   },
 );
@@ -229,7 +229,7 @@ userRouter.get(
       );
     } catch (error) {
       logger.error(`Error getting cloud config: ${error}`);
-      res.status(500).json({ error: 'Failed to get cloud config' });
+      replyError(res, 500, 'Failed to get cloud config');
     }
   },
 );

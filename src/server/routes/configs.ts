@@ -1,11 +1,11 @@
 import { and, eq } from 'drizzle-orm';
 import { Router } from 'express';
-import { z } from 'zod';
 import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
 import { ConfigSchemas } from '../../types/api/configs';
 import { ApiRoutes } from '../../types/api/routes';
+import { replyError, replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const configsRouter = Router();
@@ -15,7 +15,7 @@ configsRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const queryResult = ConfigSchemas.List.Query.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      replyValidationError(res, queryResult.error);
       return;
     }
 
@@ -43,7 +43,7 @@ configsRouter.get(
       res.json(ConfigSchemas.List.Response.parse({ configs }));
     } catch (error) {
       logger.error(`Error fetching configs: ${error}`);
-      res.status(500).json({ error: 'Failed to fetch configs' });
+      replyError(res, 500, 'Failed to fetch configs');
     }
   },
 );
@@ -53,7 +53,7 @@ configsRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ConfigSchemas.Create.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -72,7 +72,7 @@ configsRouter.post(
       res.json(ConfigSchemas.Create.Response.parse(result));
     } catch (error) {
       logger.error(`Error saving config: ${error}`);
-      res.status(500).json({ error: 'Failed to save config' });
+      replyError(res, 500, 'Failed to save config');
     }
   },
 );
@@ -82,7 +82,7 @@ configsRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ConfigSchemas.ListByType.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
@@ -105,7 +105,7 @@ configsRouter.get(
       res.json(ConfigSchemas.ListByType.Response.parse({ configs }));
     } catch (error) {
       logger.error(`Error fetching configs: ${error}`);
-      res.status(500).json({ error: 'Failed to fetch configs' });
+      replyError(res, 500, 'Failed to fetch configs');
     }
   },
 );
@@ -115,7 +115,7 @@ configsRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ConfigSchemas.Get.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
@@ -129,7 +129,7 @@ configsRouter.get(
         .limit(1);
 
       if (!config) {
-        res.status(404).json({ error: 'Config not found' });
+        replyError(res, 404, 'Config not found');
         return;
       }
 
@@ -137,7 +137,7 @@ configsRouter.get(
       res.json(ConfigSchemas.Get.Response.parse(config));
     } catch (error) {
       logger.error(`Error fetching config: ${error}`);
-      res.status(500).json({ error: 'Failed to fetch config' });
+      replyError(res, 500, 'Failed to fetch config');
     }
   },
 );

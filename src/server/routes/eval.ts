@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
@@ -13,7 +12,7 @@ import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { replyValidationError, sendError } from '../utils/errors';
+import { replyError, replyValidationError, sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -66,7 +65,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
         evalId,
       });
-      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+      replyError(res, 413, 'Eval too large to display. Try reducing the page size.');
       return;
     }
 
@@ -125,14 +124,14 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
     logger.error('[GET /:id/table] Response still too large after stripping prompts', {
       evalId,
     });
-    res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+    replyError(res, 413, 'Eval too large to display. Try reducing the page size.');
   }
 }
 
 evalRouter.post(ApiRoutes.Eval.CreateJob.routerPath, (req: Request, res: Response): void => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
   if (!result.success) {
-    res.status(400).json({ error: z.prettifyError(result.error) });
+    replyValidationError(res, result.error);
     return;
   }
 
@@ -202,14 +201,14 @@ evalRouter.post(ApiRoutes.Eval.CreateJob.routerPath, (req: Request, res: Respons
 evalRouter.get(ApiRoutes.Eval.GetJob.routerPath, (req: Request, res: Response): void => {
   const paramsResult = EvalSchemas.GetJob.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
   const { id } = paramsResult.data;
   const job = evalJobs.get(id);
   if (!job) {
-    res.status(404).json({ error: 'Job not found' });
+    replyError(res, 404, 'Job not found');
     return;
   }
 
@@ -246,13 +245,13 @@ evalRouter.patch(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.Update.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
     const bodyResult = EvalSchemas.Update.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -264,7 +263,7 @@ evalRouter.patch(
       await updateResult(id, config, table as unknown as EvaluateTable | undefined);
       res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
     } catch {
-      res.status(500).json({ error: 'Failed to update eval table' });
+      replyError(res, 500, 'Failed to update eval table');
     }
   },
 );
@@ -274,12 +273,12 @@ evalRouter.patch(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.UpdateAuthor.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
     const bodyResult = EvalSchemas.UpdateAuthor.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -289,7 +288,7 @@ evalRouter.patch(
     try {
       const eval_ = await Eval.findById(id);
       if (!eval_) {
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
@@ -308,7 +307,7 @@ evalRouter.patch(
       );
     } catch (error) {
       logger.error(`Failed to update eval author: ${error}`);
-      res.status(500).json({ error: 'Failed to update eval author' });
+      replyError(res, 500, 'Failed to update eval author');
     }
   },
 );
@@ -320,13 +319,13 @@ evalRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.Table.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
     const queryResult = EvalSchemas.Table.Query.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      replyValidationError(res, queryResult.error);
       return;
     }
 
@@ -348,7 +347,7 @@ evalRouter.get(
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
-      res.status(404).json({ error: 'Eval not found' });
+      replyError(res, 404, 'Eval not found');
       return;
     }
 
@@ -368,7 +367,7 @@ evalRouter.get(
         return;
       } catch (error) {
         if (error instanceof ComparisonEvalNotFoundError) {
-          res.status(404).json({ error: 'Comparison eval not found' });
+          replyError(res, 404, 'Comparison eval not found');
           return;
         }
         throw error;
@@ -409,7 +408,7 @@ evalRouter.get(
 
       // Check if any comparison evals were not found
       if (comparisonData.some((data) => data === null)) {
-        res.status(404).json({ error: 'Comparison eval not found' });
+        replyError(res, 404, 'Comparison eval not found');
         return;
       }
 
@@ -496,12 +495,12 @@ evalRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.MetadataKeys.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
     const queryResult = EvalSchemas.MetadataKeys.Query.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      replyValidationError(res, queryResult.error);
       return;
     }
 
@@ -511,7 +510,7 @@ evalRouter.get(
     try {
       const eval_ = await Eval.findById(id);
       if (!eval_) {
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
@@ -522,9 +521,7 @@ evalRouter.get(
         );
         const missingEvals = comparisonEvalIds.filter((_, index) => !comparisonEvals[index]);
         if (missingEvals.length > 0) {
-          res.status(400).json({
-            error: `Comparison evals not found: ${missingEvals.join(', ')}`,
-          });
+          replyError(res, 400, `Comparison evals not found: ${missingEvals.join(', ')}`);
           return;
         }
       }
@@ -537,7 +534,7 @@ evalRouter.get(
       logger.error(
         `Error fetching metadata keys for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      res.status(500).json({ error: 'Failed to fetch metadata keys' });
+      replyError(res, 500, 'Failed to fetch metadata keys');
     }
   },
 );
@@ -547,12 +544,12 @@ evalRouter.get(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.MetadataValues.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
     const queryResult = EvalSchemas.MetadataValues.Query.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      replyValidationError(res, queryResult.error);
       return;
     }
 
@@ -562,7 +559,7 @@ evalRouter.get(
     try {
       const eval_ = await Eval.findById(id);
       if (!eval_) {
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
@@ -573,7 +570,7 @@ evalRouter.get(
       logger.error(
         `Error fetching metadata values for eval ${id}: ${error instanceof Error ? error.message : String(error)}`,
       );
-      res.status(500).json({ error: 'Failed to fetch metadata values' });
+      replyError(res, 500, 'Failed to fetch metadata values');
     }
   },
 );
@@ -581,13 +578,13 @@ evalRouter.get(
 evalRouter.post(ApiRoutes.Eval.AddResults.routerPath, async (req: Request, res: Response) => {
   const paramsResult = EvalSchemas.AddResults.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
   const bodyResult = EvalSchemas.AddResults.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
@@ -597,14 +594,14 @@ evalRouter.post(ApiRoutes.Eval.AddResults.routerPath, async (req: Request, res: 
 
   const eval_ = await Eval.findById(id);
   if (!eval_) {
-    res.status(404).json({ error: 'Eval not found' });
+    replyError(res, 404, 'Eval not found');
     return;
   }
   try {
     await eval_.setResults(results);
   } catch (error) {
     logger.error(`Failed to add results to eval: ${error}`);
-    res.status(500).json({ error: 'Failed to add results to eval' });
+    replyError(res, 500, 'Failed to add results to eval');
     return;
   }
   res.status(204).send();
@@ -615,7 +612,7 @@ evalRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = EvalSchemas.Replay.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -625,14 +622,14 @@ evalRouter.post(
       // Load the evaluation to get the provider configuration
       const eval_ = await Eval.findById(evaluationId);
       if (!eval_) {
-        res.status(404).json({ error: 'Evaluation not found' });
+        replyError(res, 404, 'Evaluation not found');
         return;
       }
 
       // Get the provider configuration from the eval
       const providers = eval_.config.providers;
       if (!providers) {
-        res.status(400).json({ error: 'No providers found in evaluation' });
+        replyError(res, 400, 'No providers found in evaluation');
         return;
       }
 
@@ -641,7 +638,7 @@ evalRouter.post(
       let providerConfig: any;
       if (Array.isArray(providers)) {
         if (providers.length === 0) {
-          res.status(400).json({ error: 'No providers found in evaluation' });
+          replyError(res, 400, 'No providers found in evaluation');
           return;
         }
         // Use the first provider or the one at the specified test index
@@ -709,7 +706,7 @@ evalRouter.post(
       );
     } catch (error) {
       logger.error(`Failed to replay evaluation: ${error}`);
-      res.status(500).json({ error: 'Failed to replay evaluation' });
+      replyError(res, 500, 'Failed to replay evaluation');
     }
   },
 );
@@ -735,13 +732,13 @@ evalRouter.post(
       const gradingResult = bodyResult.data as unknown as GradingResult;
       const result = await EvalResult.findById(id);
       if (!result || result.evalId !== evalId) {
-        res.status(404).json({ error: 'Result not found' });
+        replyError(res, 404, 'Result not found');
         return;
       }
 
       const eval_ = await Eval.findById(evalId);
       if (!eval_) {
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
@@ -767,7 +764,7 @@ evalRouter.post(
           `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
         );
 
-        res.status(400).json({ error: 'Prompt metrics not found' });
+        replyError(res, 400, 'Prompt metrics not found');
         return;
       }
 
@@ -816,7 +813,7 @@ evalRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = EvalSchemas.Save.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -835,9 +832,11 @@ evalRouter.post(
       } else {
         // v4 format: { config, prompts, results, ... }
         if (!body.results || !body.config) {
-          res.status(400).json({
-            error: 'Missing required fields: results and config are required for v4 format',
-          });
+          replyError(
+            res,
+            400,
+            'Missing required fields: results and config are required for v4 format',
+          );
           return;
         }
         const incEval = body as unknown as Eval;
@@ -865,7 +864,7 @@ evalRouter.post(
         error,
         body: sanitizeObject(body, { context: 'request body' }),
       });
-      res.status(500).json({ error: 'Failed to write eval to database' });
+      replyError(res, 500, 'Failed to write eval to database');
     }
   },
 );
@@ -875,7 +874,7 @@ evalRouter.delete(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.Delete.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
@@ -890,11 +889,11 @@ evalRouter.delete(
       });
 
       if (error instanceof Error && error.message === `Eval with ID ${id} not found`) {
-        res.status(404).json({ error: 'Evaluation not found' });
+        replyError(res, 404, 'Evaluation not found');
         return;
       }
 
-      res.status(500).json({ error: 'Failed to delete eval' });
+      replyError(res, 500, 'Failed to delete eval');
     }
   },
 );
@@ -905,7 +904,7 @@ evalRouter.delete(
 evalRouter.delete(ApiRoutes.Eval.BulkDelete.routerPath, (req: Request, res: Response) => {
   const bodyResult = EvalSchemas.BulkDelete.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
@@ -915,7 +914,7 @@ evalRouter.delete(ApiRoutes.Eval.BulkDelete.routerPath, (req: Request, res: Resp
     deleteEvals(ids);
     res.status(204).send();
   } catch {
-    res.status(500).json({ error: 'Failed to delete evals' });
+    replyError(res, 500, 'Failed to delete evals');
   }
 });
 
@@ -927,12 +926,12 @@ evalRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.Copy.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
     const bodyResult = EvalSchemas.Copy.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -942,7 +941,7 @@ evalRouter.post(
     try {
       const sourceEval = await Eval.findById(id);
       if (!sourceEval) {
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
@@ -969,7 +968,7 @@ evalRouter.post(
         error,
         evalId: id,
       });
-      res.status(500).json({ error: 'Failed to copy evaluation' });
+      replyError(res, 500, 'Failed to copy evaluation');
     }
   },
 );

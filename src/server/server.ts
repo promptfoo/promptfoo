@@ -43,7 +43,7 @@ import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
-import { replyValidationError, sendError } from './utils/errors';
+import { replyError, replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../types/index';
@@ -186,7 +186,7 @@ export function createApp() {
     const { id } = paramsResult.data;
     const file = await readResult(id);
     if (!file) {
-      res.status(404).json({ error: 'Result not found' });
+      replyError(res, 404, 'Result not found');
       return;
     }
     res.json(ServerSchemas.Result.Response.parse({ data: file.result }));
@@ -249,7 +249,7 @@ export function createApp() {
       const eval_ = await Eval.findById(id);
       if (!eval_) {
         logger.warn('Eval not found for share check-domain', { id });
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
@@ -290,7 +290,7 @@ export function createApp() {
       }
       if (!eval_) {
         logger.warn('Eval not found for share request', { id });
-        res.status(404).json({ error: 'Eval not found' });
+        replyError(res, 404, 'Eval not found');
         return;
       }
 
