@@ -39,16 +39,23 @@ const GEMINI_2_5_PRO_TIERED_COST = {
  * Note: Vertex AI may have different pricing for some models.
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
-  // Gemini 3.1 models (Preview)
+  // Gemini 3.5 models
+  {
+    id: 'gemini-3.5-flash',
+    cost: { input: 1.5 / 1e6, output: 9.0 / 1e6 },
+  },
+
+  // Gemini 3.1 models
   ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'].map((id) => ({
     id,
     cost: GEMINI_3_PRO_COST,
     tieredCost: GEMINI_3_PRO_TIERED_COST,
   })),
-  {
-    id: 'gemini-3.1-flash-lite-preview',
+  // gemini-3.1-flash-lite (GA) and its preview alias share Flash-Lite pricing.
+  ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview'].map((id) => ({
+    id,
     cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
-  },
+  })),
 
   // Gemini 3.0 models (Preview)
   {
@@ -165,6 +172,10 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   },
 
   // Gemini Embedding
+  {
+    id: 'gemini-embedding-2',
+    cost: { input: 0.2 / 1e6, output: 0 },
+  },
   {
     id: 'gemini-embedding-001',
     cost: { input: 0.15 / 1e6, output: 0 },
