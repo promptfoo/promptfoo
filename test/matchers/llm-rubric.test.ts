@@ -195,6 +195,44 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should treat null score as omitted when provider returns a pass verdict', async () => {
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: null, reason: 'Boolean pass supplied' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric('Expected output', 'Sample output', options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Boolean pass supplied',
+      }),
+    );
+  });
+
+  it('should use a valid score when provider returns null pass', async () => {
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: null, score: 0.6, reason: 'Score supplied' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric('Expected output', 'Sample output', options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 0.6,
+        reason: 'Score supplied',
+      }),
+    );
+  });
+
   it('should handle when provider returns direct object output instead of string', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';

@@ -258,7 +258,7 @@ export async function runJsonGradingPrompt({
     pass = /^(true|yes|pass|y)$/i.test(String(pass));
   }
 
-  let score = parsed.score;
+  let score = hasScore ? parsed.score : undefined;
   if (typeof score !== 'number') {
     score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
   }
