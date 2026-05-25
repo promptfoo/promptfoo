@@ -3,7 +3,7 @@ import React, { useMemo } from 'react';
 import { cn } from '@app/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import { INLINE_IMAGE_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import TruncatedText from './TruncatedText';
 
 interface VariableMarkdownCellProps {
@@ -49,7 +49,7 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
         text={
           <ReactMarkdown
             remarkPlugins={REMARK_PLUGINS}
-            urlTransform={IDENTITY_URL_TRANSFORM}
+            urlTransform={INLINE_IMAGE_URL_TRANSFORM}
             components={markdownComponents}
           >
             {value}

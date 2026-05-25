@@ -42,7 +42,7 @@ import {
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import { INLINE_IMAGE_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -376,7 +376,7 @@ function renderMarkdownOrJsonNode({
     node: (
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
-        urlTransform={IDENTITY_URL_TRANSFORM}
+        urlTransform={INLINE_IMAGE_URL_TRANSFORM}
         components={markdownComponents}
       >
         {normalizedText}
