@@ -13,14 +13,14 @@ Common issues encountered when red teaming LLM applications with promptfoo.
 Run these commands to diagnose common red team issues:
 
 ```bash
-# Verify your configuration is valid
-npx promptfoo validate -c redteam.yaml
+# Validate configuration without contacting targets
+npx promptfoo@latest validate -c promptfooconfig.yaml
 
-# Test connection to your target(s) without running an eval
-npx promptfoo validate target -c redteam.yaml
+# Test configured target connectivity (sends test requests)
+npx promptfoo@latest validate target -c promptfooconfig.yaml
 
-# Check environment variables are set
-echo $OPENAI_API_KEY  # or your provider's key
+# Check whether a provider key is set without printing its value
+test -n "$OPENAI_API_KEY" && echo 'OPENAI_API_KEY is set' || echo 'OPENAI_API_KEY is not set'
 ```
 
 ## Common Issues Table
