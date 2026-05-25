@@ -328,7 +328,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.reasoning_effort = config.reasoning_effort;
     }
 
-    if (config.reasoning && isReasoningModel) {
+    // Chat Completions accepts the nested reasoning object for o-series-style
+    // deployments, but GPT-5 chat models use reasoning_effort instead.
+    if (config.reasoning && isReasoningModel && !isGPT5Model) {
       body.reasoning = config.reasoning;
     }
 

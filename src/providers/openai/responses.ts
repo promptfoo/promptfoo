@@ -286,6 +286,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
+      isReasoningModel &&
       isAzureResponsesDeploymentWithReasoningConfig &&
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';

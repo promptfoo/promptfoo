@@ -1795,6 +1795,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.reasoning_effort).toBeUndefined();
     });
 
+    it('should not send Responses-style nested reasoning for GPT-5 chat models', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-5', {
+        config: {
+          reasoning: { effort: 'medium' },
+          reasoning_effort: 'medium',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.reasoning).toBeUndefined();
+      expect(body.reasoning_effort).toBe('medium');
+    });
+
     it('should identify GPT-5 models correctly including prefixed names', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');

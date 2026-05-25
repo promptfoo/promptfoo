@@ -198,7 +198,7 @@ describe('OpenAiResponsesProvider Azure custom deployments', () => {
           apiKey: 'test-key',
           apiBaseUrl: AZURE_BASE_URL,
           isReasoningModel: false,
-          reasoning_effort: 'medium',
+          reasoning: { effort: 'medium' },
           temperature: 0.7,
         },
       });
