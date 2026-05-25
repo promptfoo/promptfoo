@@ -603,6 +603,35 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
+    it('should preserve boundaries in reasoning content with blank paragraphs', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'Final answer: 3',
+                reasoning_content: 'scratch\n\n$$2$$',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'What is the answer?' }]),
+      );
+
+      expect(result.output).toBe(
+        'Thinking: scratch\nThinking: \nThinking: $$2$$\n\nFinal answer: 3',
+      );
+    });
+
     it('should hide reasoning content when showThinking is false', async () => {
       const mockResponse = {
         data: {

@@ -910,6 +910,18 @@ describe('extractMathAnswer', async () => {
       expect(await extractMathAnswer('Thinking: $$2$$\n\nFinal answer: 3')).toBe('3');
     });
 
+    it('does not extract math from reasoning-only signatureless output', async () => {
+      expect(await extractMathAnswer('Thinking: $$2$$\n\n')).toBe('');
+    });
+
+    it('ignores marked blank paragraphs inside signatureless thinking blocks', async () => {
+      expect(
+        await extractMathAnswer(
+          'Thinking: scratch\nThinking: \nThinking: $$2$$\n\nFinal answer: 3',
+        ),
+      ).toBe('3');
+    });
+
     it('extracts labelled answer when output follows thinking with later blank lines', async () => {
       expect(await extractMathAnswer('Thinking: hidden\n\nFinal answer: 3\n\nNotes')).toBe('3');
     });
