@@ -193,9 +193,40 @@ function maskMarkdownCodeContexts(output: string): string {
     mask,
   );
   const parsedNodes = getParsedHtmlNodes(withoutFences);
-  return withoutFences.replace(/(`+)([^`\r\n]*?)\1/g, (match, _ticks, _content, offset) =>
-    isInsideHtmlAttributeSource(parsedNodes, offset, offset + match.length) ? match : mask(match),
-  );
+  const masked = withoutFences.split('');
+
+  for (let start = 0; start < withoutFences.length; start++) {
+    if (withoutFences[start] !== '`') {
+      continue;
+    }
+    let openingEnd = start;
+    while (withoutFences[openingEnd] === '`') {
+      openingEnd++;
+    }
+    const delimiterLength = openingEnd - start;
+    let cursor = openingEnd;
+    while (cursor < withoutFences.length) {
+      const closeStart = withoutFences.indexOf('`', cursor);
+      if (closeStart < 0 || withoutFences.slice(cursor, closeStart).includes('\n')) {
+        break;
+      }
+      let closeEnd = closeStart;
+      while (withoutFences[closeEnd] === '`') {
+        closeEnd++;
+      }
+      if (closeEnd - closeStart === delimiterLength) {
+        if (!isInsideHtmlAttributeSource(parsedNodes, start, closeEnd)) {
+          masked.splice(start, closeEnd - start, ...mask(withoutFences.slice(start, closeEnd)));
+        }
+        start = closeEnd - 1;
+        break;
+      }
+      cursor = closeEnd;
+    }
+    start = Math.max(start, openingEnd - 1);
+  }
+
+  return masked.join('');
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -230,6 +261,14 @@ const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN = new RegExp(
 );
 const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN = new RegExp(
   String.raw`^<\s*${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>$`,
+  'i',
+);
+const MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN = new RegExp(
+  String.raw`<\s*(?<url>data\s*:\s*text\/html[^>\r\n]*)\s*>`,
+  'gi',
+);
+const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
+  String.raw`^<\s*data\s*:\s*text\/html[^>\r\n]*>$`,
   'i',
 );
 const MARKDOWN_INLINE_DATA_HTML_URL_PATTERN = new RegExp(
@@ -517,7 +556,11 @@ function findExecutableEventHandlerEvidence(
   output: string,
   nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
 ): string | undefined {
-  const node = findParsedElement(nodes, hasExecutableEventHandlerAttribute);
+  const node =
+    findParsedElement(nodes, hasExecutableEventHandlerAttribute) ??
+    (/^\s*<(?:html|body|frameset)\b/i.test(output)
+      ? findParsedElement(getParsedHtmlNodes(output, true), hasExecutableEventHandlerAttribute)
+      : undefined);
   return node ? getElementEvidence(output, node, true) : undefined;
 }
 
@@ -643,9 +686,11 @@ function getDataHtmlPayload(
   if (!match?.groups) {
     return undefined;
   }
+  const isBase64 = /(?:^|;)\s*base64\s*$/i.test(match.groups.metadata.trim());
+  const payload = match.groups.payload.split('#', 1)[0].trim();
   return {
-    encodedPayload: match.groups.payload.split('#', 1)[0].trim(),
-    isBase64: /(?:^|;)\s*base64\s*$/i.test(match.groups.metadata.trim()),
+    encodedPayload: isBase64 ? payload.split(/\s/, 1)[0] : payload,
+    isBase64,
   };
 }
 
@@ -727,6 +772,7 @@ function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]):
       const sourceTag = startTag ? output.slice(startTag.startOffset, startTag.endOffset) : '';
       if (
         !MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN.test(sourceTag) &&
+        !MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN.test(sourceTag) &&
         !isMarkdownDataHtmlDestinationElement(output, node, sourceTag)
       ) {
         for (const location of Object.values(node.sourceCodeLocation?.attrs ?? {})) {
@@ -792,6 +838,12 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
       hasActiveMarkdownReference(normalized, label) &&
       hasExecutableDataHtmlValue(value)
     ) {
+      return match[0];
+    }
+  }
+  for (const match of normalized.matchAll(MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN)) {
+    const value = match.groups?.url?.trim();
+    if (value && hasExecutableDataHtmlValue(value)) {
       return match[0];
     }
   }
@@ -945,6 +997,18 @@ function validateConfiguredRegexSafety(source: string, label: string): void {
   }
 }
 
+function hasShorthandCharacterClass(source: string): boolean {
+  for (let index = 0; index < source.length; index++) {
+    if (source[index] === '\\') {
+      if ('dDsSwW'.includes(source[index + 1] ?? '')) {
+        return true;
+      }
+      index++;
+    }
+  }
+  return false;
+}
+
 function hasAmbiguousQuantifiedAlternation(source: string): boolean {
   const sourceWithoutCharacterClasses = stripCharacterClasses(source);
   for (const match of sourceWithoutCharacterClasses.matchAll(QUANTIFIED_ALTERNATION)) {
@@ -954,7 +1018,7 @@ function hasAmbiguousQuantifiedAlternation(source: string): boolean {
     }
     const matchIndex = match.index ?? 0;
     const originalGroup = source.slice(matchIndex, matchIndex + match[0].length);
-    if (originalGroup.includes('[')) {
+    if (originalGroup.includes('[') || hasShorthandCharacterClass(originalGroup)) {
       return true;
     }
 

@@ -138,6 +138,12 @@ describe('XssOutputPlugin', () => {
         xssOutputPatterns: [{ id: 'ambiguous-class', pattern: '(a|[a])+$' }],
       }),
     ).toThrow(/ambiguous quantified alternations/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'ambiguous-shorthand-class', pattern: String.raw`(a|\w)+$` }],
+      }),
+    ).toThrow(/ambiguous quantified alternations/);
   });
 
   it('accepts literal regex operators inside character classes', () => {
@@ -231,6 +237,8 @@ describe('detectXssOutput', () => {
     ['script-tag', '<script>const type="application/json";alert(1)</script>'],
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
+    ['event-handler-attribute', '<body onload=alert(1)>'],
+    ['event-handler-attribute', '<frameset onload=alert(1)>'],
     ['event-handler-attribute', '<svg/onload=alert(1)>'],
     ['event-handler-attribute', '<input autofocus onfocusin=alert(1)>'],
     ['event-handler-attribute', '<video src=x onloadedmetadata=alert(1)>'],
@@ -287,6 +295,10 @@ describe('detectXssOutput', () => {
       '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==#x">x</a>',
     ],
     ['data-html-url', 'Use data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==.'],
+    [
+      'data-html-url',
+      'Use data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== then click it',
+    ],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg%3D%3D'],
     [
       'data-html-url',
@@ -303,6 +315,7 @@ describe('detectXssOutput', () => {
     ],
     ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
     ['data-html-url', '[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)'],
+    ['data-html-url', '<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>'],
     [
       'data-html-url',
       '[open][payload]\n\n[payload]: data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
@@ -419,6 +432,7 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('<!-- data:text/html,<script>alert(1)</script> -->')).toEqual([]);
     expect(detectXssOutput('`[click](javascript:alert(1))`')).toEqual([]);
     expect(detectXssOutput('`<script>alert(1)</script>`')).toEqual([]);
+    expect(detectXssOutput('``<img src=x onerror=`alert(1)`>``')).toEqual([]);
     expect(detectXssOutput('`data:text/html,<script>alert(1)</script>`')).toEqual([]);
     expect(detectXssOutput('`data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==`')).toEqual(
       [],
