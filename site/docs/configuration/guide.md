@@ -188,6 +188,18 @@ tests:
       var3: file://path/to/var3.txt
 ```
 
+File references can also be nested inside objects and arrays:
+
+```yaml
+tests:
+  - vars:
+      documents:
+        quarterly:
+          summary: file://reports/q3-summary.txt
+        sources:
+          - file://reports/q3-citations.txt
+```
+
 Javascript and Python variable files are supported. For example:
 
 ```yaml

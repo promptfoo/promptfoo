@@ -332,6 +332,10 @@ tests:
 
 This creates `favoriteFruit` and `reason` vars on-the-go, as the chatbot answers questions.
 
+Values stored with `storeOutputAs` are treated as untrusted when reused. If a stored value, including
+a nested value, begins with `file://` or `package:`, promptfoo neutralizes that reference rather than
+loading a local file or executable package from model output.
+
 ### Manipulating outputs with `transform`
 
 Outputs can be modified before storage using the `transform` property:

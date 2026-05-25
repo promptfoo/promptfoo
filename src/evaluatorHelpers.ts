@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
@@ -98,7 +98,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
     const { PDFParse } = await import('pdf-parse');
-    const dataBuffer = fs.readFileSync(pdfPath);
+    const dataBuffer = await fs.readFile(pdfPath);
     const parser = new PDFParse({ data: dataBuffer });
     const result = await parser.getText();
     await parser.destroy();
@@ -183,57 +183,54 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
 export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
 
+  function getMediaMetadata(value: string): FileMetadata[string] | undefined {
+    if (!value.startsWith('file://')) {
+      return undefined;
+    }
+
+    const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
+    const fileExtension = filePath.split('.').pop() || '';
+
+    if (isImageFile(filePath)) {
+      return { path: value, type: 'image', format: fileExtension };
+    }
+    if (isVideoFile(filePath)) {
+      return { path: value, type: 'video', format: fileExtension };
+    }
+    if (isAudioFile(filePath)) {
+      return { path: value, type: 'audio', format: fileExtension };
+    }
+    return undefined;
+  }
+
   function collectFromValue(
     value: VarValue,
     metadataKey: string,
     visiting = new WeakSet<object>(),
   ): void {
-    const objectValue = typeof value === 'object' && value !== null ? (value as object) : undefined;
-    if (objectValue) {
-      if (visiting.has(objectValue)) {
-        return;
+    if (typeof value === 'string') {
+      const metadata = getMediaMetadata(value);
+      if (metadata) {
+        fileMetadata[metadataKey] = metadata;
       }
-      visiting.add(objectValue);
+      return;
     }
 
-    try {
-      if (typeof value === 'string' && value.startsWith('file://')) {
-        const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
-        const fileExtension = filePath.split('.').pop() || '';
+    if (typeof value !== 'object' || value === null || visiting.has(value)) {
+      return;
+    }
 
-        if (isImageFile(filePath)) {
-          fileMetadata[metadataKey] = {
-            path: value, // Keep the original file:// notation
-            type: 'image',
-            format: fileExtension,
-          };
-        } else if (isVideoFile(filePath)) {
-          fileMetadata[metadataKey] = {
-            path: value,
-            type: 'video',
-            format: fileExtension,
-          };
-        } else if (isAudioFile(filePath)) {
-          fileMetadata[metadataKey] = {
-            path: value,
-            type: 'audio',
-            format: fileExtension,
-          };
-        }
-      } else if (Array.isArray(value)) {
-        for (let i = 0; i < value.length; i++) {
-          collectFromValue(value[i] as VarValue, `${metadataKey}[${i}]`, visiting);
-        }
-      } else if (isPlainObject(value)) {
-        for (const [key, val] of Object.entries(value)) {
-          collectFromValue(val as VarValue, `${metadataKey}.${key}`, visiting);
-        }
+    visiting.add(value);
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        collectFromValue(value[i] as VarValue, `${metadataKey}[${i}]`, visiting);
       }
-    } finally {
-      if (objectValue) {
-        visiting.delete(objectValue);
+    } else if (isPlainObject(value)) {
+      for (const [key, val] of Object.entries(value)) {
+        collectFromValue(val as VarValue, `${metadataKey}.${key}`, visiting);
       }
     }
+    visiting.delete(value);
   }
 
   for (const [varName, value] of Object.entries(vars)) {
@@ -400,14 +397,17 @@ function getMediaFileType(filePath: string): 'image' | 'video' | 'audio' | undef
   return undefined;
 }
 
-function loadMediaFileVar(filePath: string, fileType: 'image' | 'video' | 'audio'): VarValue {
+async function loadMediaFileVar(
+  filePath: string,
+  fileType: 'image' | 'video' | 'audio',
+): Promise<VarValue> {
   telemetry.record('feature_used', {
     feature: `load_${fileType}_as_base64`,
   });
 
   logger.debug(`Loading ${fileType} as base64: ${filePath}`);
   try {
-    const fileBuffer = fs.readFileSync(filePath);
+    const fileBuffer = await fs.readFile(filePath);
     const base64Data = fileBuffer.toString('base64');
 
     if (fileType === 'image') {
@@ -439,17 +439,17 @@ async function loadFileVar(
   } else if (fileExtension === 'py') {
     return loadPythonFileVar(filePath, varPath, basePrompt, vars);
   } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    return JSON.stringify(yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object);
+    return JSON.stringify(yaml.load(await fs.readFile(filePath, 'utf8')) as string | object);
   } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
     telemetry.record('feature_used', {
       feature: 'extract_text_from_pdf',
     });
     return await extractTextFromPDF(filePath);
   } else if (mediaFileType && !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')) {
-    return loadMediaFileVar(filePath, mediaFileType);
+    return await loadMediaFileVar(filePath, mediaFileType);
   }
 
-  return fs.readFileSync(filePath, 'utf8').trim();
+  return (await fs.readFile(filePath, 'utf8')).trim();
 }
 
 async function loadPackageVar(
