@@ -215,8 +215,12 @@ function getDefaultEnvVar(providerId: string): string {
 /**
  * Pre-checks providers for missing API keys before evaluation starts.
  * Assumes getApiKey() is side-effect free (no network calls or token refresh).
+ * Returns stable provider IDs by default; descriptions are for user-facing diagnostics only.
  */
-export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, string[]> {
+export function checkProviderApiKeys(
+  providers: ApiProvider[],
+  options: { useDescriptions?: boolean } = {},
+): Map<string, string[]> {
   const missingApiKeys = new Map<string, string[]>();
 
   for (const provider of providers) {
@@ -245,11 +249,13 @@ export function checkProviderApiKeys(providers: ApiProvider[]): Map<string, stri
 
     if (requiresKey && !apiKey) {
       const envVar = p.config?.apiKeyEnvar || getDefaultEnvVar(provider.id());
-      const providerLabel = getProviderDescription(provider);
+      const providerIdentifier = options.useDescriptions
+        ? getProviderDescription(provider)
+        : provider.id();
       if (!missingApiKeys.has(envVar)) {
         missingApiKeys.set(envVar, []);
       }
-      missingApiKeys.get(envVar)!.push(providerLabel);
+      missingApiKeys.get(envVar)!.push(providerIdentifier);
     }
   }
 
