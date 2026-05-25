@@ -421,6 +421,37 @@ describe('evaluatorHelpers', () => {
       expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringContaining('item.txt'), 'utf8');
     });
 
+    it('should parse YAML file references nested inside an object var (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        context: { data: 'file:///path/to/data.yaml' },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('key: valueFromYaml');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('Test prompt with {{ context.data }}'),
+        vars,
+        {},
+      );
+
+      expect(vars.context.data).toBe('{"key":"valueFromYaml"}');
+      expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
+    });
+
+    it('should render templates loaded from nested text files (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'file:///path/to/message.txt' },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('Hello {{ name | upper }}');
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+      expect(vars.context.message).toBe('Hello ALICE');
+      expect(renderedPrompt).toBe('Hello ALICE');
+    });
+
     it('should not modify nested non-file:// strings in object vars (issue #1613)', async () => {
       const vars: Record<string, any> = {
         context: {
@@ -433,6 +464,18 @@ describe('evaluatorHelpers', () => {
 
       expect(vars.context.name).toBe('Alice');
       expect(vars.context.role).toBe('admin');
+    });
+
+    it('should not render templates in ordinary nested strings (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        name: 'Alice',
+        context: { message: 'Hello {{ name | upper }}' },
+      };
+
+      const renderedPrompt = await renderPrompt(toPrompt('{{ context.message }}'), vars, {});
+
+      expect(vars.context.message).toBe('Hello {{ name | upper }}');
+      expect(renderedPrompt).toBe('Hello {{ name | upper }}');
     });
 
     it('should wrap missing-file errors with the var name and path (issue #1613)', async () => {
@@ -486,12 +529,13 @@ describe('evaluatorHelpers', () => {
 
       vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) => {
         const contents = {
-          '/path/to/a.txt': 'content-a',
-          '/path/to/b.txt': 'content-b',
-          '/path/to/c.txt': 'content-c',
+          'a.txt': 'content-a',
+          'b.txt': 'content-b',
+          'c.txt': 'content-c',
         };
         const resolvedPath = String(filePath);
-        const content = contents[resolvedPath as keyof typeof contents];
+        const fileName = resolvedPath.split(/[\\/]/).pop()!;
+        const content = contents[fileName as keyof typeof contents];
         if (content === undefined) {
           throw new Error(`Unexpected file read: ${resolvedPath}`);
         }

@@ -172,6 +172,12 @@ function isSupportedNestedFileRef(filePath: string): boolean {
   );
 }
 
+type ResolvedNestedFileRef = {
+  container: object;
+  key: string;
+  resolvedFromSkipped: boolean;
+};
+
 async function loadNestedFileRef(
   value: string,
   basePath: string,
@@ -184,7 +190,11 @@ async function loadNestedFileRef(
 
   logger.debug(`Resolving nested file reference for var "${varName}": ${value} -> ${filePath}`);
   try {
-    return (await fs.readFile(filePath, 'utf8')).trim();
+    const contents = await fs.readFile(filePath, 'utf8');
+    const extension = path.extname(filePath).toLowerCase();
+    return extension === '.yaml' || extension === '.yml'
+      ? JSON.stringify(yaml.load(contents) as string | object)
+      : contents.trim();
   } catch (error) {
     throw new Error(
       `Failed to load nested file reference for var "${varName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`,
@@ -200,14 +210,16 @@ async function loadNestedFileRef(
  * @param value The root container to walk.
  * @param basePath Base directory used to resolve relative file paths.
  * @param varName Name of the top-level var being resolved (used in error messages).
+ * @returns The nested properties populated from textual files.
  */
 async function resolveNestedFileRefs(
   value: object,
   basePath: string,
   varName: string,
-): Promise<void> {
+): Promise<ResolvedNestedFileRef[]> {
   const pending: object[] = [value];
   const visited = new WeakSet<object>();
+  const resolvedFileRefs: ResolvedNestedFileRef[] = [];
 
   while (pending.length > 0) {
     const container = pending.pop()!;
@@ -234,11 +246,72 @@ async function resolveNestedFileRefs(
             ...descriptor,
             value: resolvedValue,
           });
+          resolvedFileRefs.push({ container, key, resolvedFromSkipped: false });
         }
       } else if (Array.isArray(nestedValue) || isPlainObject(nestedValue)) {
         pending.push(nestedValue);
       }
     }
+  }
+
+  return resolvedFileRefs;
+}
+
+function resolveNestedFileRefVariables(
+  resolvedFileRefs: ResolvedNestedFileRef[],
+  vars: Record<string, VarValue>,
+  skipRenderVars: string[] | undefined,
+  varsResolvedFromSkipped: Set<string>,
+): void {
+  let nestedFileRefKey = '__promptfoo_nested_file_ref__';
+  while (Object.hasOwn(vars, nestedFileRefKey)) {
+    nestedFileRefKey = `_${nestedFileRefKey}`;
+  }
+
+  for (const target of resolvedFileRefs) {
+    const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
+    if (
+      !descriptor ||
+      !('value' in descriptor) ||
+      descriptor.writable !== true ||
+      typeof descriptor.value !== 'string'
+    ) {
+      continue;
+    }
+
+    const nestedVars = { ...vars, [nestedFileRefKey]: descriptor.value };
+    const nestedResolvedFromSkipped = new Set(varsResolvedFromSkipped);
+    resolveVariables(nestedVars, skipRenderVars, nestedResolvedFromSkipped);
+    Object.defineProperty(target.container, target.key, {
+      ...descriptor,
+      value: nestedVars[nestedFileRefKey],
+    });
+    target.resolvedFromSkipped = nestedResolvedFromSkipped.has(nestedFileRefKey);
+  }
+}
+
+function renderNestedFileRefTemplates(
+  resolvedFileRefs: ResolvedNestedFileRef[],
+  vars: Record<string, VarValue>,
+  nunjucks: ReturnType<typeof getNunjucksEngine>,
+): void {
+  for (const target of resolvedFileRefs) {
+    const descriptor = Object.getOwnPropertyDescriptor(target.container, target.key);
+    if (
+      !descriptor ||
+      !('value' in descriptor) ||
+      descriptor.writable !== true ||
+      typeof descriptor.value !== 'string' ||
+      target.resolvedFromSkipped ||
+      referencesUndefinedVariables(descriptor.value, vars)
+    ) {
+      continue;
+    }
+
+    Object.defineProperty(target.container, target.key, {
+      ...descriptor,
+      value: nunjucks.renderString(autoWrapRawIfPartialNunjucks(descriptor.value), vars),
+    });
   }
 }
 
@@ -337,6 +410,7 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  const resolvedNestedFileRefs: ResolvedNestedFileRef[] = [];
 
   let basePrompt = prompt.raw;
 
@@ -474,7 +548,7 @@ export async function renderPrompt(
       vars[varName] = javascriptOutput.output;
     } else if (Array.isArray(value) || isPlainObject(value)) {
       const basePath = cliState.basePath || '';
-      await resolveNestedFileRefs(value, basePath, varName);
+      resolvedNestedFileRefs.push(...(await resolveNestedFileRefs(value, basePath, varName)));
     }
   }
 
@@ -514,6 +588,12 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveNestedFileRefVariables(
+    resolvedNestedFileRefs,
+    vars,
+    skipRenderVars,
+    varsResolvedFromSkipped,
+  );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -602,6 +682,7 @@ export async function renderPrompt(
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
     // Vars values can be template strings, so we need to render them first:
+    renderNestedFileRefTemplates(resolvedNestedFileRefs, vars, nunjucks);
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => {
         if (
