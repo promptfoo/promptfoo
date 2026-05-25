@@ -52,6 +52,13 @@ The two failures are intentional. The missing and irrelevant retrieval cases run
 
 `PROMPTFOO_PASS_RATE_THRESHOLD=0` keeps this intentional-failure demonstration from exiting nonzero before you can inspect the report. Remove it in CI when failures should fail the build.
 
+On PowerShell, set the threshold before running the command:
+
+```powershell
+$env:PROMPTFOO_PASS_RATE_THRESHOLD = '0'
+npx promptfoo@latest eval -c promptfooconfig.yaml
+```
+
 ## How to adapt this example
 
 1. Replace the sample queries with your own RAG test cases.

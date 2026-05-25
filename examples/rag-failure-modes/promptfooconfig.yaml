@@ -40,8 +40,8 @@ tests:
         Employees are eligible for a laptop replacement every three years.
       answer: According to equipment-policy.md#laptops, employees are eligible for a laptop replacement every three years.
     assert:
-      - type: contains
-        value: 'three years'
+      - type: icontains
+        value: 'employees are eligible for a laptop replacement every three years'
       - type: contains
         value: 'equipment-policy.md#laptops'
 
@@ -53,8 +53,10 @@ tests:
         Employees may request reimbursement for ergonomic home-office equipment with manager approval.
       answer: Employees may request ergonomic home-office equipment reimbursement with manager approval.
     assert:
-      - type: not-icontains
-        value: 'guaranteed standing desk reimbursement'
+      - type: javascript
+        value: |
+          const unsupportedGuarantee = /\b(?:guarantee(?:d|s)?|always|automatically|unconditionally)\b[\s\S]*\bstanding desk\b|\bstanding desk\b[\s\S]*\b(?:guarantee(?:d|s)?|always|automatically|unconditionally)\b/i;
+          return !unsupportedGuarantee.test(output);
       - type: contains
         value: 'manager approval'
 
@@ -66,12 +68,13 @@ tests:
         Employees are eligible for a laptop replacement every three years.
       answer: equipment-policy.md#laptops says employees are eligible for a laptop replacement every three years.
     assert:
-      - type: contains
-        value: 'equipment-policy.md#laptops'
       - type: javascript
         value: |
+          const sources = new Set(
+            Array.from(context.vars.context.matchAll(/^Source:\s*(\S+)\s*$/gim), (match) => match[1]),
+          );
           const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
-          return citations.every((citation) => context.vars.context.includes(citation));
+          return citations.length > 0 && citations.every((citation) => sources.has(citation));
 
   - description: Source metadata should be preserved
     vars:
@@ -82,10 +85,20 @@ tests:
         Employees are eligible for a laptop replacement every three years.
       answer: 'equipment-policy.md#laptops, Page: 4, says employees are eligible for a laptop replacement every three years.'
     assert:
-      - type: contains
-        value: 'equipment-policy.md#laptops'
-      - type: contains
-        value: 'Page: 4'
+      - type: javascript
+        value: |
+          const source = context.vars.context.match(/^Source:\s*(\S+)\s*$/im)?.[1];
+          const citedSources = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          return source !== undefined
+            && citedSources.length > 0
+            && citedSources.every((citation) => citation === source);
+      - type: javascript
+        value: |
+          const page = context.vars.context.match(/^Page:\s*(\d+)\s*$/im)?.[1];
+          const citedPages = Array.from(output.matchAll(/\bPage:\s*(\d+)\b/gi), (match) => match[1]);
+          return page !== undefined
+            && citedPages.length > 0
+            && citedPages.every((citation) => citation === page);
 
   - description: Conflicting context should be surfaced
     vars:
@@ -98,12 +111,19 @@ tests:
         PTO days cannot be carried over into the next year.
       answer: pto-policy.md#carryover allows up to 5 carryover days, while employee-handbook.md#pto says PTO cannot be carried over, so the sources conflict.
     assert:
-      - type: contains
-        value: 'pto-policy.md#carryover'
-      - type: contains
-        value: 'employee-handbook.md#pto'
-      - type: icontains
-        value: 'conflict'
+      - type: javascript
+        value: |
+          const sources = Array.from(
+            context.vars.context.matchAll(/^Source:\s*(\S+)\s*$/gim),
+            (match) => match[1],
+          );
+          const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          return sources.every((source) => citations.includes(source))
+            && citations.every((citation) => sources.includes(citation));
+      - type: javascript
+        value: |
+          return /\b(?:conflict|disagree|contradict)/i.test(output)
+            && !/\b(?:do not|does not|don't|doesn't|no|not)\b.{0,12}\b(?:conflict|disagree|contradict)/i.test(output);
 
   - description: Model should not refuse when sufficient context exists
     vars:
