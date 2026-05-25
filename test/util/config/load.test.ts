@@ -2456,10 +2456,16 @@ describe('PROMPTFOO_STRICT_CONFIG', () => {
     mockDereference.mockReset();
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
 
+    // vi.fn() mocks survive `vi.clearAllMocks()` / `vi.restoreAllMocks()`; their
+    // implementations are only cleared by `mockReset()`. Without this, an implementation set
+    // inside one of the strict-mode tests below leaks to later tests in this file (they run in
+    // random order) and causes `readConfig` to throw for any unknown top-level key.
+    vi.mocked(getEnvBool).mockReset();
     vi.mocked(getEnvBool).mockReturnValue(false);
   });
 
   afterEach(() => {
+    vi.mocked(getEnvBool).mockReset();
     vi.restoreAllMocks();
   });
 
