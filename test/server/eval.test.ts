@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
@@ -7,6 +8,7 @@ import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
+import { ResultFailureReason } from '../../src/types/index';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -337,6 +339,60 @@ describe('eval routes', () => {
       expect(updatedEval.prompts[result.promptIdx].metrics?.score).toBe(1);
       expect(updatedEval.prompts[result.promptIdx].metrics?.testPassCount).toBe(1);
       expect(updatedEval.prompts[result.promptIdx].metrics?.testFailCount).toBe(1);
+    });
+  });
+
+  describe('post("/:id/results")', () => {
+    it('rejects sparse shared rows before they can corrupt subsequent table reads', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      testEvalIds.add(eval_.id);
+
+      const appendRes = await api.post(`/api/eval/${eval_.id}/results`).send([
+        {
+          promptIdx: 0,
+          testIdx: 0,
+          success: true,
+          score: 1,
+        },
+      ]);
+
+      expect(appendRes.status).toBe(400);
+
+      const tableRes = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(tableRes.status).toBe(200);
+      expect(tableRes.body.table.body).toEqual([]);
+    });
+
+    it('appends a complete shared result row and renders it through the table endpoint', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      testEvalIds.add(eval_.id);
+
+      const appendRes = await api.post(`/api/eval/${eval_.id}/results`).send([
+        {
+          id: randomUUID(),
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { vars: { state: 'oregon' } },
+          prompt: { raw: 'What is the capital of {{state}}?', label: 'Capitals' },
+          provider: { id: 'test-provider', label: 'Test Provider' },
+          response: { output: 'Salem' },
+          failureReason: ResultFailureReason.NONE,
+          success: true,
+          score: 1,
+          latencyMs: 5,
+          namedScores: {},
+        },
+      ]);
+
+      expect(appendRes.status).toBe(204);
+
+      const tableRes = await api.get(`/api/eval/${eval_.id}/table`);
+      expect(tableRes.status).toBe(200);
+      expect(tableRes.body.table.body[0].outputs[0]).toMatchObject({
+        pass: true,
+        score: 1,
+        text: 'Salem',
+      });
     });
   });
 

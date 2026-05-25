@@ -213,20 +213,36 @@ export type UpdateEvalResponse = z.infer<typeof UpdateEvalResponseSchema>;
 
 export const AddResultsParamsSchema = EvalIdParamSchema;
 
-/** Schema for eval results with minimal required fields.
- * EvaluateResult has many optional fields, but these core fields are required
- * for the result to be usable. Using passthrough to preserve all extra fields.
+/**
+ * Results uploaded by sharing are serialized EvalResult database rows. These
+ * fields are required for the row to remain readable after direct insertion;
+ * passthrough preserves the richer evaluator payload.
  */
-export const AddResultsRequestSchema = z.array(
-  z
-    .object({
-      promptIdx: z.number().int().nonnegative(),
-      testIdx: z.number().int().nonnegative(),
-      success: z.boolean(),
-      score: z.number(),
-    })
-    .passthrough(),
-);
+export const AddResultsRequestSchema = z
+  .array(
+    z
+      .object({
+        id: z.string().min(1),
+        promptIdx: z.number().int().nonnegative(),
+        testIdx: z.number().int().nonnegative(),
+        testCase: z.object({}).passthrough(),
+        prompt: z
+          .object({
+            raw: z.string(),
+            label: z.string(),
+          })
+          .passthrough(),
+        provider: z
+          .object({
+            id: z.string().min(1),
+          })
+          .passthrough(),
+        success: z.boolean(),
+        score: z.number(),
+      })
+      .passthrough(),
+  )
+  .min(1, 'At least one result is required');
 
 export type AddResultsParams = z.infer<typeof AddResultsParamsSchema>;
 export type AddResultsRequest = z.infer<typeof AddResultsRequestSchema>;

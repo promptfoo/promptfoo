@@ -628,12 +628,30 @@ describe('API schema red-team coverage', () => {
       expect(EvalSchemas.GetJob.Params.safeParse({ id: 'not-a-uuid' }).success).toBe(false);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
-          { promptIdx: 0, testIdx: 0, success: true, score: 1, provider: { id: 'echo' } },
+          {
+            id: 'result-1',
+            promptIdx: 0,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: { id: 'echo' },
+          },
         ]).success,
       ).toBe(true);
       expect(
         EvalSchemas.AddResults.Request.safeParse([
-          { promptIdx: -1, testIdx: 0, success: true, score: 1 },
+          {
+            id: 'result-1',
+            promptIdx: -1,
+            testIdx: 0,
+            testCase: {},
+            prompt: { raw: 'Tell me a joke', label: 'Tell me a joke' },
+            success: true,
+            score: 1,
+            provider: { id: 'echo' },
+          },
         ]).success,
       ).toBe(false);
       expect(
