@@ -162,7 +162,7 @@ describe('matchesLlmRubric', () => {
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
       pass: false,
       score: 0,
-      reason: `llm-rubric response must contain 'pass' or 'score' field. Output: ${graderOutput}`,
+      reason: "llm-rubric response must contain a 'pass' or 'score' field",
       metadata: { graderError: true },
       tokensUsed: {
         total: 10,
@@ -996,6 +996,33 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should allow threshold zero to preserve boolean-only pass behavior', async () => {
+    const rubricPrompt = 'Rubric prompt';
+    const output = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0,
+    };
+    const options: GradingConfig = {
+      rubricPrompt,
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 0, reason: 'Boolean pass preserved' }),
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric(rubricPrompt, output, options, {}, assertion)).resolves.toEqual(
+      expect.objectContaining({
+        assertion,
+        pass: true,
+        score: 0,
+        reason: 'Boolean pass preserved',
+      }),
+    );
+  });
+
   it('should handle missing or invalid scores when threshold is present', async () => {
     const rubricPrompt = 'Rubric prompt';
     const output = 'Sample output';
@@ -1462,6 +1489,99 @@ Evaluate the response
     });
     expect(grading.provider.callApi).not.toHaveBeenCalled();
     expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('should apply the default threshold to remote llm-rubric grading results', async () => {
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({ output: '' }),
+      }),
+    };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 0,
+      reason: 'Remote boolean pass with failing score',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric('Test rubric', 'Test output', grading, {}, undefined, {
+      preferRemote: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        score: 0,
+        reason: 'Remote boolean pass with failing score',
+      }),
+    );
+  });
+
+  it('should honor threshold zero for remote llm-rubric grading results', async () => {
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: 'Test rubric',
+      threshold: 0,
+    };
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({ output: '' }),
+      }),
+    };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 0,
+      reason: 'Remote boolean pass preserved',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric('Test rubric', 'Test output', grading, {}, assertion, {
+      preferRemote: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        assertion,
+        pass: true,
+        score: 0,
+        reason: 'Remote boolean pass preserved',
+      }),
+    );
+  });
+
+  it('should preserve a remote boolean pass when the remote grader omits score', async () => {
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({ output: '' }),
+      }),
+    };
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: undefined as unknown as number,
+      reason: 'Remote pass without numeric score',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric('Test rubric', 'Test output', grading, {}, undefined, {
+      preferRemote: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Remote pass without numeric score',
+      }),
+    );
   });
 
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {

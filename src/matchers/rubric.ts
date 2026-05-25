@@ -248,10 +248,7 @@ export async function runJsonGradingPrompt({
   }
 
   if (parsed.pass === undefined && parsed.score === undefined) {
-    return graderFail(
-      `${label} response must contain 'pass' or 'score' field. Output: ${JSON.stringify(parsed)}`,
-      resp.tokenUsage,
-    );
+    return graderFail(`${label} response must contain a 'pass' or 'score' field`, resp.tokenUsage);
   }
 
   let pass = parsed.pass ?? true;
