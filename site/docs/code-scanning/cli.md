@@ -99,6 +99,9 @@ promptfoo code-scans run --format sarif > promptfoo-code-scan.sarif
 ```
 
 SARIF output includes location-backed findings that GitHub Code Scanning can display.
+If a `--github-pr` scan is skipped while a fork awaits maintainer approval, SARIF output is not
+generated and the command exits nonzero. Upload SARIF only after this command succeeds, since an
+empty uploaded report would incorrectly appear to be a completed clean scan.
 
 ## Configuration File
 
