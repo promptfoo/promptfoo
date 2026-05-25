@@ -113,6 +113,12 @@ tests: file://test_cases.csv
 tests: huggingface://datasets/rajpurkar/squad
 ```
 
+**Azure Blob Storage**
+
+```yaml
+tests: az://myaccount/evals/tests.json
+```
+
 **Dynamic generation**
 
 ```yaml
