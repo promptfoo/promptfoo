@@ -47,6 +47,7 @@ import { readTest, readTests } from '../testCaseReader';
 import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+import { findTestsWithoutAssertions, findUnknownTopLevelKeys } from './strictValidation';
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -73,6 +74,33 @@ export function logConfigResolutionError(error: ConfigResolutionError, prefix?: 
 
 function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {
   throw new ConfigResolutionError(message, options);
+}
+
+/**
+ * In strict mode (PROMPTFOO_STRICT_CONFIG=true), fail the run if any test has no assertions.
+ * This catches typoed or missing `assert` blocks that would otherwise produce silent passes.
+ */
+function enforceStrictConfigAssertions(testSuite: TestSuite): void {
+  if (!getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
+    return;
+  }
+  const defaultTestForCheck =
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
+  const offenders = findTestsWithoutAssertions(testSuite.tests || [], defaultTestForCheck);
+  if (offenders.length === 0) {
+    return;
+  }
+  const previewIndices = offenders.slice(0, 5);
+  const indexList = previewIndices.join(', ');
+  const more =
+    offenders.length > previewIndices.length
+      ? ` (and ${offenders.length - previewIndices.length} more)`
+      : '';
+  failConfigResolution(
+    `Strict config: ${offenders.length} test${offenders.length === 1 ? '' : 's'} ` +
+      `[indices ${indexList}${more}] have no assertions. ` +
+      'Add an `assert:` block to each test or `defaultTest.assert`, or unset PROMPTFOO_STRICT_CONFIG.',
+  );
 }
 
 /**
@@ -349,6 +377,19 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     ret = renderedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
+  }
+
+  // Surface typo'd top-level keys (e.g. `assert:` at the root when the user meant
+  // `defaultTest.assert`). In strict mode, fail loudly; otherwise log a warning so users notice
+  // without breaking existing workflows.
+  const unknownTopLevelKeys = findUnknownTopLevelKeys(ret as Record<string, unknown>);
+  if (unknownTopLevelKeys.length > 0) {
+    const keyList = unknownTopLevelKeys.map((k) => `'${k}'`).join(', ');
+    const message = `Unknown top-level config key(s) ${keyList} in ${configPath}. Did you mean to nest these under another field (e.g. \`defaultTest.assert\`)?`;
+    if (getEnvBool('PROMPTFOO_STRICT_CONFIG')) {
+      failConfigResolution(message);
+    }
+    logger.warn(`${message} Set PROMPTFOO_STRICT_CONFIG=true to fail on this.`);
   }
 
   if (ret.targets) {
@@ -967,6 +1008,8 @@ export async function resolveConfigs(
     testSuite.tests || [],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
+
+  enforceStrictConfigAssertions(testSuite);
 
   // Validate provider references in tests and scenarios
   validateTestProviderReferences(

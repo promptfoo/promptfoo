@@ -5,7 +5,7 @@ import { globSync } from 'glob';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
-import { isCI } from '../../../src/envars';
+import { getEnvBool, isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { readPrompts } from '../../../src/prompts/index';
@@ -2442,6 +2442,73 @@ describe('resolveConfigs with external defaultTest', () => {
         vars: inlineDefaultTest.vars,
       }),
     );
+  });
+});
+
+describe('PROMPTFOO_STRICT_CONFIG', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+
+    vi.mocked(getEnvBool).mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('readConfig emits a warning when unknown top-level keys are present', async () => {
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      // typo: this assert block should live under defaultTest.assert
+      assert: [{ type: 'contains', value: 'world' }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual(mockConfig);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Unknown top-level config key(s) 'assert' in config.json"),
+    );
+  });
+
+  it('readConfig fails fast on unknown top-level keys when strict mode is enabled', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => key === 'PROMPTFOO_STRICT_CONFIG');
+    const mockConfig = {
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+      assert: [{ type: 'contains', value: 'world' }],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).rejects.toThrow(
+      /Unknown top-level config key\(s\) 'assert'/,
+    );
+  });
+
+  it('readConfig leaves valid configs untouched even in strict mode', async () => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => key === 'PROMPTFOO_STRICT_CONFIG');
+    const mockConfig = {
+      description: 'Test config',
+      providers: ['openai:gpt-4o'],
+      prompts: ['Hello, world!'],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await expect(readConfig('config.json')).resolves.toEqual(mockConfig);
   });
 });
 
