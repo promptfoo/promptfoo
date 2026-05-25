@@ -149,6 +149,13 @@ function normalizeUrlDetectionOutput(output: string): string {
   return decodeHtmlEntitiesForUrlDetection(output).replace(/[\u0000-\u001F\u007F]/g, '');
 }
 
+function normalizeMarkdownUrlDetectionOutput(output: string): string {
+  return output
+    .split(/\r\n?|\n/)
+    .map((line) => normalizeUrlDetectionOutput(line))
+    .join('\n');
+}
+
 function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -406,7 +413,7 @@ function hasJavascriptUrlValue(value: string | undefined): boolean {
 }
 
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
-  const normalized = normalizeUrlDetectionOutput(output);
+  const normalized = normalizeMarkdownUrlDetectionOutput(output);
   for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
     if (!isMarkdownImageDestination(normalized, (match.index ?? 0) + 2)) {
       return match[0];
