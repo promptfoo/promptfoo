@@ -1,5 +1,10 @@
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
-import { sanitizeBody, sanitizeObject, sanitizeUrl } from '../../src/util/sanitizer';
+import {
+  sanitizeBody,
+  sanitizeObject,
+  sanitizeUrl,
+  sanitizeUrlEncodedString,
+} from '../../src/util/sanitizer';
 
 // Mock console methods to prevent test noise
 const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -959,6 +964,68 @@ describe('sanitizeObject', () => {
         'curl -H "Authorization: Bearer abc" https://example.test?api_key=sk-xyz user@example.com';
 
       expect(sanitizeObject(command)).toBe(command);
+    });
+
+    it('should redact form bodies that end with a trailing &', () => {
+      const body = 'username=alice&api_key=sk-1234567890abcdefghijklmnopqrstuv&';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toContain('username=alice');
+      expect(result).toContain('api_key=%5BREDACTED%5D');
+      expect(result).not.toContain('sk-1234567890abcdefghijklmnopqrstuv');
+    });
+
+    it('should redact when value contains "=" (base64 padding)', () => {
+      const body = 'token=aGVsbG8=&data=public';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('token=%5BREDACTED%5D&data=public');
+    });
+
+    it('should redact PHP/qs-style bracket keys', () => {
+      const body = 'user[password]=hunter2&user[name]=alice';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toContain('user[password]=%5BREDACTED%5D');
+      expect(result).toContain('user[name]=alice');
+      expect(result).not.toContain('hunter2');
+    });
+
+    it('should redact when "+" in the key decodes to a space', () => {
+      // `api+key` URL-decodes to `api key`; normalizeFieldName must collapse
+      // whitespace so this still matches SECRET_FIELD_NAMES.
+      const body = 'api+key=secret-value-12345';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('api+key=%5BREDACTED%5D');
+    });
+
+    it('should redact when "+" in the value would otherwise defeat secret detection', () => {
+      // Raw chunk matches `^[a-zA-Z0-9+/=_-]{64,}$`; decoded form contains a
+      // space and wouldn't. We must check the raw form too.
+      const body = `opaque=${'A'.repeat(32)}+${'B'.repeat(32)}`;
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('opaque=%5BREDACTED%5D');
+    });
+
+    it('should not redact an empty value (no field-presence leak)', () => {
+      const body = 'password=&username=alice';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should preserve original encoding for non-redacted values', () => {
+      // URLSearchParams.toString() would have re-encoded `~` as `%7E`.
+      // Targeted replacement should leave the untouched value byte-identical.
+      const body = 'name=John~Doe&password=hunter2';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('name=John~Doe&password=%5BREDACTED%5D');
+    });
+
+    it('should return original input when nothing matches a secret', () => {
+      const body = 'a=1&b=2&c=3';
+      expect(sanitizeUrlEncodedString(body)).toBe(body);
+    });
+
+    it('should redact secret-looking values under non-sensitive key names', () => {
+      const body = 'cursor=sk-1234567890abcdefghijklmnopqrstuv&page=2';
+      const result = sanitizeUrlEncodedString(body);
+      expect(result).toBe('cursor=%5BREDACTED%5D&page=2');
     });
   });
 });

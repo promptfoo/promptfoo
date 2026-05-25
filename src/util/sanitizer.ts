@@ -78,10 +78,12 @@ export const SECRET_FIELD_NAMES = new Set([
 ]);
 
 /**
- * Normalize field names for comparison (lowercase, no hyphens/underscores)
+ * Normalize field names for comparison (lowercase, no hyphens/underscores/whitespace).
+ * Whitespace is stripped so that `Api Key` and `api+key` (which URL-decodes to
+ * `api key`) both collapse to `apikey` and match SECRET_FIELD_NAMES.
  */
 export function normalizeFieldName(fieldName: string): string {
-  return fieldName.toLowerCase().replace(/[-_]/g, '');
+  return fieldName.toLowerCase().replace(/[-_\s]/g, '');
 }
 
 /**
@@ -224,17 +226,39 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
   return str;
 }
 
-const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%-]+=[^=&]*$/;
+// `key=value` where the key is a typical form-data identifier (allow brackets
+// for PHP/qs-style nested keys) and the value runs to the next `&`. The first
+// `=` is the separator; subsequent `=` (e.g. base64 padding) belong to the
+// value.
+const URL_ENCODED_SEGMENT_RE = /^[A-Za-z0-9._~+%\[\]-]+=[^&]*$/;
 
 function looksLikeUrlEncodedFormData(value: string): boolean {
   // Form-urlencoded data has no raw whitespace (spaces are `+` or `%20`) and
-  // every `&`-separated chunk is a `key=value` pair with safe key characters.
-  // Without this gate, prose containing `=` gets re-serialized by
-  // URLSearchParams and emerges URL-encoded.
+  // every non-empty `&`-separated chunk is a `key=value` pair with safe key
+  // characters. Empty chunks (leading/trailing/consecutive `&`) are tolerated.
+  // Without this gate, prose containing `=` gets re-serialized and emerges
+  // URL-encoded.
   if (!value.includes('=') || /\s/.test(value)) {
     return false;
   }
-  return value.split('&').every((segment) => URL_ENCODED_SEGMENT_RE.test(segment));
+  const segments = value.split('&').filter((segment) => segment.length > 0);
+  if (segments.length === 0) {
+    return false;
+  }
+  return segments.every((segment) => URL_ENCODED_SEGMENT_RE.test(segment));
+}
+
+// Matches one `key=value` pair. `[^=&]+` for the key ensures we split on the
+// FIRST `=` (so values can contain `=`, e.g. base64 padding); `[^&]*` lets the
+// value run to the next pair.
+const URL_ENCODED_PAIR_RE = /(^|&)([^=&]+)=([^&]*)/g;
+
+function decodeFormComponent(component: string): string | undefined {
+  try {
+    return decodeURIComponent(component.replace(/\+/g, ' '));
+  } catch {
+    return undefined;
+  }
 }
 
 export function sanitizeUrlEncodedString(value: string): string {
@@ -242,25 +266,42 @@ export function sanitizeUrlEncodedString(value: string): string {
     return value;
   }
 
-  try {
-    const params = new URLSearchParams(value);
-    const entries = Array.from(params.entries());
-    if (entries.length === 0) {
-      return value;
+  let changed = false;
+  const result = value.replace(URL_ENCODED_PAIR_RE, (match, separator, rawKey, rawValue) => {
+    if (rawValue.length === 0) {
+      // Preserve empty values verbatim so `password=` doesn't masquerade as a
+      // redacted secret.
+      return match;
     }
 
-    let changed = false;
-    for (const [key, paramValue] of entries) {
-      if (isSecretField(key) || looksLikeSecret(paramValue)) {
-        params.set(key, REDACTED);
-        changed = true;
-      }
+    const decodedKey = decodeFormComponent(rawKey);
+    if (decodedKey === undefined) {
+      return match;
     }
+    const decodedValue = decodeFormComponent(rawValue);
 
-    return changed ? params.toString() : value;
-  } catch {
-    return value;
-  }
+    // Check both raw and decoded forms of the value so `+` decoding can't be
+    // used to escape pattern-based secret detection (e.g.
+    // `key=AAAA+BBBB...` where the raw 64-char chunk matches but the
+    // space-bearing decoded form doesn't).
+    const valueLooksSecret =
+      looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue));
+
+    // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so
+    // we can match the leaf name against SECRET_FIELD_NAMES.
+    const keyParts = decodedKey.split(/[.\[\]]+/).filter(Boolean);
+    const keyIsSecret = keyParts.length > 0 && keyParts.some(isSecretField);
+
+    if (keyIsSecret || valueLooksSecret) {
+      changed = true;
+      // `encodeURIComponent(REDACTED)` keeps the output a valid form-encoded
+      // body; debug consumers that decode it see `[REDACTED]`.
+      return `${separator}${rawKey}=${encodeURIComponent(REDACTED)}`;
+    }
+    return match;
+  });
+
+  return changed ? result : value;
 }
 
 /**
