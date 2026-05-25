@@ -13,7 +13,10 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -378,24 +381,49 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       };
     }
 
-    let output, candidate;
+    const dataWithResponse = (Array.isArray(data) ? data : [data]) as GeminiResponseData[];
+    const lastData = dataWithResponse[dataWithResponse.length - 1];
+    if (!lastData) {
+      return {
+        error: `No response data found in response: ${JSON.stringify(data)}`,
+      };
+    }
+    let output: ReturnType<typeof formatCandidateContents> | undefined;
+    let candidate: ReturnType<typeof getCandidate> | undefined;
     try {
-      candidate = getCandidate(data);
-      output = formatCandidateContents(candidate);
+      for (const datum of dataWithResponse) {
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+          continue;
+        }
+
+        const candidateForChunk = getCandidate(datum);
+        if (candidateForChunk.finishReason === 'STOP' && !candidateForChunk.content?.parts) {
+          continue;
+        }
+
+        candidate = candidateForChunk;
+        output = mergeParts(output, formatCandidateContents(candidate));
+      }
+
+      if (output === undefined || candidate === undefined) {
+        throw new Error(`No output found in response: ${JSON.stringify(data)}`);
+      }
     } catch (err) {
       return {
         error: `${String(err)}`,
       };
     }
+    const finalCandidate = candidate;
 
     try {
       let guardrails: GuardrailResponse | undefined;
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
 
-      if (data.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = data.promptFeedback?.safetyRatings?.some(
+      if (promptSafetyRatings || finalCandidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
+        const flaggedOutput = finalCandidate.safetyRatings?.some(
           (r) => r.probability !== 'NEGLIGIBLE',
         );
-        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
 
         guardrails = {
@@ -407,25 +435,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
       const tokenUsage = cached
         ? {
-            cached: data.usageMetadata?.totalTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
+            cached: lastData.usageMetadata?.totalTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 0,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
+                reasoning: lastData.usageMetadata.thoughtsTokenCount,
                 acceptedPrediction: 0,
                 rejectedPrediction: 0,
               },
             }),
           }
         : {
-            prompt: data.usageMetadata?.promptTokenCount,
-            completion: data.usageMetadata?.candidatesTokenCount,
-            total: data.usageMetadata?.totalTokenCount,
+            prompt: lastData.usageMetadata?.promptTokenCount,
+            completion: lastData.usageMetadata?.candidatesTokenCount,
+            total: lastData.usageMetadata?.totalTokenCount,
             numRequests: 1,
-            ...(data.usageMetadata?.thoughtsTokenCount !== undefined && {
+            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
               completionDetails: {
-                reasoning: data.usageMetadata.thoughtsTokenCount,
+                reasoning: lastData.usageMetadata.thoughtsTokenCount,
                 acceptedPrediction: 0,
                 rejectedPrediction: 0,
               },
@@ -435,15 +463,16 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount == null
+        lastData.usageMetadata?.candidatesTokenCount == null
           ? undefined
-          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+          : lastData.usageMetadata.candidatesTokenCount +
+            (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
         : calculateGoogleCost(
             this.modelName,
             config,
-            data.usageMetadata?.promptTokenCount,
+            lastData.usageMetadata?.promptTokenCount,
             completionForCost,
           );
 
@@ -455,10 +484,18 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         cached,
         ...(guardrails && { guardrails }),
         metadata: {
-          ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),
-          ...(candidate.groundingMetadata && { groundingMetadata: candidate.groundingMetadata }),
-          ...(candidate.groundingSupports && { groundingSupports: candidate.groundingSupports }),
-          ...(candidate.webSearchQueries && { webSearchQueries: candidate.webSearchQueries }),
+          ...(finalCandidate.groundingChunks && {
+            groundingChunks: finalCandidate.groundingChunks,
+          }),
+          ...(finalCandidate.groundingMetadata && {
+            groundingMetadata: finalCandidate.groundingMetadata,
+          }),
+          ...(finalCandidate.groundingSupports && {
+            groundingSupports: finalCandidate.groundingSupports,
+          }),
+          ...(finalCandidate.webSearchQueries && {
+            webSearchQueries: finalCandidate.webSearchQueries,
+          }),
         },
       };
     } catch (err) {
