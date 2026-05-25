@@ -119,6 +119,48 @@ describe('groupResultsByTest', () => {
       { description: 'inline assertion', pass: 2, total: 2 },
     ]);
   });
+
+  it('keeps redacted variable expansions grouped with their own repeats', () => {
+    const redactedTest = { description: 'secret vars', vars: { token: '[REDACTED]' } };
+    const results = [
+      makeResult({ success: false, testIdx: 0, testCase: redactedTest }),
+      makeResult({ success: true, testIdx: 1, testCase: redactedTest }),
+      makeResult({ success: false, testIdx: 2, testCase: redactedTest }),
+      makeResult({ success: true, testIdx: 3, testCase: redactedTest }),
+    ];
+
+    const groups = groupResultsByTest(
+      results,
+      2,
+      new Map([
+        [0, 0],
+        [1, 1],
+        [2, 0],
+        [3, 1],
+      ]),
+    );
+    expect([...groups.values()]).toEqual([
+      { description: 'secret vars', pass: 0, total: 2 },
+      { description: 'secret vars', pass: 2, total: 2 },
+    ]);
+  });
+
+  it('does not serialize live provider objects when runtime identities are available', () => {
+    const provider = {} as Record<string, unknown>;
+    provider.client = provider;
+    const testCase = {
+      description: 'live provider',
+      options: { provider },
+    } as EvaluateResult['testCase'];
+
+    expect(() =>
+      groupResultsByTest(
+        [makeResult({ success: true, testIdx: 0, testCase })],
+        2,
+        new Map([[0, 0]]),
+      ),
+    ).not.toThrow();
+  });
 });
 
 describe('getFailingGroups', () => {

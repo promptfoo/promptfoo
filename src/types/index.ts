@@ -218,6 +218,8 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  /** Runtime-only identity for grouping the same materialized test across repeats. */
+  repeatPassRateGroupIdx?: number;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;

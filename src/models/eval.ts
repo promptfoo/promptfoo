@@ -298,6 +298,8 @@ export default class Eval {
   generationDurationMs?: number;
   /** Time spent running the evaluation phase. */
   evaluationDurationMs?: number;
+  /** Runtime-only materialized-test identities used by CLI repeat pass-rate enforcement. */
+  repeatPassRateGroupByTestIdx?: Map<number, number>;
 
   /**
    * The shareable URL for this evaluation, if it has been shared.

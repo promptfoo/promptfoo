@@ -10,32 +10,53 @@ export interface RepeatPassRateGroup {
 export function groupResultsByTest(
   results: (EvaluateResult | EvalResult)[],
   repeat: number,
+  repeatPassRateGroupByTestIdx?: ReadonlyMap<number, number>,
 ): Map<string, RepeatPassRateGroup> {
-  const resultsBySerializedTest = new Map<string, (EvaluateResult | EvalResult)[]>();
+  const resultsBySerializedTest = new Map<
+    string,
+    { hasRuntimeGroupIdentity: boolean; results: (EvaluateResult | EvalResult)[] }
+  >();
 
   for (const result of results) {
-    const key = JSON.stringify({
-      testCase: result.testCase,
-      promptId: result.promptId,
-      provider: {
-        id: result.provider.id,
-        label: result.provider.label,
-      },
-    });
-    const matchingResults = resultsBySerializedTest.get(key) ?? [];
-    matchingResults.push(result);
+    const repeatPassRateGroupIdx = repeatPassRateGroupByTestIdx?.get(result.testIdx);
+    const key = JSON.stringify(
+      repeatPassRateGroupIdx === undefined
+        ? {
+            testCase: result.testCase,
+            promptId: result.promptId,
+            provider: {
+              id: result.provider.id,
+              label: result.provider.label,
+            },
+          }
+        : {
+            repeatPassRateGroupIdx,
+            promptId: result.promptId,
+            provider: {
+              id: result.provider.id,
+              label: result.provider.label,
+            },
+          },
+    );
+    const matchingResults = resultsBySerializedTest.get(key) ?? {
+      hasRuntimeGroupIdentity: repeatPassRateGroupIdx !== undefined,
+      results: [],
+    };
+    matchingResults.results.push(result);
     resultsBySerializedTest.set(key, matchingResults);
   }
 
   const groups = new Map<string, RepeatPassRateGroup>();
 
-  for (const [serializedKey, matchingResults] of resultsBySerializedTest) {
+  for (const [serializedKey, bucket] of resultsBySerializedTest) {
+    const matchingResults = bucket.results;
     matchingResults.sort((left, right) => left.testIdx - right.testIdx);
 
-    // Persisted results strip function values. If otherwise identical tests differ
-    // only by inline functions, each still occupies its own contiguous repeat window.
-    for (let offset = 0; offset < matchingResults.length; offset += repeat) {
-      const window = matchingResults.slice(offset, offset + repeat);
+    // The runtime plan supplies stable identities before secret redaction and
+    // provider serialization. Retain the window fallback for direct/legacy callers.
+    const windowSize = bucket.hasRuntimeGroupIdentity ? matchingResults.length : repeat;
+    for (let offset = 0; offset < matchingResults.length; offset += windowSize) {
+      const window = matchingResults.slice(offset, offset + windowSize);
       const description =
         window[0].testCase.description || JSON.stringify(window[0].testCase.vars || {});
       const group = { pass: 0, total: window.length, description };

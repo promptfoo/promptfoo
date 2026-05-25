@@ -257,6 +257,68 @@ describe('evalCommand', () => {
     }
   });
 
+  it('keeps secret variable repetitions distinct after result sanitization', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '50',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const record = evalRecord as Eval;
+        record.repeatPassRateGroupByTestIdx = new Map([
+          [0, 0],
+          [1, 1],
+          [2, 0],
+          [3, 1],
+        ]);
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'secret vars', vars: { token: 'sk-failing-secret' } },
+          promptId: '',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        };
+
+        await record.addResult(result);
+        await record.addResult({
+          ...result,
+          testIdx: 1,
+          testCase: { description: 'secret vars', vars: { token: 'sk-passing-secret' } },
+          success: true,
+          score: 1,
+        });
+        await record.addResult({ ...result, testIdx: 2 });
+        await record.addResult({
+          ...result,
+          testIdx: 3,
+          testCase: { description: 'secret vars', vars: { token: 'sk-passing-secret' } },
+          success: true,
+          score: 1,
+        });
+        return record;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(process.exitCode).toBe(100);
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
   it('does not apply repeat pass-rate thresholds to reusable callers', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_PASS_RATE_THRESHOLD: '0',

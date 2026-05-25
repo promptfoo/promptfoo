@@ -166,7 +166,10 @@ async function applyCliRepeatPassRateThreshold({
   }
 
   const results = evalRecord.persisted ? await evalRecord.getResults() : evalRecord.results;
-  const failing = getFailingGroups(groupResultsByTest(results, repeat), threshold);
+  const failing = getFailingGroups(
+    groupResultsByTest(results, repeat, evalRecord.repeatPassRateGroupByTestIdx),
+    threshold,
+  );
   if (failing.length === 0) {
     return;
   }
