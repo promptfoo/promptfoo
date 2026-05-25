@@ -3,12 +3,14 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   doEval,
   EvalRunError,
   evalCommand,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
+import { getErrorResultIds } from '../../src/commands/retry';
 import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -35,6 +37,7 @@ import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/cache');
+vi.mock('../../src/commands/retry');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
@@ -730,6 +733,23 @@ describe('evalCommand', () => {
       loggerErrorSpy.mockRestore();
       process.exitCode = previousExitCode;
     }
+  });
+
+  it('rejects --retry-errors with maxErrors before saved ERROR results can be removed', async () => {
+    const latestEval = new Eval(defaultConfig);
+    vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
+    vi.mocked(getErrorResultIds).mockResolvedValueOnce(['error-result-id']);
+
+    await expect(
+      doEval({ retryErrors: true, maxErrors: 1 }, defaultConfig, defaultConfigPath, {}),
+    ).rejects.toThrow(
+      'Cannot use --max-errors with --retry-errors because stopping early could discard ERROR results that were not retried.',
+    );
+
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(cliState._retryErrorResultIds).toBeUndefined();
+    expect(cliState.retryMode).toBe(false);
+    expect(cliState.resume).toBe(false);
   });
 
   it('throws EvalRunError with all missing keys joined for library callers', async () => {

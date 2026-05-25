@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetPromptConversationCacheForTests, evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import {
@@ -1049,6 +1050,35 @@ describeEvaluator('evaluator execution control', () => {
       });
 
       expect(callCount).toBe(2);
+    });
+
+    it('runs afterAll extensions when maxErrors stops the evaluation early', async () => {
+      const failingProvider: ApiProvider = {
+        id: vi.fn().mockReturnValue('failing-provider'),
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Connection refused',
+          output: '',
+          tokenUsage: createEmptyTokenUsage(),
+        }),
+      };
+      const testSuite: TestSuite = {
+        extensions: ['file://cleanup.js:afterAll'],
+        providers: [failingProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}],
+      };
+
+      await evaluate(testSuite, createMockEval(), {
+        maxConcurrency: 1,
+        maxErrors: 1,
+      });
+
+      expect(failingProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(runExtensionHook).toHaveBeenCalledWith(
+        testSuite.extensions,
+        'afterAll',
+        expect.objectContaining({ evalId: 'mock-eval-id' }),
+      );
     });
 
     it('resets the consecutive error count after a successful provider response', async () => {

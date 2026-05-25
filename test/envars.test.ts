@@ -5,6 +5,7 @@ import {
   getEnvFloat,
   getEnvInt,
   getEnvString,
+  getMaxErrors,
   getMaxEvalTimeMs,
   isCI,
 } from '../src/envars';
@@ -474,6 +475,26 @@ describe('envars', () => {
     it('should handle empty string', () => {
       mockProcessEnv({ PROMPTFOO_MAX_EVAL_TIME_MS: '' });
       expect(getMaxEvalTimeMs(1000)).toBe(1000);
+    });
+  });
+
+  describe('getMaxErrors', () => {
+    it('should default to disabled when environment variable is not set', () => {
+      expect(getMaxErrors()).toBe(0);
+      expect(getMaxErrors(3)).toBe(3);
+    });
+
+    it('should return the configured integer value, including explicit zero', () => {
+      mockProcessEnv({ PROMPTFOO_MAX_ERRORS: '4' });
+      expect(getMaxErrors()).toBe(4);
+
+      mockProcessEnv({ PROMPTFOO_MAX_ERRORS: '0' });
+      expect(getMaxErrors(3)).toBe(0);
+    });
+
+    it('should use the default for invalid values', () => {
+      mockProcessEnv({ PROMPTFOO_MAX_ERRORS: 'invalid' });
+      expect(getMaxErrors(3)).toBe(3);
     });
   });
 });

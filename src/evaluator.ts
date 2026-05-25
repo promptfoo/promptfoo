@@ -494,12 +494,14 @@ function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
 function logGroupedGradingStatus({
   concurrency,
   hasEvalStepTimeout,
+  hasMaxErrorsLimit,
   runEvalOptions,
   shouldGroupGradingByProvider,
   usesConversationVar,
 }: {
   concurrency: number;
   hasEvalStepTimeout: boolean;
+  hasMaxErrorsLimit: boolean;
   runEvalOptions: RunEvalOptions[];
   shouldGroupGradingByProvider: boolean;
   usesConversationVar: boolean;
@@ -525,6 +527,9 @@ function logGroupedGradingStatus({
   }
   if (usesConversationVar) {
     reasons.push('conversation variables require per-row ordering');
+  }
+  if (hasMaxErrorsLimit) {
+    reasons.push('max-errors requires row-by-row error accounting');
   }
   if (reasons.length > 0) {
     logger.info(
@@ -3521,15 +3526,6 @@ class Evaluator {
         logger.warn(
           `Evaluation stopped after ${processingContext.consecutiveErrors} consecutive error(s) (max-errors: ${processingContext.maxErrors})`,
         );
-        return this.saveInterruptedEval({
-          ciProgressReporter,
-          globalTimeout,
-          logMessage: 'Saving partial evaluation progress after max-errors threshold...',
-          processingContext,
-          progressBarManager,
-          prompts,
-          startTime,
-        });
       } else if (isEvalTimedOut()) {
         logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
       } else if (!processingContext.targetUnavailable) {
@@ -3818,6 +3814,7 @@ class Evaluator {
     rowsWithMaxScoreAssertion,
     rowsWithSelectBestAssertion,
     runEvalOptions,
+    skipBecauseMaxErrors,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     isWebUI: boolean;
@@ -3828,7 +3825,12 @@ class Evaluator {
     rowsWithMaxScoreAssertion: Set<number>;
     rowsWithSelectBestAssertion: Set<number>;
     runEvalOptions: RunEvalOptions[];
+    skipBecauseMaxErrors: boolean;
   }) {
+    if (skipBecauseMaxErrors) {
+      return;
+    }
+
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
     updateComparisonReporterTotals({
       ciProgressReporter,
@@ -4542,8 +4544,9 @@ class Evaluator {
       }
     }
     const hasEvalStepTimeout = (options.timeoutMs || getEvalTimeoutMs()) > 0;
+    const hasMaxErrorsLimit = maxErrors > 0;
     const shouldGroupGradingByProvider =
-      concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
+      !hasMaxErrorsLimit && concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 
     // Print info messages before starting progress bar
     if (!this.options.silent) {
@@ -4559,6 +4562,7 @@ class Evaluator {
       logGroupedGradingStatus({
         concurrency,
         hasEvalStepTimeout,
+        hasMaxErrorsLimit,
         runEvalOptions,
         shouldGroupGradingByProvider,
         usesConversationVar,
@@ -4604,6 +4608,7 @@ class Evaluator {
       rowsWithMaxScoreAssertion,
       rowsWithSelectBestAssertion,
       runEvalOptions,
+      skipBecauseMaxErrors: processingContext.maxErrorsExceeded,
     });
 
     await this.finalizeEvaluation({
