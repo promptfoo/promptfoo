@@ -268,6 +268,7 @@ describe('detectXssOutput', () => {
     ['script-tag', '- <div>\n  ```\n  <script>alert(1)</script>\n  ```\n  </div>'],
     ['script-tag', '<div>\n`<script>alert(1)</script>`'],
     ['script-tag', '<search>\n`<script>alert(1)</script>`\n</search>'],
+    ['script-tag', '<!--\n```\n-->\n<script>alert(1)</script>\n```'],
     ['script-tag', '\\`<script>alert(1)</script>\\`'],
     ['script-tag', '<script>const type="application/json";alert(1)</script>'],
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
@@ -328,6 +329,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[click][payload\n link]\n\n[payload link]: javascript:alert(1)'],
     ['javascript-url', '[click][payload]\n\n   [payload]: javascript:alert(1)'],
     ['javascript-url', '[click](javascript:alert(1)\n "title")'],
+    ['javascript-url', String.raw`[click](javascript:alert(1) "ti\"tle")`],
     ['javascript-url', '[outer [click](javascript:alert(1))](#safe)'],
     ['javascript-url', '[`]`](javascript:alert(1))'],
     [
@@ -420,6 +422,11 @@ describe('detectXssOutput', () => {
     ],
     ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
     ['data-html-url', '[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E\n "title")'],
+    [
+      'data-html-url',
+      String.raw`[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E "ti\"tle")`,
+    ],
+    ['data-html-url', String.raw`[open](<data:text/html,\<script\>alert(1)\</script\>>)`],
     ['data-html-url', String.raw`[open](data:text/html,\<script\>alert(1)\</script\>)`],
     ['data-html-url', '[outer [open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)](#safe)'],
     ['data-html-url', '[`]`](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)'],
@@ -483,6 +490,10 @@ describe('detectXssOutput', () => {
     [
       'data-html-url',
       `<svg><use href="data:image/svg+xml,<svg id='x'><image href='1' onerror='alert(1)' /></svg>#x" /></svg>`,
+    ],
+    [
+      'data-html-url',
+      '<svg><a><set attributeName="href" to="data:image/svg+xml,%3Csvg onload=alert(1)%3E" /><text>Click</text></a></svg>',
     ],
     [
       'data-html-url',
@@ -633,6 +644,11 @@ describe('detectXssOutput', () => {
     ).toEqual([]);
     expect(
       detectXssOutput('<svg><animate attributeName="fill" values="javascript:alert(1)" /></svg>'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '<svg><set attributeName="fill" to="data:image/svg+xml,%3Csvg onload=alert(1)%3E" /></svg>',
+      ),
     ).toEqual([]);
   });
 

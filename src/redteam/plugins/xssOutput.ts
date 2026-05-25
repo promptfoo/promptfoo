@@ -196,8 +196,12 @@ function maskMarkdownCodeContexts(output: string): string {
   const rawHtmlRanges = findRawHtmlBlockRanges(output);
   const withoutFences = output.replace(
     /(^|\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
-    (match, _lineStart: string, _fence: string, offset: number) =>
-      isInsideRawHtmlBlock(rawHtmlRanges, offset, offset + match.length) ? match : mask(match),
+    (match, _lineStart: string, fence: string, offset: number) => {
+      const fenceOffset = offset + match.indexOf(fence);
+      return isInsideRawHtmlBlock(rawHtmlRanges, fenceOffset, fenceOffset + fence.length)
+        ? match
+        : mask(match);
+    },
   );
   const lines = withoutFences.split(/(\r?\n)/);
   let inIndentedBlock = false;
@@ -246,7 +250,7 @@ function maskMarkdownCodeContexts(output: string): string {
       ) {
         if (
           !isInsideHtmlAttributeSource(parsedNodes, start, closeEnd) &&
-          !isInsideRawHtmlBlock(rawHtmlRanges, start, closeEnd)
+          !isInsideRawHtmlBlock(rawHtmlRanges, start, openingEnd)
         ) {
           masked.splice(start, closeEnd - start, ...mask(withoutCodeBlocks.slice(start, closeEnd)));
         }
@@ -634,6 +638,19 @@ function findRawHtmlBlockRanges(
     }
   };
   visit(nodes);
+  for (const match of source.matchAll(
+    /^(?<prefix>(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3})(?<opening><!--|<\?|<!\[CDATA\[|<![A-Z])/gm,
+  )) {
+    const opening = match.groups?.opening;
+    const openingOffset = (match.index ?? 0) + (match.groups?.prefix?.length ?? 0);
+    const terminator =
+      opening === '<!--' ? '-->' : opening === '<?' ? '?>' : opening === '<![CDATA[' ? ']]>' : '>';
+    const closingOffset = source.indexOf(terminator, openingOffset + (opening?.length ?? 0));
+    ranges.push({
+      start: openingOffset,
+      end: closingOffset < 0 ? source.length : closingOffset + terminator.length,
+    });
+  }
   for (const match of source.matchAll(
     /^(?<prefix>(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3})<\/(?<tag>[a-z][a-z0-9-]*)[ \t]*>[ \t]*(?=\r?$)/gim,
   )) {
@@ -1377,14 +1394,20 @@ function extractMarkdownDestinationValue(rawValue: string): string | undefined {
   }
   if (/[\r\n]/.test(trimmed)) {
     const titledDestination = trimmed.match(
-      /^([\s\S]*?)[ \t]*\r?\n[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))$/,
+      /^([\s\S]*?)[ \t]*\r?\n[ \t]+(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|\((?:\\.|[^()\\\r\n])*\))$/,
     );
     return titledDestination && !/[\r\n]/.test(titledDestination[1])
       ? extractMarkdownDestinationValue(titledDestination[1])
       : undefined;
   }
   if (trimmed.startsWith('<')) {
-    const closeBracket = trimmed.indexOf('>');
+    let closeBracket = -1;
+    for (let index = 1; index < trimmed.length; index++) {
+      if (trimmed[index] === '>' && !isEscapedMarkdownDelimiter(trimmed, index)) {
+        closeBracket = index;
+        break;
+      }
+    }
     if (closeBracket < 0) {
       return undefined;
     }
@@ -1392,15 +1415,21 @@ function extractMarkdownDestinationValue(rawValue: string): string | undefined {
     const suffix = trimmed.slice(closeBracket + 1).trim();
     if (
       !angleDestination ||
-      /[\s<>]/.test(angleDestination) ||
-      (suffix && !/^(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))$/.test(suffix))
+      /\s/.test(angleDestination) ||
+      [...angleDestination].some(
+        (character, index) =>
+          (character === '<' || character === '>') &&
+          !isEscapedMarkdownDelimiter(angleDestination, index),
+      ) ||
+      (suffix &&
+        !/^(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|\((?:\\.|[^()\\\r\n])*\))$/.test(suffix))
     ) {
       return undefined;
     }
     return angleDestination;
   }
   const destination = trimmed
-    .replace(/\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))\s*$/, '')
+    .replace(/\s+(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'|\((?:\\.|[^()\\\r\n])*\))\s*$/, '')
     .trim();
   return destination && !/\s/.test(destination) ? destination : undefined;
 }
@@ -1457,6 +1486,24 @@ function findExecutableDataHtmlEvidence(
       values.push(
         getParsedAttributeValue(element, 'href'),
         getParsedAttributeValue(element, 'xlink:href'),
+      );
+    }
+    if (
+      element.namespaceURI === SVG_NAMESPACE &&
+      (element.tagName === 'animate' || element.tagName === 'set') &&
+      ['href', 'xlink:href'].includes(
+        (
+          getParsedAttributeValue(element, 'attributeName') ??
+          getParsedAttributeValue(element, 'attributename')
+        )
+          ?.trim()
+          .toLowerCase() ?? '',
+      )
+    ) {
+      values.push(
+        ...['values', 'from', 'to'].flatMap(
+          (attributeName) => getParsedAttributeValue(element, attributeName)?.split(';') ?? [],
+        ),
       );
     }
     if (element.namespaceURI === MATHML_NAMESPACE) {
