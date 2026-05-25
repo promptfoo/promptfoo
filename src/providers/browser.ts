@@ -84,8 +84,8 @@ export class BrowserProvider implements ApiProvider {
   static clearSessionCache(): void {
     BrowserProvider.pageCache.forEach((page) => {
       page.close().catch((err) => {
-        logger.debug('Failed to close browser page during session cache cleanup', {
-          error: String(err),
+        logger.debug('[Browser] Failed to close page during session cache cleanup', {
+          error: err,
         });
       });
     });

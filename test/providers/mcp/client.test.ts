@@ -122,6 +122,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { createDeferred } from '../../util/utils';
 
@@ -1408,6 +1409,58 @@ describe('MCPClient', () => {
 
       // Should have called getOAuthTokenWithExpiry twice (initial + refresh)
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+    });
+
+    it('should log structured close failures and continue an OAuth refresh reconnect', async () => {
+      const transportError = new Error('transport close failed');
+      const clientError = new Error('client close failed');
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+
+      mockClient.connect.mockResolvedValue(undefined);
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+      });
+      mockClient.callTool.mockResolvedValue({ content: 'result' });
+      mockGetOAuthTokenWithExpiry
+        .mockResolvedValueOnce({
+          accessToken: 'initial-token',
+          expiresAt: Date.now() + 30_000,
+        })
+        .mockResolvedValueOnce({
+          accessToken: 'refreshed-token',
+          expiresAt: Date.now() + 3_600_000,
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+
+      await mcpClient.initialize();
+      mockStreamableHTTPTransport.close.mockRejectedValueOnce(transportError);
+      mockClient.close.mockRejectedValueOnce(clientError);
+
+      await expect(mcpClient.callTool('tool1', {})).resolves.toEqual({
+        content: 'result',
+        raw: { content: 'result' },
+      });
+      expect(debugSpy).toHaveBeenCalledWith(
+        '[MCP] Failed to close existing transport during OAuth refresh',
+        { error: transportError, serverKey: 'http://localhost:3000' },
+      );
+      expect(debugSpy).toHaveBeenCalledWith(
+        '[MCP] Failed to close existing client during OAuth refresh',
+        { error: clientError, serverKey: 'http://localhost:3000' },
+      );
     });
 
     it('should call the reconnected client after a proactive token refresh', async () => {

@@ -1,5 +1,3 @@
-import logger from '../logger';
-
 import type { GradingResult, TokenUsage } from '../types/index';
 
 /**
@@ -87,9 +85,7 @@ export function euclideanDistance(vecA: number[], vecB: number[]): number {
 export function tryParse(content: string) {
   try {
     return JSON.parse(content);
-  } catch (err) {
-    logger.debug('Failed to parse content as JSON', { error: String(err) });
-  }
+  } catch {}
   return content;
 }
 

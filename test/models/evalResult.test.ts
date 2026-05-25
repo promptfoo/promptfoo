@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -103,6 +104,25 @@ describe('EvalResult', () => {
           apiKey: '[REDACTED]',
         },
       });
+    });
+
+    it('should log structured context before falling back from a provider projection error', () => {
+      const error = new Error('provider id failed');
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      const provider = {
+        id: () => {
+          throw error;
+        },
+        label: 'Test Provider',
+        callApi: vi.fn(),
+      } as ApiProvider;
+
+      sanitizeProvider(provider);
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        '[EvalResult] Failed to sanitize provider object; using JSON fallback',
+        { error },
+      );
     });
   });
 

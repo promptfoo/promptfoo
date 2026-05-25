@@ -4,7 +4,6 @@ import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import { clearCountCache } from './evalPerformance';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import {
@@ -22,6 +21,7 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
 import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
+import { clearCountCache } from './evalPerformance';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
@@ -110,8 +110,8 @@ export function sanitizeProvider(
       };
     }
   } catch (err) {
-    logger.debug('Failed to sanitize provider object, falling back to safeJsonStringify', {
-      error: String(err),
+    logger.debug('[EvalResult] Failed to sanitize provider object; using JSON fallback', {
+      error: err,
     });
   }
   return JSON.parse(safeJsonStringify(provider) as string);
