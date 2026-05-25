@@ -811,4 +811,79 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
   });
+
+  describe('minimum severity input resolution', () => {
+    function mockSeverityInputs(values: {
+      'min-severity'?: string;
+      'minimum-severity'?: string;
+    }): void {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity') {
+          return values['min-severity'] ?? '';
+        }
+        if (name === 'minimum-severity') {
+          return values['minimum-severity'] ?? '';
+        }
+        return '';
+      });
+    }
+
+    it('uses min-severity when only min-severity is set', async () => {
+      mockSeverityInputs({ 'min-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('uses minimum-severity when only the alias is set (regression test for #9427)', async () => {
+      mockSeverityInputs({ 'minimum-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('falls back to medium when neither input is set', async () => {
+      mockSeverityInputs({});
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('prefers min-severity and warns when both inputs disagree', async () => {
+      mockSeverityInputs({ 'min-severity': 'high', 'minimum-severity': 'critical' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined);
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        expect.stringContaining('Both min-severity (high) and minimum-severity (critical) are set'),
+      );
+    });
+
+    it('does not warn when both inputs are set to the same value', async () => {
+      mockSeverityInputs({ 'min-severity': 'high', 'minimum-severity': 'high' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined);
+      expect(mocks.core.warning).not.toHaveBeenCalledWith(expect.stringContaining('min-severity'));
+    });
+
+    it('trims whitespace from severity inputs', async () => {
+      mockSeverityInputs({ 'minimum-severity': '  critical  ' });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('critical', undefined);
+    });
+  });
 });
