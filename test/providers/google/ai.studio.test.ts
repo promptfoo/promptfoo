@@ -320,6 +320,151 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it('should preserve grounding metadata from earlier incremental chunks', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+      const groundingMetadata = {
+        webSearchQueries: ['source query'],
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'Grounded ' }] },
+                groundingMetadata,
+              },
+            ],
+          },
+          {
+            candidates: [{ content: { parts: [{ text: 'answer' }] }, finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 2, totalTokenCount: 5 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('Grounded answer');
+      expect(response.metadata?.groundingMetadata).toEqual(groundingMetadata);
+    });
+
+    it('should merge grounding metadata distributed across multiple chunks', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'First ' }] },
+                groundingMetadata: {
+                  webSearchQueries: ['query A'],
+                  groundingChunks: [{ web: { uri: 'https://a.example' } }],
+                  searchEntryPoint: { renderedContent: '<div>a</div>' },
+                },
+              },
+            ],
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'second ' }] },
+                groundingMetadata: {
+                  webSearchQueries: ['query B'],
+                  groundingChunks: [{ web: { uri: 'https://b.example' } }],
+                  groundingSupports: [{ segment: { startIndex: 0, endIndex: 5 } }],
+                  searchEntryPoint: { renderedContent: '<div>b</div>' },
+                },
+              },
+            ],
+          },
+          {
+            candidates: [{ content: { parts: [{ text: 'third' }] }, finishReason: 'STOP' }],
+            usageMetadata: { promptTokenCount: 3, candidatesTokenCount: 6, totalTokenCount: 9 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('First second third');
+      const merged = response.metadata?.groundingMetadata as Record<string, any>;
+      expect(merged.webSearchQueries).toEqual(['query A', 'query B']);
+      expect(merged.groundingChunks).toEqual([
+        { web: { uri: 'https://a.example' } },
+        { web: { uri: 'https://b.example' } },
+      ]);
+      expect(merged.groundingSupports).toEqual([{ segment: { startIndex: 0, endIndex: 5 } }]);
+      // Last-wins for non-array refinement fields.
+      expect(merged.searchEntryPoint).toEqual({ renderedContent: '<div>b</div>' });
+    });
+
+    it('should aggregate flat grounding fields when present on multiple candidates', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'A ' }] },
+                webSearchQueries: ['q1'],
+                groundingChunks: [{ web: { uri: 'https://1.example' } }],
+              },
+            ],
+          },
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'B' }] },
+                finishReason: 'STOP',
+                webSearchQueries: ['q2'],
+                groundingChunks: [{ web: { uri: 'https://2.example' } }],
+              },
+            ],
+            usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+          },
+        ],
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callGemini('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('A B');
+      expect(response.metadata?.webSearchQueries).toEqual(['q1', 'q2']);
+      expect(response.metadata?.groundingChunks).toEqual([
+        { web: { uri: 'https://1.example' } },
+        { web: { uri: 'https://2.example' } },
+      ]);
+    });
+
     it('should ignore terminal STOP chunks without parts after streamed output', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
