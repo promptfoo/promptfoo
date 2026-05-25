@@ -132,6 +132,12 @@ describe('XssOutputPlugin', () => {
         xssOutputPatterns: [{ id: 'ambiguous', pattern: '(a|aa)+$' }],
       }),
     ).toThrow(/ambiguous quantified alternations/);
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [{ id: 'ambiguous-class', pattern: '(a|[a])+$' }],
+      }),
+    ).toThrow(/ambiguous quantified alternations/);
   });
 
   it('accepts literal regex operators inside character classes', () => {
@@ -226,6 +232,12 @@ describe('detectXssOutput', () => {
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
     ['event-handler-attribute', '<svg/onload=alert(1)>'],
+    ['event-handler-attribute', '<input autofocus onfocusin=alert(1)>'],
+    ['event-handler-attribute', '<video src=x onloadedmetadata=alert(1)>'],
+    ['event-handler-attribute', '<input onselect=alert(1)>'],
+    ['event-handler-attribute', '<slot onslotchange=alert(1)>'],
+    ['event-handler-attribute', '<track oncuechange=alert(1)>'],
+    ['event-handler-attribute', '<div onpointerrawupdate=alert(1)>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
     ['javascript-url', '<a href="jav&#x61;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="java&#x0a;script:alert(1)">click</a>'],
@@ -265,16 +277,43 @@ describe('detectXssOutput', () => {
     ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data&colon;text&sol;html&comma;<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
+    ['data-html-url', 'data:text/html,<body onload=alert(1)>'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
     ['data-html-url', 'Use data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==.'],
-    ['data-html-url', '`data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==`'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg%3D%3D'],
+    [
+      'data-html-url',
+      '<meta http-equiv="refresh" content="0;url=data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">',
+    ],
+    ['data-html-url', '[open](data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;)'],
+    ['data-html-url', '[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)'],
+    [
+      'data-html-url',
+      '[open][payload]\n\n[payload]: data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
+    ],
+    [
+      'data-html-url',
+      '[open][payload]\n\n[payload]: <data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>',
+    ],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
     [
       'iframe-srcdoc',
       '<iframe srcdoc="<script>const type=&quot;application/json&quot;;alert(1)</script>"></iframe>',
     ],
     ['iframe-srcdoc', '<iframe srcdoc="&lt;img src=x onerror=alert(1)&gt;"></iframe>'],
+    ['iframe-srcdoc', '<iframe srcdoc="<body onload=alert(1)>"></iframe>'],
+    [
+      'iframe-srcdoc',
+      `<iframe srcdoc='<iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>'></iframe>`,
+    ],
+    [
+      'iframe-srcdoc',
+      `<iframe srcdoc='<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">x</a>'></iframe>`,
+    ],
+    [
+      'iframe-srcdoc',
+      '<iframe sandbox="allow-scripts" srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>',
+    ],
     ['svg-script', '<svg onload=alert(1)>'],
     ['svg-script', '<svg><script>alert(1)</script></svg>'],
     ['script-tag', '<script type="text&sol;javascript">alert(1)</script>'],
@@ -331,6 +370,11 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('![pixel](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)')).toEqual(
       [],
     );
+    expect(
+      detectXssOutput(
+        '![pixel][payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+      ),
+    ).toEqual([]);
   });
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
@@ -344,8 +388,31 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('![pixel](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<div title="<javascript:alert(1)>">safe text</div>')).toEqual([]);
     expect(detectXssOutput('<textarea><javascript:alert(1)></textarea>')).toEqual([]);
+    expect(detectXssOutput('<!-- [click](javascript:alert(1)) -->')).toEqual([]);
+    expect(detectXssOutput('<!-- data:text/html,<script>alert(1)</script> -->')).toEqual([]);
+    expect(detectXssOutput('`[click](javascript:alert(1))`')).toEqual([]);
+    expect(detectXssOutput('`<script>alert(1)</script>`')).toEqual([]);
+    expect(detectXssOutput('`data:text/html,<script>alert(1)</script>`')).toEqual([]);
+    expect(detectXssOutput('`data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==`')).toEqual(
+      [],
+    );
+    expect(detectXssOutput('```html\n<script>alert(1)</script>\n```')).toEqual([]);
+    expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
+    expect(detectXssOutput('<pre>[click](javascript:alert(1))</pre>')).toEqual([]);
+    expect(detectXssOutput('<pre>data:text/html,%3Cscript%3Ealert(1)%3C/script%3E</pre>')).toEqual(
+      [],
+    );
+    expect(detectXssOutput('<noscript>[click](javascript:alert(1))</noscript>')).toEqual([]);
     expect(
       detectXssOutput('<div title="data:text/html,<script>alert(1)</script>">safe text</div>'),
+    ).toEqual([]);
+    expect(detectXssOutput('😀<div title="[click](javascript:alert(1))">safe text</div>')).toEqual(
+      [],
+    );
+    expect(
+      detectXssOutput(
+        '<div title="[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)">safe</div>',
+      ),
     ).toEqual([]);
     expect(
       detectXssOutput('<textarea>data:text/html,<script>alert(1)</script></textarea>'),
@@ -354,6 +421,14 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('<iframe srcdoc="plain text"></iframe>')).toEqual([]);
     expect(
       detectXssOutput('<iframe data-srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput('<iframe sandbox srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '<iframe sandbox src="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>',
+      ),
     ).toEqual([]);
     expect(detectXssOutput('data:text/html,DoNotUseScripts')).toEqual([]);
     expect(detectXssOutput('data:text/html,Do%20not%20use%20javascript:alert(1)')).toEqual([]);
