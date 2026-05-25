@@ -9,6 +9,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   getGeminiMaxRetries,
   isGeminiRetryableError,
+  isGeminiRetryableResponseData,
   isGeminiRetryableStatus,
   waitBeforeGeminiRetry,
 } from './retry';
@@ -381,11 +382,20 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           getRequestTimeoutMs(),
           'json',
           shouldBustCache(context),
+          0,
         )) as FetchWithCacheResult<GeminiResponseData>;
 
         if (isGeminiRetryableStatus(result.status) && attempt < maxRetries) {
           await waitBeforeGeminiRetry(config, attempt, maxRetries);
           continue;
+        }
+
+        if (isGeminiRetryableResponseData(result.data)) {
+          await result.deleteFromCache?.();
+          if (attempt < maxRetries) {
+            await waitBeforeGeminiRetry(config, attempt, maxRetries);
+            continue;
+          }
         }
 
         data = result.data;

@@ -198,6 +198,78 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.output).toBe('test response');
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
       expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(cache.fetchWithCache).mock.calls[0][5]).toBe(0);
+    });
+
+    it('should retry empty candidates and evict the invalid cached response', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: { candidates: [] },
+          cached: false,
+          status: 200,
+          deleteFromCache,
+        } as any)
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retry candidates that contain no output', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: { candidates: [{ finishReason: 'STOP' }] },
+          cached: false,
+          status: 200,
+          deleteFromCache,
+        } as any)
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('should not retry safety-blocked empty candidates', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [],
+          promptFeedback: {
+            blockReason: 'SAFETY',
+            safetyRatings: [{ category: 'HARM_CATEGORY_DANGEROUS', probability: 'HIGH' }],
+          },
+        },
+        cached: false,
+        status: 200,
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('Response blocked: SAFETY');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
     });
 
     it('should retry on HTTP 503 and eventually succeed', async () => {
@@ -463,6 +535,23 @@ describe('Google Gemini provider retry logic', () => {
       expect(timeUtil.sleep).not.toHaveBeenCalled();
     });
 
+    it('should safely clamp negative maxRetries to no retries', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: -1 },
+      });
+
+      const error503 = new Error('Service Unavailable');
+      (error503 as any).response = { status: 503 };
+
+      vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(error503);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('API call error');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
+    });
+
     it('should default to 3 retries when maxRetries is not specified', async () => {
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key' },
@@ -527,6 +616,37 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('retry success');
       expect(fetchUtil.fetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(fetchUtil.fetchWithProxy).mock.calls[0][1]).toEqual(
+        expect.objectContaining({ disableTransientRetries: true }),
+      );
+    });
+
+    it('should retry empty candidates in express mode', async () => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          vertexai: true,
+          apiKey: 'test-vertex-key',
+          maxRetries: 1,
+          baseRetryDelay: 10,
+        },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ candidates: [] }),
+        } as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: vi.fn().mockResolvedValue(successResponse.data),
+        } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(fetchUtil.fetchWithProxy).toHaveBeenCalledTimes(2);
+      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on HTTP 429 in express mode', async () => {
@@ -634,6 +754,31 @@ describe('Google Gemini provider retry logic', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('oauth retry success');
       expect(mockRequest).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry empty candidate responses in OAuth mode', async () => {
+      const mockRequest = vi
+        .fn()
+        .mockResolvedValueOnce({ data: { candidates: [] } })
+        .mockResolvedValueOnce({ data: successResponse.data });
+
+      mockGoogleClientRequest(mockRequest);
+
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          vertexai: true,
+          projectId: 'test-project',
+          maxRetries: 1,
+          baseRetryDelay: 10,
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(mockRequest).toHaveBeenCalledTimes(2);
+      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
     });
   });
 

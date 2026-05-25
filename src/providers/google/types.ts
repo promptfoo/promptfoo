@@ -307,7 +307,8 @@ export interface CompletionOptions {
   mcp?: MCPConfig;
 
   /**
-   * Maximum number of retries for transient API errors (503, 429, network errors).
+   * Maximum number of retries for transient Gemini failures (408, 429, 5xx,
+   * network errors, and empty candidate/output responses).
    * Set to 0 to disable retries.
    * @default 3
    */

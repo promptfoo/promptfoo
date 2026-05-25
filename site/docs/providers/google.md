@@ -104,9 +104,9 @@ For promptfoo's built-in cost estimates, Google providers also support `config.c
 `config.inputCost`, and `config.outputCost`. Use `inputCost` and `outputCost` for separate
 prompt and completion pricing. The legacy `cost` option remains the shared fallback.
 
-Gemini text calls retry transient `408`, `429`, `5xx`, and network errors three times by default.
-Set `config.maxRetries: 0` to disable retries, or tune `config.baseRetryDelay` with a millisecond
-delay used for exponential backoff.
+Gemini text calls retry transient `408`, `429`, `5xx`, network errors, and empty
+candidate/output responses three times by default. Set `config.maxRetries: 0` to disable
+retries, or tune `config.baseRetryDelay` with a millisecond delay used for exponential backoff.
 
 ## Quick Start
 

@@ -25,6 +25,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   getGeminiMaxRetries,
   isGeminiRetryableError,
+  isGeminiRetryableResponseData,
   isGeminiRetryableStatus,
   waitBeforeGeminiRetry,
 } from './retry';
@@ -586,6 +587,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
               headers: await this.getAuthHeaders(),
               body: JSON.stringify(body),
               signal: AbortSignal.timeout(getRequestTimeoutMs()),
+              disableTransientRetries: true,
             });
 
             if (!res.ok) {
@@ -615,6 +617,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
               timeout: getRequestTimeoutMs(),
             });
             data = res.data as GeminiApiResponse;
+          }
+
+          if (isGeminiRetryableResponseData(data)) {
+            if (attempt < maxRetries) {
+              await waitBeforeGeminiRetry(config, attempt, maxRetries);
+              continue;
+            }
           }
 
           break;

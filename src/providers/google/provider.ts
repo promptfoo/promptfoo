@@ -25,6 +25,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   getGeminiMaxRetries,
   isGeminiRetryableError,
+  isGeminiRetryableResponseData,
   isGeminiRetryableStatus,
   waitBeforeGeminiRetry,
 } from './retry';
@@ -61,6 +62,7 @@ type GaxiosError = any;
 type GeminiRequestResult = {
   cached: boolean;
   data?: GeminiApiResponse;
+  deleteFromCache?: () => Promise<void>;
   error?: string;
   status?: number;
 };
@@ -368,6 +370,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         headers: await this.getAuthHeaders(),
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(getRequestTimeoutMs()),
+        disableTransientRetries: true,
       });
 
       if (!res.ok) {
@@ -405,6 +408,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     return {
       cached: result.cached,
       data: result.data,
+      deleteFromCache: result.deleteFromCache,
       status: result.status,
     };
   }
@@ -498,6 +502,14 @@ export class GoogleProvider extends GoogleGenericProvider {
         if (shouldRetryStatus && attempt < maxRetries) {
           await waitBeforeGeminiRetry(config, attempt, maxRetries);
           continue;
+        }
+
+        if (result.data && isGeminiRetryableResponseData(result.data)) {
+          await result.deleteFromCache?.();
+          if (attempt < maxRetries) {
+            await waitBeforeGeminiRetry(config, attempt, maxRetries);
+            continue;
+          }
         }
 
         if (result.error) {

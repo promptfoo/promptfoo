@@ -313,6 +313,36 @@ describe('GoogleProvider', () => {
       });
     });
 
+    it('should retry transient empty responses and evict them from the cache', async () => {
+      const retryProvider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 0 },
+      });
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: { candidates: [] },
+          cached: false,
+          status: 200,
+          deleteFromCache,
+        } as any)
+        .mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'retry response' }] } }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached: false,
+          status: 200,
+        } as any);
+
+      const result = await retryProvider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('retry response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
     it('should handle safety blocked response', async () => {
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
@@ -442,6 +472,7 @@ describe('GoogleProvider', () => {
 
         const calledOptions = vi.mocked(fetchUtil.fetchWithProxy).mock.calls[0][1] as any;
         expect(calledOptions.headers['x-goog-api-key']).toBe('vertex-api-key');
+        expect(calledOptions.disableTransientRetries).toBe(true);
       });
 
       it('should use aiplatform.googleapis.com endpoint for express mode', async () => {
@@ -468,7 +499,7 @@ describe('GoogleProvider', () => {
 
     beforeEach(() => {
       provider = new GoogleProvider('gemini-pro', {
-        config: { apiKey: 'test-key' },
+        config: { apiKey: 'test-key', maxRetries: 0 },
       });
     });
 
