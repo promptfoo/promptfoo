@@ -412,6 +412,7 @@ const sidebars = {
               collapsed: true,
               items: [
                 'guides/evaluate-rag',
+                'guides/rag-failure-modes',
                 'guides/prevent-llm-hallucinations',
                 'guides/evaluate-json',
                 'guides/evaluate-coding-agents',

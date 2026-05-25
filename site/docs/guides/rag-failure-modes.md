@@ -1,7 +1,7 @@
 ---
 title: RAG Failure Modes
 sidebar_position: 3
-description: Diagnose common RAG failure modes and map each one to concrete Promptfoo assertions, starter tests, and debugging hints.
+description: Diagnose common RAG failure modes with concrete Promptfoo assertions, starter tests, and debugging steps for retrieval misses, grounding errors, and refusals.
 ---
 
 # RAG failure modes
