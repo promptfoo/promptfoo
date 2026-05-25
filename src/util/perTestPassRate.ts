@@ -35,10 +35,15 @@ function resolveVars(result: ResultLike): unknown {
 }
 
 function groupKey(result: ResultLike): string {
-  const testCase = result.testCase as { description?: string } | undefined;
-  return [result.promptIdx, testCase?.description ?? '', stableStringify(resolveVars(result))].join(
-    ' ',
-  );
+  // Include `assert` so tests that share vars but differ in assertions (a common
+  // pattern when no description is set) don't merge into one bucket.
+  const testCase = result.testCase as { description?: string; assert?: unknown } | undefined;
+  return [
+    result.promptIdx,
+    testCase?.description ?? '',
+    stableStringify(resolveVars(result)),
+    stableStringify(testCase?.assert ?? []),
+  ].join('|');
 }
 
 function describeGroup(sample: ResultLike): string {
@@ -46,7 +51,17 @@ function describeGroup(sample: ResultLike): string {
   if (testCase?.description) {
     return testCase.description;
   }
-  return `test #${sample.testIdx} (vars=${stableStringify(resolveVars(sample))})`;
+  // Avoid logging raw var values: in CI they can leak secrets or PII. Surface
+  // the variable names only, and fall back to the test index when even those
+  // are absent.
+  const vars = resolveVars(sample);
+  if (vars && typeof vars === 'object' && !Array.isArray(vars)) {
+    const keys = Object.keys(vars as Record<string, unknown>).sort();
+    if (keys.length > 0) {
+      return `test #${sample.testIdx} (vars: ${keys.join(', ')})`;
+    }
+  }
+  return `test #${sample.testIdx}`;
 }
 
 export function findTestsBelowRepeatPassRateThreshold(

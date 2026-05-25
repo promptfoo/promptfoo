@@ -150,4 +150,77 @@ describe('findTestsBelowRepeatPassRateThreshold', () => {
     expect(failures).toHaveLength(1);
     expect(failures[0].totalCount).toBe(2);
   });
+
+  it('keeps tests with same vars but different assertions in separate groups', () => {
+    // Pattern: two tests with no description, identical vars, but different
+    // assertions. Without `assert` in the group key these merge and a
+    // consistently failing test gets averaged out behind a passing one.
+    const results = [
+      {
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { x: 1 }, assert: [{ type: 'contains', value: 'foo' }] },
+        vars: { x: 1 },
+        success: true,
+      },
+      {
+        promptIdx: 0,
+        testIdx: 1,
+        testCase: { vars: { x: 1 }, assert: [{ type: 'contains', value: 'foo' }] },
+        vars: { x: 1 },
+        success: true,
+      },
+      {
+        promptIdx: 0,
+        testIdx: 2,
+        testCase: { vars: { x: 1 }, assert: [{ type: 'contains', value: 'bar' }] },
+        vars: { x: 1 },
+        success: false,
+      },
+      {
+        promptIdx: 0,
+        testIdx: 3,
+        testCase: { vars: { x: 1 }, assert: [{ type: 'contains', value: 'bar' }] },
+        vars: { x: 1 },
+        success: false,
+      },
+    ] as unknown as EvaluateResult[];
+    const failures = findTestsBelowRepeatPassRateThreshold(results, 80);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].passCount).toBe(0);
+    expect(failures[0].totalCount).toBe(2);
+  });
+
+  it('redacts var values from the failure description when no description is set', () => {
+    const results: EvaluateResult[] = [
+      makeResult({
+        testIdx: 0,
+        testCase: { vars: { api_key: 'sk-secret', user_email: 'a@b.com' } },
+        vars: { api_key: 'sk-secret', user_email: 'a@b.com' },
+        success: false,
+      }),
+      makeResult({
+        testIdx: 1,
+        testCase: { vars: { api_key: 'sk-secret', user_email: 'a@b.com' } },
+        vars: { api_key: 'sk-secret', user_email: 'a@b.com' },
+        success: false,
+      }),
+    ];
+    const failures = findTestsBelowRepeatPassRateThreshold(results, 50);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].description).not.toContain('sk-secret');
+    expect(failures[0].description).not.toContain('a@b.com');
+    expect(failures[0].description).toContain('api_key');
+    expect(failures[0].description).toContain('user_email');
+  });
+
+  it('falls back to testIdx-only when there is no description and no vars', () => {
+    const results: EvaluateResult[] = [
+      makeResult({ testIdx: 7, testCase: {}, vars: {}, success: false }),
+      makeResult({ testIdx: 7, testCase: {}, vars: {}, success: false }),
+    ];
+    const failures = findTestsBelowRepeatPassRateThreshold(results, 50);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].description).toBe('test #7');
+  });
 });
