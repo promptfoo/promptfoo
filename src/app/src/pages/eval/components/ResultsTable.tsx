@@ -65,7 +65,12 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals } from './utils';
+import {
+  getNamedMetricTotals,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
@@ -1515,6 +1520,7 @@ interface ResultsTableProps {
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
+  originalRowPositionIndex?: number;
   originalPromptIndex?: number;
 }
 
@@ -1582,7 +1588,9 @@ function ResultsTableHeader({
         className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
       >
         <table
-          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          className={`results-table results-table-header-table firefox-fix ${
+            maxTextLength <= 25 ? 'compact' : ''
+          }`}
           style={{
             wordBreak,
             width: `${tableWidth}px`,
@@ -1593,7 +1601,8 @@ function ResultsTableHeader({
           <thead>
             {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
+                {headerGroup.headers.map((header, headerIndex) => {
+                  const isMetadataCol = isMetadataColumn(header.column.id);
                   const isFinalRow = headerGroup.depth === 1;
 
                   return (
@@ -1603,7 +1612,9 @@ function ResultsTableHeader({
                       colSpan={header.colSpan}
                       style={{
                         width: header.getSize(),
-                        borderBottom: 'none',
+                        borderLeft: headerIndex === 0 ? undefined : 'none',
+                        borderBottom:
+                          !isMetadataCol && isFinalRow ? '2px solid var(--border-color)' : 'none',
                         height: isFinalRow ? 'fit-content' : 'auto',
                       }}
                     >
@@ -1654,6 +1665,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1747,7 +1759,9 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
+    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
       outputs: row.outputs.map((output, promptIndex) =>
@@ -1756,6 +1770,7 @@ function ResultsTable({
           : {
               ...output,
               originalRowIndex: rowIndex,
+              originalRowPositionIndex: rowPositionOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
@@ -1839,6 +1854,26 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Clear both deep-link forms in the browser URL before synchronizing React Router.
+  // The row-jump effect below reads the live URL in this same effect cycle.
+  const clearRowDeepLink = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    const hasDetailsHash = parseEvalOutputPromptHash(url.hash) !== null;
+    if (!url.searchParams.has('rowId') && !hasDetailsHash) {
+      return;
+    }
+
+    url.searchParams.delete('rowId');
+    if (hasDetailsHash) {
+      setEvalDetailsHash('');
+      url.hash = '';
+    } else {
+      window.history.replaceState(window.history.state, '', url);
+    }
+
+    navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+  }, [navigate]);
+
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
@@ -1876,11 +1911,39 @@ function ResultsTable({
     );
   }, [filters.values]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  const isFilteringActive =
+    Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
+
+  // Reset only when these controls change. Strict Mode replays effects in dev
+  // with the same inputs, and that replay must not clear an initial deep link.
+  const previousResultSetControlsRef = useRef({
+    failureFilter,
+    filterMode,
+    debouncedSearchText,
+    appliedFiltersString,
+  });
+
   React.useEffect(() => {
+    const previousControls = previousResultSetControlsRef.current;
+    previousResultSetControlsRef.current = {
+      failureFilter,
+      filterMode,
+      debouncedSearchText,
+      appliedFiltersString,
+    };
+    if (
+      previousControls.failureFilter === failureFilter &&
+      previousControls.filterMode === filterMode &&
+      previousControls.debouncedSearchText === debouncedSearchText &&
+      previousControls.appliedFiltersString === appliedFiltersString
+    ) {
+      return;
+    }
+
+    clearRowDeepLink();
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
+  }, [clearRowDeepLink, failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
@@ -2155,7 +2218,12 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.index}
+                    rowIndex={
+                      info.row.original.testIdx ?? output.originalRowIndex ?? info.row.index
+                    }
+                    rowPositionIndex={
+                      output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
+                    }
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2251,22 +2319,28 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  const clearRowIdFromUrl = React.useCallback(() => {
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('rowId')) {
-      url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
-    }
-  }, [navigate]);
-
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
+    const detailsHashTarget = parseEvalOutputPromptHash(window.location.hash);
     const rowId = params['rowId'];
+    const rowIndexFromQuery =
+      rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
+    // Copied detail links carry both forms:
+    // - `rowId` is the filtered-table position used to resolve the correct page.
+    // - the hash keeps the stable test/prompt identity so stale rows do not open dialogs.
+    //
+    // The hash encodes the row's GLOBAL test index, not its position within the
+    // currently filtered/searched table. When a filter or search is active, that global
+    // index does not map to a filtered-table page, so paging by it would land on the
+    // wrong page. In that case require `rowId` (the explicit filtered position) for page
+    // resolution; the dialog can still open via the hash if the target row happens to be
+    // on the current page.
+    const requestedRowIndex =
+      rowIndexFromQuery ?? (isFilteringActive ? undefined : detailsHashTarget?.rowIndex);
 
-    if (rowId && Number.isInteger(Number(rowId))) {
-      const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
+    if (requestedRowIndex !== undefined && filteredResultsCount > 0) {
+      const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -2302,8 +2376,7 @@ function ResultsTable({
         }
       };
 
-      const tableContainer =
-        document.querySelector('.results-table')?.parentElement || document.body;
+      const tableContainer = document.getElementById('results-table-container') || document.body;
 
       const observer = new MutationObserver(() => {
         if (hasScrolled) {
@@ -2336,7 +2409,18 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+  }, [
+    pagination.pageIndex,
+    pagination.pageSize,
+    reactTable,
+    filteredResultsCount,
+    locationHash,
+    debouncedSearchText,
+    failureFilter,
+    filterMode,
+    appliedFiltersString,
+    filters.appliedCount,
+  ]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.
@@ -2416,13 +2500,11 @@ function ResultsTable({
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {filteredResultsCount === 0 &&
-        !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
-          <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
-            <p>No results found for the current filters.</p>
-          </div>
-        )}
+      {filteredResultsCount === 0 && !isFetching && isFilteringActive && (
+        <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
+          <p>No results found for the current filters.</p>
+        </div>
+      )}
       <div className="h-4" />
       <ResultsTableHeader
         reactTable={reactTable}
@@ -2439,7 +2521,9 @@ function ResultsTable({
         id="results-table-container"
         style={{
           zoom,
-          borderTop: 'none',
+          borderTopWidth: '1px',
+          borderTopStyle: 'solid',
+          borderColor: 'var(--border-color)',
           // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
           // won't extend to the bottom of the viewport.
           flexGrow: 1,
@@ -2558,7 +2642,7 @@ function ResultsTable({
                     ...prev,
                     pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                   }));
-                  clearRowIdFromUrl();
+                  clearRowDeepLink();
                 }
               }}
               className="w-[60px] h-8 text-center"
@@ -2581,7 +2665,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -2598,7 +2682,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
