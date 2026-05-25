@@ -66,16 +66,16 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   }
 
   const db = getDb();
-  const evalIds = db
+  const affectedEvals = await db
     .selectDistinct({ evalId: evalResultsTable.evalId })
     .from(evalResultsTable)
     .where(inArray(evalResultsTable.id, resultIds))
-    .all()
-    .map(({ evalId }) => evalId);
+    .all();
 
   // Use batch delete with inArray for better performance
   await db.delete(evalResultsTable).where(inArray(evalResultsTable.id, resultIds));
-  for (const evalId of evalIds) {
+
+  for (const { evalId } of affectedEvals) {
     clearCountCache(evalId);
   }
 
