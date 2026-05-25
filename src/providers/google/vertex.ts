@@ -1014,7 +1014,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     };
 
     const cache = await getCache();
-    const apiHost = `${this.getRegion()}-aiplatform.googleapis.com`;
+    const apiHost = this.getApiHost();
     const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body, apiHost);
     logger.debug('Preparing to call Llama API', {
       model: this.modelName,

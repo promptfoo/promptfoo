@@ -2310,6 +2310,37 @@ describe('VertexChatProvider.callLlamaApi', () => {
       'utf8',
     );
   });
+
+  it('honors VERTEX_API_HOST overrides on the Llama path', async () => {
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'Llama response content' } }],
+        usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+      },
+    });
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: { region: 'us-central1' },
+      env: { VERTEX_API_HOST: 'llama-proxy.example.test' },
+    });
+
+    await provider.callLlamaApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining('https://llama-proxy.example.test/'),
+      }),
+    );
+  });
 });
 
 describe('VertexChatProvider.callClaudeApi parameter naming', () => {
