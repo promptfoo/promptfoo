@@ -30,6 +30,7 @@ import {
 } from './retry';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -795,32 +796,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
           metadata: {},
         };
 
-        // Extract search grounding metadata from candidates
-        const candidateWithMetadata = dataWithResponse
-          .map((datum) => getCandidate(datum))
-          .find(
-            (candidate) =>
-              candidate.groundingMetadata ||
-              candidate.groundingChunks ||
-              candidate.groundingSupports ||
-              candidate.webSearchQueries,
-          );
-
-        if (candidateWithMetadata) {
-          response.metadata = {
-            ...(candidateWithMetadata.groundingMetadata && {
-              groundingMetadata: candidateWithMetadata.groundingMetadata,
-            }),
-            ...(candidateWithMetadata.groundingChunks && {
-              groundingChunks: candidateWithMetadata.groundingChunks,
-            }),
-            ...(candidateWithMetadata.groundingSupports && {
-              groundingSupports: candidateWithMetadata.groundingSupports,
-            }),
-            ...(candidateWithMetadata.webSearchQueries && {
-              webSearchQueries: candidateWithMetadata.webSearchQueries,
-            }),
-          };
+        const grounding = collectGroundingMetadata(dataWithResponse);
+        if (Object.keys(grounding).length > 0) {
+          response.metadata = { ...grounding };
         }
 
         if (isCacheEnabled()) {
@@ -1256,7 +1234,9 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-const DEFAULT_VERTEX_MODEL = 'gemini-2.5-pro';
+const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const DEFAULT_VERTEX_REGION = 'global';
+const DEFAULT_VERTEX_API_HOST = 'aiplatform.googleapis.com';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
 
 export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
@@ -1264,7 +1244,10 @@ export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
 }
 
 export function getGoogleVertexProviders(env?: EnvOverrides) {
-  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, { env });
+  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, {
+    env,
+    config: { region: DEFAULT_VERTEX_REGION, apiHost: DEFAULT_VERTEX_API_HOST },
+  });
   return {
     embeddingProvider: getGoogleVertexEmbeddingProvider(env),
     gradingJsonProvider: gradingProvider,
