@@ -69,6 +69,7 @@ import {
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -551,6 +552,21 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelName = splits.slice(1).join(':');
       return new DatabricksMosaicAiChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: providerOptions.config || {},
+      });
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('mlflow-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new MlflowGatewayChatCompletionProvider(modelName, {
         ...providerOptions,
         config: providerOptions.config || {},
       });
