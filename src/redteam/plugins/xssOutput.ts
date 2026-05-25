@@ -188,9 +188,13 @@ function normalizeMarkdownDataUrlDetectionOutput(output: string): string {
 
 function maskMarkdownCodeContexts(output: string): string {
   const mask = (value: string) => value.replace(/[^\r\n]/g, ' ');
+  const rawHtmlNodes = getParsedHtmlNodes(output);
   const withoutFences = output.replace(
     /(^|\r?\n)(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
-    mask,
+    (match, _lineStart: string, _fence: string, offset: number) =>
+      isInsideRawHtmlBlockContent(rawHtmlNodes, output, offset, offset + match.length)
+        ? match
+        : mask(match),
   );
   const lines = withoutFences.split(/(\r?\n)/);
   let inIndentedBlock = false;
@@ -237,7 +241,10 @@ function maskMarkdownCodeContexts(output: string): string {
         closeEnd - closeStart === delimiterLength &&
         !isEscapedMarkdownDelimiter(withoutCodeBlocks, closeStart)
       ) {
-        if (!isInsideHtmlAttributeSource(parsedNodes, start, closeEnd)) {
+        if (
+          !isInsideHtmlAttributeSource(parsedNodes, start, closeEnd) &&
+          !isInsideRawHtmlBlockContent(rawHtmlNodes, output, start, closeEnd)
+        ) {
           masked.splice(start, closeEnd - start, ...mask(withoutCodeBlocks.slice(start, closeEnd)));
         }
         start = closeEnd - 1;
@@ -485,6 +492,7 @@ interface ParsedSourceLocation {
   startOffset: number;
   endOffset: number;
   startTag?: ParsedSourceLocation;
+  endTag?: ParsedSourceLocation;
   attrs?: Record<string, ParsedSourceLocation>;
 }
 
@@ -506,6 +514,89 @@ function isInsideHtmlAttributeSource(nodes: ParsedHtmlNode[], start: number, end
       return true;
     }
     if (isInsideHtmlAttributeSource(node.childNodes ?? [], start, end)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const RAW_HTML_BLOCK_CONTAINER_TAGS = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'body',
+  'caption',
+  'center',
+  'colgroup',
+  'dd',
+  'details',
+  'dialog',
+  'dir',
+  'div',
+  'dl',
+  'dt',
+  'fieldset',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'head',
+  'header',
+  'html',
+  'iframe',
+  'legend',
+  'li',
+  'main',
+  'menu',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'search',
+  'section',
+  'summary',
+  'table',
+  'tbody',
+  'td',
+  'tfoot',
+  'th',
+  'thead',
+  'tr',
+  'ul',
+]);
+const RAW_HTML_BLOCK_LINE_PREFIX = /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}$/;
+const RAW_HTML_BLOCK_BLANK_LINE = /\r?\n(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\r?\n/;
+
+function isInsideRawHtmlBlockContent(
+  nodes: ParsedHtmlNode[],
+  source: string,
+  start: number,
+  end: number,
+): boolean {
+  for (const node of nodes) {
+    const location = node.sourceCodeLocation;
+    const startTag = location?.startTag;
+    const endTag = location?.endTag;
+    if (location && startTag && RAW_HTML_BLOCK_CONTAINER_TAGS.has(node.tagName ?? '')) {
+      const lineStart = source.lastIndexOf('\n', Math.max(0, startTag.startOffset - 1)) + 1;
+      const opensBlock = RAW_HTML_BLOCK_LINE_PREFIX.test(
+        source.slice(lineStart, startTag.startOffset),
+      );
+      const beforeCode = source.slice(startTag.endOffset, start);
+      const blockStillOpen = !RAW_HTML_BLOCK_BLANK_LINE.test(beforeCode);
+      const contentEnd = endTag?.startOffset ?? location.endOffset;
+      if (opensBlock && blockStillOpen && startTag.endOffset <= start && contentEnd >= end) {
+        return true;
+      }
+    }
+    if (isInsideRawHtmlBlockContent(node.childNodes ?? [], source, start, end)) {
       return true;
     }
   }
@@ -853,7 +944,8 @@ function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]):
 }
 
 function isMarkdownImageDestination(source: string, offset: number): boolean {
-  return /!\[[^\]\r\n]*\]\(\s*(?:<\s*)?$/.test(source.slice(0, offset));
+  const match = /!\[[^\]\r\n]*\]\(\s*(?:<\s*)?$/.exec(source.slice(0, offset));
+  return match !== null && !isEscapedMarkdownDelimiter(source, match.index);
 }
 
 function isMarkdownReferenceDefinitionDestination(source: string, offset: number): boolean {

@@ -261,6 +261,11 @@ describe('detectXssOutput', () => {
     ['script-tag', '<script>alert(1)'],
     ['script-tag', '<script src=//evil.example/x.js>'],
     ['script-tag', '<div>\n    <script>alert(1)</script>\n</div>'],
+    ['script-tag', '<div>\n`<script>alert(1)</script>`\n</div>'],
+    ['script-tag', '<div>\n```\n<script>alert(1)</script>\n```\n</div>'],
+    ['script-tag', '> <div>\n> `<script>alert(1)</script>`\n> </div>'],
+    ['script-tag', '<div>\n`<script>alert(1)</script>`'],
+    ['script-tag', '<search>\n`<script>alert(1)</script>`\n</search>'],
     ['script-tag', '\\`<script>alert(1)</script>\\`'],
     ['script-tag', '<script>const type="application/json";alert(1)</script>'],
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
@@ -288,6 +293,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', String.raw`[click](javascript\:alert(1))`],
     ['javascript-url', String.raw`\![click](javascript:alert(1))`],
+    ['javascript-url', String.raw`\![click](<javascript:alert(1)>)`],
     ['javascript-url', '[click](java&#x0a;script:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['javascript-url', '[click][payload]\n\n[payload]: javascript:alert(1)'],
@@ -359,6 +365,7 @@ describe('detectXssOutput', () => {
     ],
     ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
     ['data-html-url', '[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)'],
+    ['data-html-url', String.raw`\![open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)`],
     ['data-html-url', '<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>'],
     [
       'data-html-url',
@@ -493,6 +500,9 @@ describe('detectXssOutput', () => {
       [],
     );
     expect(detectXssOutput('```html\n<script>alert(1)</script>\n```')).toEqual([]);
+    expect(detectXssOutput('<span>`<script>alert(1)</script>`</span>')).toEqual([]);
+    expect(detectXssOutput('<div>\n\n`<script>alert(1)</script>`\n</div>')).toEqual([]);
+    expect(detectXssOutput('> <div>\n>\n> `<script>alert(1)</script>`\n> </div>')).toEqual([]);
     expect(detectXssOutput('> ```html\n> <script>alert(1)</script>\n> ```')).toEqual([]);
     expect(detectXssOutput('    <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('>     <script>alert(1)</script>')).toEqual([]);
