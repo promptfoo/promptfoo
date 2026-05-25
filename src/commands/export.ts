@@ -117,8 +117,13 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
 }
 
 function isStringSizeRangeError(error: unknown): error is RangeError {
+  if (!(error instanceof RangeError)) {
+    return false;
+  }
+
   return (
-    error instanceof RangeError && /Invalid string length|ERR_STRING_TOO_LONG/i.test(error.message)
+    (error as NodeJS.ErrnoException).code === 'ERR_STRING_TOO_LONG' ||
+    /Invalid string length|Cannot create a string longer than/i.test(error.message)
   );
 }
 

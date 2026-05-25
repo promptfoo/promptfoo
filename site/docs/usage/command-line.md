@@ -549,6 +549,8 @@ Export an eval record to JSON format. To export the most recent, use `latest`.
 
 Exports always redact config secrets before writing. Media bytes are opt-in because they can make the export much larger and may contain sensitive user content. Without `--include-media`, blob references remain in the exported results and resolve only when the target Promptfoo data directory already has the referenced blobs.
 
+For very large evals, use `promptfoo export eval <evalId> -o output.jsonl`; writing the entire export to stdout as formatted JSON can exceed Node.js string size limits.
+
 :::warning
 Eval exports can still contain user data in prompts, outputs, variables, traces, and opt-in media. Inspect an export before sharing it.
 :::

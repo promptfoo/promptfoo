@@ -233,6 +233,24 @@ describe('exportCommand', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('should show specific command for coded oversized-string errors', async () => {
+    const error = Object.assign(
+      new RangeError('Cannot create a string longer than the maximum allowed length'),
+      { code: 'ERR_STRING_TOO_LONG' },
+    );
+    mockEval.toEvaluateSummary.mockRejectedValue(error);
+    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+
+    exportCommand(program);
+
+    await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
   it('should show specific command when JSON output is too large to stringify', async () => {
     const originalStringify = JSON.stringify;
     const stringifySpy = vi
