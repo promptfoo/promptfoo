@@ -9,6 +9,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -433,18 +434,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         };
       }
 
-      // Pick the first chunk that carries any grounding signal. Gemini's
-      // streaming pattern emits grounding once per turn (usually on the
-      // search/retrieval-bearing candidate, before later text-only chunks),
-      // so first-wins matches observed behavior. If Google ever emits
-      // grounding on multiple chunks we'd intentionally keep only the first.
-      const candidateWithMetadata = dataWithResponse
-        .filter((datum) => datum.candidates?.length)
-        .map((datum) => getCandidate(datum))
-        .find(
-          (c) =>
-            c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
-        );
+      const grounding = collectGroundingMetadata(dataWithResponse);
 
       const tokenUsage = cached
         ? {
@@ -496,20 +486,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: {
-          ...(candidateWithMetadata?.groundingChunks && {
-            groundingChunks: candidateWithMetadata.groundingChunks,
-          }),
-          ...(candidateWithMetadata?.groundingMetadata && {
-            groundingMetadata: candidateWithMetadata.groundingMetadata,
-          }),
-          ...(candidateWithMetadata?.groundingSupports && {
-            groundingSupports: candidateWithMetadata.groundingSupports,
-          }),
-          ...(candidateWithMetadata?.webSearchQueries && {
-            webSearchQueries: candidateWithMetadata.webSearchQueries,
-          }),
-        },
+        metadata: { ...grounding },
       };
     } catch (err) {
       return {
