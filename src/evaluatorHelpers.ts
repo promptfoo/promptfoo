@@ -351,13 +351,26 @@ async function loadPromptFileVar(
   return (await fs.readFile(filePath, 'utf8')).trim();
 }
 
+function normalizePromptVarPath(value: string): string {
+  return value.replace(/\[\s*(['"])([^'"]+)\1\s*\]/g, '.$2');
+}
+
+function isSkippedPromptFileVar(varName: string, skipRenderVars?: string[]): boolean {
+  const normalizedVarName = normalizePromptVarPath(varName);
+  return (
+    skipRenderVars?.some(
+      (skippedVar) => normalizePromptVarPath(skippedVar) === normalizedVarName,
+    ) ?? false
+  );
+}
+
 async function loadPromptFileVars(
   value: unknown,
   varName: string,
   context: PromptFileLoadContext,
   loadedValues: WeakMap<object, VarValue>,
 ): Promise<VarValue> {
-  if (varName === '_conversation' || context.skipRenderVars?.includes(varName)) {
+  if (varName === '_conversation' || isSkippedPromptFileVar(varName, context.skipRenderVars)) {
     return value as VarValue;
   }
 
@@ -372,10 +385,10 @@ async function loadPromptFileVars(
       return loadedValue;
     }
 
-    const result: VarValue[] = [];
+    const result = value as VarValue[];
     loadedValues.set(value, result);
     for (const [index, item] of value.entries()) {
-      result.push(await loadPromptFileVars(item, `${varName}[${index}]`, context, loadedValues));
+      result[index] = await loadPromptFileVars(item, `${varName}[${index}]`, context, loadedValues);
     }
     return result;
   }
@@ -386,7 +399,7 @@ async function loadPromptFileVars(
       return loadedValue;
     }
 
-    const result: Record<string, VarValue> = {};
+    const result = value as Record<string, VarValue>;
     loadedValues.set(value, result);
     for (const [key, item] of Object.entries(value)) {
       result[key] = await loadPromptFileVars(item, `${varName}.${key}`, context, loadedValues);

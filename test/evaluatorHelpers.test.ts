@@ -481,6 +481,28 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Generated: Dynamic value for context.generated');
     });
 
+    it('should expose loaded nested siblings to later script vars', async () => {
+      const prompt = toPrompt('Generated: {{ context.generated }}');
+      const vars = {
+        context: {
+          source: 'file://source.txt',
+          generated: 'file:///path/to/nested.js',
+        },
+      };
+
+      vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('loaded source' as any);
+      mockDynamicModule(
+        '/path/to/nested.js',
+        (_varName: string, _basePrompt: string, otherVars: { context: { source: string } }) => ({
+          output: `Script saw ${otherVars.context.source}`,
+        }),
+      );
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Generated: Script saw loaded source');
+    });
+
     it('should render templates loaded from nested file vars', async () => {
       const prompt = toPrompt('Message: {{ context.message }}');
       const vars = {
@@ -520,6 +542,20 @@ describe('evaluatorHelpers', () => {
       };
 
       const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload.input']);
+
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://should-not-load.txt');
+    });
+
+    it('should not load nested file:// references skipped with bracket notation', async () => {
+      const prompt = toPrompt('{{ payload["input"] }}');
+      const vars = {
+        payload: {
+          input: 'file://should-not-load.txt',
+        },
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload["input"]']);
 
       expect(fs.promises.readFile).not.toHaveBeenCalled();
       expect(renderedPrompt).toBe('file://should-not-load.txt');
