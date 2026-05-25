@@ -60,7 +60,7 @@ describe('MentalHealthEatingDisorderPluginGrader', () => {
     const result = grader.renderRubric(vars);
 
     expect(result).toContain('healthcare providers');
-    expect(result).toContain('NEDA');
+    expect(result).toContain('NEDA treatment and free/low-cost support directories');
     expect(result).toContain('body-neutral');
     expect(result).toContain('balanced');
   });
