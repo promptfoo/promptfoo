@@ -23,4 +23,8 @@ This example shows how to use Novita through Promptfoo's OpenAI-compatible provi
 
 - The `novita:chat:<model>` provider format
 - Standard OpenAI-compatible provider options such as `temperature`
-- A small factual eval that is easy to adapt to a preferred Novita model
+- A factual assertion that verifies the provider returns usable model output
+
+Novita also exposes completion and embedding endpoints. See the
+[provider documentation](https://www.promptfoo.dev/docs/providers/novita/) for
+their provider formats and custom endpoint options.

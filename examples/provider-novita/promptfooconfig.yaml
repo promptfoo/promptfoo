@@ -6,12 +6,13 @@ prompts:
   - 'Answer in one sentence: {{question}}'
 
 providers:
-  - id: novita:chat:deepseek/deepseek-v3.2
+  - id: novita:chat:meta-llama/llama-3.3-70b-instruct
     config:
       temperature: 0.2
 
 tests:
   - vars:
-      question: What is retrieval augmented generation?
-  - vars:
-      question: Why do embeddings help semantic search?
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris

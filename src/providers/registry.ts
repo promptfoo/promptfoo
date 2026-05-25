@@ -68,8 +68,8 @@ import {
 } from './localai';
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
-import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
