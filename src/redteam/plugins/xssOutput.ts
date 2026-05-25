@@ -506,9 +506,28 @@ function hasJavascriptUrlValue(value: string | undefined): boolean {
   );
 }
 
+function normalizeMarkdownReferenceLabel(label: string): string {
+  return label.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 function hasActiveMarkdownReference(source: string, label: string): boolean {
-  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(String.raw`(?<!!)\[[^\]\r\n]+\]\[\s*${escapedLabel}\s*\]`, 'i').test(source);
+  const normalizedLabel = normalizeMarkdownReferenceLabel(label);
+  for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\]\[\s*([^\]\r\n]*)\s*\]/g)) {
+    const referencedLabel = match[3] || match[2];
+    if (match[1] !== '!' && normalizeMarkdownReferenceLabel(referencedLabel) === normalizedLabel) {
+      return true;
+    }
+  }
+  for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\](?![ \t]*(?:\[|:|\())/g)) {
+    if (
+      match[1] !== '!' &&
+      source[(match.index ?? 0) - 1] !== ']' &&
+      normalizeMarkdownReferenceLabel(match[2]) === normalizedLabel
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {

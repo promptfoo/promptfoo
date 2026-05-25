@@ -250,6 +250,8 @@ describe('detectXssOutput', () => {
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['javascript-url', '[click][payload]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[click][payload]\r\n\r\n[payload]: java&#x0a;script:alert(1)'],
+    ['javascript-url', '[payload][]\n\n[payload]: javascript:alert(1)'],
+    ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '<javascript:alert(1)>'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;foo=bar,<script>alert(1)</script>'],
@@ -295,6 +297,8 @@ describe('detectXssOutput', () => {
       'data-html-url',
       '[open][payload]\n\n[payload]: <data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>',
     ],
+    ['data-html-url', '[payload][]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
+    ['data-html-url', '[payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
     [
       'iframe-srcdoc',
@@ -373,6 +377,11 @@ describe('detectXssOutput', () => {
     expect(
       detectXssOutput(
         '![pixel][payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+      ),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '![payload][]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
       ),
     ).toEqual([]);
   });
