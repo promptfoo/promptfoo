@@ -225,7 +225,9 @@ print({fn_name}({test_input}))
             )
         except Exception:
             dbg = str(getattr(res, "logs", ""))[:800]
-        write_metrics(task_id, False, duration, extra={"error": err_obj or stderr, "debug": dbg})
+        write_metrics(
+            task_id, False, duration, extra={"error": err_obj or stderr, "debug": dbg}
+        )
         return {
             "pass": False,
             "score": 0,
