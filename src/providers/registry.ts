@@ -4,6 +4,7 @@ import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { isMissingPackageImportError } from '../util/packageImportErrors';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -68,6 +69,7 @@ import {
 import { ManualInputProvider } from './manualInput';
 import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
+import { MlflowGatewayChatCompletionProvider } from './mlflow-gateway';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
 import { OpenAiAssistantProvider } from './openai/assistant';
@@ -556,6 +558,21 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('mlflow-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const modelName = splits.slice(1).join(':');
+      return new MlflowGatewayChatCompletionProvider(modelName, {
+        ...providerOptions,
+        config: providerOptions.config || {},
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('deepseek:'),
     create: async (
       providerPath: string,
@@ -986,8 +1003,17 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
-        const { OpenAiAgentsProvider } = await import('./openai/agents');
-        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+        try {
+          const { OpenAiAgentsProvider } = await import('./openai/agents');
+          return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+        } catch (error) {
+          if (isMissingPackageImportError(error, '@openai/agents')) {
+            throw new Error(
+              'The @openai/agents package is required for OpenAI Agents providers. Install it with: npm install @openai/agents',
+            );
+          }
+          throw error;
+        }
       }
       if (modelType === 'chatkit') {
         const { OpenAiChatKitProvider } = await import('./openai/chatkit');
