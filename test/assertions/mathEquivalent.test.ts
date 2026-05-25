@@ -249,6 +249,10 @@ describe('cleanMathText', async () => {
     expect(cleanMathText('Redacted Thinking: $$99$$\n\n0.5')).toBe('0.5');
   });
 
+  it('strips a terminal Anthropic redacted thinking block', async () => {
+    expect(cleanMathText('Redacted Thinking: $$99$$')).toBe('');
+  });
+
   it('strips thinking blocks with content before a signature line', async () => {
     expect(cleanMathText('Thinking: $$99$$\nSignature: AbCd123\n\n0.5')).toBe('0.5');
   });
@@ -347,6 +351,9 @@ describe('cleanMathText', async () => {
     ['√\\pi m', '√\\pi'],
     ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
     ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
+    ['\\pi rad', '\\pi'],
+    ['(1/2) m', '(1/2)'],
+    ['(10) kg', '(10)'],
   ])('strips trailing unit after a fractional/LaTeX answer (%s → %s)', async (input, expected) => {
     // The unit cleanup previously only matched a plain integer/decimal as
     // the left context, so "1/2 m" or "\\frac{1}{2} kg" left the unit in
@@ -896,6 +903,10 @@ describe('extractMathAnswer', async () => {
       expect(await extractMathAnswer('Redacted Thinking: $$99$$\n\nAnswer: 7')).toBe('7');
     });
 
+    it('does not extract math from a terminal Anthropic redacted-thinking block', async () => {
+      expect(await extractMathAnswer('Redacted Thinking: $$99$$')).toBe('');
+    });
+
     it('ignores $$...$$ inside thinking blocks with a later signature line', async () => {
       expect(await extractMathAnswer('Thinking: $$2$$\nSignature: sig\n\nFinal answer: 3')).toBe(
         '3',
@@ -1248,6 +1259,9 @@ describe('isMathEquivalent', async () => {
       ['√\\pi m', '\\sqrt{\\pi}'],
       ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
       ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
+      ['\\pi rad', '\\pi'],
+      ['(1/2) m', '0.5'],
+      ['(10) kg', 10],
     ])('grades fractional / LaTeX answers with trailing units "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
     });

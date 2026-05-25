@@ -133,6 +133,7 @@ export function normalizeLatex(text: string): string {
 
 const TRAILING_UNIT_PATTERN = /^(.*?)(?:\s*)(rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/;
 const NUMERIC_VALUE_PATTERN = /^-?\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?$/;
+const SELF_CONTAINED_LATEX_CONSTANTS = new Set(['\\pi']);
 
 function isSelfContainedLatexValue(text: string): boolean {
   let value = text.startsWith('-') ? text.slice(1).trimStart() : text;
@@ -145,6 +146,9 @@ function isSelfContainedLatexValue(text: string): boolean {
     return false;
   }
   value = value.slice(command[0].length);
+  if (!value) {
+    return SELF_CONTAINED_LATEX_CONSTANTS.has(command[0]);
+  }
   let sawArgument = false;
 
   while (value) {
@@ -173,6 +177,27 @@ function isSelfContainedLatexValue(text: string): boolean {
   return sawArgument;
 }
 
+function isParenthesizedNumericValue(text: string): boolean {
+  const value = (text.startsWith('-') ? text.slice(1) : text).trim();
+  if (!value.startsWith('(') || !value.endsWith(')')) {
+    return false;
+  }
+
+  let depth = 0;
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === '(') {
+      depth++;
+    } else if (value[i] === ')') {
+      depth--;
+      if (depth < 0 || (depth === 0 && i !== value.length - 1)) {
+        return false;
+      }
+    }
+  }
+
+  return depth === 0 && NUMERIC_VALUE_PATTERN.test(value.slice(1, -1).trim());
+}
+
 function stripTrailingUnit(text: string): string {
   const trimmed = text.trim();
   const match = trimmed.match(TRAILING_UNIT_PATTERN);
@@ -182,6 +207,7 @@ function stripTrailingUnit(text: string): string {
   const value = match[1].trimEnd();
   if (
     NUMERIC_VALUE_PATTERN.test(value) ||
+    isParenthesizedNumericValue(value) ||
     isSelfContainedLatexValue(value) ||
     isSelfContainedLatexValue(normalizeLatex(value))
   ) {
@@ -202,8 +228,8 @@ export function cleanMathText(text: string): string {
   // Trailing backslash-space sequences left over from \text removal.
   s = s.trim().replace(/\\+\s*$/, '');
 
-  // Remove units only after self-contained numeric or brace-balanced LaTeX
-  // values, so `x + m` remains symbolic while `\frac{1}{\sqrt{2}} m` works.
+  // Remove units only after self-contained numeric, parenthesized numeric,
+  // or safe LaTeX values, so `x + m` remains symbolic while `\pi rad` works.
   s = stripTrailingUnit(s);
   s = s.trim().replace(/\s*°\s*$/, '');
 
@@ -602,8 +628,8 @@ function stripThinkingBlocks(text: string): string {
         /(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:(?:\r?\n)+|$)/gi,
         '$1',
       )
-      // Anthropic redacted thinking is a single rendered line.
-      .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\n]*(?:\r?\n)+/gi, '$1')
+      // Anthropic redacted thinking is a single rendered line and may be terminal.
+      .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\r\n]*(?:(?:\r?\n)+|$)/gi, '$1')
       // Responses API reasoning summaries are rendered as individually prefixed lines.
       // Keep line separators available for the next global match so adjacent
       // prefixed summary lines are all removed.
