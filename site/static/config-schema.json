@@ -863,6 +863,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
@@ -933,6 +934,7 @@
             {
               "type": "string",
               "enum": [
+                "agent-rubric",
                 "answer-relevance",
                 "bleu",
                 "classifier",
