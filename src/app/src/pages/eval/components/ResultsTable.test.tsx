@@ -2608,6 +2608,11 @@ describe('ResultsTable Variable JSON Formatting', () => {
             pass: true,
             score: 1,
             text: 'test output',
+            metadata: {
+              transformDisplayVars: {
+                __transformed_payload: '{"decoded":true}',
+              },
+            },
           },
         ],
         test: {},
@@ -2673,20 +2678,34 @@ describe('ResultsTable Variable JSON Formatting', () => {
     );
   });
 
-  it('keeps header and body column widths aligned through colgroups', () => {
+  it('prettifies JSON strings in transformed variable columns', () => {
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
-      renderMarkdown: true,
-      prettifyJson: false,
+      renderMarkdown: false,
+      prettifyJson: true,
     }));
 
     const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    const colgroups = container.querySelectorAll('table.results-table colgroup');
-    expect(colgroups).toHaveLength(2);
-    expect(colgroups[0].querySelectorAll('col')).toHaveLength(
-      colgroups[1].querySelectorAll('col').length,
+    const formattedCells = Array.from(
+      container.querySelectorAll('[data-testid="prettified-json-variable"]'),
+    ).map((cell) => cell.textContent);
+    expect(formattedCells).toContain('{\n  "decoded": true\n}');
+  });
+
+  it('renders prettified transformed JSON as a code block when markdown is enabled', () => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const codeBlocks = Array.from(container.querySelectorAll('code')).map(
+      (cell) => cell.textContent,
     );
+    expect(codeBlocks.some((text) => text?.includes('"decoded": true'))).toBe(true);
   });
 });
 

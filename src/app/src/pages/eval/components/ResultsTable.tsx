@@ -414,35 +414,32 @@ function formatVariableCellValue({
   renderMarkdown: boolean;
   prettifyJson: boolean;
 }): { value: string; isJsonPrettified: boolean } {
+  const isObjectValue = typeof value === 'object';
   let formattedValue =
     typeof value === 'string' ? value : (JSON.stringify(value, null, 2) ?? String(value));
+  let isJsonPrettified = prettifyJson && isObjectValue && value !== null;
 
-  if (typeof value === 'object' && renderMarkdown) {
-    formattedValue = `\`\`\`json\n${formattedValue}\n\`\`\``;
-  }
-
-  let isJsonPrettified = false;
-  if (prettifyJson) {
-    const trimmed = formattedValue.trim();
+  if (prettifyJson && typeof value === 'string') {
+    const trimmed = value.trim();
     const looksLikeJson =
       (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
       (trimmed.startsWith('[') && trimmed.endsWith(']'));
 
     if (looksLikeJson) {
       try {
-        const parsed = JSON.parse(formattedValue);
+        const parsed = JSON.parse(trimmed);
         if (typeof parsed === 'object' && parsed !== null) {
           formattedValue = JSON.stringify(parsed, null, 2);
-          if (renderMarkdown) {
-            formattedValue = `\`\`\`json\n${formattedValue}\n\`\`\``;
-          } else {
-            isJsonPrettified = true;
-          }
+          isJsonPrettified = true;
         }
       } catch {
         // Not valid JSON, leave as-is.
       }
     }
+  }
+
+  if (renderMarkdown && (isObjectValue || isJsonPrettified)) {
+    formattedValue = `\`\`\`json\n${formattedValue}\n\`\`\``;
   }
 
   return { value: formattedValue, isJsonPrettified };
@@ -2116,9 +2113,30 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 const value = info.getValue();
+                const { value: formattedValue, isJsonPrettified } = formatVariableCellValue({
+                  value,
+                  renderMarkdown,
+                  prettifyJson,
+                });
                 return (
                   <div className="cell">
-                    <TruncatedText text={value} maxLength={maxTextLength} />
+                    {isJsonPrettified ? (
+                      renderMarkdown ? (
+                        <VariableMarkdownCell
+                          value={formattedValue}
+                          maxTextLength={maxTextLength}
+                        />
+                      ) : (
+                        <div
+                          data-testid="prettified-json-variable"
+                          style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}
+                        >
+                          <TruncatedText text={formattedValue} maxLength={maxTextLength} />
+                        </div>
+                      )
+                    ) : (
+                      <TruncatedText text={value} maxLength={maxTextLength} />
+                    )}
                   </div>
                 );
               },
@@ -2128,7 +2146,14 @@ function ResultsTable({
         ),
       }),
     ];
-  }, [columnHelper, maxTextLength, transformDisplayVarColumnSizes, transformDisplayVarKeys]);
+  }, [
+    columnHelper,
+    maxTextLength,
+    prettifyJson,
+    renderMarkdown,
+    transformDisplayVarColumnSizes,
+    transformDisplayVarKeys,
+  ]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
