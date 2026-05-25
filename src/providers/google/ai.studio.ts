@@ -433,6 +433,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         };
       }
 
+      // Pick the first chunk that carries any grounding signal. Gemini's
+      // streaming pattern emits grounding once per turn (usually on the
+      // search/retrieval-bearing candidate, before later text-only chunks),
+      // so first-wins matches observed behavior. If Google ever emits
+      // grounding on multiple chunks we'd intentionally keep only the first.
       const candidateWithMetadata = dataWithResponse
         .filter((datum) => datum.candidates?.length)
         .map((datum) => getCandidate(datum))
