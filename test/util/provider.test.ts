@@ -548,6 +548,15 @@ describe('checkProviderApiKeys', () => {
     expect(result.get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
   });
 
+  it('uses descriptions only when requested for user-facing error output', () => {
+    const provider = providerWithKey('openai:gpt-4', { label: 'primary' });
+
+    expect(checkProviderApiKeys([provider]).get('OPENAI_API_KEY')).toEqual(['openai:gpt-4']);
+    expect(
+      checkProviderApiKeys([provider], { useDescriptions: true }).get('OPENAI_API_KEY'),
+    ).toEqual(['primary (openai:gpt-4)']);
+  });
+
   it('skips providers with valid key, no getApiKey method, or requiresApiKey false', () => {
     const providers: ApiProvider[] = [
       providerWithKey('openai:gpt-4', { getApiKey: () => 'sk-1234' }),
