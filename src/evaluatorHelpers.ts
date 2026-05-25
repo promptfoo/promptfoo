@@ -178,27 +178,60 @@ type ResolvedNestedFileRef = {
   resolvedFromSkipped: boolean;
 };
 
+type NestedFileRefLoadResult =
+  | { loaded: false }
+  | {
+      loaded: true;
+      value: string | undefined;
+    };
+
 async function loadNestedFileRef(
   value: string,
   basePath: string,
   varName: string,
-): Promise<string | undefined> {
+): Promise<NestedFileRefLoadResult> {
   const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
   if (!isSupportedNestedFileRef(filePath)) {
-    return undefined;
+    return { loaded: false };
   }
 
   logger.debug(`Resolving nested file reference for var "${varName}": ${value} -> ${filePath}`);
   try {
     const contents = await fs.readFile(filePath, 'utf8');
     const extension = path.extname(filePath).toLowerCase();
-    return extension === '.yaml' || extension === '.yml'
-      ? JSON.stringify(yaml.load(contents) as string | object)
-      : contents.trim();
+    return {
+      loaded: true,
+      value:
+        extension === '.yaml' || extension === '.yml'
+          ? JSON.stringify(yaml.load(contents) as string | object | undefined)
+          : contents.trim(),
+    };
   } catch (error) {
     throw new Error(
       `Failed to load nested file reference for var "${varName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+}
+
+function collectNestedContainers(value: object, containers: WeakSet<object>): void {
+  const pending: object[] = [value];
+  while (pending.length > 0) {
+    const container = pending.pop()!;
+    if (containers.has(container)) {
+      continue;
+    }
+    containers.add(container);
+
+    for (const key of Object.keys(container)) {
+      const descriptor = Object.getOwnPropertyDescriptor(container, key);
+      if (
+        descriptor &&
+        'value' in descriptor &&
+        (Array.isArray(descriptor.value) || isPlainObject(descriptor.value))
+      ) {
+        pending.push(descriptor.value);
+      }
+    }
   }
 }
 
@@ -216,6 +249,7 @@ async function resolveNestedFileRefs(
   value: object,
   basePath: string,
   varName: string,
+  protectedContainers: WeakSet<object>,
 ): Promise<ResolvedNestedFileRef[]> {
   const pending: object[] = [value];
   const visited = new WeakSet<object>();
@@ -223,7 +257,7 @@ async function resolveNestedFileRefs(
 
   while (pending.length > 0) {
     const container = pending.pop()!;
-    if (visited.has(container)) {
+    if (visited.has(container) || protectedContainers.has(container)) {
       continue;
     }
     visited.add(container);
@@ -240,12 +274,15 @@ async function resolveNestedFileRefs(
           continue;
         }
 
-        const resolvedValue = await loadNestedFileRef(nestedValue, basePath, varName);
-        if (resolvedValue !== undefined) {
-          Object.defineProperty(container, key, {
-            ...descriptor,
-            value: resolvedValue,
-          });
+        const result = await loadNestedFileRef(nestedValue, basePath, varName);
+        if (!result.loaded) {
+          continue;
+        }
+        Object.defineProperty(container, key, {
+          ...descriptor,
+          value: result.value,
+        });
+        if (typeof result.value === 'string') {
           resolvedFileRefs.push({ container, key, resolvedFromSkipped: false });
         }
       } else if (Array.isArray(nestedValue) || isPlainObject(nestedValue)) {
@@ -264,7 +301,7 @@ function resolveNestedFileRefVariables(
   varsResolvedFromSkipped: Set<string>,
 ): void {
   let nestedFileRefKey = '__promptfoo_nested_file_ref__';
-  while (Object.hasOwn(vars, nestedFileRefKey)) {
+  while (Object.prototype.hasOwnProperty.call(vars, nestedFileRefKey)) {
     nestedFileRefKey = `_${nestedFileRefKey}`;
   }
 
@@ -411,12 +448,22 @@ export async function renderPrompt(
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const resolvedNestedFileRefs: ResolvedNestedFileRef[] = [];
+  const protectedNestedContainers = new WeakSet<object>();
 
   let basePrompt = prompt.raw;
 
+  for (const [varName, value] of Object.entries(vars)) {
+    if (
+      (varName === '_conversation' || skipRenderVars?.includes(varName)) &&
+      (Array.isArray(value) || isPlainObject(value))
+    ) {
+      collectNestedContainers(value, protectedNestedContainers);
+    }
+  }
+
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    if (varName === '_conversation' || skipRenderVars?.includes(varName)) {
       continue;
     }
 
@@ -548,7 +595,9 @@ export async function renderPrompt(
       vars[varName] = javascriptOutput.output;
     } else if (Array.isArray(value) || isPlainObject(value)) {
       const basePath = cliState.basePath || '';
-      resolvedNestedFileRefs.push(...(await resolveNestedFileRefs(value, basePath, varName)));
+      resolvedNestedFileRefs.push(
+        ...(await resolveNestedFileRefs(value, basePath, varName, protectedNestedContainers)),
+      );
     }
   }
 
