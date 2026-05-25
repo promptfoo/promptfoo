@@ -301,6 +301,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[payload][]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '<javascript:alert(1)>'],
+    ['javascript-url', '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;foo=bar,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;charset=utf-8;foo=bar,<script>alert(1)</script>'],
@@ -445,6 +446,7 @@ describe('detectXssOutput', () => {
 
   it('does not flag javascript URLs in non-executable image src attributes', () => {
     expect(detectXssOutput('<img src="javascript:alert(1)">')).toEqual([]);
+    expect(detectXssOutput('![pixel](<javascript:alert(1)>)')).toEqual([]);
   });
 
   it('does not flag data:text/html image sources as executable navigation sinks', () => {
@@ -452,6 +454,9 @@ describe('detectXssOutput', () => {
       [],
     );
     expect(detectXssOutput('![pixel](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)')).toEqual(
+      [],
+    );
+    expect(detectXssOutput('![pixel](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)')).toEqual(
       [],
     );
     expect(
@@ -493,6 +498,7 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('>     <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('-     <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('1.     <script>alert(1)</script>')).toEqual([]);
+    expect(detectXssOutput('Examples:\n-     <script>alert(1)</script>')).toEqual([]);
     expect(detectXssOutput('    [click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
     expect(detectXssOutput('<pre>[click](javascript:alert(1))</pre>')).toEqual([]);
@@ -506,6 +512,7 @@ describe('detectXssOutput', () => {
     ).toEqual([]);
     expect(detectXssOutput(String.raw`\[click](javascript:alert(1))`)).toEqual([]);
     expect(detectXssOutput(String.raw`\<javascript:alert(1)>`)).toEqual([]);
+    expect(detectXssOutput('< javascript:alert(1)>')).toEqual([]);
     expect(
       detectXssOutput(String.raw`\<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>`),
     ).toEqual([]);

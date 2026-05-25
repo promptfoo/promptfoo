@@ -198,10 +198,11 @@ function maskMarkdownCodeContexts(output: string): string {
   for (let index = 0; index < lines.length; index += 2) {
     const line = lines[index];
     const blank = /^[ \t]*$/.test(line);
+    const listIndented = /^(?: {0,3}>[ \t]?)* {0,3}(?:[-+*]|\d+[.)])[ \t]+(?: {4}|\t)/.test(line);
     const indented = /^(?: {0,3}>[ \t]?)*(?:(?: {0,3}(?:[-+*]|\d+[.)])[ \t]+)?)(?: {4}|\t)/.test(
       line,
     );
-    if (indented && (previousLineWasBlank || inIndentedBlock)) {
+    if (indented && (listIndented || previousLineWasBlank || inIndentedBlock)) {
       lines[index] = mask(line);
       inIndentedBlock = true;
     } else if (!blank) {
@@ -277,19 +278,19 @@ const MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN = new RegExp(
   'gim',
 );
 const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN = new RegExp(
-  String.raw`<\s*${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>`,
+  String.raw`<${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>`,
   'gi',
 );
 const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN = new RegExp(
-  String.raw`^<\s*${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>$`,
+  String.raw`^<${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>$`,
   'i',
 );
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`<\s*(?<url>data\s*:\s*text\/html[^>\r\n]*)\s*>`,
+  String.raw`<(?<url>data\s*:\s*text\/html[^>\r\n]*)\s*>`,
   'gi',
 );
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
-  String.raw`^<\s*data\s*:\s*text\/html[^>\r\n]*>$`,
+  String.raw`^<data\s*:\s*text\/html[^>\r\n]*>$`,
   'i',
 );
 const MARKDOWN_INLINE_DATA_HTML_URL_PATTERN = new RegExp(
@@ -647,7 +648,10 @@ function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
     }
   }
   for (const match of normalized.matchAll(MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN)) {
-    if (!isEscapedMarkdownDelimiter(normalized, match.index ?? 0)) {
+    if (
+      !isMarkdownImageDestination(normalized, match.index ?? 0) &&
+      !isEscapedMarkdownDelimiter(normalized, match.index ?? 0)
+    ) {
       return match[0];
     }
   }
@@ -659,13 +663,19 @@ function findExecutableJavascriptUrlEvidence(
   nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
   scanMarkdown = true,
 ): string | undefined {
-  const node = findParsedElement(nodes, (element) =>
-    (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).some(
-      (attributeName) =>
-        (element.tagName !== 'iframe' || iframeAllowsScripts(element)) &&
-        hasJavascriptUrlValue(getParsedAttributeValue(element, attributeName)),
-    ),
-  );
+  const node = findParsedElement(nodes, (element) => {
+    if (element.tagName === 'iframe' && !iframeAllowsScripts(element)) {
+      return false;
+    }
+    const values = (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).map(
+      (attributeName) => getParsedAttributeValue(element, attributeName),
+    );
+    const metaRefreshValue = getMetaRefreshValue(element);
+    if (metaRefreshValue !== undefined) {
+      values.push(metaRefreshValue);
+    }
+    return values.some((value) => value !== undefined && hasJavascriptUrlValue(value));
+  });
   return node
     ? getElementEvidence(output, node, true)
     : scanMarkdown
@@ -895,6 +905,7 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
     const value = match.groups?.url?.trim();
     if (
       value &&
+      !isMarkdownImageDestination(normalized, match.index ?? 0) &&
       !isEscapedMarkdownDelimiter(normalized, match.index ?? 0) &&
       hasExecutableDataHtmlValue(value)
     ) {
