@@ -121,6 +121,9 @@ export interface MCPTool {
 
 export interface MCPToolResult {
   content: string;
+  /** Set when the SDK call itself threw (transport, timeout, auth failure). */
   error?: string;
+  /** Set when the tool resolved with a protocol-level `isError: true` result. */
+  isError?: true;
   raw?: unknown;
 }
