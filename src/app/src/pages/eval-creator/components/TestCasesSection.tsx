@@ -127,6 +127,20 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
     });
   };
 
+  const handleActivateTestCase = (index: number) => {
+    if (selectionMode) {
+      toggleSelected(index);
+      return;
+    }
+    setEditingTestCaseIndex(index);
+    setTestCaseDialogOpen(true);
+  };
+
+  const getTestCaseButtonLabel = (index: number, isSelected: boolean) =>
+    selectionMode
+      ? `${isSelected ? 'Deselect' : 'Select'} test case ${index + 1}`
+      : `Open test case ${index + 1} for editing`;
+
   const allSelected = testCases.length > 0 && selectedIndices.size === testCases.length;
   const someSelected = selectedIndices.size > 0 && !allSelected;
 
@@ -478,14 +492,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                   return (
                     <tr
                       key={index}
-                      onClick={() => {
-                        if (selectionMode) {
-                          toggleSelected(index);
-                          return;
-                        }
-                        setEditingTestCaseIndex(index);
-                        setTestCaseDialogOpen(true);
-                      }}
+                      onClick={() => handleActivateTestCase(index)}
                       className={cn(
                         'border-b border-border cursor-pointer',
                         'hover:bg-muted/50 transition-colors',
@@ -506,19 +513,10 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                         <button
                           type="button"
                           onClick={(event) => {
-                            if (selectionMode) {
-                              return;
-                            }
-
                             event.stopPropagation();
-                            setEditingTestCaseIndex(index);
-                            setTestCaseDialogOpen(true);
+                            handleActivateTestCase(index);
                           }}
-                          aria-label={
-                            selectionMode
-                              ? `${isSelected ? 'Deselect' : 'Select'} test case ${index + 1}`
-                              : `Open test case ${index + 1} for editing`
-                          }
+                          aria-label={getTestCaseButtonLabel(index, isSelected)}
                           className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           {hasMissingVars && (
