@@ -15,8 +15,8 @@ tests:
         The travel policy covers airfare reimbursement and hotel booking rules.
       answer: The retrieved travel policy does not answer laptop replacement timing.
     assert:
-      - type: contains
-        value: 'three years'
+      - type: javascript
+        value: context.vars.context.includes('three years')
 
   - description: Irrelevant retrieved context should be flagged
     vars:
@@ -25,8 +25,8 @@ tests:
         The equipment policy describes laptop replacement timelines and monitor reimbursement.
       answer: I found equipment reimbursement guidance, not PTO carryover policy details.
     assert:
-      - type: contains
-        value: 'pto-policy.md#carryover'
+      - type: javascript
+        value: context.vars.context.includes('pto-policy.md#carryover')
 
   - description: Answer should not ignore available context
     vars:
@@ -64,8 +64,10 @@ tests:
     assert:
       - type: contains
         value: 'equipment-policy.md#laptops'
-      - type: not-contains
-        value: 'benefits-policy.md#laptops'
+      - type: javascript
+        value: |
+          const citations = output.match(/[a-z-]+\.md#[a-z-]+/gi) || [];
+          return citations.every((citation) => context.vars.context.includes(citation));
 
   - description: Source metadata should be preserved
     vars:
@@ -96,7 +98,7 @@ tests:
         value: 'pto-policy.md#carryover'
       - type: contains
         value: 'employee-handbook.md#pto'
-      - type: contains
+      - type: icontains
         value: 'conflict'
 
   - description: Model should not refuse when sufficient context exists
@@ -107,9 +109,11 @@ tests:
         Employees are eligible for a laptop replacement every three years.
       answer: Employees are eligible for a laptop replacement every three years.
     assert:
-      - type: not-contains
+      - type: not-icontains
         value: "I don't know"
-      - type: not-contains
+      - type: not-icontains
         value: 'not enough information'
+      - type: not-icontains
+        value: 'insufficient information'
       - type: contains
         value: 'three years'

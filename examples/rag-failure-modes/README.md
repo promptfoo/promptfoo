@@ -4,20 +4,20 @@ This example shows how to map common retrieval-augmented generation (RAG) failur
 
 Promptfoo already supports RAG evaluation through assertions such as `context-recall`, `context-relevance`, deterministic string checks, and model-graded rubrics. This example is not a new RAG framework or a new assertion type. It is a starter checklist for deciding which eval to write when a RAG system fails.
 
-The runnable config uses deterministic `answer` fixtures so each assertion evaluates answer behavior directly instead of passing just because the retrieved context text appears in the echoed prompt. The accompanying `query` and `context` vars document the RAG scenario being illustrated; they are not passed through the runnable `echo` prompt.
+The runnable config uses deterministic `answer` fixtures for response checks and JavaScript assertions over `context.vars.context` for retrieval checks. The `echo` prompt stays limited to the answer fixture so an assertion cannot pass just because expected evidence was echoed in the prompt.
 
 ## Failure modes covered
 
 | Failure mode                       | What it looks like                                                                    | Suggested eval pattern                                                                                   |
 | ---------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Missing retrieved context          | The retrieved context does not contain the information needed to answer the question. | Use `context-recall` or deterministic `contains-all` checks against expected source text.                |
-| Irrelevant retrieved context       | The retrieved chunks are on the wrong topic or too weak to support the answer.        | Use `context-relevance` or rubric-based checks.                                                          |
+| Missing retrieved context          | The retrieved context does not contain the information needed to answer the question. | Check `context.vars.context` deterministically, or use `context-recall` with real model output.          |
+| Irrelevant retrieved context       | The retrieved chunks are on the wrong topic or too weak to support the answer.        | Check retrieved source text deterministically, or use `context-relevance` with real model output.        |
 | Answer ignores available context   | The context contains the answer, but the model answers incorrectly or generically.    | Check for expected answer details with `contains`, `contains-all`, or `llm-rubric`.                      |
 | Answer overclaims beyond context   | The model adds details that are not present in the retrieved context.                 | Use `llm-rubric` for judgment-based checks, or deterministic `not-contains` checks for known overclaims. |
-| Fabricated citation or source      | The answer cites a source ID or document that was not retrieved.                      | Use `contains`, `not-contains`, regex, or JavaScript assertions for expected source IDs.                 |
+| Fabricated citation or source      | The answer cites a source ID or document that was not retrieved.                      | Use JavaScript to verify that every cited source appears in the retrieved context.                       |
 | Metadata/source not preserved      | The answer gives a plausible response but drops required source/page metadata.        | Use deterministic assertions for required metadata patterns.                                             |
-| Conflicting context not surfaced   | Retrieved chunks disagree, but the answer silently chooses one.                       | Use rubric assertions requiring the answer to mention conflict or uncertainty.                           |
-| Refusal despite sufficient context | The model refuses or says it lacks information even though the context is enough.     | Use `not-contains` for refusal phrases and `contains` for expected answer details.                       |
+| Conflicting context not surfaced   | Retrieved chunks disagree, but the answer silently chooses one.                       | Require conflict language with `icontains`, or use a rubric for broader uncertainty handling.            |
+| Refusal despite sufficient context | The model refuses or says it lacks information even though the context is enough.     | Use `not-icontains` for refusal phrases and `contains` for expected answer details.                      |
 
 ## How to run
 
@@ -37,7 +37,7 @@ npx promptfoo@latest view
 Or from the repository root during local development:
 
 ```bash
-npm run local -- eval --config examples/rag-failure-modes/promptfooconfig.yaml
+npm run local -- eval -c examples/rag-failure-modes/promptfooconfig.yaml --no-cache -o output.json
 ```
 
 Expected result:
@@ -48,7 +48,7 @@ Expected result:
 0 errors
 ```
 
-The two failures are intentional. In this deterministic fixture set, they show Promptfoo rejecting answers that do not contain the evidence a grounded response would need when retrieval is missing or irrelevant. In a real project, pair these answer checks with retrieval-aware assertions such as `context-recall` or `context-relevance`, then fix retrieval or chunking before deployment.
+The two failures are intentional. The missing and irrelevant retrieval cases run JavaScript assertions directly against `context.vars.context`, so they fail even though their answer fixtures responsibly acknowledge that evidence is absent. The remaining cases test answer behavior. In a real project, replace the fixtures with your pipeline output and consider `context-recall` or `context-relevance` when model-graded retrieval checks are appropriate.
 
 ## How to adapt this example
 
@@ -60,7 +60,8 @@ The two failures are intentional. In this deterministic fixture set, they show P
 
 ## Notes
 
-- `context-recall` and `context-relevance` are useful when evaluating retrieved context quality.
-- Deterministic checks such as `contains`, `contains-all`, and `not-contains` are useful for required answer strings, source IDs, or refusal phrases.
+- `context-recall` and `context-relevance` are useful when evaluating retrieved context quality with a configured grading provider.
+- Deterministic JavaScript checks over `context.vars.context` let you validate required retrieved evidence without a grading provider.
+- Deterministic checks such as `contains`, `contains-all`, and `not-icontains` are useful for required answer strings, source IDs, or refusal phrases.
 - `llm-rubric` is useful when the failure mode requires judgment, such as overclaiming beyond context or failing to surface conflicting sources.
 - This example intentionally avoids adding new Promptfoo internals or new assertion semantics.
