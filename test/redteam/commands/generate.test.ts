@@ -51,7 +51,7 @@ type SynthesizeMockResult = {
   failedPlugins: FailedPluginInfo[];
 };
 
-const TEST_PROBE_LIMIT = vi.hoisted(() => 100_000);
+const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
