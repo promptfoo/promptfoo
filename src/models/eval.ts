@@ -1512,10 +1512,6 @@ export default class Eval {
       }
     });
 
-    if (copiedCount > 0) {
-      clearCountCache(newEvalId);
-    }
-
     logger.info('Eval copy completed successfully', {
       sourceEvalId: this.id,
       targetEvalId: newEvalId,
