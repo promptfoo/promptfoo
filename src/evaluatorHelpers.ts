@@ -151,122 +151,95 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
   return fileMetadata;
 }
 
-/**
- * Maximum recursion depth for resolveNestedFileRefs.  Belt-and-suspenders guard
- * against pathologically deep structures even when cycle detection is in effect.
- * Only reached when the structure actually contains file:// strings (see the
- * callsite guard in renderPrompt).
- */
-const NESTED_FILE_REFS_MAX_DEPTH = 32;
-
-/**
- * Returns true when `value` (or any transitively nested string) starts with
- * "file://". Used as a cheap pre-flight so we skip the full recursive walk on
- * vars that have no file references at all.
- *
- * Accepts an optional `seen` WeakSet so it is safe to call on self-referential
- * (cyclic) structures — cycles are short-circuited and reported as false.
- */
-function hasNestedFileRef(value: unknown, seen: WeakSet<object> = new WeakSet()): boolean {
-  if (typeof value === 'string') return value.startsWith('file://');
-  if (Array.isArray(value)) {
-    if (seen.has(value)) return false;
-    seen.add(value);
-    return value.some((item) => hasNestedFileRef(item, seen));
-  }
-  if (isPlainObject(value)) {
-    if (seen.has(value as object)) return false;
-    seen.add(value as object);
-    return Object.values(value as Record<string, unknown>).some((v) => hasNestedFileRef(v, seen));
-  }
-  return false;
-}
-
 /** True only for plain objects ({} or Object.create(null)). */
 function isPlainObject(value: unknown): boolean {
-  if (typeof value !== 'object' || value === null) return false;
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
   const proto = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }
 
-/**
- * Recursively resolves file:// references inside nested objects and arrays.
- * This is used when a var value is itself an object/array containing file:// strings.
- * JS, Python, image, video, audio, and PDF references are intentionally not supported
- * inside nested structures — only plain-text files are resolved (txt, md, html, etc.).
- *
- * Non-plain objects (Date, Map, URL, class instances, etc.) are returned as-is;
- * they cannot contain file:// string properties and reconstructing them would
- * strip their prototype and non-enumerable state.
- *
- * @param value   The value to walk; strings starting with "file://" are read from disk.
- * @param basePath Base directory used to resolve relative file paths.
- * @param varName Name of the top-level var being resolved (used in error messages).
- * @param ancestors WeakSet of objects/arrays on the current DFS path.  Entries are
- *   deleted after their subtree is processed so that shared (non-cyclic) objects are
- *   resolved in every branch they appear in, while true cycles are still short-circuited.
- * @param depth Current recursion depth; throws once it exceeds NESTED_FILE_REFS_MAX_DEPTH.
- */
-async function resolveNestedFileRefs(
-  value: unknown,
+function isSupportedNestedFileRef(filePath: string): boolean {
+  const extension = path.extname(filePath).toLowerCase();
+  return !(
+    isJavascriptFile(filePath) ||
+    extension === '.py' ||
+    extension === '.pdf' ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
+  );
+}
+
+async function loadNestedFileRef(
+  value: string,
   basePath: string,
   varName: string,
-  ancestors: WeakSet<object> = new WeakSet(),
-  depth = 0,
-): Promise<VarValue> {
-  if (depth > NESTED_FILE_REFS_MAX_DEPTH) {
+): Promise<string | undefined> {
+  const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+  if (!isSupportedNestedFileRef(filePath)) {
+    return undefined;
+  }
+
+  logger.debug(`Resolving nested file reference for var "${varName}": ${value} -> ${filePath}`);
+  try {
+    return (await fs.readFile(filePath, 'utf8')).trim();
+  } catch (error) {
     throw new Error(
-      `Failed to resolve nested file references for var "${varName}": exceeded maximum depth of ${NESTED_FILE_REFS_MAX_DEPTH}`,
+      `Failed to load nested file reference for var "${varName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
 
-  if (typeof value === 'string' && value.startsWith('file://')) {
-    const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-    logger.debug(`Resolving nested file reference for var "${varName}": ${value} -> ${filePath}`);
-    try {
-      return (await fs.readFile(filePath, 'utf8')).trim();
-    } catch (error) {
-      throw new Error(
-        `Failed to load nested file reference for var "${varName}" (${filePath}): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
+/**
+ * Resolves textual file:// values inside nested plain objects and arrays in place.
+ * In-place mutation preserves cyclic graphs, aliases, and container prototypes while
+ * matching renderPrompt's existing mutation of top-level file-backed vars.
+ *
+ * @param value The root container to walk.
+ * @param basePath Base directory used to resolve relative file paths.
+ * @param varName Name of the top-level var being resolved (used in error messages).
+ */
+async function resolveNestedFileRefs(
+  value: object,
+  basePath: string,
+  varName: string,
+): Promise<void> {
+  const pending: object[] = [value];
+  const visited = new WeakSet<object>();
 
-  if (Array.isArray(value)) {
-    if (ancestors.has(value)) {
-      // True cycle on the current DFS path — return unchanged.
-      return value as VarValue;
+  while (pending.length > 0) {
+    const container = pending.pop()!;
+    if (visited.has(container)) {
+      continue;
     }
-    ancestors.add(value);
-    const resolved = await Promise.all(
-      value.map((item) => resolveNestedFileRefs(item, basePath, varName, ancestors, depth + 1)),
-    );
-    ancestors.delete(value); // allow re-visiting in sibling branches
-    return resolved;
-  }
+    visited.add(container);
 
-  if (isPlainObject(value)) {
-    // Non-plain objects (Date, Map, URL, class instances) are returned as-is.
-    // They cannot contain file:// string properties and rebuilding them would
-    // strip their prototype and non-enumerable state.
-    if (ancestors.has(value as object)) {
-      // True cycle on the current DFS path — return unchanged.
-      return value as VarValue;
-    }
-    ancestors.add(value as object);
-    const result: Record<string, VarValue> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (k === '__proto__') {
-        // Skipping __proto__ to prevent prototype pollution via Object.assign-style writes.
+    for (const key of Object.keys(container)) {
+      const descriptor = Object.getOwnPropertyDescriptor(container, key);
+      if (!descriptor || !('value' in descriptor)) {
         continue;
       }
-      result[k] = await resolveNestedFileRefs(v, basePath, varName, ancestors, depth + 1);
-    }
-    ancestors.delete(value as object); // allow re-visiting in sibling branches
-    return result;
-  }
 
-  return value as VarValue;
+      const nestedValue = descriptor.value;
+      if (typeof nestedValue === 'string' && nestedValue.startsWith('file://')) {
+        if (descriptor.writable !== true) {
+          continue;
+        }
+
+        const resolvedValue = await loadNestedFileRef(nestedValue, basePath, varName);
+        if (resolvedValue !== undefined) {
+          Object.defineProperty(container, key, {
+            ...descriptor,
+            value: resolvedValue,
+          });
+        }
+      } else if (Array.isArray(nestedValue) || isPlainObject(nestedValue)) {
+        pending.push(nestedValue);
+      }
+    }
+  }
 }
 
 /**
@@ -499,13 +472,9 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (typeof value === 'object' && value !== null && hasNestedFileRef(value)) {
-      // Only recurse when the object/array actually contains a file:// string somewhere
-      // inside it (issue #1613).  The hasNestedFileRef pre-flight avoids rebuilding vars
-      // that have no file refs (performance), prevents the depth guard from firing on
-      // deeply-nested plain data, and leaves non-plain objects (Date, Map, …) untouched.
+    } else if (Array.isArray(value) || isPlainObject(value)) {
       const basePath = cliState.basePath || '';
-      vars[varName] = await resolveNestedFileRefs(value, basePath, varName);
+      await resolveNestedFileRefs(value, basePath, varName);
     }
   }
 

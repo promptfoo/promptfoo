@@ -453,16 +453,21 @@ describe('evaluatorHelpers', () => {
       );
     });
 
-    it('should not stack-overflow on cyclic var values (issue #1613)', async () => {
-      const cyclic: Record<string, any> = { name: 'root', child: null };
+    it('should resolve file references consistently through cyclic var values (issue #1613)', async () => {
+      const cyclic: Record<string, any> = {
+        report: 'file:///path/to/cyclic.txt',
+        child: null,
+      };
       cyclic.child = cyclic;
       const vars: Record<string, any> = { cyclic };
 
-      // Must not throw a RangeError / stack overflow, and must terminate.
-      await expect(renderPrompt(toPrompt('{{ cyclic.name }}'), vars, {})).resolves.toBeDefined();
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('cyclic content');
 
-      // The non-file string under the cycle is preserved.
-      expect(vars.cyclic.name).toBe('root');
+      await renderPrompt(toPrompt('{{ cyclic.child.report }}'), vars, {});
+
+      expect(vars.cyclic.child).toBe(vars.cyclic);
+      expect(vars.cyclic.report).toBe('cyclic content');
+      expect(vars.cyclic.child.report).toBe('cyclic content');
     });
 
     it('should resolve deeply nested array-of-object-of-array file refs (issue #1613)', async () => {
@@ -490,24 +495,33 @@ describe('evaluatorHelpers', () => {
       expect(vars.bundle[1].chunks[0].inner).toBe('content-c');
     });
 
-    it('should resolve both branches when the same object is shared (non-cyclic) across keys (issue #1613)', async () => {
-      // A shared (aliased) sub-object that is NOT cyclic must be fully resolved in
-      // every branch it appears in.  Previously the global-seen WeakSet caused the
-      // second branch to return the object untouched because it was already visited.
+    it('should preserve aliases while resolving a shared object across keys (issue #1613)', async () => {
       const shared = { report: 'file:///path/to/shared.txt' };
       const vars: Record<string, any> = {
         ctx: { first: shared, second: shared },
       };
 
-      vi.spyOn(fsPromises, 'readFile')
-        .mockResolvedValueOnce('content-first')
-        .mockResolvedValueOnce('content-second');
+      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('shared content');
 
       await renderPrompt(toPrompt('{{ ctx.first.report }} {{ ctx.second.report }}'), vars, {});
 
-      // Both branches must be resolved — not just the first encountered.
-      expect(vars.ctx.first.report).toBe('content-first');
-      expect(vars.ctx.second.report).toBe('content-second');
+      expect(vars.ctx.first).toBe(vars.ctx.second);
+      expect(vars.ctx.first.report).toBe('shared content');
+      expect(vars.ctx.second.report).toBe('shared content');
+      expect(readFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve aliases while resolving a shared object in an array (issue #1613)', async () => {
+      const shared = { report: 'file:///path/to/shared.txt' };
+      const vars: Record<string, any> = { items: [shared, shared] };
+
+      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('shared content');
+
+      await renderPrompt(toPrompt('{{ items[1].report }}'), vars, {});
+
+      expect(vars.items[0]).toBe(vars.items[1]);
+      expect(vars.items[1].report).toBe('shared content');
+      expect(readFile).toHaveBeenCalledTimes(1);
     });
 
     it('should leave non-plain object vars (Date, Map) untouched (issue #1613)', async () => {
@@ -517,26 +531,127 @@ describe('evaluatorHelpers', () => {
         meta: { created: date, index: map, label: 'plain' },
       };
 
-      // No file:// refs present — hasNestedFileRef should short-circuit and leave
-      // the object entirely unmodified, preserving prototype-bearing instances.
       await renderPrompt(toPrompt('{{ meta.label }}'), vars, {});
 
-      expect(vars.meta.created).toBe(date);        // same Date reference
+      expect(vars.meta.created).toBe(date);
       expect(vars.meta.created instanceof Date).toBe(true);
-      expect(vars.meta.index).toBe(map);           // same Map reference
+      expect(vars.meta.index).toBe(map);
     });
 
-    it('should not traverse deeply-nested vars that contain no file:// refs (issue #1613)', async () => {
-      // Build a structure that exceeds NESTED_FILE_REFS_MAX_DEPTH with zero file:// refs.
-      // Previously the depth guard would throw; now the hasNestedFileRef fast-path
-      // prevents entry into the recursive walk entirely.
+    it('should handle deeply-nested vars that contain no file:// refs (issue #1613)', async () => {
       let deep: Record<string, unknown> = { value: 'leaf' };
-      for (let i = 0; i < 40; i++) deep = { child: deep };
+      for (let i = 0; i < 40; i++) {
+        deep = { child: deep };
+      }
 
       const vars: Record<string, any> = { deep };
 
-      // Must not throw even though nesting exceeds 32.
       await expect(renderPrompt(toPrompt('{{ deep | dump }}'), vars, {})).resolves.toBeDefined();
+    });
+
+    it('should allow an unrelated deep branch alongside a nested file reference (issue #1613)', async () => {
+      let metadata: Record<string, unknown> = { value: 'leaf' };
+      for (let i = 0; i < 100; i++) {
+        metadata = { child: metadata };
+      }
+      const vars: Record<string, any> = {
+        context: {
+          report: 'file:///path/to/report.txt',
+          metadata,
+        },
+      };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('file content');
+
+      await renderPrompt(toPrompt('{{ context.report }}'), vars, {});
+
+      expect(vars.context.report).toBe('file content');
+    });
+
+    it('should preserve null-prototype dictionaries and __proto__ data properties (issue #1613)', async () => {
+      const nested = Object.create(null) as Record<string, string>;
+      Object.defineProperty(nested, '__proto__', {
+        configurable: true,
+        enumerable: true,
+        value: 'file:///path/to/prototype.txt',
+        writable: true,
+      });
+      nested.report = 'file:///path/to/report.txt';
+      const vars: Record<string, any> = { nested };
+
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).includes('prototype.txt') ? 'prototype content' : 'report content',
+      );
+
+      await renderPrompt(toPrompt('{{ nested.report }}'), vars, {});
+
+      expect(Object.getPrototypeOf(vars.nested)).toBeNull();
+      expect(Object.hasOwn(vars.nested, '__proto__')).toBe(true);
+      expect(vars.nested.__proto__).toBe('prototype content');
+      expect(vars.nested.report).toBe('report content');
+    });
+
+    it('should not invoke accessors while searching nested vars for file references (issue #1613)', async () => {
+      const getter = vi.fn(() => {
+        throw new Error('getter should not run');
+      });
+      const context: Record<string, unknown> = { report: 'file:///path/to/report.txt' };
+      Object.defineProperty(context, 'danger', { enumerable: true, get: getter });
+      const vars: Record<string, any> = { context };
+
+      vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('file content');
+
+      await renderPrompt(toPrompt('{{ context.report }}'), vars, {});
+
+      expect(getter).not.toHaveBeenCalled();
+      expect(vars.context.report).toBe('file content');
+    });
+
+    it('should leave nested executable, PDF, and multimedia file references unresolved (issue #1613)', async () => {
+      const vars: Record<string, any> = {
+        nested: {
+          script: 'file:///path/to/source.js',
+          python: 'file:///path/to/source.py',
+          pdf: 'file:///path/to/document.pdf',
+          image: 'file:///path/to/image.png',
+        },
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile');
+
+      await renderPrompt(toPrompt('{{ nested.script }}'), vars, {});
+
+      expect(vars.nested.script).toBe('file:///path/to/source.js');
+      expect(vars.nested.python).toBe('file:///path/to/source.py');
+      expect(vars.nested.pdf).toBe('file:///path/to/document.pdf');
+      expect(vars.nested.image).toBe('file:///path/to/image.png');
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('should resolve nested array file references sequentially (issue #1613)', async () => {
+      let releaseFirstRead: (value: string) => void = () => {};
+      const firstRead = new Promise<string>((resolve) => {
+        releaseFirstRead = resolve;
+      });
+      const vars: Record<string, any> = {
+        items: ['file:///path/to/first.txt', 'file:///path/to/second.txt'],
+      };
+      const readFile = vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) => {
+        if (String(filePath).includes('first.txt')) {
+          return firstRead;
+        }
+        return 'second content';
+      });
+
+      const rendered = renderPrompt(toPrompt('{{ items }}'), vars, {});
+      await vi.waitFor(() => {
+        expect(readFile).toHaveBeenCalledTimes(1);
+      });
+
+      releaseFirstRead('first content');
+      await rendered;
+
+      expect(readFile).toHaveBeenCalledTimes(2);
+      expect(vars.items).toEqual(['first content', 'second content']);
     });
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
