@@ -188,13 +188,11 @@ function normalizeMarkdownDataUrlDetectionOutput(output: string): string {
 
 function maskMarkdownCodeContexts(output: string): string {
   const mask = (value: string) => value.replace(/[^\r\n]/g, ' ');
-  const rawHtmlNodes = getParsedHtmlNodes(output);
+  const rawHtmlRanges = findRawHtmlBlockRanges(output);
   const withoutFences = output.replace(
     /(^|\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
     (match, _lineStart: string, _fence: string, offset: number) =>
-      isInsideRawHtmlBlockContent(rawHtmlNodes, output, offset, offset + match.length)
-        ? match
-        : mask(match),
+      isInsideRawHtmlBlock(rawHtmlRanges, offset, offset + match.length) ? match : mask(match),
   );
   const lines = withoutFences.split(/(\r?\n)/);
   let inIndentedBlock = false;
@@ -243,7 +241,7 @@ function maskMarkdownCodeContexts(output: string): string {
       ) {
         if (
           !isInsideHtmlAttributeSource(parsedNodes, start, closeEnd) &&
-          !isInsideRawHtmlBlockContent(rawHtmlNodes, output, start, closeEnd)
+          !isInsideRawHtmlBlock(rawHtmlRanges, start, closeEnd)
         ) {
           masked.splice(start, closeEnd - start, ...mask(withoutCodeBlocks.slice(start, closeEnd)));
         }
@@ -572,33 +570,66 @@ const RAW_HTML_BLOCK_LINE_PREFIX =
 const RAW_HTML_BLOCK_BLANK_LINE =
   /\r?\n(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\r?\n/;
 
-function isInsideRawHtmlBlockContent(
-  nodes: ParsedHtmlNode[],
-  source: string,
-  start: number,
-  end: number,
-): boolean {
-  for (const node of nodes) {
-    const location = node.sourceCodeLocation;
-    const startTag = location?.startTag;
-    const endTag = location?.endTag;
-    if (location && startTag && RAW_HTML_BLOCK_CONTAINER_TAGS.has(node.tagName ?? '')) {
-      const lineStart = source.lastIndexOf('\n', Math.max(0, startTag.startOffset - 1)) + 1;
-      const opensBlock = RAW_HTML_BLOCK_LINE_PREFIX.test(
-        source.slice(lineStart, startTag.startOffset),
-      );
-      const beforeCode = source.slice(startTag.endOffset, start);
-      const blockStillOpen = !RAW_HTML_BLOCK_BLANK_LINE.test(beforeCode);
-      const contentEnd = endTag?.startOffset ?? location.endOffset;
-      if (opensBlock && blockStillOpen && startTag.endOffset <= start && contentEnd >= end) {
-        return true;
-      }
-    }
-    if (isInsideRawHtmlBlockContent(node.childNodes ?? [], source, start, end)) {
-      return true;
-    }
+interface SourceRange {
+  end: number;
+  start: number;
+}
+
+function previousLineAllowsType7RawHtmlBlock(source: string, lineStart: number): boolean {
+  if (lineStart === 0) {
+    return true;
   }
-  return false;
+  const previousLineStart = source.lastIndexOf('\n', Math.max(0, lineStart - 2)) + 1;
+  return RAW_HTML_BLOCK_LINE_PREFIX.test(source.slice(previousLineStart, lineStart).trimEnd());
+}
+
+function startsRawHtmlBlock(source: string, node: ParsedHtmlNode): boolean {
+  const startTag = node.sourceCodeLocation?.startTag;
+  if (!startTag) {
+    return false;
+  }
+  const lineStart = source.lastIndexOf('\n', Math.max(0, startTag.startOffset - 1)) + 1;
+  if (!RAW_HTML_BLOCK_LINE_PREFIX.test(source.slice(lineStart, startTag.startOffset))) {
+    return false;
+  }
+  if (RAW_HTML_BLOCK_CONTAINER_TAGS.has(node.tagName ?? '')) {
+    return true;
+  }
+  if (!/^[a-z][a-z0-9-]*$/i.test(node.tagName ?? '')) {
+    return false;
+  }
+
+  const lineEnd = source.indexOf('\n', startTag.endOffset);
+  const afterTag = source.slice(startTag.endOffset, lineEnd < 0 ? source.length : lineEnd);
+  return /^[ \t\r]*$/.test(afterTag) && previousLineAllowsType7RawHtmlBlock(source, lineStart);
+}
+
+function findRawHtmlBlockRanges(
+  source: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(source),
+): SourceRange[] {
+  const ranges: SourceRange[] = [];
+  const visit = (nodeList: ParsedHtmlNode[]): void => {
+    for (const node of nodeList) {
+      const startTag = node.sourceCodeLocation?.startTag;
+      if (startTag && startsRawHtmlBlock(source, node)) {
+        const terminator = RAW_HTML_BLOCK_BLANK_LINE.exec(source.slice(startTag.endOffset));
+        ranges.push({
+          end: terminator
+            ? startTag.endOffset + (terminator.index ?? 0) + terminator[0].length
+            : source.length,
+          start: startTag.startOffset,
+        });
+      }
+      visit(node.childNodes ?? []);
+    }
+  };
+  visit(nodes);
+  return ranges;
+}
+
+function isInsideRawHtmlBlock(ranges: SourceRange[], start: number, end: number): boolean {
+  return ranges.some((range) => range.start <= start && range.end >= end);
 }
 
 // Parsing distinguishes executable elements from identical text inside attributes or RCDATA.
@@ -696,19 +727,11 @@ function isEscapedMarkdownDelimiter(source: string, index: number): boolean {
   return precedingBackslashes % 2 === 1;
 }
 
-function isActiveMarkdownLinkMatch(source: string, start: number, imageMarker: boolean): boolean {
-  const bracketStart = start + (imageMarker ? 1 : 0);
-  if (isEscapedMarkdownDelimiter(source, bracketStart)) {
-    return false;
-  }
-  return !imageMarker || isEscapedMarkdownDelimiter(source, start);
-}
-
 interface MarkdownInlineDestination {
   destinationOffset: number;
   evidence: string;
   image: boolean;
-  value: string;
+  value: string | undefined;
 }
 
 function findBalancedMarkdownDelimiter(
@@ -716,6 +739,7 @@ function findBalancedMarkdownDelimiter(
   start: number,
   opening: string,
   closing: string,
+  allowLineBreak = false,
 ): number | undefined {
   let depth = 1;
   for (let cursor = start + 1; cursor < source.length; cursor++) {
@@ -728,7 +752,7 @@ function findBalancedMarkdownDelimiter(
       if (depth === 0) {
         return cursor;
       }
-    } else if (source[cursor] === '\n' || source[cursor] === '\r') {
+    } else if (!allowLineBreak && (source[cursor] === '\n' || source[cursor] === '\r')) {
       return undefined;
     }
   }
@@ -752,7 +776,7 @@ function findMarkdownInlineDestinations(source: string): MarkdownInlineDestinati
       continue;
     }
 
-    const destinationEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '(', ')');
+    const destinationEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '(', ')', true);
     if (destinationEnd === undefined) {
       continue;
     }
@@ -774,20 +798,37 @@ function findMarkdownInlineDestinations(source: string): MarkdownInlineDestinati
 
 function hasActiveMarkdownReference(source: string, label: string): boolean {
   const normalizedLabel = normalizeMarkdownReferenceLabel(label);
-  for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\]\[\s*([^\]\r\n]*)\s*\]/g)) {
-    const referencedLabel = match[3] || match[2];
-    if (
-      isActiveMarkdownLinkMatch(source, match.index ?? 0, match[1] === '!') &&
-      normalizeMarkdownReferenceLabel(referencedLabel) === normalizedLabel
-    ) {
-      return true;
+  for (let labelStart = 0; labelStart < source.length; labelStart++) {
+    if (source[labelStart] !== '[' || isEscapedMarkdownDelimiter(source, labelStart)) {
+      continue;
     }
-  }
-  for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\](?![ \t]*(?:\[|:|\())/g)) {
-    if (
-      isActiveMarkdownLinkMatch(source, match.index ?? 0, match[1] === '!') &&
-      source[(match.index ?? 0) - 1] !== ']' &&
-      normalizeMarkdownReferenceLabel(match[2]) === normalizedLabel
+    const image =
+      labelStart > 0 &&
+      source[labelStart - 1] === '!' &&
+      !isEscapedMarkdownDelimiter(source, labelStart - 1);
+    if (image) {
+      continue;
+    }
+    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']');
+    if (labelEnd === undefined) {
+      continue;
+    }
+    const linkLabel = source.slice(labelStart + 1, labelEnd);
+    if (source[labelEnd + 1] === '[') {
+      const referenceEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '[', ']');
+      if (referenceEnd === undefined) {
+        continue;
+      }
+      const referenceLabel = source.slice(labelEnd + 2, referenceEnd).trim() || linkLabel;
+      if (normalizeMarkdownReferenceLabel(referenceLabel) === normalizedLabel) {
+        return true;
+      }
+      labelStart = referenceEnd;
+    } else if (
+      source[labelStart - 1] !== ']' &&
+      source[labelEnd + 1] !== '(' &&
+      source[labelEnd + 1] !== ':' &&
+      normalizeMarkdownReferenceLabel(linkLabel) === normalizedLabel
     ) {
       return true;
     }
@@ -976,31 +1017,9 @@ function isMarkdownDataHtmlDestinationElement(
 
 function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]): string {
   const masked = output.split('');
-  const maskRawHtmlBlocks = (nodeList: ParsedHtmlNode[]): void => {
-    for (const node of nodeList) {
-      const location = node.sourceCodeLocation;
-      const startTag = location?.startTag;
-      const endTag = location?.endTag;
-      if (location && startTag && RAW_HTML_BLOCK_CONTAINER_TAGS.has(node.tagName ?? '')) {
-        const lineStart = output.lastIndexOf('\n', Math.max(0, startTag.startOffset - 1)) + 1;
-        const opensBlock = RAW_HTML_BLOCK_LINE_PREFIX.test(
-          output.slice(lineStart, startTag.startOffset),
-        );
-        if (opensBlock) {
-          const contentEnd = endTag?.startOffset ?? location.endOffset;
-          const terminator = RAW_HTML_BLOCK_BLANK_LINE.exec(
-            output.slice(startTag.endOffset, contentEnd),
-          );
-          const rawBlockEnd = terminator
-            ? startTag.endOffset + (terminator.index ?? 0) + terminator[0].length
-            : contentEnd;
-          masked.fill(' ', startTag.startOffset, rawBlockEnd);
-        }
-      }
-      maskRawHtmlBlocks(node.childNodes ?? []);
-    }
-  };
-  maskRawHtmlBlocks(nodes);
+  for (const range of findRawHtmlBlockRanges(output, nodes)) {
+    masked.fill(' ', range.start, range.end);
+  }
 
   const maskNodes = (nodeList: ParsedHtmlNode[], maskLiteralText = false): void => {
     for (const node of nodeList) {
@@ -1060,8 +1079,16 @@ function isEscapedMarkdownAutolinkDestination(source: string, offset: number): b
   return opening !== null && isEscapedMarkdownDelimiter(source, opening.index);
 }
 
-function extractMarkdownDestinationValue(rawValue: string): string {
+function extractMarkdownDestinationValue(rawValue: string): string | undefined {
   const trimmed = rawValue.trim();
+  if (/[\r\n]/.test(trimmed)) {
+    const titledDestination = trimmed.match(
+      /^([\s\S]*?)[ \t]*\r?\n[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))$/,
+    );
+    return titledDestination && !/[\r\n]/.test(titledDestination[1])
+      ? extractMarkdownDestinationValue(titledDestination[1])
+      : undefined;
+  }
   if (trimmed.startsWith('<')) {
     const closeBracket = trimmed.indexOf('>');
     if (closeBracket >= 0) {
@@ -1074,7 +1101,11 @@ function extractMarkdownDestinationValue(rawValue: string): string {
 function findMarkdownDataHtmlEvidence(output: string): string | undefined {
   const normalized = normalizeMarkdownDataUrlDetectionOutput(output);
   for (const destination of findMarkdownInlineDestinations(normalized)) {
-    if (!destination.image && hasExecutableDataHtmlValue(destination.value)) {
+    if (
+      !destination.image &&
+      destination.value !== undefined &&
+      hasExecutableDataHtmlValue(destination.value)
+    ) {
       return destination.evidence;
     }
   }

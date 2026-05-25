@@ -304,6 +304,13 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[click](java&#x0a;script:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['javascript-url', '[click][payload]\n\n[payload]: javascript:alert(1)'],
+    ['javascript-url', '[click [nested]][payload]\n\n[payload]: javascript:alert(1)'],
+    [
+      'javascript-url',
+      String.raw`[click\]nested][payload]
+
+[payload]: javascript:alert(1)`,
+    ],
     [
       'javascript-url',
       String.raw`\![click][payload]
@@ -313,6 +320,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[click][payload]\r\n\r\n[payload]: java&#x0a;script:alert(1)'],
     ['javascript-url', '[payload][]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
+    ['javascript-url', '[click](javascript:alert(1)\n "title")'],
     ['javascript-url', '<javascript:alert(1)>'],
     ['javascript-url', '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
@@ -386,12 +394,17 @@ describe('detectXssOutput', () => {
       '[open](data:text/html&semi;base64&comma;PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg&equals;&equals;)',
     ],
     ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
+    ['data-html-url', '[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E\n "title")'],
     ['data-html-url', '[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)'],
     ['data-html-url', String.raw`\![open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)`],
     ['data-html-url', '<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>'],
     [
       'data-html-url',
       '[open][payload]\n\n[payload]: data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
+    ],
+    [
+      'data-html-url',
+      '[open [nested]][payload]\n\n[payload]: data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
     ],
     [
       'data-html-url',
@@ -432,6 +445,8 @@ describe('detectXssOutput', () => {
     ['svg-script', '<svg><script>alert(1)</script></svg>'],
     ['script-tag', '<script type="text&sol;javascript">alert(1)</script>'],
     ['javascript-url', '<div>\n\n[click](javascript:alert(1))\n</div>'],
+    ['script-tag', '<div>\n</div>\n`<script>alert(1)</script>`'],
+    ['script-tag', '<my-widget>\n```\n<script>alert(1)</script>\n```\n</my-widget>'],
   ])('detects %s output', (expectedRule, output) => {
     expect(detectXssOutput(output).map((match) => match.id)).toContain(expectedRule);
   });
@@ -514,6 +529,11 @@ describe('detectXssOutput', () => {
         '![payload][]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
       ),
     ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '![pixel [nested]][payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+      ),
+    ).toEqual([]);
   });
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
@@ -552,6 +572,9 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('    [click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
     expect(detectXssOutput('<div>\n[click](javascript:alert(1))\n</div>')).toEqual([]);
+    expect(detectXssOutput('<div>\n</div>\n[click](javascript:alert(1))')).toEqual([]);
+    expect(detectXssOutput('<my-widget>\n[click](javascript:alert(1))\n</my-widget>')).toEqual([]);
+    expect(detectXssOutput('[click](javascript:alert(1)\n not-a-title)')).toEqual([]);
     expect(
       detectXssOutput('<div>\n[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)\n</div>'),
     ).toEqual([]);
