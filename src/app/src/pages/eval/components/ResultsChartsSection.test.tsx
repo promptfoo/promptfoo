@@ -11,7 +11,7 @@ describe('ResultsChartsSection', () => {
         resultsChartsScores={[0.2, 0.8]}
         resultsChartsUnavailableReasons={[]}
         showCharts={null}
-        setShowCharts={() => {}}
+        toggleShowCharts={() => {}}
       >
         {(chartsToggleButton) => (
           <>

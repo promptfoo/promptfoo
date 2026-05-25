@@ -2623,6 +2623,7 @@ describe('useTableStore', () => {
 
 describe('useResultsViewSettingsStore', () => {
   beforeEach(() => {
+    localStorage.removeItem('eval-settings');
     act(() => {
       useResultsViewSettingsStore.setState(initialResultsViewSettingsState, true);
     });
@@ -2632,13 +2633,31 @@ describe('useResultsViewSettingsStore', () => {
     expect(useResultsViewSettingsStore.getState().showCharts).toBeNull();
 
     act(() => {
-      useResultsViewSettingsStore.getState().setShowCharts(false);
-    });
-    expect(useResultsViewSettingsStore.getState().showCharts).toBe(false);
-
-    act(() => {
-      useResultsViewSettingsStore.getState().setShowCharts(true);
+      useResultsViewSettingsStore.getState().toggleShowCharts(false);
     });
     expect(useResultsViewSettingsStore.getState().showCharts).toBe(true);
+  });
+
+  it('toggles repeatedly against the latest explicit preference', () => {
+    expect(useResultsViewSettingsStore.getState().showCharts).toBeNull();
+
+    act(() => {
+      useResultsViewSettingsStore.getState().toggleShowCharts(true);
+      useResultsViewSettingsStore.getState().toggleShowCharts(true);
+    });
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(true);
+  });
+
+  it('rehydrates an explicit chart preference from persisted settings', async () => {
+    localStorage.setItem(
+      'eval-settings',
+      JSON.stringify({ state: { showCharts: false }, version: 2 }),
+    );
+
+    await act(async () => {
+      await useResultsViewSettingsStore.persist.rehydrate();
+    });
+
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(false);
   });
 });

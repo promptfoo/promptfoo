@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import { mockWindowOpen } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
@@ -175,6 +177,26 @@ const mockRecentEvals: ResultLightweightWithLabel[] = [
 const renderWithRouter = (component: React.ReactElement) => {
   return renderWithProviders(<MemoryRouter>{component}</MemoryRouter>);
 };
+
+function useInteractiveChartSettingsMock() {
+  const [showCharts, setShowCharts] = useState<boolean | null>(null);
+
+  return {
+    setInComparisonMode: vi.fn(),
+    columnStates: {},
+    setColumnState: vi.fn(),
+    maxTextLength: 100,
+    wordBreak: 'break-word',
+    showInferenceDetails: true,
+    comparisonEvalIds: [],
+    setComparisonEvalIds: vi.fn(),
+    hiddenVarNamesBySchema: {},
+    setHiddenVarNamesForSchema: vi.fn(),
+    showCharts,
+    toggleShowCharts: (defaultShowCharts: boolean) =>
+      setShowCharts((currentShowCharts) => !(currentShowCharts ?? defaultShowCharts)),
+  };
+}
 
 async function expectChartsUnavailable(...reasonTexts: string[]) {
   const showChartsButton = screen.getByRole('button', { name: 'Show Charts' });
@@ -841,18 +863,7 @@ describe('ResultsView Charts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
-      setInComparisonMode: vi.fn(),
-      columnStates: {},
-      setColumnState: vi.fn(),
-      maxTextLength: 100,
-      wordBreak: 'break-word',
-      showInferenceDetails: true,
-      comparisonEvalIds: [],
-      setComparisonEvalIds: vi.fn(),
-      hiddenVarNamesBySchema: {},
-      setHiddenVarNamesForSchema: vi.fn(),
-    });
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(useInteractiveChartSettingsMock);
 
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
@@ -932,6 +943,26 @@ describe('ResultsView Charts', () => {
 
     const hideChartsButton = screen.getByText('Hide Charts');
     expect(hideChartsButton).toBeInTheDocument();
+  });
+
+  it('keeps charts collapsed by default on compact viewports until explicitly shown', async () => {
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900);
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    const showChartsButton = screen.getByRole('button', { name: 'Show Charts' });
+    expect(screen.queryByTestId('results-charts')).toBeNull();
+
+    await userEvent.click(showChartsButton);
+
+    expect(screen.getByRole('button', { name: 'Hide Charts' })).toBeInTheDocument();
+    expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 
   it('renders charts when there are multiple prompts and at least two different valid scores, even when some scores are NaN', async () => {
@@ -1112,18 +1143,7 @@ describe('ResultsView Chart Rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
-      setInComparisonMode: vi.fn(),
-      columnStates: {},
-      setColumnState: vi.fn(),
-      maxTextLength: 100,
-      wordBreak: 'break-word',
-      showInferenceDetails: true,
-      comparisonEvalIds: [],
-      setComparisonEvalIds: vi.fn(),
-      hiddenVarNamesBySchema: {},
-      setHiddenVarNamesForSchema: vi.fn(),
-    });
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(useInteractiveChartSettingsMock);
 
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',
@@ -1417,7 +1437,8 @@ describe('ResultsView Chart Rendering', () => {
       />,
     );
 
-    await expectChartsUnavailable();
+    expect(screen.getByRole('button', { name: 'Show Charts' })).toBeInTheDocument();
+    expect(screen.queryByTestId('results-charts')).toBeNull();
 
     tableStoreValue = {
       ...tableStoreValue,

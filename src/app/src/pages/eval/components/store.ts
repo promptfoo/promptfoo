@@ -445,7 +445,7 @@ interface SettingsState {
   setMaxImageHeight: (maxImageHeight: number) => void;
 
   showCharts: boolean | null;
-  setShowCharts: (showCharts: boolean) => void;
+  toggleShowCharts: (defaultShowCharts: boolean) => void;
 }
 
 export const useResultsViewSettingsStore = create<SettingsState>()(
@@ -502,7 +502,8 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
 
       showCharts: null,
-      setShowCharts: (showCharts: boolean) => set(() => ({ showCharts })),
+      toggleShowCharts: (defaultShowCharts: boolean) =>
+        set((state) => ({ showCharts: !(state.showCharts ?? defaultShowCharts) })),
     }),
     {
       name: 'eval-settings',

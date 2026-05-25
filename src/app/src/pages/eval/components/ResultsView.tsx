@@ -72,7 +72,7 @@ interface ResultsChartsSectionProps {
   resultsChartsScores: number[];
   resultsChartsUnavailableReasons: string[];
   showCharts: boolean | null;
-  setShowCharts: (showCharts: boolean) => void;
+  toggleShowCharts: (defaultShowCharts: boolean) => void;
   children: (toggleButton: React.ReactNode | null) => React.ReactNode;
 }
 
@@ -183,32 +183,21 @@ export function ResultsChartsSection({
   resultsChartsScores,
   resultsChartsUnavailableReasons,
   showCharts,
-  setShowCharts,
+  toggleShowCharts,
   children,
 }: ResultsChartsSectionProps) {
   if (isRedteamEval) {
     return <>{children(null)}</>;
   }
 
-  const [explicitShowCharts, setExplicitShowCharts] = React.useState<boolean | null>(showCharts);
-  React.useEffect(() => {
-    setExplicitShowCharts(showCharts);
-  }, [showCharts]);
-
   const shouldShowCharts =
-    explicitShowCharts ??
+    showCharts ??
     (canRenderResultsCharts &&
       typeof window !== 'undefined' &&
       window.innerHeight >= MIN_VIEWPORT_HEIGHT_FOR_CHARTS);
 
-  const handleToggleCharts = () => {
-    const nextShowCharts = !shouldShowCharts;
-    setExplicitShowCharts(nextShowCharts);
-    setShowCharts(nextShowCharts);
-  };
-
   const toggleButton = (
-    <Button variant="ghost" size="sm" onClick={handleToggleCharts}>
+    <Button variant="ghost" size="sm" onClick={() => toggleShowCharts(shouldShowCharts)}>
       <BarChart className="size-4 mr-2" />
       {shouldShowCharts ? 'Hide Charts' : 'Show Charts'}
     </Button>
@@ -290,7 +279,7 @@ export default function ResultsView({
     hiddenVarNamesBySchema,
     setHiddenVarNamesForSchema,
     showCharts = null,
-    setShowCharts = () => {},
+    toggleShowCharts = () => {},
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
@@ -852,7 +841,7 @@ export default function ResultsView({
               resultsChartsScores={resultsChartsScores}
               resultsChartsUnavailableReasons={resultsChartsUnavailableReasons}
               showCharts={showCharts}
-              setShowCharts={setShowCharts}
+              toggleShowCharts={toggleShowCharts}
             >
               {(chartsToggleButton) => (
                 <div className="flex flex-col gap-3 mt-4 pt-4 border-t border-border/50">
