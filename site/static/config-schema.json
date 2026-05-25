@@ -359,6 +359,12 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MLFLOW_GATEWAY_API_KEY": {
+          "type": "string"
+        },
+        "MLFLOW_GATEWAY_URL": {
+          "type": "string"
+        },
         "MODELSLAB_API_KEY": {
           "type": "string"
         },
@@ -1785,6 +1791,12 @@
                       "type": "string"
                     },
                     "MISTRAL_API_KEY": {
+                      "type": "string"
+                    },
+                    "MLFLOW_GATEWAY_API_KEY": {
+                      "type": "string"
+                    },
+                    "MLFLOW_GATEWAY_URL": {
                       "type": "string"
                     },
                     "MODELSLAB_API_KEY": {

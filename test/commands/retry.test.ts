@@ -11,6 +11,7 @@ import { getDb } from '../../src/database/index';
 import { evalResultsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
+import { getTotalResultRowCount } from '../../src/models/evalPerformance';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
 
@@ -179,6 +180,46 @@ describe('retry command', () => {
 
       expect(remaining).toHaveLength(1);
       expect(remaining[0].id).toBe(`${evalRecord.id}-del-2`);
+    });
+
+    it('should invalidate the cached total row count after deleting results', async () => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = getDb();
+
+      await db.insert(evalResultsTable).values([
+        {
+          id: `${evalRecord.id}-del-1`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+          testCase: { vars: {} },
+          provider: { id: 'test-provider' },
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        },
+        {
+          id: `${evalRecord.id}-del-2`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 1,
+          prompt: { raw: 'test', display: 'test', label: 'test' },
+          testCase: { vars: {} },
+          provider: { id: 'test-provider' },
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        },
+      ]);
+
+      expect(await getTotalResultRowCount(evalRecord.id)).toBe(2);
+
+      await deleteErrorResults([`${evalRecord.id}-del-1`]);
+
+      expect(await getTotalResultRowCount(evalRecord.id)).toBe(1);
     });
 
     it('should handle empty array gracefully', async () => {
