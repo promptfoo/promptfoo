@@ -152,7 +152,7 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
 }
 
 /** True only for plain objects ({} or Object.create(null)). */
-function isPlainObject(value: unknown): boolean {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) {
     return false;
   }

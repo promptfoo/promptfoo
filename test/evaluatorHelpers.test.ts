@@ -484,10 +484,19 @@ describe('evaluatorHelpers', () => {
         ],
       };
 
-      vi.spyOn(fsPromises, 'readFile')
-        .mockResolvedValueOnce('content-a')
-        .mockResolvedValueOnce('content-b')
-        .mockResolvedValueOnce('content-c');
+      vi.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath) => {
+        const contents = {
+          '/path/to/a.txt': 'content-a',
+          '/path/to/b.txt': 'content-b',
+          '/path/to/c.txt': 'content-c',
+        };
+        const resolvedPath = String(filePath);
+        const content = contents[resolvedPath as keyof typeof contents];
+        if (content === undefined) {
+          throw new Error(`Unexpected file read: ${resolvedPath}`);
+        }
+        return content;
+      });
 
       await renderPrompt(toPrompt('{{ bundle | dump }}'), vars, {});
 
