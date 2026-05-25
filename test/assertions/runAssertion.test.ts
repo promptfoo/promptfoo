@@ -584,6 +584,25 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should pass when the is-json assertion uses an inline boolean true schema', async () => {
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'is-json',
+        value: true,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: '{"foo":"bar"}' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should fail when the not-is-json assertion finds matching schema', async () => {
     const output = '{"latitude": 80.123, "longitude": -1}';
 
@@ -1349,6 +1368,25 @@ describe('runAssertion', () => {
       pass: false,
       score: 0,
       reason: expect.stringContaining('JSON does not conform to the provided schema'),
+    });
+  });
+
+  it('should pass when the contains-json assertion uses an inline boolean true schema', async () => {
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'contains-json',
+        value: true,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'prefix {"foo":"bar"} suffix' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
     });
   });
 
