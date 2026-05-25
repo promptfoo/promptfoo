@@ -322,6 +322,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[click][payload]\n\n[payload]:\n javascript:alert(1)'],
     ['javascript-url', '[click][payload]\n\n> [payload]: javascript:alert(1)'],
+    ['javascript-url', '[click][payload]\n\n- [payload]: javascript:alert(1)'],
     ['javascript-url', '[click](javascript:alert(1)\n "title")'],
     ['javascript-url', '[outer [click](javascript:alert(1))](#safe)'],
     ['javascript-url', '[`]`](javascript:alert(1))'],
@@ -333,6 +334,7 @@ describe('detectXssOutput', () => {
     ],
     ['javascript-url', '<javascript:alert(1)>'],
     ['javascript-url', '<math><mi href="javascript:alert(1)">x</mi></math>'],
+    ['javascript-url', '<input type="submit" formaction="javascript:alert(1)">'],
     [
       'javascript-url',
       '<svg><a><animate attributeName="href" values="javascript:alert(1)" /><text>Click</text></a></svg>',
@@ -400,6 +402,9 @@ describe('detectXssOutput', () => {
       `<meta http-equiv="refresh" content="0;url='data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;'">`,
     ],
     ['data-html-url', '[open](data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;)'],
+    ['data-html-url', '[open](data:text/html,&#060;script&#062;alert(1)&#060;/script&#062;)'],
+    ['data-html-url', '[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E%ZZ)'],
+    ['data-html-url', '<input type="image" formaction="data:text/html,<script>alert(1)</script>">'],
     [
       'data-html-url',
       String.raw`\![open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)`,
@@ -447,6 +452,10 @@ describe('detectXssOutput', () => {
     [
       'data-html-url',
       '[open][payload]\n\n> [payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    [
+      'data-html-url',
+      '[open][payload]\n\n- [payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
     ],
     [
       'data-html-url',
@@ -530,6 +539,10 @@ describe('detectXssOutput', () => {
         '[open][payload]\n\n[payload]: https://safe.example\n[payload]:\n data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
       ),
     ).toEqual([]);
+    expect(detectXssOutput('</div>\n[click](javascript:alert(1))')).toEqual([]);
+    expect(
+      detectXssOutput('</div>\n[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)'),
+    ).toEqual([]);
   });
 
   it('does not flag non-handler attributes or quoted payload examples as inline handlers', () => {
@@ -588,6 +601,10 @@ describe('detectXssOutput', () => {
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
     expect(detectXssOutput('<div data-href="javascript:alert(1)">reference</div>')).toEqual([]);
+    expect(detectXssOutput('<input type="text" formaction="javascript:alert(1)">')).toEqual([]);
+    expect(
+      detectXssOutput('<button type="button" formaction="javascript:alert(1)">x</button>'),
+    ).toEqual([]);
     expect(
       detectXssOutput('<svg><animate attributeName="fill" values="javascript:alert(1)" /></svg>'),
     ).toEqual([]);
@@ -709,6 +726,14 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('data:text/html;base64,SGVsbG8gd29ybGQ=')).toEqual([]);
     expect(
       detectXssOutput('<a href="data:text/html,hello#<script>alert(1)</script>">safe</a>'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput('<input type="text" formaction="data:text/html,<script>alert(1)</script>">'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '<button type="button" formaction="data:text/html,<script>alert(1)</script>">x</button>',
+      ),
     ).toEqual([]);
     expect(
       detectXssOutput('<svg><script type="application/json">{"safe":true}</script></svg>'),

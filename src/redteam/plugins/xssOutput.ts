@@ -163,23 +163,28 @@ function normalizeMarkdownDataUrlDetectionOutput(output: string): string {
     .split(/\r\n?|\n/)
     .map((line) =>
       normalizeMarkdownUrlDetectionOutput(line).replace(
-        /&(lt|gt|quot|apos|#x(?:3c|3e|22|27)|#(?:60|62|34|39));?/gi,
+        /&(lt|gt|quot|apos|#x[0-9a-f]+|#\d+);?/gi,
         (_entity, value) => {
-          const decoded: Record<string, string> = {
+          const namedEntities: Record<string, string> = {
             lt: '<',
             gt: '>',
             quot: '"',
             apos: "'",
-            '#x3c': '<',
-            '#x3e': '>',
-            '#x22': '"',
-            '#x27': "'",
-            '#60': '<',
-            '#62': '>',
-            '#34': '"',
-            '#39': "'",
           };
-          return decoded[String(value).toLowerCase()] ?? _entity;
+          const normalizedValue = String(value).toLowerCase();
+          const namedEntity = namedEntities[normalizedValue];
+          if (namedEntity !== undefined) {
+            return namedEntity;
+          }
+          const codePoint = Number.parseInt(
+            normalizedValue.slice(normalizedValue.startsWith('#x') ? 2 : 1),
+            normalizedValue.startsWith('#x') ? 16 : 10,
+          );
+          if (!Number.isFinite(codePoint) || codePoint < 0 || codePoint > 0x10ffff) {
+            return _entity;
+          }
+          const decoded = String.fromCodePoint(codePoint);
+          return ['<', '>', '"', "'"].includes(decoded) ? decoded : _entity;
         },
       ),
     )
@@ -260,7 +265,15 @@ function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
-    return value;
+    return value.replace(/(?:%[0-9a-f]{2})+/gi, (encoded) => {
+      try {
+        return decodeURIComponent(encoded);
+      } catch {
+        return encoded.replace(/%([0-7][0-9a-f])/gi, (_match, hex) =>
+          String.fromCharCode(Number.parseInt(hex, 16)),
+        );
+      }
+    });
   }
 }
 
@@ -604,22 +617,32 @@ function findRawHtmlBlockRanges(
   nodes: ParsedHtmlNode[] = getParsedHtmlNodes(source),
 ): SourceRange[] {
   const ranges: SourceRange[] = [];
+  const addRange = (start: number, openingEnd: number): void => {
+    const terminator = RAW_HTML_BLOCK_BLANK_LINE.exec(source.slice(openingEnd));
+    ranges.push({
+      end: terminator ? openingEnd + (terminator.index ?? 0) + terminator[0].length : source.length,
+      start,
+    });
+  };
   const visit = (nodeList: ParsedHtmlNode[]): void => {
     for (const node of nodeList) {
       const startTag = node.sourceCodeLocation?.startTag;
       if (startTag && startsRawHtmlBlock(source, node)) {
-        const terminator = RAW_HTML_BLOCK_BLANK_LINE.exec(source.slice(startTag.endOffset));
-        ranges.push({
-          end: terminator
-            ? startTag.endOffset + (terminator.index ?? 0) + terminator[0].length
-            : source.length,
-          start: startTag.startOffset,
-        });
+        addRange(startTag.startOffset, startTag.endOffset);
       }
       visit(node.childNodes ?? []);
     }
   };
   visit(nodes);
+  for (const match of source.matchAll(
+    /^(?<prefix>(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3})<\/(?<tag>[a-z][a-z0-9-]*)[ \t]*>[ \t]*(?=\r?$)/gim,
+  )) {
+    const tag = match.groups?.tag?.toLowerCase();
+    if (tag && RAW_HTML_BLOCK_CONTAINER_TAGS.has(tag)) {
+      const prefixLength = match.groups?.prefix?.length ?? 0;
+      addRange((match.index ?? 0) + prefixLength, (match.index ?? 0) + match[0].length);
+    }
+  }
   return ranges;
 }
 
@@ -710,6 +733,28 @@ function hasJavascriptUrlValue(value: string | undefined): boolean {
   );
 }
 
+function getExecutableUrlAttributeValues(
+  node: ParsedHtmlNode,
+  allowedAttributes: Record<string, string[]>,
+): Array<string | undefined> {
+  const tagName = node.tagName ?? '';
+  if (tagName === 'input') {
+    const type = getParsedAttributeValue(node, 'type')?.trim().toLowerCase() ?? 'text';
+    if (type !== 'submit' && type !== 'image') {
+      return [];
+    }
+  }
+  if (tagName === 'button') {
+    const type = getParsedAttributeValue(node, 'type')?.trim().toLowerCase() ?? 'submit';
+    if (type !== 'submit') {
+      return [];
+    }
+  }
+  return (allowedAttributes[tagName] ?? []).map((attributeName) =>
+    getParsedAttributeValue(node, attributeName),
+  );
+}
+
 function normalizeMarkdownReferenceLabel(label: string): string {
   return label.trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -744,6 +789,7 @@ interface MarkdownLogicalLine {
   endOffset: number;
   lineStart: number;
   quoteDepth: number;
+  startsListItem: boolean;
 }
 
 function findBalancedMarkdownDelimiter(
@@ -869,13 +915,17 @@ function getMarkdownLogicalLines(source: string): MarkdownLogicalLine[] {
     }
     const lineStart = match.index ?? 0;
     const rawLine = match[0].replace(/\r?\n$/, '');
-    const prefix = rawLine.match(/^[ \t]{0,3}(?:(?:>[ \t]?)[ \t]{0,3})*/)?.[0] ?? '';
+    const prefix =
+      rawLine.match(
+        /^(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+)[ \t]{0,3})*/,
+      )?.[0] ?? '';
     lines.push({
       content: rawLine.slice(prefix.length),
       contentOffset: lineStart + prefix.length,
       endOffset: lineStart + rawLine.length,
       lineStart,
       quoteDepth: (prefix.match(/>/g) ?? []).length,
+      startsListItem: /(?:^|[ \t])(?:[-+*]|\d+[.)])[ \t]+/.test(prefix),
     });
   }
   return lines;
@@ -900,7 +950,8 @@ function findMarkdownReferenceDestinations(
       previousLine &&
       previousLine.quoteDepth === line.quoteDepth &&
       previousLine.content.trim() &&
-      !definitionEndLines.has(lineIndex - 1)
+      !definitionEndLines.has(lineIndex - 1) &&
+      !line.startsListItem
     ) {
       continue;
     }
@@ -1031,9 +1082,7 @@ function findExecutableJavascriptUrlEvidence(
     if (element.tagName === 'iframe' && !iframeAllowsScripts(element)) {
       return false;
     }
-    const values = (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).map(
-      (attributeName) => getParsedAttributeValue(element, attributeName),
-    );
+    const values = getExecutableUrlAttributeValues(element, JAVASCRIPT_URL_ALLOWED_ATTRIBUTES);
     if (element.namespaceURI === MATHML_NAMESPACE) {
       values.push(
         getParsedAttributeValue(element, 'href'),
@@ -1371,9 +1420,7 @@ function findExecutableDataHtmlEvidence(
     if (element.tagName === 'iframe' && !iframeAllowsScripts(element)) {
       return false;
     }
-    const values = (DATA_HTML_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).map(
-      (attributeName) => getParsedAttributeValue(element, attributeName),
-    );
+    const values = getExecutableUrlAttributeValues(element, DATA_HTML_URL_ALLOWED_ATTRIBUTES);
     if (element.namespaceURI === SVG_NAMESPACE && element.tagName === 'use') {
       values.push(
         getParsedAttributeValue(element, 'href'),
