@@ -52,6 +52,25 @@ Here is the main structure of the promptfoo configuration file:
 | resultsTable                    | object                                                                                                                                                | No                             | Default variable-column visibility for the web viewer. Use `defaultVisibleVars` as an allowlist or `defaultHiddenVars` as a denylist.                                                                                           |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                                             | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
 
+### Results Table Defaults
+
+Use `resultsTable` to select the variable columns shown when a results table is first opened. `defaultVisibleVars` is an allowlist and takes precedence over `defaultHiddenVars` if both are specified. Once a user changes visibility for the same set of variables in the web viewer, that saved preference overrides these defaults.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Answer {{question}} using {{context}}'
+providers:
+  - echo
+resultsTable:
+  defaultVisibleVars:
+    - question
+tests:
+  - vars:
+      question: What is the capital of France?
+      context: Paris is the capital of France.
+      metadata: internal-source
+```
+
 ### Test Case
 
 A test case represents a single example input that is fed into all prompts and providers.
