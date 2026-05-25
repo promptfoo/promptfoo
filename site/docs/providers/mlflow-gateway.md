@@ -5,7 +5,7 @@ description: Use MLflow AI Gateway as an LLM provider in promptfoo for unified m
 
 # MLflow AI Gateway
 
-[MLflow AI Gateway](https://mlflow.org/docs/latest/genai/governance/ai-gateway/) is a database-backed LLM proxy built into the MLflow tracking server (MLflow ≥ 3.0). It provides a unified OpenAI-compatible API across dozens of providers — OpenAI, Anthropic, Gemini, Mistral, Bedrock, Ollama, and more — with built-in secrets management, fallback/retry, traffic splitting, and budget tracking, all configured through the MLflow UI.
+[MLflow AI Gateway](https://mlflow.org/docs/latest/genai/governance/ai-gateway/) is a database-backed LLM proxy built into the MLflow tracking server (MLflow >= 3.0). It provides a unified OpenAI-compatible API across providers such as OpenAI, Anthropic, and Gemini, with server-side credential management, automatic fallbacks, traffic splitting, usage tracking, and budget policies configured through the MLflow UI.
 
 ## Prerequisites
 
@@ -30,17 +30,18 @@ Where `<endpoint-name>` is the name of the gateway endpoint you created in the M
 
 ## Environment variables
 
-| Variable                 | Description                                          | Required |
-| ------------------------ | ---------------------------------------------------- | -------- |
-| `MLFLOW_GATEWAY_URL`     | MLflow server URL (e.g., `http://localhost:5000`)    | Yes      |
-| `MLFLOW_GATEWAY_API_KEY` | API key (not validated by gateway, can be any value) | No       |
+| Variable                 | Description                                       | Required |
+| ------------------------ | ------------------------------------------------- | -------- |
+| `MLFLOW_GATEWAY_URL`     | MLflow server URL (e.g., `http://localhost:5000`) | Yes      |
+| `MLFLOW_GATEWAY_API_KEY` | Optional Bearer token forwarded to the gateway    | No       |
 
 :::note
-This provider does not fall back to `OPENAI_API_KEY` for authentication, even
-though it uses the OpenAI-compatible endpoint. If you want to send a Bearer
-token to the gateway, set `MLFLOW_GATEWAY_API_KEY` or pass `apiKey` in the
-provider config. This prevents accidentally forwarding cloud-OpenAI credentials
-to a self-hosted gateway URL.
+The MLflow quickstart does not require a client API key because provider
+credentials are configured server-side. This provider does not fall back to
+`OPENAI_API_KEY`, even though it uses an OpenAI-compatible endpoint, so it
+will not accidentally forward a cloud OpenAI credential to a self-hosted
+gateway. If your deployment accepts a Bearer token, set
+`MLFLOW_GATEWAY_API_KEY` or pass `apiKey` in the provider config.
 :::
 
 ## Basic usage
@@ -80,13 +81,27 @@ providers:
       max_tokens: 500
 ```
 
-| Parameter     | Description                | Default              |
-| ------------- | -------------------------- | -------------------- |
-| `gatewayUrl`  | MLflow server URL          | `MLFLOW_GATEWAY_URL` |
-| `temperature` | Sampling temperature       | Provider default     |
-| `max_tokens`  | Maximum tokens to generate | Provider default     |
+| Parameter        | Description                                       | Default                  |
+| ---------------- | ------------------------------------------------- | ------------------------ |
+| `gatewayUrl`     | MLflow server URL                                 | `MLFLOW_GATEWAY_URL`     |
+| `apiKey`         | Optional Bearer token sent as `Authorization`     | `MLFLOW_GATEWAY_API_KEY` |
+| `apiKeyRequired` | Fail before calling when a Bearer token is absent | `false`                  |
+| `headers`        | Additional request headers for secured gateways   | None                     |
+| `temperature`    | Sampling temperature                              | Provider default         |
+| `max_tokens`     | Maximum tokens to generate                        | Provider default         |
 
 Most standard [OpenAI chat completion parameters](/docs/providers/openai/#configuring-parameters) are supported since MLflow Gateway uses an OpenAI-compatible API. Authentication and endpoint URL settings are MLflow-specific and do not inherit `OPENAI_API_KEY`, `OPENAI_ORGANIZATION`, or OpenAI base URL variables.
+
+For an MLflow server configured with HTTP Basic authentication, provide the
+authorization header required by that deployment:
+
+```yaml
+providers:
+  - id: mlflow-gateway:my-chat-endpoint
+    config:
+      headers:
+        Authorization: 'Basic {{env.MLFLOW_BASIC_AUTH}}'
+```
 
 ## Multiple endpoints
 
@@ -124,10 +139,10 @@ defaultTest:
 
 These are configured in the MLflow UI — no promptfoo configuration changes needed:
 
-- **Fallback & retry** — automatic failover to backup models on failure
+- **Fallbacks** — automatic failover to backup models on failure
 - **Traffic splitting** — route percentages of requests to different models for A/B testing
-- **Budget tracking** — per-endpoint or per-user token budgets
-- **Usage tracing** — every call logged as an MLflow trace automatically
+- **Budget policies** — alert or reject later requests after a USD threshold is exceeded
+- **Usage tracking** — optionally log endpoint requests as traces with latency and token metrics
 
 ## Additional resources
 

@@ -126,9 +126,8 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
 
   protected getMissingApiKeyErrorMessage(): string {
     return (
-      `MLflow Gateway API key is not set. Set the ${this.config.apiKeyEnvar || MLFLOW_GATEWAY_API_KEY_ENV_VAR} ` +
-      'environment variable or add `apiKey` to the provider config. The gateway does not ' +
-      'validate the key; any non-empty value is accepted.'
+      `MLflow Gateway Bearer token is not set. Set the ${this.config.apiKeyEnvar || MLFLOW_GATEWAY_API_KEY_ENV_VAR} ` +
+      'environment variable or add `apiKey` to the provider config.'
     );
   }
 }

@@ -1,6 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import { MlflowGatewayChatCompletionProvider } from '../../src/providers/mlflow-gateway';
 import { mockProcessEnv } from '../util/utils';
+
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
 
 describe('MlflowGatewayChatCompletionProvider', () => {
   // Capture a reset closure before each test so tests see a clean env (no
@@ -9,6 +15,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
     restoreEnv = mockProcessEnv(
       {
         MLFLOW_GATEWAY_URL: undefined,
@@ -244,5 +251,93 @@ describe('MlflowGatewayChatCompletionProvider', () => {
       config: { gatewayUrl: 'http://localhost:5000' },
     });
     expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
+  });
+
+  it('should call the OpenAI-compatible gateway endpoint without leaking OpenAI headers', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'sk-openai-secret',
+      OPENAI_ORGANIZATION: 'org-openai-secret',
+      OPENAI_API_HOST: 'evil.example.com',
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [{ message: { content: 'gateway output' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 4, completion_tokens: 3, total_tokens: 7 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    const result = await provider.callApi('Hello gateway');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      'http://localhost:5000/gateway/mlflow/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }),
+      expect.any(Number),
+      'json',
+      undefined,
+      undefined,
+    );
+    const request = vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toMatchObject({ model: 'my-chat-endpoint' });
+    expect(result.output).toBe('gateway output');
+    expect(result.tokenUsage).toEqual({ total: 7, prompt: 4, completion: 3, numRequests: 1 });
+  });
+
+  it('should send explicitly configured authorization headers to secured gateways', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { choices: [{ message: { content: 'authenticated output' } }] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
+      config: {
+        gatewayUrl: 'http://localhost:5000',
+        headers: { Authorization: 'Basic dXNlcjpwYXNz' },
+      },
+    });
+    await provider.callApi('Hello gateway');
+
+    expect(vi.mocked(fetchWithCache).mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Basic dXNlcjpwYXNz' }),
+      }),
+    );
+  });
+
+  it('should return gateway HTTP errors from the configured endpoint', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { error: { message: 'unauthorized' } },
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    } as never);
+
+    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    const result = await provider.callApi('Hello gateway');
+
+    expect(result.error).toContain('API error: 401 Unauthorized');
+  });
+
+  it('should fail before requesting when an explicitly required Bearer token is missing', async () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000', apiKeyRequired: true },
+    });
+
+    await expect(provider.callApi('Hello gateway')).rejects.toThrow(
+      'MLflow Gateway Bearer token is not set',
+    );
+    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 });
