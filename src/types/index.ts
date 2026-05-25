@@ -554,6 +554,9 @@ export interface GradingResult {
     // that the criterion was or was not met. `true`-literal so the field is
     // only meaningful when present; never set `false` explicitly.
     graderError?: true;
+    // Set when custom assertion code fails to execute. Expected-failure
+    // handling must not turn broken assertion logic into a passing result.
+    scriptError?: true;
     [key: string]: any;
   };
 }

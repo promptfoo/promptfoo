@@ -208,29 +208,17 @@ describe('evalPerformance', () => {
         provider: { id: 'provider-1', label: 'Provider 1' },
         prompt: { raw: 'Test prompt', label: 'Test prompt' },
         vars: { input: `test${testIdx}` },
-        response: {
-          output: `response-${testIdx}`,
-          tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0 },
-        },
+        response: { output: `response-${testIdx}`, tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0 } },
         error: null,
         failureReason: ResultFailureReason.NONE,
         success: true,
         score: 1,
         latencyMs: 10,
-        gradingResult: {
-          pass: true,
-          score: 1,
-          reason: 'Pass',
-          namedScores: {},
-          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
-          componentResults: [],
-        },
+        gradingResult: { pass: true, score: 1, reason: 'Pass', namedScores: {}, tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 }, componentResults: [] },
         namedScores: {},
         cost: 0,
         metadata: {},
-      }) as Parameters<
-        typeof import('../../src/models/evalResult')['default']['createFromEvaluateResult']
-      >[1];
+      }) as Parameters<typeof import('../../src/models/evalResult')['default']['createFromEvaluateResult']>[1];
 
     it('getCachedResultsCount refreshes after createFromEvaluateResult (issue #9348)', async () => {
       const eval_ = await Eval.create(

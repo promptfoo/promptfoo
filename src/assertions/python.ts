@@ -60,6 +60,7 @@ export const handlePython = async ({
       score: 0,
       reason: `Python code execution failed: ${(err as Error).message}`,
       assertion,
+      metadata: { scriptError: true },
     };
   }
 };

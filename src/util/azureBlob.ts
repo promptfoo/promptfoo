@@ -92,9 +92,7 @@ export function parseAzureBlobUri(uri: string): AzureBlobUriParts {
 }
 
 function isAzureBlobSasToken(queryString: string): boolean {
-  const searchParams = new URLSearchParams(
-    queryString.startsWith('?') ? queryString.slice(1) : queryString,
-  );
+  const searchParams = new URLSearchParams(queryString.startsWith('?') ? queryString.slice(1) : queryString);
   return searchParams.has('sig');
 }
 

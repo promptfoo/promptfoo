@@ -123,7 +123,9 @@ describe('Azure Blob test-set loading', () => {
       'DefaultEndpointsProtocol=https;AccountName=otheraccount;AccountKey=secret',
     );
 
-    await expect(readAzureBlobText('az://account/container/path/tests.json')).rejects.toThrow(
+    await expect(
+      readAzureBlobText('az://account/container/path/tests.json'),
+    ).rejects.toThrow(
       'AZURE_STORAGE_CONNECTION_STRING targets storage account "otheraccount", but the az:// URI targets "account".',
     );
     expect(mocks.fromConnectionString).not.toHaveBeenCalled();

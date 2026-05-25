@@ -89,7 +89,7 @@ tests:
 
 ### Provider patterns
 
-Patterns are matched against both the provider's `id()` and its `label`, in that order, and support `*` and `?` wildcards. Use `providers: '*'` to match every provider while keeping a `reason`. The `xfail` marker is not supported on comparison assertions (`select-best`, `max-score`) or on `human` assertions, and the schema will reject those configurations.
+Patterns are matched against both the provider's `id()` and its `label`, and support `*` and `?` wildcards. Use `providers: '*'` to match every provider while keeping a `reason`. The `xfail` marker is not supported on comparison assertions (`select-best`, `max-score`) or on `human` assertions, and the schema will reject those configurations.
 
 ### Per-provider xfail blocks
 

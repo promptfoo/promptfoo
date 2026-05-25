@@ -1,6 +1,6 @@
 import logger from './logger';
-import { fetchWithProxy } from './util/fetch/index';
 import { isMissingPackageImportError } from './util/packageImportErrors';
+import { fetchWithProxy } from './util/fetch/index';
 
 import type { CsvRow } from './types/index';
 

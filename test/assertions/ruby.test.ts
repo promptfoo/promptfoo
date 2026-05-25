@@ -208,4 +208,28 @@ describe('Ruby assertions', () => {
     expect(result.reason).toContain("output.include?('{{secret}}')");
     expect(result.reason).not.toContain('sk-test-secret-123');
   });
+
+  it('should not xfail Ruby execution errors', async () => {
+    vi.mocked(runRubyCode).mockRejectedValueOnce(new Error('boom'));
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'ruby',
+        value: 'raise "boom"',
+        xfail: true,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Ruby code execution failed: boom',
+      metadata: { scriptError: true },
+    });
+    expect(result.metadata?.xfail).toBeUndefined();
+  });
 });

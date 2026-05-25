@@ -446,7 +446,7 @@ function applyProviderXFail(
   if (assertion.weight === 0) {
     return result;
   }
-  if (result.metadata?.graderError === true) {
+  if (result.metadata?.graderError === true || result.metadata?.scriptError === true) {
     return result;
   }
 
