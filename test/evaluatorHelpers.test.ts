@@ -481,6 +481,22 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Generated: Dynamic value for context.generated');
     });
 
+    it('should render templates loaded from nested file vars', async () => {
+      const prompt = toPrompt('Message: {{ context.message }}');
+      const vars = {
+        name: 'Alice',
+        context: {
+          message: 'file://message.txt',
+        },
+      };
+
+      vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('Hello {{ name }}' as any);
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(renderedPrompt).toBe('Message: Hello Alice');
+    });
+
     it('should not load nested file:// references for skipped top-level vars', async () => {
       const prompt = toPrompt('{{ attack.fileRef }}');
       const vars = {
@@ -493,6 +509,32 @@ describe('evaluatorHelpers', () => {
 
       expect(fs.promises.readFile).not.toHaveBeenCalled();
       expect(renderedPrompt).toBe('file://should-not-load.txt');
+    });
+
+    it('should not load nested file:// references for skipped nested vars', async () => {
+      const prompt = toPrompt('{{ payload.input }}');
+      const vars = {
+        payload: {
+          input: 'file://should-not-load.txt',
+        },
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload.input']);
+
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://should-not-load.txt');
+    });
+
+    it('should not load file:// references from runtime conversation history', async () => {
+      const prompt = toPrompt('{{ _conversation[0].response.output }}');
+      const vars = {
+        _conversation: [{ response: { output: 'file://untrusted-model-output.txt' } }],
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://untrusted-model-output.txt');
     });
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {

@@ -239,6 +239,8 @@ type PromptFileLoadContext = {
   basePrompt: string;
   vars: Record<string, VarValue>;
   provider?: ApiProvider;
+  skipRenderVars?: string[];
+  loadedFilePaths: Set<string>;
 };
 
 async function loadPromptMultimediaFile(filePath: string): Promise<string> {
@@ -355,7 +357,12 @@ async function loadPromptFileVars(
   context: PromptFileLoadContext,
   loadedValues: WeakMap<object, VarValue>,
 ): Promise<VarValue> {
+  if (varName === '_conversation' || context.skipRenderVars?.includes(varName)) {
+    return value as VarValue;
+  }
+
   if (typeof value === 'string' && value.startsWith('file://')) {
+    context.loadedFilePaths.add(varName);
     return await loadPromptFileVar(value, varName, context);
   }
 
@@ -390,6 +397,69 @@ async function loadPromptFileVars(
   return value as VarValue;
 }
 
+function renderNestedLoadedFileValues(
+  value: VarValue,
+  varName: string,
+  vars: Record<string, VarValue>,
+  loadedFilePaths: Set<string>,
+  nunjucks: ReturnType<typeof getNunjucksEngine>,
+  renderedValues: WeakMap<object, VarValue>,
+): VarValue {
+  if (typeof value === 'string') {
+    if (!loadedFilePaths.has(varName) || referencesUndefinedVariables(value, vars)) {
+      return value;
+    }
+
+    return nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars);
+  }
+
+  if (Array.isArray(value)) {
+    const renderedValue = renderedValues.get(value);
+    if (renderedValue) {
+      return renderedValue;
+    }
+
+    const result: VarValue[] = [];
+    renderedValues.set(value, result);
+    for (const [index, item] of value.entries()) {
+      result.push(
+        renderNestedLoadedFileValues(
+          item,
+          `${varName}[${index}]`,
+          vars,
+          loadedFilePaths,
+          nunjucks,
+          renderedValues,
+        ),
+      );
+    }
+    return result;
+  }
+
+  if (isPlainObject(value)) {
+    const renderedValue = renderedValues.get(value);
+    if (renderedValue) {
+      return renderedValue;
+    }
+
+    const result: Record<string, VarValue> = {};
+    renderedValues.set(value, result);
+    for (const [key, item] of Object.entries(value)) {
+      result[key] = renderNestedLoadedFileValues(
+        item,
+        `${varName}.${key}`,
+        vars,
+        loadedFilePaths,
+        nunjucks,
+        renderedValues,
+      );
+    }
+    return result;
+  }
+
+  return value;
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -415,12 +485,19 @@ export async function renderPrompt(
   let basePrompt = prompt.raw;
 
   const basePath = cliState.basePath || '';
-  const fileLoadContext = { basePath, basePrompt, vars, provider };
+  const fileLoadContext = {
+    basePath,
+    basePrompt,
+    vars,
+    provider,
+    skipRenderVars,
+    loadedFilePaths: new Set<string>(),
+  };
   const loadedValues = new WeakMap<object, VarValue>();
 
   // Load file-backed values at any depth using the same renderer semantics.
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    if (varName === '_conversation' || skipRenderVars?.includes(varName)) {
       continue;
     }
 
@@ -575,13 +652,24 @@ export async function renderPrompt(
     return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
   } catch {
     // Vars values can be template strings, so we need to render them first:
+    const renderedValues = new WeakMap<object, VarValue>();
     const renderedVars = Object.fromEntries(
       Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
+        if (typeof value !== 'string') {
+          return [
+            key,
+            renderNestedLoadedFileValues(
+              value,
+              key,
+              vars,
+              fileLoadContext.loadedFilePaths,
+              nunjucks,
+              renderedValues,
+            ),
+          ];
+        }
+
+        if (skipRenderVars?.includes(key) || varsResolvedFromSkipped.has(key)) {
           return [key, value];
         }
 
