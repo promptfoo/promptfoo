@@ -43,6 +43,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
+import { findTestsBelowRepeatPassRateThreshold } from '../util/perTestPassRate';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
@@ -1083,6 +1084,7 @@ export async function doEval(
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+      const perTestRepeatThreshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
 
       if (
         isCliInvocation &&
@@ -1097,6 +1099,37 @@ export async function doEval(
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
+      }
+
+      if (
+        isCliInvocation &&
+        perTestRepeatThreshold !== undefined &&
+        Number.isFinite(perTestRepeatThreshold) &&
+        repeat > 1
+      ) {
+        // Persisted evals store results in the DB; non-persisted evals (e.g. --no-write)
+        // keep them in memory only and getResults() would wipe them with a DB query.
+        const results = evalRecord.persisted ? await evalRecord.getResults() : evalRecord.results;
+        const belowThreshold = findTestsBelowRepeatPassRateThreshold(
+          results,
+          perTestRepeatThreshold,
+        );
+        if (belowThreshold.length > 0) {
+          logger.info(
+            chalk.white(
+              `${chalk.red.bold(belowThreshold.length)} test${belowThreshold.length === 1 ? '' : 's'} below the per-test repeat pass-rate threshold of ${chalk.red.bold(perTestRepeatThreshold)}${chalk.red('%')}:`,
+            ),
+          );
+          for (const failure of belowThreshold) {
+            logger.info(
+              chalk.white(
+                `  - ${failure.description}: ${chalk.red.bold(failure.passCount)}/${failure.totalCount} (${chalk.red.bold(failure.passRatePct.toFixed(2))}${chalk.red('%')})`,
+              ),
+            );
+          }
+          process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {
