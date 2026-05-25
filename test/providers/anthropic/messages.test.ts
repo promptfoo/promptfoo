@@ -1602,7 +1602,26 @@ describe('AnthropicMessagesProvider', () => {
       expect(createSpy.mock.calls[1][0]).not.toHaveProperty('tool_choice');
     });
 
-    it('marks MCP tool_result blocks as errors before continuing the Anthropic conversation', async () => {
+    it.each([
+      {
+        label: 'isError result with content',
+        mcpResult: { content: 'lookup failed', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): lookup failed',
+      },
+      {
+        label: 'thrown error surfaced via the error field',
+        mcpResult: { content: '', error: 'lookup failed' },
+        expectedContent: 'MCP Tool Error (search_companies): lookup failed',
+      },
+      {
+        label: 'error result without content',
+        mcpResult: { content: '', isError: true },
+        expectedContent: 'MCP Tool Error (search_companies): Tool returned an error result',
+      },
+    ])('marks MCP tool_result blocks as errors before continuing the Anthropic conversation ($label)', async ({
+      mcpResult,
+      expectedContent,
+    }) => {
       provider = createProvider('claude-3-5-sonnet-latest', {
         config: {
           mcp: {
@@ -1615,9 +1634,7 @@ describe('AnthropicMessagesProvider', () => {
         },
       });
 
-      mcpMocks.callTool.mockResolvedValueOnce({
-        error: 'lookup failed',
-      });
+      mcpMocks.callTool.mockResolvedValueOnce(mcpResult);
 
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
@@ -1650,7 +1667,7 @@ describe('AnthropicMessagesProvider', () => {
             {
               type: 'tool_result',
               tool_use_id: 'toolu_error',
-              content: 'MCP Tool Error (search_companies): lookup failed',
+              content: expectedContent,
               is_error: true,
             },
           ],
@@ -1747,6 +1764,46 @@ describe('AnthropicMessagesProvider', () => {
       // Cost should still be tracked even when the loop cap aborts the eval —
       // tokens were spent across both rounds.
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('disables MCP tool execution when max_tool_calls is 0', async () => {
+      // Regression: max_tool_calls: 0 is an explicit "do not auto-execute MCP
+      // tools" guard, but 0 was treated as invalid and silently widened to the
+      // default of 8, so tools ran anyway.
+      provider = createProvider('claude-3-5-sonnet-latest', {
+        config: {
+          max_tool_calls: 0,
+          mcp: {
+            enabled: true,
+            server: {
+              command: 'npm',
+              args: ['start'],
+            },
+          },
+        },
+      });
+
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValueOnce({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_search',
+            name: 'search_companies',
+            input: { query: 'clean energy' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      // No tool was executed and no continuation request was made.
+      expect(mcpMocks.callTool).not.toHaveBeenCalled();
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      // The initial response is returned on the normal output path, not as an error.
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5 });
     });
 
     it('blocks parallel MCP tool execution when it would exceed max_tool_calls', async () => {

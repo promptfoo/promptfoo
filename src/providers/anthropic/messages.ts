@@ -13,6 +13,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
+import { getMcpErrorMessage, isMcpErrorResult } from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
@@ -116,7 +117,9 @@ function getMaxMcpToolCalls(config: AnthropicMessageOptions): number {
     return DEFAULT_MAX_MCP_TOOL_CALLS;
   }
 
-  if (!Number.isFinite(config.max_tool_calls) || config.max_tool_calls < 1) {
+  // Negative or non-finite values are invalid and fall back to the default;
+  // 0 is honored as an explicit "disable automatic MCP tool execution" setting.
+  if (!Number.isFinite(config.max_tool_calls) || config.max_tool_calls < 0) {
     return DEFAULT_MAX_MCP_TOOL_CALLS;
   }
 
@@ -294,16 +297,22 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       return { response: initialResponse };
     }
 
+    const maxToolCalls = getMaxMcpToolCalls(config);
+    if (maxToolCalls === 0) {
+      // max_tool_calls: 0 explicitly disables automatic MCP tool execution.
+      // Return the model's initial response (which may contain tool_use
+      // blocks) unchanged rather than treating unexecuted tools as an error.
+      return { response: initialResponse };
+    }
+
     let response = initialResponse;
     const responses = [initialResponse];
     let messages = params.messages;
-    const maxToolCalls = getMaxMcpToolCalls(config);
     let executedMcpToolCalls = 0;
 
     for (let iteration = 0; iteration < maxToolCalls; iteration++) {
       const responseToolUses = response.content.filter(
-        (block): block is Anthropic.Messages.ToolUseBlock =>
-          block.type === 'tool_use',
+        (block): block is Anthropic.Messages.ToolUseBlock => block.type === 'tool_use',
       );
       const toolUses = responseToolUses.filter((block) => mcpToolNames.has(block.name));
 
@@ -384,11 +393,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         coerceMcpToolInput(toolUse.input),
       );
 
-      if (result.error) {
+      if (isMcpErrorResult(result)) {
         return {
           type: 'tool_result',
           tool_use_id: toolUse.id,
-          content: `MCP Tool Error (${toolUse.name}): ${result.error}`,
+          content: `MCP Tool Error (${toolUse.name}): ${getMcpErrorMessage(result)}`,
           is_error: true,
         };
       }
