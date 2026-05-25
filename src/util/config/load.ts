@@ -441,16 +441,14 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
 }
 
 async function expandInlineAssertionIncludes<T>(value: T, baseDir: string): Promise<T> {
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !Array.isArray((value as { assert?: unknown }).assert)
-  ) {
+  if (!value || typeof value !== 'object') {
     return value;
   }
-  const assert = await expandAssertionFileRefs((value as { assert: AssertionOrSet[] }).assert, {
-    baseDir,
-  });
+  const assertions = (value as { assert?: unknown }).assert;
+  if (!Array.isArray(assertions)) {
+    return value;
+  }
+  const assert = await expandAssertionFileRefs(assertions as AssertionOrSet[], { baseDir });
   return (assert ? { ...value, assert } : value) as T;
 }
 
