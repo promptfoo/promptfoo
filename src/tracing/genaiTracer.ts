@@ -91,8 +91,7 @@ const GEN_AI_LATEST_OPT_IN = 'gen_ai_latest_experimental';
 
 /**
  * True when OTEL_SEMCONV_STABILITY_OPT_IN includes gen_ai_latest_experimental.
- * When false, we emit legacy operation names (completion, embedding) and both
- * gen_ai.system and gen_ai.provider.name for backward compatibility.
+ * When false, we emit only the convention version used before this migration.
  */
 export function useGenAILatestExperimental(): boolean {
   const val = getEnvString('OTEL_SEMCONV_STABILITY_OPT_IN');
@@ -109,8 +108,8 @@ export function useGenAILatestExperimental(): boolean {
  * Operation name to emit on the span (and gen_ai.operation.name).
  * Uses legacy names when opt-in is not set so existing dashboards keep working.
  */
-function getEmittedOperationName(operationName: GenAIOperationName): string {
-  return useGenAILatestExperimental() ? operationName : LEGACY_OPERATION_NAMES[operationName];
+function getEmittedOperationName(operationName: GenAIOperationName, useLatest: boolean): string {
+  return useLatest ? operationName : LEGACY_OPERATION_NAMES[operationName];
 }
 
 /**
@@ -338,10 +337,11 @@ export async function withGenAISpan<T>(
 
   // Normalize legacy operation names (completion -> text_completion, embedding -> embeddings)
   const canonicalOperation = normalizeOperationName(ctx.operationName);
+  const useLatest = useGenAILatestExperimental();
 
   // Span name follows GenAI convention: "{operation} {model}"
   // Use emitted operation name (legacy vs latest per OTEL_SEMCONV_STABILITY_OPT_IN)
-  const emittedOperation = getEmittedOperationName(canonicalOperation);
+  const emittedOperation = getEmittedOperationName(canonicalOperation, useLatest);
   const spanName = `${emittedOperation} ${ctx.model}`;
 
   // Extract parent context from traceparent if provided
@@ -391,7 +391,7 @@ export async function withGenAISpan<T>(
 
       const errorType =
         error instanceof Error
-          ? ((error.name || (error as { code?: string }).code) ?? ERROR_TYPE_VALUE_OTHER)
+          ? (error as { code?: string }).code || error.name || ERROR_TYPE_VALUE_OTHER
           : ERROR_TYPE_VALUE_OTHER;
       span.setAttribute(ATTR_ERROR_TYPE, String(errorType));
 
@@ -409,7 +409,7 @@ export async function withGenAISpan<T>(
     spanName,
     {
       kind: SpanKind.CLIENT,
-      attributes: buildRequestAttributes(ctx),
+      attributes: buildRequestAttributes(ctx, emittedOperation, useLatest),
     },
     parentContext,
     spanCallback,
@@ -419,21 +419,24 @@ export async function withGenAISpan<T>(
 /**
  * Build request attributes for a GenAI span.
  */
-function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
-  const canonicalOperation = normalizeOperationName(ctx.operationName);
-  const emittedOperation = getEmittedOperationName(canonicalOperation);
-  const providerName = getGenAIProviderName(ctx.system);
-
+function buildRequestAttributes(
+  ctx: GenAISpanContext,
+  emittedOperation: string,
+  useLatest: boolean,
+): Attributes {
   const attrs: Attributes = {
-    // GenAI semantic conventions (dual-emit when not opt-in: both system and provider.name)
-    [GenAIAttributes.SYSTEM]: ctx.system,
-    [GenAIAttributes.PROVIDER_NAME]: providerName,
     [GenAIAttributes.OPERATION_NAME]: emittedOperation,
     [GenAIAttributes.REQUEST_MODEL]: ctx.model,
 
     // Promptfoo attributes
     [PromptfooAttributes.PROVIDER_ID]: ctx.providerId,
   };
+
+  if (useLatest) {
+    attrs[GenAIAttributes.PROVIDER_NAME] = getGenAIProviderName(ctx.system);
+  } else {
+    attrs[GenAIAttributes.SYSTEM] = ctx.system;
+  }
 
   // Optional request parameters
   if (ctx.maxTokens !== undefined) {

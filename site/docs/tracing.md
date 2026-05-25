@@ -62,8 +62,8 @@ Each provider call creates a span with these attributes:
 
 **Request Attributes:**
 
-- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
-- `gen_ai.provider.name` - OTEL provider identifier (e.g., "openai", "gcp.vertex_ai")
+- `gen_ai.system` - Legacy provider system (default mode; e.g., "openai", "anthropic", "azure", "bedrock")
+- `gen_ai.provider.name` - Latest OTEL provider identifier (opt-in mode; e.g., "openai", "gcp.vertex_ai")
 - `gen_ai.operation.name` - Operation type: "chat", "completion" or "text_completion", "embedding" or "embeddings" (see [Convention version](#convention-version) below)
 - `gen_ai.request.model` - Model name
 - `gen_ai.request.max_tokens` - Max tokens setting
@@ -93,8 +93,8 @@ Each provider call creates a span with these attributes:
 
 Built-in instrumentation follows the [OpenTelemetry Gen AI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). Operation names and some attributes can be emitted in two modes:
 
-- **Default (legacy):** `gen_ai.operation.name` uses "completion" and "embedding"; both `gen_ai.system` and `gen_ai.provider.name` are set. This keeps existing dashboards and queries working.
-- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to emit spec-aligned names ("text_completion", "embeddings") and span names. Use this when you want full alignment with the latest convention.
+- **Default (legacy):** Existing instrumentation is unchanged: `gen_ai.system` is set and `gen_ai.operation.name` uses legacy operation names. This keeps existing dashboards and queries working.
+- **Latest (opt-in):** Set `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` to replace deprecated `gen_ai.system` with `gen_ai.provider.name` and emit spec-aligned operation and span names such as "text_completion" and "embeddings".
 
 The built-in OTLP receiver accepts both naming styles and normalizes them for the UI.
 

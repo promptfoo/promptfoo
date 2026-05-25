@@ -95,7 +95,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const span = spans[0];
 
       // Required GenAI attributes (OTEL spec)
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
+      expect(span.attributes[GenAIAttributes.SYSTEM]).toBeUndefined();
       expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
       expect(span.attributes[GenAIAttributes.OPERATION_NAME]).toBe('chat');
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4');
@@ -165,6 +165,21 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(spans).toHaveLength(1);
       expect(spans[0].status.code).toBe(SpanStatusCode.ERROR);
       expect(spans[0].attributes['error.type']).toBe('Error');
+    });
+
+    it('should prefer a coded exception identifier for error.type', async () => {
+      const testError = Object.assign(new Error('Connection reset'), { code: 'ECONNRESET' });
+      await expect(
+        withGenAISpan(
+          { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
+          async () => {
+            throw testError;
+          },
+        ),
+      ).rejects.toThrow('Connection reset');
+
+      const span = memoryExporter.getFinishedSpans()[0];
+      expect(span.attributes['error.type']).toBe('ECONNRESET');
     });
 
     it('should set error.type when response has error (no throw)', async () => {
@@ -285,14 +300,14 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
         expect(span2.attributes[GenAIAttributes.OPERATION_NAME]).toBe('embedding');
       });
 
-      it('should still emit both gen_ai.system and gen_ai.provider.name when not opt-in', async () => {
+      it('should preserve only the legacy system attribute when not opt-in', async () => {
         await withGenAISpan(
           { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
           async () => ({ output: 'test' }),
         );
         const span = memoryExporter.getFinishedSpans()[0];
         expect(span.attributes[GenAIAttributes.SYSTEM]).toBe('openai');
-        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('openai');
+        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBeUndefined();
       });
     });
   });
@@ -565,12 +580,13 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const spans = memoryExporter.getFinishedSpans();
       expect(spans).toHaveLength(4);
 
-      // Verify all systems are represented
-      const systems = spans.map((s) => s.attributes[GenAIAttributes.SYSTEM]);
-      expect(systems).toContain('openai');
-      expect(systems).toContain('anthropic');
-      expect(systems).toContain('bedrock');
-      expect(systems).toContain('azure');
+      // Verify all latest convention provider names are represented
+      const providerNames = spans.map((s) => s.attributes[GenAIAttributes.PROVIDER_NAME]);
+      expect(providerNames).toContain(getGenAIProviderName('openai'));
+      expect(providerNames).toContain(getGenAIProviderName('anthropic'));
+      expect(providerNames).toContain(getGenAIProviderName('bedrock'));
+      expect(providerNames).toContain(getGenAIProviderName('azure'));
+      expect(spans.every((s) => s.attributes[GenAIAttributes.SYSTEM] === undefined)).toBe(true);
 
       // All spans should be successful
       spans.forEach((span) => {
@@ -600,8 +616,12 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(results).toHaveLength(2);
 
       const spans = memoryExporter.getFinishedSpans();
-      const openaiSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'openai');
-      const anthropicSpan = spans.find((s) => s.attributes[GenAIAttributes.SYSTEM] === 'anthropic');
+      const openaiSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === getGenAIProviderName('openai'),
+      );
+      const anthropicSpan = spans.find(
+        (s) => s.attributes[GenAIAttributes.PROVIDER_NAME] === getGenAIProviderName('anthropic'),
+      );
 
       expect(openaiSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(100);
       expect(anthropicSpan!.attributes[GenAIAttributes.USAGE_INPUT_TOKENS]).toBe(200);
@@ -640,7 +660,8 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
       const span = memoryExporter.getFinishedSpans()[0];
 
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(getGenAIProviderName(system));
+      expect(span.attributes[GenAIAttributes.SYSTEM]).toBeUndefined();
       expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe(model);
       expect(span.attributes[PromptfooAttributes.PROVIDER_ID]).toBe(`${system}:${model}`);
       expect(span.status.code).toBe(SpanStatusCode.OK);
@@ -670,7 +691,8 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       );
 
       const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.attributes[GenAIAttributes.SYSTEM]).toBe(system);
+      expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(getGenAIProviderName(system));
+      expect(span.attributes[GenAIAttributes.SYSTEM]).toBeUndefined();
       expect(span.status.code).toBe(SpanStatusCode.OK);
 
       memoryExporter.reset();

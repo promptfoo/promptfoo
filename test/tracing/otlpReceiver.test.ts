@@ -270,7 +270,7 @@ describe('OTLPReceiver', () => {
               {
                 spans: [
                   {
-                    traceId: Buffer.from('abcd123456789012345678901234567890', 'hex').toString(
+                    traceId: Buffer.from('abcd1234567890123456789012345678', 'hex').toString(
                       'base64',
                     ),
                     spanId: Buffer.from('aaaaaaaaaaaaaaaa', 'hex').toString('base64'),

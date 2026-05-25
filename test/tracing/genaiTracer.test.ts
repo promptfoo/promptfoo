@@ -65,6 +65,7 @@ describe('genaiTracer', () => {
   describe('GenAIAttributes', () => {
     it('should have correct attribute names for GenAI semantic conventions', () => {
       expect(GenAIAttributes.SYSTEM).toBe('gen_ai.system');
+      expect(GenAIAttributes.PROVIDER_NAME).toBe('gen_ai.provider.name');
       expect(GenAIAttributes.OPERATION_NAME).toBe('gen_ai.operation.name');
       expect(GenAIAttributes.REQUEST_MODEL).toBe('gen_ai.request.model');
       expect(GenAIAttributes.USAGE_INPUT_TOKENS).toBe('gen_ai.usage.input_tokens');
@@ -399,6 +400,32 @@ describe('genaiTracer', () => {
         const callArgs = mockTracer.startActiveSpan.mock.calls[0];
         const options = callArgs[1];
         expect(options.attributes['gen_ai.operation.name']).toBe('completion');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should emit only latest provider identification when opted in', async () => {
+      const restoreEnv = mockProcessEnv({
+        OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+      });
+
+      try {
+        await withGenAISpan(
+          { system: 'vertex', operationName: 'completion', model: 'gemini', providerId: 'test' },
+          async () => ({ output: 'test' }),
+        );
+
+        expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+          'text_completion gemini',
+          expect.any(Object),
+          expect.anything(),
+          expect.any(Function),
+        );
+
+        const options = mockTracer.startActiveSpan.mock.calls[0][1];
+        expect(options.attributes[GenAIAttributes.PROVIDER_NAME]).toBe('gcp.vertex_ai');
+        expect(options.attributes).not.toHaveProperty(GenAIAttributes.SYSTEM);
       } finally {
         restoreEnv();
       }

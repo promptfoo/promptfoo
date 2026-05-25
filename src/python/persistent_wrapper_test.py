@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from python import persistent_wrapper
@@ -707,37 +707,56 @@ class TestTracedCall(unittest.TestCase):
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_call_api_maps_to_chat(self, _mock_latest):
-        """call_api should map to operation name 'chat' in legacy mode."""
+    def test_call_api_preserves_legacy_attributes(self, _mock_latest):
+        """Default mode should retain the pre-migration Python span convention."""
         func = MagicMock(return_value={"output": "hi"})
         ctx = self._make_context()
         persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
 
-        self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0], "python call_api"
+        )
+        self.mock_span.set_attribute.assert_any_call("gen_ai.system", "python")
+        self.mock_span.set_attribute.assert_any_call(
+            "gen_ai.operation.name", "call_api"
+        )
+        self.assertNotIn(
+            call("gen_ai.provider.name", "python"),
+            self.mock_span.set_attribute.mock_calls,
+        )
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
     )
-    def test_call_embedding_api_maps_to_embedding(self, _mock_latest):
-        """call_embedding_api should map to 'embedding' in legacy mode."""
+    def test_call_embedding_api_preserves_legacy_operation(self, _mock_latest):
+        """Default mode should retain legacy embedding function naming."""
         func = MagicMock(return_value={"output": [0.1, 0.2]})
         ctx = self._make_context()
         persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
 
         self.mock_span.set_attribute.assert_any_call(
-            "gen_ai.operation.name", "embedding"
+            "gen_ai.operation.name", "call_embedding_api"
         )
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
     )
     def test_call_api_latest_maps_to_chat(self, _mock_latest):
-        """call_api with latest opt-in should still map to 'chat' (not remapped)."""
+        """Latest opt-in should emit spec attributes and span names."""
         func = MagicMock(return_value={"output": "hi"})
         ctx = self._make_context()
-        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+        persistent_wrapper._traced_call(
+            func, ["prompt", {"config": {"model": "gpt-4"}}, ctx], "call_api"
+        )
 
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0], "chat gpt-4"
+        )
+        self.mock_span.set_attribute.assert_any_call("gen_ai.provider.name", "python")
         self.mock_span.set_attribute.assert_any_call("gen_ai.operation.name", "chat")
+        self.assertNotIn(
+            call("gen_ai.system", "python"), self.mock_span.set_attribute.mock_calls
+        )
 
     @patch(
         "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=True
@@ -746,8 +765,16 @@ class TestTracedCall(unittest.TestCase):
         """call_embedding_api with latest opt-in should map to 'embeddings'."""
         func = MagicMock(return_value={"output": [0.1]})
         ctx = self._make_context()
-        persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_embedding_api")
+        persistent_wrapper._traced_call(
+            func,
+            ["prompt", {"config": {"model": "text-embedding"}}, ctx],
+            "call_embedding_api",
+        )
 
+        self.assertEqual(
+            self.mock_tracer.start_as_current_span.call_args.args[0],
+            "embeddings text-embedding",
+        )
         self.mock_span.set_attribute.assert_any_call(
             "gen_ai.operation.name", "embeddings"
         )
