@@ -831,9 +831,23 @@
               "assert": {
                 "type": "array",
                 "items": {
-                  "allOf": [
+                  "anyOf": [
                     {
-                      "$ref": "#/definitions/__schema23"
+                      "allOf": [
+                        {
+                          "$ref": "#/definitions/__schema23"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "required": ["$ref"],
+                      "properties": {
+                        "$ref": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   ]
                 }

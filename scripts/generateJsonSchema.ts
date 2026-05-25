@@ -153,16 +153,29 @@ const jsonRefSchema = {
   additionalProperties: false,
 };
 
+function isAssertionDefinitionRef(
+  candidate: Record<string, unknown>,
+  defs: Record<string, unknown>,
+): boolean {
+  if (typeof candidate.$ref !== 'string') {
+    return false;
+  }
+  const defName = candidate.$ref.split('/').pop()!;
+  const def = defs[defName] as Record<string, unknown> | undefined;
+  return Array.isArray(def?.required) && (def.required as string[]).includes('type');
+}
+
 /**
  * Recursively walks the JSON Schema object and adds a JSON Reference alternative
- * to every assertion array's `items.anyOf`. This allows YAML users to write
+ * to every assertion array's items schema. This allows YAML users to write
  *   assert:
  *     - $ref: '#/assertionTemplates/myTemplate'
  * without editors showing "Property $ref is not allowed" errors.
  *
- * Detection heuristic: an array's items has `anyOf` containing an object whose
- * `required` array includes both "type" and "assert" (AssertionSet pattern) or
- * a $ref to a definition that has required: ["type"] (Assertion pattern).
+ * Detection heuristic: a top-level assertion array has `items.anyOf` containing
+ * an AssertionSet pattern or a reference to an Assertion definition. Nested
+ * AssertionSet arrays are generated as `items.allOf` with the same Assertion
+ * definition reference.
  */
 function addJsonRefToAssertionArrays(
   obj: unknown,
@@ -193,12 +206,8 @@ function addJsonRefToAssertionArrays(
           return true;
         }
         // Assertion: $ref to a definition that has required: ["type"]
-        if (typeof opt.$ref === 'string') {
-          const defName = (opt.$ref as string).split('/').pop()!;
-          const def = defs[defName] as Record<string, unknown> | undefined;
-          if (Array.isArray(def?.required) && (def!.required as string[]).includes('type')) {
-            return true;
-          }
+        if (isAssertionDefinitionRef(opt, defs)) {
+          return true;
         }
         return false;
       });
@@ -213,6 +222,14 @@ function addJsonRefToAssertionArrays(
         if (!alreadyHasRef) {
           anyOf.push(jsonRefSchema);
         }
+      }
+    } else if (Array.isArray(items.allOf)) {
+      const isNestedAssertionArray = (items.allOf as Record<string, unknown>[]).some((opt) =>
+        isAssertionDefinitionRef(opt, defs),
+      );
+
+      if (isNestedAssertionArray) {
+        o.items = { anyOf: [items, jsonRefSchema] };
       }
     }
   }

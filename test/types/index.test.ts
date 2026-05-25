@@ -610,7 +610,13 @@ describe('JSON Schema validation (AJV)', () => {
       tests: [
         {
           vars: { input: 'test' },
-          assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
+          assert: [
+            { $ref: '#/assertionTemplates/containsPirate' },
+            {
+              type: 'assert-set',
+              assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
+            },
+          ],
         },
       ],
     };
@@ -648,7 +654,7 @@ describe('JSON Schema validation (AJV)', () => {
 
     walk(schema, []);
 
-    expect(refAlternativePaths).toHaveLength(1);
+    expect(refAlternativePaths).toHaveLength(2);
 
     const assertionArrayItems = refAlternativePaths[0]
       .split('.')
