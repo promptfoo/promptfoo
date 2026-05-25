@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -66,6 +67,26 @@ function countGradingAssertions(gradingResult: GradingResult | null | undefined)
     },
     { pass: 0, fail: 0 },
   );
+}
+
+function hasManualRating(gradingResult: GradingResult | null | undefined): boolean {
+  const componentResults = gradingResult?.componentResults;
+  if (!Array.isArray(componentResults)) {
+    return false;
+  }
+
+  return componentResults.some((componentResult: unknown) => {
+    if (!componentResult || typeof componentResult !== 'object') {
+      return false;
+    }
+
+    const { assertion } = componentResult as { assertion?: unknown };
+    return Boolean(
+      assertion &&
+        typeof assertion === 'object' &&
+        (assertion as { type?: unknown }).type === HUMAN_ASSERTION_TYPE,
+    );
+  });
 }
 
 function getResultMetricCategory(
@@ -787,6 +808,10 @@ evalRouter.post(
       const previousScore = result.score;
       const previousCategory = getResultMetricCategory(result.success, result.failureReason);
       const previousAssertions = countGradingAssertions(result.gradingResult);
+      const hasOutcomeOverride =
+        result.success !== gradingResult.pass ||
+        result.score !== gradingResult.score ||
+        hasManualRating(gradingResult);
 
       // Update the result
       result.gradingResult = gradingResult;
@@ -794,7 +819,9 @@ evalRouter.post(
       result.score = gradingResult.score;
       result.failureReason = gradingResult.pass
         ? ResultFailureReason.NONE
-        : ResultFailureReason.ASSERT;
+        : hasOutcomeOverride
+          ? ResultFailureReason.ASSERT
+          : result.failureReason;
 
       // Update the prompt metrics
       const prompt = eval_.prompts[result.promptIdx];

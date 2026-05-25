@@ -138,6 +138,16 @@ describe('eval routes', () => {
     return payload;
   }
 
+  async function markResultAsError(eval_: Eval, result: EvalResult) {
+    result.failureReason = ResultFailureReason.ERROR;
+    await result.save();
+    const prompt = eval_.prompts[result.promptIdx];
+    invariant(prompt.metrics, 'Prompt metrics are required');
+    prompt.metrics.testFailCount -= 1;
+    prompt.metrics.testErrorCount += 1;
+    await eval_.save();
+  }
+
   describe('post("/:evalId/results/:id/rating")', () => {
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
@@ -395,13 +405,7 @@ describe('eval routes', () => {
       invariant(result instanceof EvalResult, 'EvalResult is required');
       invariant(result.id, 'Result ID is required');
 
-      result.failureReason = ResultFailureReason.ERROR;
-      await result.save();
-      const prompt = eval_.prompts[result.promptIdx];
-      invariant(prompt.metrics, 'Prompt metrics are required');
-      prompt.metrics.testFailCount -= 1;
-      prompt.metrics.testErrorCount += 1;
-      await eval_.save();
+      await markResultAsError(eval_, result);
 
       const passRes = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
@@ -427,6 +431,67 @@ describe('eval routes', () => {
       expect(updatedMetrics?.testPassCount).toBe(1);
       expect(updatedMetrics?.testFailCount).toBe(1);
       expect(updatedMetrics?.testErrorCount).toBe(0);
+    });
+
+    it('should classify a direct manual fail rating on an error result as a failure', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+
+      await markResultAsError(eval_, result);
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, false));
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.ASSERT);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.testPassCount).toBe(1);
+      expect(updatedMetrics?.testFailCount).toBe(1);
+      expect(updatedMetrics?.testErrorCount).toBe(0);
+    });
+
+    it('should preserve an error category when a rating submission only adds a comment', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result instanceof EvalResult, 'EvalResult is required');
+      invariant(result.id, 'Result ID is required');
+
+      await markResultAsError(eval_, result);
+
+      const commentPayload = {
+        ...structuredClone(result.gradingResult ?? {}),
+        pass: result.success,
+        score: result.score,
+        comment: 'Reviewed as an execution error',
+      };
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(commentPayload);
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(updatedResult?.gradingResult?.comment).toBe('Reviewed as an execution error');
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      const updatedMetrics = updatedEval.prompts[result.promptIdx].metrics;
+      expect(updatedMetrics?.testPassCount).toBe(1);
+      expect(updatedMetrics?.testFailCount).toBe(0);
+      expect(updatedMetrics?.testErrorCount).toBe(1);
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
