@@ -6,13 +6,15 @@ prompts:
   - '{{query}}'
 
 providers:
-  - id: vertex:gemini-2.0-flash
+  - id: vertex:gemini-2.5-flash
+    label: gemini-2.5-flash-search
     config:
       temperature: 0.2
       maxOutputTokens: 1024
       tools:
         - googleSearch: {}
   - id: vertex:gemini-2.5-flash
+    label: gemini-2.5-flash-search-thinking
     config:
       temperature: 0.2
       maxOutputTokens: 1024
@@ -30,7 +32,7 @@ tests:
       - type: contains
         value: stock
       - type: contains
-        value: price
+        value: '$'
 
   # Test a technical question
   - vars:
