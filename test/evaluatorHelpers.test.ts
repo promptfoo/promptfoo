@@ -599,7 +599,7 @@ describe('evaluatorHelpers', () => {
         payload: shared,
         context: shared,
       };
-      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('secret content');
+      const readFile = vi.spyOn(fsPromises, 'readFile');
 
       await renderPrompt(toPrompt('{{ context.report }}'), vars, {}, undefined, ['payload']);
 
@@ -612,7 +612,7 @@ describe('evaluatorHelpers', () => {
       const vars: Record<string, any> = {
         _conversation: [{ output: 'file:///path/to/provider-output.txt' }],
       };
-      const readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValueOnce('secret content');
+      const readFile = vi.spyOn(fsPromises, 'readFile');
 
       await renderPrompt(toPrompt('{{ _conversation[0].output }}'), vars, {});
 
