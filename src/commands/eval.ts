@@ -149,6 +149,40 @@ function handleRecoverableWatchError(error: unknown): boolean {
   return false;
 }
 
+async function applyCliRepeatPassRateThreshold({
+  evalRecord,
+  failedTestExitCode,
+  isCliInvocation,
+  repeat,
+}: {
+  evalRecord: Eval;
+  failedTestExitCode: number | undefined;
+  isCliInvocation: boolean;
+  repeat: number;
+}): Promise<void> {
+  const threshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
+  if (!isCliInvocation || threshold === undefined || repeat <= 1) {
+    return;
+  }
+
+  const results = evalRecord.persisted ? await evalRecord.getResults() : evalRecord.results;
+  const failing = getFailingGroups(groupResultsByTest(results, repeat), threshold);
+  if (failing.length === 0) {
+    return;
+  }
+
+  logger.info(chalk.white('Per-test repeat pass rate check failed:'));
+  for (const group of failing) {
+    const groupPassRate = (group.pass / group.total) * 100;
+    logger.info(
+      chalk.white(
+        `  ${chalk.cyan(group.description)}: ${chalk.red.bold(groupPassRate.toFixed(2))}${chalk.red('%')} (${group.pass}/${group.total}) is below threshold of ${chalk.red.bold(String(threshold))}${chalk.red('%')}`,
+      ),
+    );
+  }
+  process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+}
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -1100,26 +1134,12 @@ export async function doEval(
         return ret;
       }
 
-      const repeatPassRateThreshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
-      if (repeatPassRateThreshold !== undefined && repeat > 1) {
-        const results = evalRecord.persisted ? await evalRecord.getResults() : evalRecord.results;
-        const groups = groupResultsByTest(results);
-        const failing = getFailingGroups(groups, repeatPassRateThreshold);
-
-        if (failing.length > 0) {
-          logger.info(chalk.white('Per-test repeat pass rate check failed:'));
-          for (const group of failing) {
-            const groupPassRate = (group.pass / group.total) * 100;
-            logger.info(
-              chalk.white(
-                `  ${chalk.cyan(group.description)}: ${chalk.red.bold(groupPassRate.toFixed(2))}${chalk.red('%')} (${group.pass}/${group.total}) is below threshold of ${chalk.red.bold(String(repeatPassRateThreshold))}${chalk.red('%')}`,
-              ),
-            );
-          }
-          process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-          return ret;
-        }
-      }
+      await applyCliRepeatPassRateThreshold({
+        evalRecord,
+        failedTestExitCode,
+        isCliInvocation,
+        repeat,
+      });
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);

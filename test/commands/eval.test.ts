@@ -213,8 +213,17 @@ describe('evalCommand', () => {
     });
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
+    const cleanup = vi.fn();
 
     try {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: defaultConfig,
+        testSuite: {
+          prompts: [],
+          providers: [{ id: () => 'echo', callApi: vi.fn(), cleanup }] as ApiProvider[],
+        },
+        basePath: path.resolve('/'),
+      });
       vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
         const result = {
           promptIdx: 0,
@@ -241,6 +250,48 @@ describe('evalCommand', () => {
       });
 
       expect(process.exitCode).toBe(100);
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      restoreEnv();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('does not apply repeat pass-rate thresholds to reusable callers', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+      PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: '100',
+    });
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+        const result = {
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: { description: 'repeated failure' },
+          promptId: 'prompt-1',
+          provider: { id: 'echo' },
+          prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
+          vars: {},
+          success: false,
+          score: 0,
+          latencyMs: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.ASSERT,
+        };
+
+        await (evalRecord as Eval).addResult(result);
+        await (evalRecord as Eval).addResult({ ...result, testIdx: 1 });
+        return evalRecord as Eval;
+      });
+
+      await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
+        eventSource: 'mcp',
+      });
+
+      expect(process.exitCode).toBeUndefined();
     } finally {
       restoreEnv();
       process.exitCode = previousExitCode;

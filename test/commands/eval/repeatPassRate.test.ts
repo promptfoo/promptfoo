@@ -32,7 +32,7 @@ describe('groupResultsByTest', () => {
       makeResult({ testIdx: 3, success: true, testCase: { description: 'test B' } }),
     ];
 
-    const groups = groupResultsByTest(results);
+    const groups = groupResultsByTest(results, 2);
     expect(groups.size).toBe(2);
 
     const groupA = [...groups.values()].find((g) => g.description === 'test A')!;
@@ -50,7 +50,7 @@ describe('groupResultsByTest', () => {
       makeResult({ success: false, provider: { id: 'anthropic:claude' } }),
     ];
 
-    const groups = groupResultsByTest(results);
+    const groups = groupResultsByTest(results, 2);
     expect(groups.size).toBe(2);
   });
 
@@ -60,7 +60,7 @@ describe('groupResultsByTest', () => {
       makeResult({ success: false, provider: { id: 'openai:gpt-4', label: 'temperature-1' } }),
     ];
 
-    const groups = groupResultsByTest(results);
+    const groups = groupResultsByTest(results, 2);
     expect(groups.size).toBe(2);
   });
 
@@ -70,7 +70,7 @@ describe('groupResultsByTest', () => {
       makeResult({ success: false, promptId: 'prompt-2' }),
     ];
 
-    const groups = groupResultsByTest(results);
+    const groups = groupResultsByTest(results, 2);
     expect(groups.size).toBe(2);
   });
 
@@ -86,7 +86,7 @@ describe('groupResultsByTest', () => {
       }),
     ];
 
-    const groups = groupResultsByTest(results);
+    const groups = groupResultsByTest(results, 2);
     expect(groups.size).toBe(2);
   });
 
@@ -96,12 +96,28 @@ describe('groupResultsByTest', () => {
       makeResult({ success: false, testCase: { vars: { input: 'hello' } } }),
     ];
 
-    const groups = groupResultsByTest(results);
+    const groups = groupResultsByTest(results, 2);
     expect(groups.size).toBe(1);
     const group = [...groups.values()][0];
     expect(group.description).toBe(JSON.stringify({ input: 'hello' }));
     expect(group.pass).toBe(1);
     expect(group.total).toBe(2);
+  });
+
+  it('separates identical persisted test cases into their original repeat windows', () => {
+    const strippedFunctionTest = { description: 'inline assertion' };
+    const results = [
+      makeResult({ success: true, testIdx: 0, testCase: strippedFunctionTest }),
+      makeResult({ success: false, testIdx: 1, testCase: strippedFunctionTest }),
+      makeResult({ success: true, testIdx: 2, testCase: strippedFunctionTest }),
+      makeResult({ success: true, testIdx: 3, testCase: strippedFunctionTest }),
+    ];
+
+    const groups = groupResultsByTest(results, 2);
+    expect([...groups.values()]).toEqual([
+      { description: 'inline assertion', pass: 1, total: 2 },
+      { description: 'inline assertion', pass: 2, total: 2 },
+    ]);
   });
 });
 
