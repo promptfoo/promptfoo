@@ -392,7 +392,7 @@ type AssertionValueFunctionContext = {
   providerResponse: ProviderResponse | undefined;
 };
 type AssertionResponse = string | boolean | number | GradingResult;
-type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertResponse;
+type AssertFunction = (output: string, context: AssertionValueFunctionContext) => AssertionResponse;
 ```
 
 See [GradingResult definition](/docs/configuration/reference#gradingresult).
@@ -504,7 +504,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-5.5
   - localai:chat:vicuna
 tests:
   - vars:

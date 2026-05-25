@@ -29,8 +29,11 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -498,7 +501,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const dataWithResponse = normalizedData as GeminiResponseData[];
-      let output;
+      let output: ReturnType<typeof formatCandidateContents> | undefined;
 
       for (const datum of dataWithResponse) {
         // Check for blockReason first
@@ -538,6 +541,10 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
         }
 
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+          continue;
+        }
+
         const candidate = getCandidate(datum);
         const safetyFinishReasons = [
           'SAFETY',
@@ -575,19 +582,21 @@ export class GoogleProvider extends GoogleGenericProvider {
         } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
           // MAX_TOKENS is treated as a successful completion
           if (candidate.content?.parts) {
-            output = formatCandidateContents(candidate);
+            output = mergeParts(output, formatCandidateContents(candidate));
           }
         } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
           return {
             error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
           };
         } else if (candidate.content?.parts) {
-          output = formatCandidateContents(candidate);
-        } else {
-          return {
-            error: `No output found in response: ${JSON.stringify(data)}`,
-          };
+          output = mergeParts(output, formatCandidateContents(candidate));
         }
+      }
+
+      if (output === undefined) {
+        return {
+          error: `No output found in response: ${JSON.stringify(data)}`,
+        };
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
@@ -619,11 +628,12 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
 
       let guardrails: GuardrailResponse | undefined;
-      const candidate = getCandidate(lastData);
-      if (lastData.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastData.promptFeedback?.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
+      const lastDataWithCandidate =
+        dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
+      const candidate = getCandidate(lastDataWithCandidate);
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
+      if (promptSafetyRatings || candidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
         guardrails = { flaggedInput, flaggedOutput, flagged };
@@ -631,6 +641,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       // Extract grounding metadata
       const candidateWithMetadata = dataWithResponse
+        .filter((datum) => datum.candidates?.length)
         .map((datum) => getCandidate(datum))
         .find(
           (c) =>

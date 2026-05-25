@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import express from 'express';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
@@ -134,7 +136,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Set up HTTP transport for MCP
   const { StreamableHTTPServerTransport } = await loadMcpHttpTransport();
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => Math.random().toString(36).substring(2, 15),
+    sessionIdGenerator: () => randomUUID(),
   });
 
   await mcpServer.connect(transport);
