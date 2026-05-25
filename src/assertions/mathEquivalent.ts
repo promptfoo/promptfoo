@@ -45,6 +45,34 @@ const TRIG_FNS = [
 
 let _enginePromise: Promise<ComputeEngine> | undefined;
 
+function normalizeTopLevelNumericCommas(text: string): string {
+  const normalizeSegment = (segment: string): string =>
+    segment
+      .replace(/\b\d{1,3}(?:,\d{3})+\b/g, (match) => match.replace(/,/g, ''))
+      .replace(/(\d),(\d{2,})\b/g, '$1.$2');
+
+  let normalized = '';
+  let segmentStart = 0;
+  let depth = 0;
+  for (let index = 0; index < text.length; index++) {
+    if ('(['.includes(text[index])) {
+      if (depth === 0) {
+        normalized += normalizeSegment(text.slice(segmentStart, index));
+        segmentStart = index;
+      }
+      depth++;
+    } else if (')]'.includes(text[index]) && depth > 0) {
+      depth--;
+      if (depth === 0) {
+        normalized += text.slice(segmentStart, index + 1);
+        segmentStart = index + 1;
+      }
+    }
+  }
+
+  return normalized + normalizeSegment(text.slice(segmentStart));
+}
+
 /**
  * Lazily load `@cortex-js/compute-engine` via dynamic `import()`. Static
  * `import` on the value would be emitted as `require()` in the CJS bundle
@@ -85,17 +113,15 @@ export function normalizeLatex(text: string): string {
   // Strip leading "= " or whitespace that survived the ≈→= conversion.
   s = s.trim().replace(/^[=\s]+/, '');
 
-  // Strip "Var = ", "x_0 = ", "P(Safe|F) = " prefixes.
-  s = s.trim().replace(/^[A-Za-z_]\w*(?:\([^)]*\))?\s*=\s*/, '');
+  // Strip answer labels such as "V = ", "x_0 = ", and probability labels
+  // such as "P(Safe|F) = ". Ordinary function equations (`sin(x) = 1`) must
+  // remain equalities so they cannot be accepted as scalar answers.
+  s = s.trim().replace(/^(?:[A-Za-z_]\w*|P\([^)]*\))\s*=\s*/, '');
 
-  // US thousands separators: collapse "1,000" / "1,234,567" before the
-  // European-decimal rewrite — otherwise "1,000" becomes "1.000" = 1 and
-  // silently passes against the wrong expected value.
-  s = s.replace(/\b\d{1,3}(?:,\d{3})+\b/g, (m) => m.replace(/,/g, ''));
-
-  // European decimal comma: "2,00625" → "2.00625" (only when 2+ digits follow,
-  // to avoid mangling tuples like "23, 53" or coordinate pairs).
-  s = s.replace(/(\d),(\d{2,})\b/g, '$1.$2');
+  // Normalize numeric commas outside parenthesized/bracketed list values.
+  // This preserves coordinates such as `(23,53)` while still accepting
+  // top-level or LaTeX-braced decimal values such as `2,00625`.
+  s = normalizeTopLevelNumericCommas(s);
 
   // \dfrac / \tfrac / \cfrac variants → plain \frac for engines that don't
   // recognize the display/text variants.
@@ -198,6 +224,12 @@ function isParenthesizedNumericValue(text: string): boolean {
   return depth === 0 && NUMERIC_VALUE_PATTERN.test(value.slice(1, -1).trim());
 }
 
+function isCoefficientedLatexValue(text: string): boolean {
+  const value = (text.startsWith('-') ? text.slice(1) : text).trim();
+  const coefficient = value.match(/^\d+(?:\.\d+)?\s*/)?.[0];
+  return coefficient !== undefined && isSelfContainedLatexValue(value.slice(coefficient.length));
+}
+
 function stripTrailingUnit(text: string): string {
   const trimmed = text.trim();
   const match = trimmed.match(TRAILING_UNIT_PATTERN);
@@ -209,7 +241,9 @@ function stripTrailingUnit(text: string): string {
     NUMERIC_VALUE_PATTERN.test(value) ||
     isParenthesizedNumericValue(value) ||
     isSelfContainedLatexValue(value) ||
-    isSelfContainedLatexValue(normalizeLatex(value))
+    isCoefficientedLatexValue(value) ||
+    isSelfContainedLatexValue(normalizeLatex(value)) ||
+    isCoefficientedLatexValue(normalizeLatex(value))
   ) {
     return value;
   }
@@ -317,6 +351,12 @@ export async function parseMathExpression(text: string): Promise<BoxedExpression
  * segment right-to-left and return the first that succeeds.
  */
 export async function tryParseEachSegment(text: string): Promise<BoxedExpression | undefined> {
+  // Equation chains can communicate a computed final value (`x = 2`, or
+  // `1/2 = 0.5`), but a function equation is a constraint, not the scalar on
+  // its right-hand side. Do not turn `sin(x) = 1` or `f(x) = 2` into `1`/`2`.
+  if (/^\\?[A-Za-z_]\w*\s*\([^)]*\)\s*=/.test(normalizeLatex(text.trim()))) {
+    return undefined;
+  }
   const segments = text.split(/=|\u2248|\\approx\b/).map((s) => s.trim());
   for (let i = segments.length - 1; i >= 0; i--) {
     const seg = segments[i];

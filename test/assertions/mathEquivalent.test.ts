@@ -49,6 +49,17 @@ describe('normalizeLatex', async () => {
       expect(normalizeLatex('x_0 = 3')).toBe('3');
     });
 
+    it('strips a probability-label assignment prefix', async () => {
+      expect(normalizeLatex('P(Safe|F) = 0.0113')).toBe('0.0113');
+    });
+
+    it.each([
+      ['sin(x) = 1', '\\sin(x) = 1'],
+      ['f(x) = 2', 'f(x) = 2'],
+    ])('does not strip function equations ("%s")', async (input, expected) => {
+      expect(normalizeLatex(input)).toBe(expected);
+    });
+
     it('does not strip pure expressions', async () => {
       expect(normalizeLatex('5.09')).toBe('5.09');
     });
@@ -197,6 +208,21 @@ describe('normalizeLatex', async () => {
 
     it('leaves coordinate-style "(2,3)" alone', async () => {
       expect(normalizeLatex('(2,3)')).toBe('(2,3)');
+    });
+
+    it.each([
+      '(23,53)',
+      '(23,530)',
+      '[23,53]',
+    ])('does not rewrite commas inside grouped coordinate values ("%s")', async (input) => {
+      expect(normalizeLatex(input)).toBe(input);
+    });
+
+    it.each([
+      ['\\boxed{2,00625}', '\\boxed{2.00625}'],
+      ['\\frac{1,000}{2}', '\\frac{1000}{2}'],
+    ])('still normalizes numeric commas in LaTeX arguments ("%s")', async (input, expected) => {
+      expect(normalizeLatex(input)).toBe(expected);
     });
   });
 
@@ -352,6 +378,9 @@ describe('cleanMathText', async () => {
     ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
     ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
     ['\\pi rad', '\\pi'],
+    ['2\\pi rad', '2\\pi'],
+    ['3\\sqrt{2} m', '3\\sqrt{2}'],
+    ['3√2 m', '3√2'],
     ['(1/2) m', '(1/2)'],
     ['(10) kg', '(10)'],
   ])('strips trailing unit after a fractional/LaTeX answer (%s → %s)', async (input, expected) => {
@@ -473,6 +502,13 @@ describe('parseMathExpression', async () => {
     expect(await parseMathExpression('1 = 2')).toBeUndefined();
   });
 
+  it.each([
+    'sin(x) = 1',
+    'f(x) = 2',
+  ])('rejects function equations "%s" as scalar values', async (input) => {
+    expect(await parseMathExpression(input)).toBeUndefined();
+  });
+
   describe('rejects pure prose to prevent letter-multiplication false positives', async () => {
     it.each([
       ['apple'],
@@ -505,6 +541,13 @@ describe('tryParseEachSegment', async () => {
 
   it('returns undefined for an empty string', async () => {
     expect(await tryParseEachSegment('')).toBeUndefined();
+  });
+
+  it.each([
+    'sin(x) = 1',
+    'f(x) = 2',
+  ])('does not reduce function equation "%s" to its right-hand scalar', async (input) => {
+    expect(await tryParseEachSegment(input)).toBeUndefined();
   });
 });
 
@@ -980,6 +1023,10 @@ describe('isMathEquivalent', async () => {
     it('accepts a numeric expected value', async () => {
       expect((await isMathEquivalent('0.5', 0.5)).pass).toBe(true);
     });
+
+    it('does not collapse a coordinate answer into a decimal scalar', async () => {
+      expect((await isMathEquivalent('(23,53)', '23.53')).pass).toBe(false);
+    });
   });
 
   describe('formatting wrappers', async () => {
@@ -1226,6 +1273,13 @@ describe('isMathEquivalent', async () => {
     });
 
     it.each([
+      ['sin(x) = 1', '1'],
+      ['f(x) = 2', '2'],
+    ])('does not accept function equation "%s" as scalar %s', async (actual, expected) => {
+      expect((await isMathEquivalent(actual, expected)).pass).toBe(false);
+    });
+
+    it.each([
       ['The answer is 0.5.', '0.5'],
       ['Therefore the result is 7.', 7],
       ['So the answer comes out to 3.14159.', '3.14159'],
@@ -1260,6 +1314,9 @@ describe('isMathEquivalent', async () => {
       ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
       ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
       ['\\pi rad', '\\pi'],
+      ['2\\pi rad', '2\\pi'],
+      ['3\\sqrt{2} m', '3\\sqrt{2}'],
+      ['3√2 m', '3\\sqrt{2}'],
       ['(1/2) m', '0.5'],
       ['(10) kg', 10],
     ])('grades fractional / LaTeX answers with trailing units "%s" against %s', async (actual, expected) => {
