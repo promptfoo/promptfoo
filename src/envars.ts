@@ -42,7 +42,7 @@ type EnvVars = {
   /**
    * Force remote generation/grading on, even when local credentials (e.g. OPENAI_API_KEY) are present.
    * Useful in CI/CD pipelines that set OPENAI_API_KEY for non-redteam providers but still need
-   * remote-only strategies such as jailbreak:meta or jailbreak:composite.
+   * remote-only strategies such as jailbreak:meta or jailbreak:hydra.
    * Has no effect when PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION
    * are also set (explicit disables always win).
    */
