@@ -16,6 +16,7 @@ import { MediaSchemas } from '../types/api/media';
 import { ModelAuditSchemas } from '../types/api/modelAudit';
 import { ProviderSchemas } from '../types/api/providers';
 import { RedteamSchemas } from '../types/api/redteam';
+import { type ApiRouteContract, ApiRoutes } from '../types/api/routes';
 import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
 import { UserSchemas } from '../types/api/user';
@@ -204,34 +205,33 @@ export function createServerOpenApiRegistry() {
     registry.registerPath(route);
   }
 
-  register({
-    method: 'get',
-    path: '/health',
-    operationId: 'getHealth',
-    tags: ['Health'],
-    summary: 'Check local server health',
+  function registerContract(
+    contract: ApiRouteContract,
+    config: Omit<RouteConfig, 'method' | 'path'>,
+  ) {
+    register({
+      method: contract.method,
+      path: contract.openApiPath,
+      operationId: contract.operationId,
+      tags: [contract.tag],
+      summary: contract.summary,
+      ...config,
+    });
+  }
+
+  registerContract(ApiRoutes.Health, {
     responses: {
       200: jsonResponse('HealthResponse', ServerSchemas.Health.Response),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/remote-health',
-    operationId: 'getRemoteHealth',
-    tags: ['Health'],
-    summary: 'Check remote generation health',
+  registerContract(ApiRoutes.RemoteHealth, {
     responses: {
       200: jsonResponse('RemoteHealthResponse', ServerSchemas.RemoteHealth.Response),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/results',
-    operationId: 'listResults',
-    tags: ['Results'],
-    summary: 'List evaluation result summaries',
+  registerContract(ApiRoutes.Results.List, {
     request: {
       query: query('ListResultsQuery', ServerSchemas.ResultList.Query),
     },
@@ -241,12 +241,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/results/{id}',
-    operationId: 'getResult',
-    tags: ['Results'],
-    summary: 'Get one evaluation result',
+  registerContract(ApiRoutes.Results.Get, {
     request: {
       params: params('ResultParams', ServerSchemas.Result.Params),
     },
@@ -257,23 +252,13 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/prompts',
-    operationId: 'listPrompts',
-    tags: ['Prompts'],
-    summary: 'List known prompts',
+  registerContract(ApiRoutes.Prompts.List, {
     responses: {
       200: jsonResponse('PromptsResponse', ServerSchemas.Prompts.Response),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/history',
-    operationId: 'listHistory',
-    tags: ['Results'],
-    summary: 'List standalone evaluation history',
+  registerContract(ApiRoutes.History, {
     request: {
       query: query('HistoryQuery', ServerSchemas.History.Query),
     },
@@ -283,12 +268,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/prompts/{sha256hash}',
-    operationId: 'getPromptByHash',
-    tags: ['Prompts'],
-    summary: 'Get prompts for a test-case hash',
+  registerContract(ApiRoutes.Prompts.Get, {
     request: {
       params: params('PromptHashParams', ServerSchemas.Prompt.Params),
     },
@@ -298,23 +278,13 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/datasets',
-    operationId: 'listDatasets',
-    tags: ['Datasets'],
-    summary: 'List known datasets',
+  registerContract(ApiRoutes.Datasets, {
     responses: {
       200: jsonResponse('DatasetsResponse', ServerSchemas.Datasets.Response),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/results/share/check-domain',
-    operationId: 'checkShareDomain',
-    tags: ['Sharing'],
-    summary: 'Check where an evaluation will be shared',
+  registerContract(ApiRoutes.Results.ShareCheckDomain, {
     request: {
       query: query('ShareCheckDomainQuery', ServerSchemas.ShareCheckDomain.Query),
     },
@@ -325,12 +295,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/results/share',
-    operationId: 'shareResult',
-    tags: ['Sharing'],
-    summary: 'Create a shareable evaluation URL',
+  registerContract(ApiRoutes.Results.Share, {
     request: {
       body: jsonBody('ShareRequest', ServerSchemas.Share.Request),
     },
@@ -342,12 +307,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/dataset/generate',
-    operationId: 'generateDataset',
-    tags: ['Datasets'],
-    summary: 'Generate synthetic dataset rows',
+  registerContract(ApiRoutes.DatasetGenerate, {
     request: {
       body: jsonBody('DatasetGenerateRequest', ServerSchemas.DatasetGenerate.Request),
     },
@@ -357,12 +317,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/telemetry',
-    operationId: 'recordTelemetry',
-    tags: ['Telemetry'],
-    summary: 'Record a web UI telemetry event',
+  registerContract(ApiRoutes.Telemetry, {
     request: {
       body: jsonBody('TelemetryEvent', ServerSchemas.Telemetry.Request),
     },
@@ -373,12 +328,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/configs',
-    operationId: 'listConfigs',
-    tags: ['Configs'],
-    summary: 'List stored configs',
+  registerContract(ApiRoutes.Configs.List, {
     request: {
       query: query('ListConfigsQuery', ConfigSchemas.List.Query),
     },
@@ -389,12 +339,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/configs',
-    operationId: 'createConfig',
-    tags: ['Configs'],
-    summary: 'Create a stored config',
+  registerContract(ApiRoutes.Configs.Create, {
     request: {
       body: jsonBody('CreateConfigRequest', ConfigSchemas.Create.Request),
     },
@@ -405,12 +350,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/configs/{type}',
-    operationId: 'listConfigsByType',
-    tags: ['Configs'],
-    summary: 'List stored configs by type',
+  registerContract(ApiRoutes.Configs.ListByType, {
     request: {
       params: params('ListConfigsByTypeParams', ConfigSchemas.ListByType.Params),
     },
@@ -421,12 +361,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/configs/{type}/{id}',
-    operationId: 'getConfig',
-    tags: ['Configs'],
-    summary: 'Get a stored config',
+  registerContract(ApiRoutes.Configs.Get, {
     request: {
       params: params('GetConfigParams', ConfigSchemas.Get.Params),
     },
@@ -438,12 +373,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/eval/job',
-    operationId: 'createEvalJob',
-    tags: ['Eval'],
-    summary: 'Start an evaluation job',
+  registerContract(ApiRoutes.Eval.CreateJob, {
     request: {
       body: jsonBody('CreateJobRequest', OpenApiCreateJobRequestSchema),
     },
@@ -453,12 +383,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/eval/job/{id}',
-    operationId: 'getEvalJob',
-    tags: ['Eval'],
-    summary: 'Get evaluation job status',
+  registerContract(ApiRoutes.Eval.GetJob, {
     request: {
       params: params('GetJobParams', EvalSchemas.GetJob.Params),
     },
@@ -469,12 +394,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'patch',
-    path: '/api/eval/{id}',
-    operationId: 'updateEval',
-    tags: ['Eval'],
-    summary: 'Update an evaluation table or config',
+  registerContract(ApiRoutes.Eval.Update, {
     request: {
       params: params('UpdateEvalParams', EvalSchemas.Update.Params),
       body: jsonBody('UpdateEvalRequest', EvalSchemas.Update.Request),
@@ -486,12 +406,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'patch',
-    path: '/api/eval/{id}/author',
-    operationId: 'updateEvalAuthor',
-    tags: ['Eval'],
-    summary: 'Update evaluation author',
+  registerContract(ApiRoutes.Eval.UpdateAuthor, {
     request: {
       params: params('UpdateEvalAuthorParams', EvalSchemas.UpdateAuthor.Params),
       body: jsonBody('UpdateEvalAuthorRequest', EvalSchemas.UpdateAuthor.Request),
@@ -504,12 +419,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/eval/{id}/table',
-    operationId: 'getEvalTable',
-    tags: ['Eval'],
-    summary: 'Get evaluation table data',
+  registerContract(ApiRoutes.Eval.Table, {
     request: {
       params: params('EvalTableParams', EvalSchemas.Table.Params),
       query: query('EvalTableQuery', EvalSchemas.Table.Query),
@@ -523,12 +433,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/eval/{id}/metadata-keys',
-    operationId: 'getEvalMetadataKeys',
-    tags: ['Eval'],
-    summary: 'List metadata keys for an evaluation',
+  registerContract(ApiRoutes.Eval.MetadataKeys, {
     request: {
       params: params('GetMetadataKeysParams', EvalSchemas.MetadataKeys.Params),
       query: query('GetMetadataKeysQuery', EvalSchemas.MetadataKeys.Query),
@@ -541,12 +446,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/eval/{id}/metadata-values',
-    operationId: 'getEvalMetadataValues',
-    tags: ['Eval'],
-    summary: 'List metadata values for one key',
+  registerContract(ApiRoutes.Eval.MetadataValues, {
     request: {
       params: params('GetMetadataValuesParams', EvalSchemas.MetadataValues.Params),
       query: query('GetMetadataValuesQuery', EvalSchemas.MetadataValues.Query),
@@ -559,12 +459,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/eval/{id}/results',
-    operationId: 'addEvalResults',
-    tags: ['Eval'],
-    summary: 'Append results to an evaluation',
+  registerContract(ApiRoutes.Eval.AddResults, {
     request: {
       params: params('AddResultsParams', EvalSchemas.AddResults.Params),
       body: jsonBody('AddResultsRequest', EvalSchemas.AddResults.Request),
@@ -577,12 +472,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/eval/replay',
-    operationId: 'replayEval',
-    tags: ['Eval'],
-    summary: 'Replay one evaluation test',
+  registerContract(ApiRoutes.Eval.Replay, {
     request: {
       body: jsonBody('ReplayRequest', EvalSchemas.Replay.Request),
     },
@@ -594,12 +484,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/eval/{evalId}/results/{id}/rating',
-    operationId: 'submitEvalResultRating',
-    tags: ['Eval'],
-    summary: 'Submit a rating for one result',
+  registerContract(ApiRoutes.Eval.SubmitRating, {
     request: {
       params: params('SubmitRatingParams', EvalSchemas.SubmitRating.Params),
       body: jsonBody('SubmitRatingRequest', EvalSchemas.SubmitRating.Request),
@@ -612,12 +497,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/eval',
-    operationId: 'saveEval',
-    tags: ['Eval'],
-    summary: 'Save an evaluation result',
+  registerContract(ApiRoutes.Eval.Save, {
     request: {
       body: jsonBody('SaveEvalRequest', EvalSchemas.Save.Request),
     },
@@ -628,12 +508,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'delete',
-    path: '/api/eval/{id}',
-    operationId: 'deleteEval',
-    tags: ['Eval'],
-    summary: 'Delete one evaluation',
+  registerContract(ApiRoutes.Eval.Delete, {
     request: {
       params: params('DeleteEvalParams', EvalSchemas.Delete.Params),
     },
@@ -645,12 +520,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'delete',
-    path: '/api/eval',
-    operationId: 'bulkDeleteEvals',
-    tags: ['Eval'],
-    summary: 'Delete multiple evaluations',
+  registerContract(ApiRoutes.Eval.BulkDelete, {
     request: {
       body: jsonBody('BulkDeleteEvalsRequest', EvalSchemas.BulkDelete.Request),
     },
@@ -661,12 +531,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/eval/{id}/copy',
-    operationId: 'copyEval',
-    tags: ['Eval'],
-    summary: 'Copy an evaluation',
+  registerContract(ApiRoutes.Eval.Copy, {
     request: {
       params: params('CopyEvalParams', EvalSchemas.Copy.Params),
       body: jsonBody('CopyEvalRequest', EvalSchemas.Copy.Request),
@@ -679,24 +544,14 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/media/stats',
-    operationId: 'getMediaStats',
-    tags: ['Media'],
-    summary: 'Get media storage stats',
+  registerContract(ApiRoutes.Media.Stats, {
     responses: {
       200: jsonResponse('MediaStatsResponse', MediaSchemas.Stats.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/media/info/{type}/{filename}',
-    operationId: 'getMediaInfo',
-    tags: ['Media'],
-    summary: 'Get media file metadata',
+  registerContract(ApiRoutes.Media.Info, {
     request: {
       params: params('MediaInfoParams', MediaSchemas.Info.Params),
     },
@@ -708,12 +563,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/media/{type}/{filename}',
-    operationId: 'getMedia',
-    tags: ['Media'],
-    summary: 'Fetch media file bytes',
+  registerContract(ApiRoutes.Media.Get, {
     request: {
       params: params('MediaParams', MediaSchemas.Get.Params),
     },
@@ -725,23 +575,13 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/model-audit/check-installed',
-    operationId: 'checkModelAuditInstalled',
-    tags: ['Model Audit'],
-    summary: 'Check whether ModelAudit is installed',
+  registerContract(ApiRoutes.ModelAudit.CheckInstalled, {
     responses: {
       200: jsonResponse('CheckInstalledResponse', ModelAuditSchemas.CheckInstalled.Response),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/model-audit/scanners',
-    operationId: 'listModelAuditScanners',
-    tags: ['Model Audit'],
-    summary: 'List available ModelAudit scanners',
+  registerContract(ApiRoutes.ModelAudit.ListScanners, {
     responses: {
       200: jsonResponse('ListScannersResponse', ModelAuditSchemas.ListScanners.Response),
       400: validationError(),
@@ -749,12 +589,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/model-audit/check-path',
-    operationId: 'checkModelAuditPath',
-    tags: ['Model Audit'],
-    summary: 'Check whether a filesystem path exists',
+  registerContract(ApiRoutes.ModelAudit.CheckPath, {
     request: {
       body: jsonBody('CheckPathRequest', ModelAuditSchemas.CheckPath.Request),
     },
@@ -765,12 +600,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/model-audit/scan',
-    operationId: 'runModelAuditScan',
-    tags: ['Model Audit'],
-    summary: 'Run a ModelAudit scan',
+  registerContract(ApiRoutes.ModelAudit.Scan, {
     request: {
       body: jsonBody('ScanRequest', ModelAuditSchemas.Scan.Request),
     },
@@ -781,12 +611,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/model-audit/scans',
-    operationId: 'listModelAuditScans',
-    tags: ['Model Audit'],
-    summary: 'List persisted ModelAudit scans',
+  registerContract(ApiRoutes.ModelAudit.ListScans, {
     request: {
       query: query('ListScansQuery', ModelAuditSchemas.ListScans.Query),
     },
@@ -797,12 +622,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/model-audit/scans/latest',
-    operationId: 'getLatestModelAuditScan',
-    tags: ['Model Audit'],
-    summary: 'Get the latest persisted ModelAudit scan',
+  registerContract(ApiRoutes.ModelAudit.GetLatestScan, {
     responses: {
       200: jsonResponse('GetLatestScanResponse', ModelAuditSchemas.GetLatestScan.Response),
       404: notFound('No scans found'),
@@ -810,12 +630,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/model-audit/scans/{id}',
-    operationId: 'getModelAuditScan',
-    tags: ['Model Audit'],
-    summary: 'Get one persisted ModelAudit scan',
+  registerContract(ApiRoutes.ModelAudit.GetScan, {
     request: {
       params: params('GetScanParams', ModelAuditSchemas.GetScan.Params),
     },
@@ -827,12 +642,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'delete',
-    path: '/api/model-audit/scans/{id}',
-    operationId: 'deleteModelAuditScan',
-    tags: ['Model Audit'],
-    summary: 'Delete one persisted ModelAudit scan',
+  registerContract(ApiRoutes.ModelAudit.DeleteScan, {
     request: {
       params: params('DeleteScanParams', ModelAuditSchemas.DeleteScan.Params),
     },
@@ -844,24 +654,14 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/providers/config-status',
-    operationId: 'getProviderConfigStatus',
-    tags: ['Providers'],
-    summary: 'Get provider config status',
+  registerContract(ApiRoutes.Providers.ConfigStatus, {
     responses: {
       200: jsonResponse('ConfigStatusResponse', ProviderSchemas.ConfigStatus.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/providers/test',
-    operationId: 'testProvider',
-    tags: ['Providers'],
-    summary: 'Test a provider configuration',
+  registerContract(ApiRoutes.Providers.Test, {
     request: {
       body: jsonBody('TestProviderRequest', OpenApiTestProviderRequestSchema),
     },
@@ -872,12 +672,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/providers/discover',
-    operationId: 'discoverProviderTarget',
-    tags: ['Providers'],
-    summary: 'Discover target purpose from a provider',
+  registerContract(ApiRoutes.Providers.Discover, {
     request: {
       body: jsonBody('DiscoverRequest', OpenApiProviderOptionsWithIdSchema),
     },
@@ -888,12 +683,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/providers/http-generator',
-    operationId: 'generateHttpProvider',
-    tags: ['Providers'],
-    summary: 'Generate HTTP provider config from examples',
+  registerContract(ApiRoutes.Providers.HttpGenerator, {
     request: {
       body: jsonBody('HttpGeneratorRequest', ProviderSchemas.HttpGenerator.Request),
     },
@@ -904,12 +694,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/providers/test-request-transform',
-    operationId: 'testProviderRequestTransform',
-    tags: ['Providers'],
-    summary: 'Test an HTTP provider request transform',
+  registerContract(ApiRoutes.Providers.TestRequestTransform, {
     request: {
       body: jsonBody('TestRequestTransformRequest', ProviderSchemas.TestRequestTransform.Request),
     },
@@ -922,12 +707,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/providers/test-response-transform',
-    operationId: 'testProviderResponseTransform',
-    tags: ['Providers'],
-    summary: 'Test an HTTP provider response transform',
+  registerContract(ApiRoutes.Providers.TestResponseTransform, {
     request: {
       body: jsonBody('TestResponseTransformRequest', ProviderSchemas.TestResponseTransform.Request),
     },
@@ -940,12 +720,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/providers/test-session',
-    operationId: 'testProviderSession',
-    tags: ['Providers'],
-    summary: 'Test multi-turn provider session behavior',
+  registerContract(ApiRoutes.Providers.TestSession, {
     request: {
       body: jsonBody('TestSessionRequest', OpenApiTestSessionRequestSchema),
     },
@@ -956,12 +731,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/redteam/generate-test',
-    operationId: 'generateRedteamTest',
-    tags: ['Redteam'],
-    summary: 'Generate one or more redteam test cases',
+  registerContract(ApiRoutes.Redteam.GenerateTest, {
     request: {
       body: jsonBody('TestCaseGenerationRequest', RedteamSchemas.GenerateTest.Request),
     },
@@ -972,12 +742,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/redteam/run',
-    operationId: 'runRedteam',
-    tags: ['Redteam'],
-    summary: 'Start a redteam run',
+  registerContract(ApiRoutes.Redteam.Run, {
     request: {
       body: jsonBody('RedteamRunRequest', RedteamSchemas.Run.Request),
     },
@@ -987,24 +752,14 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/redteam/cancel',
-    operationId: 'cancelRedteam',
-    tags: ['Redteam'],
-    summary: 'Cancel the running redteam job',
+  registerContract(ApiRoutes.Redteam.Cancel, {
     responses: {
       200: jsonResponse('RedteamCancelResponse', RedteamSchemas.Cancel.Response),
       400: validationError(),
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/redteam/{taskId}',
-    operationId: 'runRedteamTask',
-    tags: ['Redteam'],
-    summary: 'Run a redteam setup task',
+  registerContract(ApiRoutes.Redteam.Task, {
     request: {
       params: params('RedteamTaskParams', RedteamSchemas.Task.Params),
       body: jsonBody('RedteamTaskRequest', RedteamSchemas.Task.Request),
@@ -1016,23 +771,13 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/redteam/status',
-    operationId: 'getRedteamStatus',
-    tags: ['Redteam'],
-    summary: 'Get redteam job status',
+  registerContract(ApiRoutes.Redteam.Status, {
     responses: {
       200: jsonResponse('RedteamStatusResponse', RedteamSchemas.Status.Response),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/traces/evaluation/{evaluationId}',
-    operationId: 'getTracesByEvaluation',
-    tags: ['Traces'],
-    summary: 'List traces for an evaluation',
+  registerContract(ApiRoutes.Traces.GetByEval, {
     request: {
       params: params('GetTracesByEvalParams', TracesSchemas.GetByEval.Params),
     },
@@ -1043,12 +788,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/traces/{traceId}',
-    operationId: 'getTrace',
-    tags: ['Traces'],
-    summary: 'Get one trace',
+  registerContract(ApiRoutes.Traces.Get, {
     request: {
       params: params('GetTraceParams', TracesSchemas.Get.Params),
     },
@@ -1060,36 +800,21 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/user/email',
-    operationId: 'getUserEmail',
-    tags: ['User'],
-    summary: 'Get configured user email',
+  registerContract(ApiRoutes.User.Get, {
     responses: {
       200: jsonResponse('GetUserResponse', UserSchemas.Get.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/user/id',
-    operationId: 'getUserId',
-    tags: ['User'],
-    summary: 'Get local user ID',
+  registerContract(ApiRoutes.User.GetId, {
     responses: {
       200: jsonResponse('GetUserIdResponse', UserSchemas.GetId.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/user/email',
-    operationId: 'updateUserEmail',
-    tags: ['User'],
-    summary: 'Update configured user email',
+  registerContract(ApiRoutes.User.Update, {
     request: {
       body: jsonBody('UpdateUserRequest', UserSchemas.Update.Request),
     },
@@ -1100,24 +825,14 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'put',
-    path: '/api/user/email/clear',
-    operationId: 'clearUserEmail',
-    tags: ['User'],
-    summary: 'Clear configured user email',
+  registerContract(ApiRoutes.User.ClearEmail, {
     responses: {
       200: jsonResponse('ClearUserEmailResponse', UserSchemas.ClearEmail.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/user/email/status',
-    operationId: 'getUserEmailStatus',
-    tags: ['User'],
-    summary: 'Get configured user email status',
+  registerContract(ApiRoutes.User.EmailStatus, {
     request: {
       query: query('GetEmailStatusQuery', UserSchemas.EmailStatus.Query),
     },
@@ -1128,12 +843,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/user/login',
-    operationId: 'loginUser',
-    tags: ['User'],
-    summary: 'Authenticate with Promptfoo Cloud',
+  registerContract(ApiRoutes.User.Login, {
     request: {
       body: jsonBody('LoginRequest', UserSchemas.Login.Request),
     },
@@ -1144,48 +854,28 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'post',
-    path: '/api/user/logout',
-    operationId: 'logoutUser',
-    tags: ['User'],
-    summary: 'Clear Promptfoo Cloud authentication',
+  registerContract(ApiRoutes.User.Logout, {
     responses: {
       200: jsonResponse('LogoutResponse', UserSchemas.Logout.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/user/cloud-config',
-    operationId: 'getUserCloudConfig',
-    tags: ['User'],
-    summary: 'Get Promptfoo Cloud app config',
+  registerContract(ApiRoutes.User.CloudConfig, {
     responses: {
       200: jsonResponse('CloudConfigResponse', UserSchemas.CloudConfig.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/version',
-    operationId: 'getVersion',
-    tags: ['Version'],
-    summary: 'Check Promptfoo version and update commands',
+  registerContract(ApiRoutes.Version, {
     responses: {
       200: jsonResponse('VersionResponse', VersionSchemas.Response),
       500: serverError(),
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/blobs/library',
-    operationId: 'listMediaLibrary',
-    tags: ['Blobs'],
-    summary: 'List media items from blob storage',
+  registerContract(ApiRoutes.Blobs.Library, {
     request: {
       query: query('MediaLibraryQuery', BlobsSchemas.Library.Query),
     },
@@ -1196,12 +886,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/blobs/library/evals',
-    operationId: 'listMediaLibraryEvals',
-    tags: ['Blobs'],
-    summary: 'List evaluations that have blob-backed media',
+  registerContract(ApiRoutes.Blobs.LibraryEvals, {
     request: {
       query: query('MediaLibraryEvalsQuery', BlobsSchemas.LibraryEvals.Query),
     },
@@ -1212,12 +897,7 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  register({
-    method: 'get',
-    path: '/api/blobs/{hash}',
-    operationId: 'getBlob',
-    tags: ['Blobs'],
-    summary: 'Fetch blob bytes or redirect to blob storage',
+  registerContract(ApiRoutes.Blobs.Get, {
     request: {
       params: params('GetBlobParams', BlobsSchemas.Get.Params),
     },

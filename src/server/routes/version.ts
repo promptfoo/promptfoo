@@ -4,6 +4,7 @@ import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { ApiRoutes } from '../../types/api/routes';
 import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
@@ -61,7 +62,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 // During outages: ~60 requests/hour vs ~12 with 5-minute delay.
 const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
     let latestVersion = versionCache.latestVersion;

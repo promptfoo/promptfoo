@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
+import { ApiRoutes } from '../../types/api/routes';
 import { TracesSchemas } from '../../types/api/traces';
 import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -8,7 +9,7 @@ import type { Request, Response } from 'express';
 export const tracesRouter = Router();
 
 // Get traces for a specific evaluation
-tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
+tracesRouter.get(ApiRoutes.Traces.GetByEval.routerPath, async (req: Request, res: Response) => {
   const paramsResult = TracesSchemas.GetByEval.Params.safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
@@ -31,7 +32,7 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
 });
 
 // Get a specific trace by ID
-tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
+tracesRouter.get(ApiRoutes.Traces.Get.routerPath, async (req: Request, res: Response) => {
   const paramsResult = TracesSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);

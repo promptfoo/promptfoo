@@ -10,6 +10,7 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import { ApiRoutes } from '../../types/api/routes';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
@@ -32,68 +33,74 @@ export const providersRouter = Router();
  * Response:
  * - hasCustomConfig: Boolean indicating if ui-providers.yaml exists with providers
  */
-providersRouter.get('/config-status', (_req: Request, res: Response): void => {
-  try {
-    const serverProviders = getAvailableProviders();
-    const hasCustomConfig = serverProviders.length > 0;
+providersRouter.get(
+  ApiRoutes.Providers.ConfigStatus.routerPath,
+  (_req: Request, res: Response): void => {
+    try {
+      const serverProviders = getAvailableProviders();
+      const hasCustomConfig = serverProviders.length > 0;
 
-    res.json(
-      ProviderSchemas.ConfigStatus.Response.parse({ success: true, data: { hasCustomConfig } }),
-    );
-  } catch (error) {
-    sendError(res, 500, 'Failed to load provider config status', error);
-  }
-});
-
-providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = ProviderSchemas.Test.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-
-  const { providerOptions } = bodyResult.data;
-
-  try {
-    const loadedProvider = await loadApiProvider(providerOptions.id, {
-      options: {
-        ...(providerOptions as ProviderOptions),
-        config: {
-          ...providerOptions.config,
-          maxRetries: 1,
-        },
-      },
-    });
-
-    // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
-    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderConnectivity({
-      provider: loadedProvider,
-      prompt: bodyResult.data.prompt,
-      inputs: providerOptions.inputs || providerOptions.config?.inputs,
-    });
-
-    res.status(200).json(
-      ProviderSchemas.Test.Response.parse({
-        testResult: {
-          success: result.success,
-          message: result.message,
-          error: result.error,
-          changes_needed: result.analysis?.changes_needed,
-          changes_needed_reason: result.analysis?.changes_needed_reason,
-          changes_needed_suggestions: result.analysis?.changes_needed_suggestions,
-        },
-        providerResponse: result.providerResponse,
-        transformedRequest: result.transformedRequest,
-      }),
-    );
-  } catch (error) {
-    sendError(res, 500, 'Failed to test provider', error);
-  }
-});
+      res.json(
+        ProviderSchemas.ConfigStatus.Response.parse({ success: true, data: { hasCustomConfig } }),
+      );
+    } catch (error) {
+      sendError(res, 500, 'Failed to load provider config status', error);
+    }
+  },
+);
 
 providersRouter.post(
-  '/discover',
+  ApiRoutes.Providers.Test.routerPath,
+  async (req: Request, res: Response): Promise<void> => {
+    const bodyResult = ProviderSchemas.Test.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      return;
+    }
+
+    const { providerOptions } = bodyResult.data;
+
+    try {
+      const loadedProvider = await loadApiProvider(providerOptions.id, {
+        options: {
+          ...(providerOptions as ProviderOptions),
+          config: {
+            ...providerOptions.config,
+            maxRetries: 1,
+          },
+        },
+      });
+
+      // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
+      // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+      const result = await testProviderConnectivity({
+        provider: loadedProvider,
+        prompt: bodyResult.data.prompt,
+        inputs: providerOptions.inputs || providerOptions.config?.inputs,
+      });
+
+      res.status(200).json(
+        ProviderSchemas.Test.Response.parse({
+          testResult: {
+            success: result.success,
+            message: result.message,
+            error: result.error,
+            changes_needed: result.analysis?.changes_needed,
+            changes_needed_reason: result.analysis?.changes_needed_reason,
+            changes_needed_suggestions: result.analysis?.changes_needed_suggestions,
+          },
+          providerResponse: result.providerResponse,
+          transformedRequest: result.transformedRequest,
+        }),
+      );
+    } catch (error) {
+      sendError(res, 500, 'Failed to test provider', error);
+    }
+  },
+);
+
+providersRouter.post(
+  ApiRoutes.Providers.Discover.routerPath,
   async (
     req: Request,
     res: Response<TargetPurposeDiscoveryResult | { error: string }>,
@@ -133,64 +140,67 @@ providersRouter.post(
   },
 );
 
-providersRouter.post('/http-generator', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = ProviderSchemas.HttpGenerator.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-  const { requestExample, responseExample } = bodyResult.data;
+providersRouter.post(
+  ApiRoutes.Providers.HttpGenerator.routerPath,
+  async (req: Request, res: Response): Promise<void> => {
+    const bodyResult = ProviderSchemas.HttpGenerator.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      return;
+    }
+    const { requestExample, responseExample } = bodyResult.data;
 
-  if (neverGenerateRemote()) {
-    res.status(400).json({ error: 'Requires remote generation be enabled.' });
-    return;
-  }
-
-  const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
-
-  try {
-    logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
-      requestExamplePreview: requestExample?.substring(0, 200),
-      hasResponseExample: !!responseExample,
-    });
-
-    const response = await fetchWithProxy(`${HOST}/api/v1/http-provider-generator`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        requestExample,
-        responseExample,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error('[POST /providers/http-generator] Error from cloud API', {
-        status: response.status,
-        errorText,
-      });
-      res.status(response.status).json({
-        error: `HTTP error! status: ${response.status}`,
-      });
+    if (neverGenerateRemote()) {
+      res.status(400).json({ error: 'Requires remote generation be enabled.' });
       return;
     }
 
-    const data = await response.json();
-    logger.debug('[POST /providers/http-generator] Successfully generated config');
-    res.status(200).json(ProviderSchemas.HttpGenerator.Response.parse(data));
-  } catch (error) {
-    logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
-      error,
-    });
-    sendError(res, 500, 'Failed to generate HTTP configuration');
-  }
-});
+    const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
+
+    try {
+      logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
+        requestExamplePreview: requestExample?.substring(0, 200),
+        hasResponseExample: !!responseExample,
+      });
+
+      const response = await fetchWithProxy(`${HOST}/api/v1/http-provider-generator`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requestExample,
+          responseExample,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error('[POST /providers/http-generator] Error from cloud API', {
+          status: response.status,
+          errorText,
+        });
+        res.status(response.status).json({
+          error: `HTTP error! status: ${response.status}`,
+        });
+        return;
+      }
+
+      const data = await response.json();
+      logger.debug('[POST /providers/http-generator] Successfully generated config');
+      res.status(200).json(ProviderSchemas.HttpGenerator.Response.parse(data));
+    } catch (error) {
+      logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
+        error,
+      });
+      sendError(res, 500, 'Failed to generate HTTP configuration');
+    }
+  },
+);
 
 // Test request transform endpoint
 providersRouter.post(
-  '/test-request-transform',
+  ApiRoutes.Providers.TestRequestTransform.routerPath,
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.TestRequestTransform.Request.safeParse(req.body);
     if (!bodyResult.success) {
@@ -242,7 +252,7 @@ providersRouter.post(
 
 // Test response transform endpoint
 providersRouter.post(
-  '/test-response-transform',
+  ApiRoutes.Providers.TestResponseTransform.routerPath,
   async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ProviderSchemas.TestResponseTransform.Request.safeParse(req.body);
     if (!bodyResult.success) {
@@ -305,38 +315,41 @@ providersRouter.post(
 );
 
 // Test multi-turn session functionality
-providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
-  const bodyResult = ProviderSchemas.TestSession.Request.safeParse(req.body);
-  if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-    return;
-  }
-  const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
+providersRouter.post(
+  ApiRoutes.Providers.TestSession.routerPath,
+  async (req: Request, res: Response): Promise<void> => {
+    const bodyResult = ProviderSchemas.TestSession.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      return;
+    }
+    const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
 
-  try {
-    const loadedProvider = await loadApiProvider(validatedProvider.id, {
-      options: {
-        ...validatedProvider,
-        config: {
-          ...validatedProvider.config,
-          maxRetries: 1,
-          sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
-          sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+    try {
+      const loadedProvider = await loadApiProvider(validatedProvider.id, {
+        options: {
+          ...validatedProvider,
+          config: {
+            ...validatedProvider.config,
+            maxRetries: 1,
+            sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
+            sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+          },
         },
-      },
-    });
+      });
 
-    // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
-    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-    const result = await testProviderSession({
-      provider: loadedProvider,
-      sessionConfig,
-      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
-      mainInputVariable,
-    });
+      // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
+      // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+      const result = await testProviderSession({
+        provider: loadedProvider,
+        sessionConfig,
+        inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+        mainInputVariable,
+      });
 
-    res.json(ProviderSchemas.TestSession.Response.parse(result));
-  } catch (error) {
-    sendError(res, 500, 'Failed to test session', error);
-  }
-});
+      res.json(ProviderSchemas.TestSession.Response.parse(result));
+    } catch (error) {
+      sendError(res, 500, 'Failed to test session', error);
+    }
+  },
+);

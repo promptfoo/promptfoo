@@ -1,28 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
+import { ALL_API_ROUTES, ApiRoutes, buildApiPath } from '../../src/types/api/routes';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
-
-const ROUTE_PREFIXES = new Map([
-  ['src/server/server.ts', ''],
-  ['src/server/routes/blobs.ts', '/api/blobs'],
-  ['src/server/routes/configs.ts', '/api/configs'],
-  ['src/server/routes/eval.ts', '/api/eval'],
-  ['src/server/routes/media.ts', '/api/media'],
-  ['src/server/routes/modelAudit.ts', '/api/model-audit'],
-  ['src/server/routes/providers.ts', '/api/providers'],
-  ['src/server/routes/redteam.ts', '/api/redteam'],
-  ['src/server/routes/traces.ts', '/api/traces'],
-  ['src/server/routes/user.ts', '/api/user'],
-  ['src/server/routes/version.ts', '/api/version'],
-]);
 
 function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   return Object.entries(document.paths ?? {}).flatMap(([path, pathItem]) =>
@@ -35,44 +19,33 @@ function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   );
 }
 
-function normalizeRoutePath(prefix: string, routePath: string) {
-  const joined = routePath === '/' ? prefix || '/' : `${prefix}${routePath}`;
-  return joined.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
-}
-
-function sourceRouteOperations() {
-  const routePattern =
-    /(?:app|\w+Router|router)\.(get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\2/g;
-
-  return [...ROUTE_PREFIXES.entries()].flatMap(([file, prefix]) => {
-    const source = fs.readFileSync(path.resolve(file), 'utf8');
-    return [...source.matchAll(routePattern)]
-      .map((match) => ({
-        method: match[1].toUpperCase(),
-        path: normalizeRoutePath(prefix, match[3]),
-      }))
-      .filter(({ path }) => path !== '/*splat' && !path.includes('/*'));
-  });
-}
-
 describe('server OpenAPI generation', () => {
   it('registers every server route exactly once', () => {
     const { routes } = createServerOpenApiRegistry();
     const document = createServerOpenApiDocument();
     const generatedOperations = operations(document);
-    const sourceOperations = sourceRouteOperations();
+    const contractKeys = ALL_API_ROUTES.map(
+      ({ method, openApiPath }) => `${method.toUpperCase()} ${openApiPath}`,
+    );
 
     expect(routes).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
     expect(generatedOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(sourceOperations).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
+    expect(ALL_API_ROUTES).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
 
     const generatedKeys = generatedOperations.map(
       ({ method, path }) => `${method.toUpperCase()} ${path}`,
     );
-    const sourceKeys = sourceOperations.map(({ method, path }) => `${method} ${path}`);
     expect(new Set(generatedKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(generatedKeys.sort()).toEqual(sourceKeys.sort());
+    expect(new Set(contractKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
+    expect(generatedKeys.sort()).toEqual(contractKeys.sort());
     expect(generatedKeys.some((key) => key.includes('/:'))).toBe(false);
+  });
+
+  it('builds encoded client paths from route contracts', () => {
+    expect(buildApiPath(ApiRoutes.Eval.Table, { id: 'suite/result 1' })).toBe(
+      '/eval/suite%2Fresult%201/table',
+    );
+    expect(() => buildApiPath(ApiRoutes.Blobs.Get)).toThrow('Missing API path parameter: hash');
   });
 
   it('documents representative request and response shapes', () => {
