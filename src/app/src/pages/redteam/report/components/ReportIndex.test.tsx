@@ -7,7 +7,30 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
 import type { EvalSummary } from '@promptfoo/types';
 
-vi.mock('@app/utils/api');
+vi.mock('@app/utils/api', () => {
+  const callApi = vi.fn();
+  return {
+    callApi,
+    callApiJson: vi.fn(
+      async (
+        route: { clientPath: string },
+        _schema: unknown,
+        options: {
+          params?: Record<string, string | number>;
+          query?: URLSearchParams;
+        } & RequestInit = {},
+      ) => {
+        let path = route.clientPath;
+        for (const [name, value] of Object.entries(options.params ?? {})) {
+          path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+        }
+        const query = options.query?.toString();
+        const response = await callApi(query ? `${path}?${query}` : path, options);
+        return response.json();
+      },
+    ),
+  };
+});
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');

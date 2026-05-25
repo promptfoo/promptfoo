@@ -15,8 +15,10 @@ import { DeleteIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiEmpty, callApiJson } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ServerSchemas } from '@promptfoo/types/api/server';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
@@ -53,12 +55,11 @@ export default function EvalsTable({
   const fetchEvals = useCallback(async (signal: AbortSignal) => {
     try {
       setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
-      }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setEvals(body.data);
+      const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
+        cache: 'no-store',
+        signal,
+      });
+      setEvals(body.data as EvalSummary[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -116,17 +117,13 @@ export default function EvalsTable({
   const handleConfirmDelete = async () => {
     try {
       setIsLoading(true);
-      const res = await callApi('/eval', {
+      await callApiEmpty(ApiRoutes.Eval.BulkDelete, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ ids: selectedEvalIds }),
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to delete evals');
-      }
 
       setEvals((prev) => prev.filter((e) => !selectedEvalIds.includes(e.evalId)));
       setRowSelection({});

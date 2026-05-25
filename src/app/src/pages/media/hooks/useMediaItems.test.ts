@@ -22,15 +22,14 @@ describe('fetchMediaItemByHash', () => {
       },
     };
 
-    vi.mocked(api.callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        data: {
-          items: [mockItem],
-        },
-      }),
-    } as Response);
+    vi.mocked(api.callApiJson).mockResolvedValue({
+      success: true,
+      data: {
+        items: [mockItem],
+        total: 1,
+        hasMore: false,
+      },
+    });
 
     const result = await fetchMediaItemByHash('abc123');
 
@@ -38,19 +37,20 @@ describe('fetchMediaItemByHash', () => {
       item: mockItem,
       error: null,
     });
-    expect(api.callApi).toHaveBeenCalledWith('/blobs/library?hash=abc123&limit=1');
+    expect(vi.mocked(api.callApiJson).mock.calls[0][2]?.query?.toString()).toBe(
+      'hash=abc123&limit=1',
+    );
   });
 
   it('should return not_found error when items array is empty', async () => {
-    vi.mocked(api.callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        data: {
-          items: [],
-        },
-      }),
-    } as Response);
+    vi.mocked(api.callApiJson).mockResolvedValue({
+      success: true,
+      data: {
+        items: [],
+        total: 0,
+        hasMore: false,
+      },
+    });
 
     const result = await fetchMediaItemByHash('nonexistent');
 
@@ -61,10 +61,9 @@ describe('fetchMediaItemByHash', () => {
   });
 
   it('should return server_error when response is not ok', async () => {
-    vi.mocked(api.callApi).mockResolvedValue({
-      ok: false,
-      json: async () => ({}),
-    } as Response);
+    vi.mocked(api.callApiJson).mockRejectedValue(
+      new api.ApiResponseError(500, { error: 'failed' }, new Response(null, { status: 500 })),
+    );
 
     const result = await fetchMediaItemByHash('abc123');
 
@@ -74,14 +73,14 @@ describe('fetchMediaItemByHash', () => {
     });
   });
 
-  it('should return server_error when success is false', async () => {
-    vi.mocked(api.callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: false,
-        error: 'Something went wrong',
-      }),
-    } as Response);
+  it('should return server_error when the typed request rejects with a server response', async () => {
+    vi.mocked(api.callApiJson).mockRejectedValue(
+      new api.ApiResponseError(
+        400,
+        { error: 'Something went wrong' },
+        new Response(null, { status: 400 }),
+      ),
+    );
 
     const result = await fetchMediaItemByHash('abc123');
 
@@ -92,7 +91,7 @@ describe('fetchMediaItemByHash', () => {
   });
 
   it('should return network_error when API call throws', async () => {
-    vi.mocked(api.callApi).mockRejectedValue(new Error('Network failure'));
+    vi.mocked(api.callApiJson).mockRejectedValue(new Error('Network failure'));
 
     const result = await fetchMediaItemByHash('abc123');
 
@@ -103,20 +102,19 @@ describe('fetchMediaItemByHash', () => {
   });
 
   it('should properly encode hash with special characters', async () => {
-    vi.mocked(api.callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        data: {
-          items: [],
-        },
-      }),
-    } as Response);
+    vi.mocked(api.callApiJson).mockResolvedValue({
+      success: true,
+      data: {
+        items: [],
+        total: 0,
+        hasMore: false,
+      },
+    });
 
     await fetchMediaItemByHash('hash with spaces & special=chars');
 
-    expect(api.callApi).toHaveBeenCalledWith(
-      '/blobs/library?hash=hash%20with%20spaces%20%26%20special%3Dchars&limit=1',
+    expect(vi.mocked(api.callApiJson).mock.calls[0][2]?.query?.toString()).toBe(
+      'hash=hash+with+spaces+%26+special%3Dchars&limit=1',
     );
   });
 });

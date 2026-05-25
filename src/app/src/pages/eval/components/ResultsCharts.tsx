@@ -9,7 +9,9 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { EVAL_ROUTES } from '@app/constants/routes';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ServerSchemas } from '@promptfoo/types/api/server';
 import {
   BarController,
   BarElement,
@@ -534,13 +536,10 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       }
 
       try {
-        const res = await callApi(`/history?description=${encodeURIComponent(config.description)}`);
-        if (!res.ok) {
-          throw new Error(`Failed to fetch progress data: ${res.status} ${res.statusText}`);
-        }
-
-        const data = await res.json();
-        setProgressData(Array.isArray(data?.data) ? data.data : []);
+        const data = await callApiJson(ApiRoutes.History, ServerSchemas.History.Response, {
+          query: new URLSearchParams({ description: config.description }),
+        });
+        setProgressData(data.data as ProgressData[]);
       } catch (error) {
         console.error('Error fetching progress data:', error);
       }

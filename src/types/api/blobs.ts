@@ -28,14 +28,14 @@ export const MediaLibraryQuerySchema = z.object({
 
 export type MediaLibraryQuery = z.infer<typeof MediaLibraryQuerySchema>;
 
-const GraderResultSchema = z.object({
+export const GraderResultSchema = z.object({
   name: z.string(),
   pass: z.boolean(),
   score: z.number(),
   reason: z.string().optional(),
 });
 
-const MediaItemContextSchema = z.object({
+export const MediaItemContextSchema = z.object({
   evalId: z.string(),
   evalDescription: z.string().optional(),
   testIdx: z.number().optional(),
@@ -51,7 +51,7 @@ const MediaItemContextSchema = z.object({
   cost: z.number().optional(),
 });
 
-const MediaItemSchema = z.object({
+export const MediaItemSchema = z.object({
   hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
   mimeType: z.string(),
   sizeBytes: z.number(),
@@ -72,6 +72,9 @@ export const MediaLibraryResponseSchema = z.object({
 });
 
 export type MediaLibraryResponse = z.infer<typeof MediaLibraryResponseSchema>;
+export type GraderResult = z.infer<typeof GraderResultSchema>;
+export type MediaItemContext = z.infer<typeof MediaItemContextSchema>;
+export type MediaItem = z.infer<typeof MediaItemSchema>;
 
 // GET /api/blobs/library/evals
 
@@ -82,7 +85,7 @@ export const MediaLibraryEvalsQuerySchema = z.object({
 
 export type MediaLibraryEvalsQuery = z.infer<typeof MediaLibraryEvalsQuerySchema>;
 
-const EvalOptionSchema = z.object({
+export const EvalOptionSchema = z.object({
   evalId: z.string(),
   description: z.string(),
   createdAt: z.string().optional(),
@@ -94,6 +97,7 @@ export const MediaLibraryEvalsResponseSchema = z.object({
 });
 
 export type MediaLibraryEvalsResponse = z.infer<typeof MediaLibraryEvalsResponseSchema>;
+export type EvalOption = z.infer<typeof EvalOptionSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const BlobsSchemas = {

@@ -7,7 +7,9 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { EvalSchemas } from '@promptfoo/types/api/eval';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { useNavigate } from 'react-router-dom';
 import {
   countTests,
@@ -15,7 +17,6 @@ import {
   normalizePromptsForJob,
   normalizeProviders,
 } from './setupReadiness';
-import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
@@ -97,7 +98,7 @@ const RunTestSuiteButton = () => {
     };
 
     try {
-      const response = await callApi('/eval/job', {
+      const job = await callApiJson(ApiRoutes.Eval.CreateJob, EvalSchemas.CreateJob.Response, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,11 +106,6 @@ const RunTestSuiteButton = () => {
         body: JSON.stringify(testSuite),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const job: CreateJobResponse = await response.json();
       if (!isMountedRef.current) {
         return;
       }
@@ -117,18 +113,11 @@ const RunTestSuiteButton = () => {
       clearPollInterval();
       const intervalId = setInterval(async () => {
         try {
-          const progressResponse = await callApi(`/eval/job/${job.id}/`);
-          if (!isMountedRef.current) {
-            clearPollInterval();
-            return;
-          }
-
-          if (!progressResponse.ok) {
-            clearPollInterval();
-            throw new Error(`HTTP error! status: ${progressResponse.status}`);
-          }
-
-          const progressData: GetJobResponse = await progressResponse.json();
+          const progressData = await callApiJson(
+            ApiRoutes.Eval.GetJob,
+            EvalSchemas.GetJob.Response,
+            { params: { id: job.id } },
+          );
           if (!isMountedRef.current) {
             clearPollInterval();
             return;

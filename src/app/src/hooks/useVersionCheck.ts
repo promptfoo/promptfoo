@@ -1,19 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { type VersionResponse, VersionSchemas } from '@promptfoo/types/api/version';
 
-interface VersionInfo {
-  currentVersion: string;
-  latestVersion: string;
-  updateAvailable: boolean;
-  selfHosted?: boolean;
-  isNpx?: boolean;
-  updateCommands?: {
-    primary: string;
-    alternative: string | null;
-  };
-  commandType?: 'docker' | 'npx' | 'npm';
-}
+type VersionInfo = VersionResponse;
 
 interface UseVersionCheckResult {
   versionInfo: VersionInfo | null;
@@ -37,11 +28,7 @@ export function useVersionCheck(): UseVersionCheckResult {
 
     const checkVersion = async () => {
       try {
-        const response = await callApi('/version');
-        if (!response.ok) {
-          throw new Error('Failed to fetch version information');
-        }
-        const data: VersionInfo = await response.json();
+        const data = await callApiJson(ApiRoutes.Version, VersionSchemas.Response);
 
         // Only update state if component is still mounted
         if (isMountedRef.current) {

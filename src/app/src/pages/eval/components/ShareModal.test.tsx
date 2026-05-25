@@ -1,5 +1,6 @@
 import { mockClipboard, mockDocumentExecCommand, mockWindowOpen } from '@app/tests/browserMocks';
-import { callApi } from '@app/utils/api';
+import { callApiResult } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,13 +8,13 @@ import ShareModal from './ShareModal';
 
 // Mock the API utility
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApiResult: vi.fn(),
 }));
 
 describe('ShareModal', () => {
   const mockOnClose = vi.fn();
   const mockOnShare = vi.fn();
-  const mockCallApi = vi.mocked(callApi);
+  const mockCallApi = vi.mocked(callApiResult);
 
   const defaultProps = {
     open: true,
@@ -27,12 +28,13 @@ describe('ShareModal', () => {
     mockClipboard();
     mockDocumentExecCommand();
     // Mock successful domain check by default
-    mockCallApi.mockResolvedValue(
-      Response.json({
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      data: {
         domain: 'localhost:3000',
         isCloudEnabled: false,
-      }),
-    );
+      },
+    } as any);
   });
 
   it('does not render when closed', () => {
@@ -50,12 +52,13 @@ describe('ShareModal', () => {
   });
 
   it('displays signup prompt when cloud is not enabled', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      data: {
         domain: 'promptfoo.app',
         isCloudEnabled: false,
-      }),
-    );
+      },
+    } as any);
 
     render(<ShareModal {...defaultProps} />);
 
@@ -98,14 +101,10 @@ describe('ShareModal', () => {
   });
 
   it('displays error when domain check fails', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json(
-        {
-          error: 'Domain check failed',
-        },
-        { status: 500 },
-      ),
-    );
+    mockCallApi.mockResolvedValue({
+      ok: false,
+      error: { message: 'Domain check failed' },
+    } as any);
 
     render(<ShareModal {...defaultProps} />);
 
@@ -136,7 +135,11 @@ describe('ShareModal', () => {
     });
 
     expect(mockCallApi).toHaveBeenCalledTimes(1);
-    expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=test-eval-id');
+    expect(mockCallApi).toHaveBeenCalledWith(
+      ApiRoutes.Results.ShareCheckDomain,
+      expect.anything(),
+      { query: new URLSearchParams({ id: 'test-eval-id' }) },
+    );
   });
 
   it('calls onClose when close button is clicked', async () => {
@@ -158,12 +161,13 @@ describe('ShareModal', () => {
   });
 
   it('opens external link when "Take me there" is clicked', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      data: {
         domain: 'promptfoo.app',
         isCloudEnabled: false,
-      }),
-    );
+      },
+    } as any);
 
     const mockOpen = mockWindowOpen();
 
@@ -208,12 +212,13 @@ describe('ShareModal', () => {
   });
 
   it('skips signup prompt when isCloudEnabled is true', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      data: {
         domain: 'any-domain.com',
         isCloudEnabled: true,
-      }),
-    );
+      },
+    } as any);
     const testUrl = 'https://promptfoo.app/eval/test-id';
     mockOnShare.mockResolvedValue(testUrl);
 
@@ -229,11 +234,12 @@ describe('ShareModal', () => {
   });
 
   it('handles missing domain in API response gracefully', async () => {
-    mockCallApi.mockResolvedValue(
-      Response.json({
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      data: {
         isCloudEnabled: false,
-      }),
-    );
+      },
+    } as any);
 
     render(<ShareModal {...defaultProps} />);
 
@@ -265,14 +271,14 @@ describe('ShareModal', () => {
     const testUrl1 = 'https://promptfoo.app/eval/test-id-1';
     const testUrl2 = 'https://promptfoo.app/eval/test-id-2';
 
-    // Must return a fresh Response for each call since Response body can only be consumed once
     mockCallApi.mockImplementation(() =>
-      Promise.resolve(
-        Response.json({
+      Promise.resolve({
+        ok: true,
+        data: {
           domain: 'localhost:3000',
           isCloudEnabled: false,
-        }),
-      ),
+        },
+      } as any),
     );
 
     mockOnShare.mockImplementation(async (id: string) => {

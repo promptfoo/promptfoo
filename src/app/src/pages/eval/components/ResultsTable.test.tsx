@@ -4,6 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +48,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 });
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  callApiJson: vi.fn(() => Promise.resolve({})),
 }));
 
 const mockNavigate = vi.fn();
@@ -1632,10 +1633,10 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockSetTable = vi.fn();
-    // Dynamically import and mock callApi
+    // Dynamically import and mock the typed request helper.
     const apiModule = await import('@app/utils/api');
-    mockCallApi = vi.mocked(apiModule.callApi);
-    mockCallApi.mockResolvedValue({ ok: true });
+    mockCallApi = vi.mocked(apiModule.callApiJson);
+    mockCallApi.mockResolvedValue({} as any);
   });
 
   it('should not include empty componentResults when toggling highlight', async () => {
@@ -4100,8 +4101,8 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     vi.clearAllMocks();
     mockSetTable = vi.fn();
     const apiModule = await import('@app/utils/api');
-    mockCallApi = vi.mocked(apiModule.callApi);
-    mockCallApi.mockResolvedValue({ ok: true });
+    mockCallApi = vi.mocked(apiModule.callApiJson);
+    mockCallApi.mockResolvedValue({} as any);
   });
 
   it('should remove human assertion and recalculate pass/score when isPass is null', () => {
@@ -4183,12 +4184,16 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
 
     await waitFor(() => {
       expect(mockCallApi).toHaveBeenCalledWith(
-        '/eval/123/results/test-output-1/rating',
-        expect.objectContaining({ method: 'POST' }),
+        ApiRoutes.Eval.SubmitRating,
+        expect.anything(),
+        expect.objectContaining({
+          params: { evalId: '123', id: 'test-output-1' },
+          method: 'POST',
+        }),
       );
     });
 
-    const [, request] = mockCallApi.mock.calls[0];
+    const [, , request] = mockCallApi.mock.calls[0];
     const payload = JSON.parse(request.body);
 
     expect(payload.pass).toBe(false);

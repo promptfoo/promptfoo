@@ -24,7 +24,9 @@ import { Label } from '@app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ModelAuditSchemas } from '@promptfoo/types/api/modelAudit';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { useModelAuditConfigStore } from '../stores';
 
 import type { ScanPath } from '../ModelAudit.types';
@@ -141,13 +143,15 @@ export default function PathSelector({
     setError(null);
 
     try {
-      const response = await callApi('/model-audit/check-path', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: trimmedPath }),
-      });
-
-      const data = await response.json();
+      const data = await callApiJson(
+        ApiRoutes.ModelAudit.CheckPath,
+        ModelAuditSchemas.CheckPath.Response,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: trimmedPath }),
+        },
+      );
 
       if (data.exists) {
         onAddPath({

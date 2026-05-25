@@ -1,6 +1,17 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { UserSchemas } from '@promptfoo/types/api/user';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { callApi, fetchUserEmail, fetchUserId, getApiBaseUrl, updateEvalAuthor } from './api';
+import {
+  ApiResponseError,
+  callApi,
+  callApiJson,
+  callApiResult,
+  fetchUserEmail,
+  fetchUserId,
+  getApiBaseUrl,
+  updateEvalAuthor,
+} from './api';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -117,6 +128,36 @@ describe('callApi', () => {
   });
 });
 
+describe('typed route API helpers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('builds encoded route paths and validates success response payloads', async () => {
+    mockFetch.mockResolvedValue(new Response(JSON.stringify({ email: 'test@example.com' })));
+
+    const result = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response);
+
+    expect(result).toEqual({ email: 'test@example.com' });
+    expect(mockFetch).toHaveBeenCalledWith('/api/user/email', {});
+  });
+
+  it('returns parsed error envelopes without requiring raw response casts', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'No access', success: false }), { status: 403 }),
+    );
+
+    const result = await callApiResult(ApiRoutes.User.Get, UserSchemas.Get.Response);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBeInstanceOf(ApiResponseError);
+      expect(result.error.body).toEqual({ error: 'No access', success: false });
+    }
+  });
+});
+
 describe('fetchUserEmail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -162,12 +203,13 @@ describe('fetchUserEmail', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('handles empty email string', async () => {
+  it('returns null when the response contains an invalid empty email string', async () => {
     const mockResponse = new Response(JSON.stringify({ email: '' }), { status: 200 });
     mockFetch.mockResolvedValue(mockResponse);
 
     const email = await fetchUserEmail();
-    expect(email).toBe('');
+    expect(email).toBe(null);
+    expect(console.error).toHaveBeenCalledWith('Error fetching user email:', expect.any(Error));
   });
 });
 
@@ -229,11 +271,13 @@ describe('updateEvalAuthor', () => {
   });
 
   it('updates eval author successfully', async () => {
-    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    const mockResponse = new Response(JSON.stringify({ message: 'Author updated successfully' }), {
+      status: 200,
+    });
     mockFetch.mockResolvedValue(mockResponse);
 
     const result = await updateEvalAuthor('eval-123', 'John Doe');
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ message: 'Author updated successfully' });
     expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/author', {
       method: 'PATCH',
       headers: {
@@ -268,11 +312,13 @@ describe('updateEvalAuthor', () => {
   });
 
   it('handles empty author name', async () => {
-    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    const mockResponse = new Response(JSON.stringify({ message: 'Author updated successfully' }), {
+      status: 200,
+    });
     mockFetch.mockResolvedValue(mockResponse);
 
     const result = await updateEvalAuthor('eval-123', '');
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ message: 'Author updated successfully' });
     expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/author', {
       method: 'PATCH',
       headers: {
@@ -283,12 +329,14 @@ describe('updateEvalAuthor', () => {
   });
 
   it('handles special characters in author name', async () => {
-    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    const mockResponse = new Response(JSON.stringify({ message: 'Author updated successfully' }), {
+      status: 200,
+    });
     mockFetch.mockResolvedValue(mockResponse);
     const specialName = "O'Brien & Sons (Testing)";
 
     const result = await updateEvalAuthor('eval-123', specialName);
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ message: 'Author updated successfully' });
     expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/author', {
       method: 'PATCH',
       headers: {
@@ -299,11 +347,13 @@ describe('updateEvalAuthor', () => {
   });
 
   it('handles special characters in eval ID', async () => {
-    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    const mockResponse = new Response(JSON.stringify({ message: 'Author updated successfully' }), {
+      status: 200,
+    });
     mockFetch.mockResolvedValue(mockResponse);
 
     const result = await updateEvalAuthor('eval-123-abc_def', 'Author');
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ message: 'Author updated successfully' });
     expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123-abc_def/author', {
       method: 'PATCH',
       headers: {

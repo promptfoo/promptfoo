@@ -1,12 +1,7 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
-import {
-  getCallApiMock,
-  mockCallApiRoutes,
-  rejectCallApi,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
+import { callApiJson } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,7 +18,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApiJson: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -37,7 +32,7 @@ describe('RunTestSuiteButton', () => {
 
   beforeEach(() => {
     useStore.getState().reset();
-    resetCallApiMock();
+    vi.mocked(callApiJson).mockReset();
     mockShowToast.mockReset();
     timers = useTestTimers();
   });
@@ -86,7 +81,7 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    vi.mocked(callApiJson).mockResolvedValueOnce({ id: '123' } as any);
     useStore.getState().updateConfig({
       prompts: 'file://prompt.txt',
       providers: 'openai:gpt-4',
@@ -101,7 +96,11 @@ describe('RunTestSuiteButton', () => {
       await Promise.resolve();
     });
 
-    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    const [, , requestInit] = vi.mocked(callApiJson).mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      RequestInit,
+    ];
     expect(typeof requestInit.body).toBe('string');
     expect(JSON.parse(requestInit.body as string)).toMatchObject({
       prompts: ['file://prompt.txt'],
@@ -111,7 +110,7 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('should serialize legacy prompt maps into prompt objects before submitting eval jobs', async () => {
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    vi.mocked(callApiJson).mockResolvedValueOnce({ id: '123' } as any);
     useStore.getState().updateConfig({
       prompts: { 'file://prompt.txt': 'Prompt label' },
       providers: 'openai:gpt-4',
@@ -126,7 +125,11 @@ describe('RunTestSuiteButton', () => {
       await Promise.resolve();
     });
 
-    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    const [, , requestInit] = vi.mocked(callApiJson).mock.calls[0] as unknown as [
+      unknown,
+      unknown,
+      RequestInit,
+    ];
     expect(typeof requestInit.body).toBe('string');
     expect(JSON.parse(requestInit.body as string)).toMatchObject({
       prompts: [{ raw: 'file://prompt.txt', label: 'Prompt label' }],
@@ -149,15 +152,9 @@ describe('RunTestSuiteButton', () => {
 
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
-    mockCallApiRoutes([
-      { method: 'POST', path: '/eval/job', response: { id: mockJobId } },
-      {
-        path: `/eval/job/${mockJobId}/`,
-        ok: false,
-        status: 500,
-        response: { message: 'Progress API failed' },
-      },
-    ]);
+    vi.mocked(callApiJson)
+      .mockResolvedValueOnce({ id: mockJobId } as any)
+      .mockRejectedValueOnce(new Error('HTTP error! status: 500'));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -190,8 +187,7 @@ describe('RunTestSuiteButton', () => {
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
 
-    // Mock callApi to reject with an error
-    rejectCallApi(new Error(errorMessage));
+    vi.mocked(callApiJson).mockRejectedValue(new Error(errorMessage));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -217,7 +213,7 @@ describe('RunTestSuiteButton', () => {
 
   it('should stop polling when unmounted', async () => {
     const mockJobId = '123';
-    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: mockJobId } }]);
+    vi.mocked(callApiJson).mockResolvedValueOnce({ id: mockJobId } as any);
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -239,14 +235,14 @@ describe('RunTestSuiteButton', () => {
       await timers.advanceByAsync(1500);
     });
 
-    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    expect(callApiJson).toHaveBeenCalledTimes(1);
   });
 
   it('should not start polling if unmounted before job creation finishes', async () => {
-    let resolveJobCreation: ((value: Response) => void) | undefined;
-    getCallApiMock().mockImplementationOnce(
+    let resolveJobCreation: ((value: { id: string }) => void) | undefined;
+    vi.mocked(callApiJson).mockImplementationOnce(
       () =>
-        new Promise((resolve) => {
+        new Promise<any>((resolve) => {
           resolveJobCreation = resolve;
         }),
     );
@@ -268,17 +264,12 @@ describe('RunTestSuiteButton', () => {
     unmount();
 
     await act(async () => {
-      resolveJobCreation?.(
-        new Response(JSON.stringify({ id: 'late-job' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
+      resolveJobCreation?.({ id: 'late-job' });
       await Promise.resolve();
       await Promise.resolve();
       await timers.advanceByAsync(1500);
     });
 
-    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+    expect(callApiJson).toHaveBeenCalledTimes(1);
   });
 });

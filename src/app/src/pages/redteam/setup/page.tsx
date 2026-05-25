@@ -24,9 +24,11 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
+import { ConfigSchemas } from '@promptfoo/types/api/configs';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
 import { ProviderOptionsSchema } from '@promptfoo/validators/providers';
 import yaml from 'js-yaml';
 import {
@@ -225,7 +227,7 @@ export default function RedTeamSetupPage() {
     });
 
     try {
-      const response = await callApi('/configs', {
+      const data = await callApiJson(ApiRoutes.Configs.Create, ConfigSchemas.Create.Response, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,12 +238,6 @@ export default function RedTeamSetupPage() {
           config,
         }),
       });
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
       toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
@@ -262,12 +258,9 @@ export default function RedTeamSetupPage() {
   const loadConfigs = async () => {
     recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
-      const response = await callApi('/configs?type=redteam');
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const data = await callApiJson(ApiRoutes.Configs.List, ConfigSchemas.List.Response, {
+        query: new URLSearchParams({ type: 'redteam' }),
+      });
 
       setHasUnsavedChanges(false);
 
@@ -289,12 +282,9 @@ export default function RedTeamSetupPage() {
 
   const handleLoadConfig = async (id: string) => {
     try {
-      const response = await callApi(`/configs/redteam/${id}`);
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const data = await callApiJson(ApiRoutes.Configs.Get, ConfigSchemas.Get.Response, {
+        params: { type: 'redteam', id },
+      });
 
       setFullConfig(data.config);
       setConfigName(data.name);

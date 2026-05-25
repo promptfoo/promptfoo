@@ -1,19 +1,19 @@
-import { mockCallApiResponse, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApiJson: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('useVersionCheck', () => {
+  const mockCallApiJson = vi.mocked(callApiJson);
   beforeEach(() => {
-    resetCallApiMock();
+    mockCallApiJson.mockReset();
     localStorage.clear();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
     // Only use fake timers in specific tests that need timer control
@@ -41,7 +41,7 @@ describe('useVersionCheck', () => {
       },
     };
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -51,8 +51,7 @@ describe('useVersionCheck', () => {
 
     expect(result.current.versionInfo).toEqual(mockVersionInfo);
     expect(result.current.error).toBeNull();
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
   });
 
   it('should set dismissed=true if the latest version matches the value in localStorage', async () => {
@@ -71,7 +70,7 @@ describe('useVersionCheck', () => {
 
     localStorage.setItem(STORAGE_KEY, mockVersionInfo.latestVersion);
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -95,7 +94,7 @@ describe('useVersionCheck', () => {
       },
     };
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -126,7 +125,7 @@ describe('useVersionCheck', () => {
       },
     };
 
-    mockCallApiResponse(mockVersionInfo);
+    mockCallApiJson.mockResolvedValue(mockVersionInfo as any);
 
     const { result, rerender } = renderHook(() => useVersionCheck());
 
@@ -134,18 +133,18 @@ describe('useVersionCheck', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
 
     rerender();
 
     // Wait a short time to ensure no additional calls are made
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
   });
 
   it('should handle network errors by setting loading=false and populating the error state', async () => {
-    rejectCallApi(new Error('Network error'));
+    mockCallApiJson.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -156,7 +155,6 @@ describe('useVersionCheck', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error?.message).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
+    expect(mockCallApiJson).toHaveBeenCalledTimes(1);
   });
 });

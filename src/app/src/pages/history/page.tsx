@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ServerSchemas } from '@promptfoo/types/api/server';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
 import type { StandaloneEval } from '@promptfoo/util/database';
@@ -23,11 +25,10 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await callApi('/history');
-        const data = await response.json();
+        const data = await callApiJson(ApiRoutes.History, ServerSchemas.History.Response);
 
         if (data?.data) {
-          setCols(data.data);
+          setCols(data.data as StandaloneEval[]);
         }
       } catch (err) {
         setError('Failed to load history data. Please try again.');

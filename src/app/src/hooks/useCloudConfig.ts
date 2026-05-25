@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { callApi } from '../utils/api';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { UserSchemas } from '@promptfoo/types/api/user';
+import { callApiJson } from '../utils/api';
 
 export type CloudConfigData = {
   appUrl: string;
@@ -28,11 +30,10 @@ export default function useCloudConfig(): {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await callApi('/user/cloud-config');
-      if (!response.ok) {
-        throw new Error('Failed to fetch cloud config');
-      }
-      const responseData = await response.json();
+      const responseData = await callApiJson(
+        ApiRoutes.User.CloudConfig,
+        UserSchemas.CloudConfig.Response,
+      );
       setData(responseData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';

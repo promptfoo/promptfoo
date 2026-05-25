@@ -58,6 +58,32 @@ vi.mock('@app/utils/api', () => ({
     }
     return { ok: true, json: async () => ({}) };
   }),
+  callApiJson: vi.fn(
+    async (
+      route: { clientPath: string },
+      _schema: unknown,
+      options: {
+        params?: Record<string, string | number>;
+        query?: URLSearchParams;
+      } & RequestInit = {},
+    ) => {
+      let path = route.clientPath;
+      for (const [name, value] of Object.entries(options.params ?? {})) {
+        path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+      }
+      const query = options.query?.toString();
+      const requestPath = query ? `${path}?${query}` : path;
+      const response =
+        Object.keys(options).length === 0
+          ? await vi.mocked(callApi)(requestPath)
+          : await vi.mocked(callApi)(requestPath, options);
+      if (response.ok === false) {
+        const body = await response.json();
+        throw new Error(body.error ?? 'Request failed');
+      }
+      return response.json();
+    },
+  ),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
@@ -1494,7 +1520,9 @@ Application Details:
 
       // Wait for recovery to complete
       await waitFor(() => {
-        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999');
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999', {
+          params: { id: 'saved-job-999' },
+        });
       });
 
       // Should clear job since it completed while away

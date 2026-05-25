@@ -1,5 +1,5 @@
 import { mockWindowOpen } from '@app/tests/browserMocks';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -28,7 +28,7 @@ vi.mock('@app/stores/evalConfig', () => ({
 }));
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApiJson: vi.fn(),
   fetchUserEmail: vi.fn().mockResolvedValue('test@example.com'),
   updateEvalAuthor: vi.fn().mockResolvedValue({}),
 }));
@@ -225,12 +225,8 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
   };
 }
 
-function createCopyEvalResponse(): Response {
-  return new Response(JSON.stringify({ id: 'new-eval-id', distinctTestCount: 1234 }), {
-    status: 200,
-    statusText: 'OK',
-    headers: { 'Content-Type': 'application/json' },
-  });
+function createCopyEvalResponse() {
+  return { id: 'new-eval-id', distinctTestCount: 1234 };
 }
 
 beforeEach(() => {
@@ -238,8 +234,8 @@ beforeEach(() => {
     filterMode: 'all',
     setFilterMode: vi.fn(),
   });
-  vi.mocked(callApi).mockReset();
-  vi.mocked(callApi).mockResolvedValue(createCopyEvalResponse());
+  vi.mocked(callApiJson).mockReset();
+  vi.mocked(callApiJson).mockResolvedValue(createCopyEvalResponse() as any);
   mockWindowOpen();
 });
 
@@ -1881,7 +1877,7 @@ describe('ResultsView Copy Eval handling', () => {
   });
 
   it('should call handleCopyEval even when the description is the same', async () => {
-    const mockCallApi = vi.mocked(callApi);
+    const mockCallApi = vi.mocked(callApiJson);
     mockCallApi.mockClear();
 
     vi.mocked(useTableStore).mockReturnValue({

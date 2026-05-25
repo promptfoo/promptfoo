@@ -35,6 +35,10 @@ vi.mock('@app/hooks/useToast', () => ({ useToast: vi.fn() }));
 vi.mock('./hooks/useSetupState', () => ({ useSetupState: vi.fn() }));
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  callApiJson: vi.fn(async (_route: unknown, _schema: unknown, options?: RequestInit) => {
+    const response = await vi.mocked(callApi)(options);
+    return response.json();
+  }),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),

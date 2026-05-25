@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -151,10 +151,7 @@ describe('Eval', () => {
 
     // Use stable mock to prevent infinite loops
     vi.mocked(useResultsViewSettingsStore).mockReturnValue(baseMockResultsViewSettings);
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [] } as any);
   });
 
   afterEach(() => {
@@ -238,10 +235,7 @@ describe('Eval', () => {
       fetchEvalData: fetchEvalDataMock,
     });
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'test-eval' }] } as any);
 
     const { queryByText } = render(
       <MemoryRouter>
@@ -264,10 +258,7 @@ describe('Eval', () => {
       table: mockTable, // Table is available
     });
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'test-eval' }] } as any);
 
     const { queryByTestId } = render(
       <MemoryRouter>

@@ -10,6 +10,37 @@ import type { MediaItem } from './types';
 // Mock callApi and useTelemetry before importing the component
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  ApiResponseError: class ApiResponseError extends Error {
+    constructor(
+      public status: number,
+      public body: { error: string },
+      public response: Response,
+    ) {
+      super(body.error);
+    }
+  },
+  callApiJson: vi.fn(
+    async (
+      route: { clientPath: string },
+      _schema: unknown,
+      options: {
+        params?: Record<string, string | number>;
+        query?: URLSearchParams;
+      } & RequestInit = {},
+    ) => {
+      let path = route.clientPath;
+      for (const [name, value] of Object.entries(options.params ?? {})) {
+        path = path.replace(`:${name}`, encodeURIComponent(String(value)));
+      }
+      const query = options.query?.toString();
+      const response = await vi.mocked(callApi)(query ? `${path}?${query}` : path, options);
+      if (!response.ok) {
+        const { ApiResponseError } = await import('@app/utils/api');
+        throw new ApiResponseError(response.status, { error: 'Server error' }, response);
+      }
+      return response.json();
+    },
+  ),
   getApiBaseUrl: () => '',
 }));
 

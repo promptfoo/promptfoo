@@ -1,12 +1,6 @@
 import React from 'react';
 
-import {
-  createMockResponse,
-  getCallApiMock,
-  mockCallApiResponse,
-  rejectCallApi,
-  resetCallApiMock,
-} from '@app/tests/apiMocks';
+import { callApiJson } from '@app/utils/api';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +8,7 @@ import { useApiHealth } from './useApiHealth';
 
 // Mock the API call
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApiJson: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
@@ -22,9 +16,10 @@ vi.mock('@app/utils/api', () => ({
 
 describe('useApiHealth', () => {
   let queryClient: QueryClient;
+  const mockCallApiJson = vi.mocked(callApiJson);
 
   beforeEach(() => {
-    resetCallApiMock();
+    mockCallApiJson.mockReset();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: {
@@ -48,7 +43,7 @@ describe('useApiHealth', () => {
   });
 
   it('handles successful health check', async () => {
-    mockCallApiResponse({ status: 'OK', message: 'Cloud API is healthy' });
+    mockCallApiJson.mockResolvedValue({ status: 'OK', message: 'Cloud API is healthy' });
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -64,7 +59,7 @@ describe('useApiHealth', () => {
   });
 
   it('handles failed health check', async () => {
-    mockCallApiResponse({ status: 'ERROR', message: 'API is not accessible' });
+    mockCallApiJson.mockResolvedValue({ status: 'ERROR', message: 'API is not accessible' });
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -80,7 +75,7 @@ describe('useApiHealth', () => {
   });
 
   it('handles network errors', async () => {
-    rejectCallApi(new Error('Network error'));
+    mockCallApiJson.mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -96,7 +91,10 @@ describe('useApiHealth', () => {
   });
 
   it('handles disabled status from API', async () => {
-    mockCallApiResponse({ status: 'DISABLED', message: 'Remote generation is disabled' });
+    mockCallApiJson.mockResolvedValue({
+      status: 'DISABLED',
+      message: 'Remote generation is disabled',
+    });
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -113,11 +111,9 @@ describe('useApiHealth', () => {
 
   it('updates status when API response changes', async () => {
     // First call succeeds
-    getCallApiMock()
-      .mockResolvedValueOnce(createMockResponse({ status: 'OK', message: 'Cloud API is healthy' }))
-      .mockResolvedValueOnce(
-        createMockResponse({ status: 'ERROR', message: 'API is not accessible' }),
-      );
+    mockCallApiJson
+      .mockResolvedValueOnce({ status: 'OK', message: 'Cloud API is healthy' })
+      .mockResolvedValueOnce({ status: 'ERROR', message: 'API is not accessible' });
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -137,12 +133,12 @@ describe('useApiHealth', () => {
 
   it('shows loading state transitions correctly', async () => {
     // Start with a slow response
-    let resolvePromise: (value: Response) => void;
-    const slowPromise = new Promise<Response>((resolve) => {
+    let resolvePromise: (value: { status: string; message: string }) => void;
+    const slowPromise = new Promise<{ status: string; message: string }>((resolve) => {
       resolvePromise = resolve;
     });
 
-    getCallApiMock().mockReturnValue(slowPromise);
+    mockCallApiJson.mockReturnValue(slowPromise);
 
     const { result } = renderHook(() => useApiHealth(), { wrapper });
 
@@ -167,7 +163,7 @@ describe('useApiHealth', () => {
     });
 
     // Resolve the promise
-    resolvePromise!(createMockResponse({ status: 'OK', message: 'test' }));
+    resolvePromise!({ status: 'OK', message: 'test' });
 
     // Wait for the refetch to complete
     await refetchPromise;

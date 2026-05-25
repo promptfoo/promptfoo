@@ -1,6 +1,9 @@
 import useApiConfig from '@app/stores/apiConfig';
-import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
-import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/types/api/user';
+import { type ErrorResponse, ErrorResponseSchema } from '@promptfoo/types/api/common';
+import { EvalSchemas, type UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
+import { type ApiRouteContract, ApiRoutes, buildApiPath } from '@promptfoo/types/api/routes';
+import { UserSchemas } from '@promptfoo/types/api/user';
+import type { ZodType } from 'zod';
 
 export function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
@@ -15,17 +18,90 @@ export async function callApi(path: string, options: RequestInit = {}): Promise<
   return fetch(`${getApiBaseUrl()}/api${path}`, options);
 }
 
+export type ApiRequestOptions = RequestInit & {
+  params?: Record<string, string | number>;
+  query?: URLSearchParams;
+};
+
+export class ApiResponseError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly body: ErrorResponse,
+    public readonly response: Response,
+  ) {
+    super(body.error);
+    this.name = 'ApiResponseError';
+  }
+}
+
+type ApiResult<T> =
+  | { ok: true; data: T; response: Response }
+  | { ok: false; error: ApiResponseError; response: Response };
+
+function createRoutePath(
+  route: Pick<ApiRouteContract, 'clientPath'>,
+  params?: Record<string, string | number>,
+  query?: URLSearchParams,
+): string {
+  const path = buildApiPath(route, params);
+  const search = query?.toString();
+  return search ? `${path}?${search}` : path;
+}
+
+async function readErrorResponse(response: Response): Promise<ApiResponseError> {
+  let body: ErrorResponse = { error: `Request failed (${response.status})` };
+  try {
+    const parsed = ErrorResponseSchema.safeParse(await response.json());
+    if (parsed.success) {
+      body = parsed.data;
+    }
+  } catch {
+    // Some legacy/non-JSON upstream failures have no typed envelope.
+  }
+  return new ApiResponseError(response.status, body, response);
+}
+
+export async function callApiResult<T>(
+  route: Pick<ApiRouteContract, 'clientPath'>,
+  schema: ZodType<T>,
+  options: ApiRequestOptions = {},
+): Promise<ApiResult<T>> {
+  const { params, query, ...requestInit } = options;
+  const response = await callApi(createRoutePath(route, params, query), requestInit);
+  if (!response.ok) {
+    return { ok: false, error: await readErrorResponse(response), response };
+  }
+  return { ok: true, data: schema.parse(await response.json()), response };
+}
+
+export async function callApiJson<T>(
+  route: Pick<ApiRouteContract, 'clientPath'>,
+  schema: ZodType<T>,
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  const result = await callApiResult(route, schema, options);
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.data;
+}
+
+export async function callApiEmpty(
+  route: Pick<ApiRouteContract, 'clientPath'>,
+  options: ApiRequestOptions = {},
+): Promise<void> {
+  const { params, query, ...requestInit } = options;
+  const response = await callApi(createRoutePath(route, params, query), requestInit);
+  if (!response.ok) {
+    throw await readErrorResponse(response);
+  }
+}
+
 export async function fetchUserEmail(): Promise<string | null> {
   try {
-    const response = await callApi('/user/email', {
+    const data = await callApiJson(ApiRoutes.User.Get, UserSchemas.Get.Response, {
       method: 'GET',
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user email');
-    }
-
-    const data: GetUserResponse = await response.json();
     return data.email;
   } catch (error) {
     console.error('Error fetching user email:', error);
@@ -35,15 +111,9 @@ export async function fetchUserEmail(): Promise<string | null> {
 
 export async function fetchUserId(): Promise<string | null> {
   try {
-    const response = await callApi('/user/id', {
+    const data = await callApiJson(ApiRoutes.User.GetId, UserSchemas.GetId.Response, {
       method: 'GET',
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch user ID');
-    }
-
-    const data: GetUserIdResponse = await response.json();
     return data.id;
   } catch (error) {
     console.error('Error fetching user ID:', error);
@@ -55,17 +125,19 @@ export async function updateEvalAuthor(
   evalId: string,
   author: string,
 ): Promise<UpdateEvalAuthorResponse> {
-  const response = await callApi(`/eval/${evalId}/author`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ author }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to update eval author');
+  try {
+    return await callApiJson(ApiRoutes.Eval.UpdateAuthor, EvalSchemas.UpdateAuthor.Response, {
+      params: { id: evalId },
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ author }),
+    });
+  } catch (error) {
+    if (error instanceof ApiResponseError) {
+      throw new Error('Failed to update eval author');
+    }
+    throw error;
   }
-
-  return response.json();
 }

@@ -15,7 +15,7 @@ const mockUseResultsViewSettingsStore = vi.fn();
 
 // Mock dependencies
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApiJson: vi.fn(),
   fetchUserEmail: vi.fn().mockResolvedValue(null),
   updateEvalAuthor: vi.fn(),
 }));
@@ -306,11 +306,8 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should successfully delete and navigate to next eval', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'Eval deleted successfully' }),
-    } as Response);
+    const { callApiJson } = await import('@app/utils/api');
+    vi.mocked(callApiJson).mockResolvedValue({ message: 'Eval deleted successfully' } as any);
 
     renderWithMockData();
 
@@ -337,11 +334,8 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should navigate to previous eval when deleting last eval', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'Eval deleted successfully' }),
-    } as Response);
+    const { callApiJson } = await import('@app/utils/api');
+    vi.mocked(callApiJson).mockResolvedValue({ message: 'Eval deleted successfully' } as any);
 
     // Current eval is the last one (eval-3)
     renderWithMockData({ ...defaultProps, defaultEvalId: 'eval-3' });
@@ -366,11 +360,8 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should navigate home when deleting only eval', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'Eval deleted successfully' }),
-    } as Response);
+    const { callApiJson } = await import('@app/utils/api');
+    vi.mocked(callApiJson).mockResolvedValue({ message: 'Eval deleted successfully' } as any);
 
     renderWithMockData({
       ...defaultProps,
@@ -407,11 +398,8 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should show error toast on delete failure', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
-    vi.mocked(callApi).mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: 'Database error' }),
-    } as Response);
+    const { callApiJson } = await import('@app/utils/api');
+    vi.mocked(callApiJson).mockRejectedValue(new Error('Database error'));
 
     renderWithMockData();
 
@@ -435,15 +423,11 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should show loading state during deletion', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
+    const { callApiJson } = await import('@app/utils/api');
     let resolveDelete: () => void;
-    vi.mocked(callApi).mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveDelete = () =>
-          resolve({
-            ok: true,
-            json: async () => ({ message: 'Success' }),
-          } as Response);
+    vi.mocked(callApiJson).mockReturnValue(
+      new Promise<any>((resolve) => {
+        resolveDelete = () => resolve({ message: 'Success' });
       }),
     );
 
@@ -482,8 +466,8 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should handle network errors gracefully', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
-    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+    const { callApiJson } = await import('@app/utils/api');
+    vi.mocked(callApiJson).mockRejectedValue(new Error('Network error'));
 
     renderWithMockData();
 
@@ -507,15 +491,11 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should not close delete confirmation dialog by clicking outside or pressing escape when deletion is in progress', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
+    const { callApiJson } = await import('@app/utils/api');
     let resolveDelete: () => void;
-    vi.mocked(callApi).mockReturnValue(
-      new Promise<Response>((resolve) => {
-        resolveDelete = () =>
-          resolve({
-            ok: true,
-            json: async () => ({ message: 'Success' }),
-          } as Response);
+    vi.mocked(callApiJson).mockReturnValue(
+      new Promise<any>((resolve) => {
+        resolveDelete = () => resolve({ message: 'Success' });
       }),
     );
 
@@ -549,11 +529,8 @@ describe('ResultsView - Delete Functionality', () => {
 
   it('should navigate home when deleting an eval not in recentEvals', async () => {
     const user = userEvent.setup();
-    const { callApi } = await import('@app/utils/api');
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ message: 'Eval deleted successfully' }),
-    } as Response);
+    const { callApiJson } = await import('@app/utils/api');
+    vi.mocked(callApiJson).mockResolvedValue({ message: 'Eval deleted successfully' } as any);
 
     renderWithMockData({
       ...defaultProps,

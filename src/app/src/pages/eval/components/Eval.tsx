@@ -7,8 +7,10 @@ import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ServerSchemas } from '@promptfoo/types/api/server';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
@@ -82,14 +84,17 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   const fetchRecentFileEvals = async () => {
-    const resp = await callApi(`/results`, { cache: 'no-store' });
-    if (!resp.ok) {
+    try {
+      const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
+        cache: 'no-store',
+      });
+      const evals = body.data as ResultLightweightWithLabel[];
+      setRecentEvals(evals);
+      return evals;
+    } catch {
       setFailed(true);
       return;
     }
-    const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-    setRecentEvals(body.data);
-    return body.data;
   };
 
   /**
