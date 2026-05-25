@@ -311,6 +311,8 @@ const DATA_HTML_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   object: ['data'],
   embed: ['src'],
 };
+const MATHML_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'onafterprint',
   'onabort',
@@ -485,6 +487,7 @@ interface ParsedSourceLocation {
 interface ParsedHtmlNode {
   nodeName?: string;
   tagName?: string;
+  namespaceURI?: string;
   attrs?: ParsedHtmlAttribute[];
   childNodes?: ParsedHtmlNode[];
   sourceCodeLocation?: ParsedSourceLocation | null;
@@ -728,9 +731,19 @@ interface MarkdownInlineDestination {
 }
 
 interface MarkdownReferenceDestination {
+  destinationEnd: number;
+  destinationOffset: number;
   evidence: string;
   label: string;
   value: string;
+}
+
+interface MarkdownLogicalLine {
+  content: string;
+  contentOffset: number;
+  endOffset: number;
+  lineStart: number;
+  quoteDepth: number;
 }
 
 function findBalancedMarkdownDelimiter(
@@ -848,28 +861,89 @@ function findMarkdownInlineDestinations(source: string): MarkdownInlineDestinati
   return destinations;
 }
 
-function findMarkdownReferenceDestinations(source: string): MarkdownReferenceDestination[] {
-  const destinations: MarkdownReferenceDestination[] = [];
-  for (const match of source.matchAll(/^[ \t]{0,3}\[/gm)) {
+function getMarkdownLogicalLines(source: string): MarkdownLogicalLine[] {
+  const lines: MarkdownLogicalLine[] = [];
+  for (const match of source.matchAll(/[^\r\n]*(?:\r?\n|$)/g)) {
+    if (!match[0]) {
+      continue;
+    }
     const lineStart = match.index ?? 0;
-    const labelStart = lineStart + match[0].lastIndexOf('[');
+    const rawLine = match[0].replace(/\r?\n$/, '');
+    const prefix = rawLine.match(/^[ \t]{0,3}(?:(?:>[ \t]?)[ \t]{0,3})*/)?.[0] ?? '';
+    lines.push({
+      content: rawLine.slice(prefix.length),
+      contentOffset: lineStart + prefix.length,
+      endOffset: lineStart + rawLine.length,
+      lineStart,
+      quoteDepth: (prefix.match(/>/g) ?? []).length,
+    });
+  }
+  return lines;
+}
+
+function findMarkdownReferenceDestinations(
+  source: string,
+  includeDuplicateDefinitions = false,
+): MarkdownReferenceDestination[] {
+  const destinations: MarkdownReferenceDestination[] = [];
+  const definedLabels = new Set<string>();
+  const definitionEndLines = new Set<number>();
+  const lines = getMarkdownLogicalLines(source);
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    if (!line.content.startsWith('[')) {
+      continue;
+    }
+    const previousLine = lines[lineIndex - 1];
+    if (
+      previousLine &&
+      previousLine.quoteDepth === line.quoteDepth &&
+      previousLine.content.trim() &&
+      !definitionEndLines.has(lineIndex - 1)
+    ) {
+      continue;
+    }
+
+    const labelStart = line.contentOffset;
     const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
     if (labelEnd === undefined || source[labelEnd + 1] !== ':') {
       continue;
     }
-    const nextLine = source.indexOf('\n', labelEnd + 2);
-    const lineEnd = nextLine < 0 ? source.length : nextLine;
-    const evidence = source.slice(lineStart, lineEnd).replace(/\r$/, '');
-    const value = extractMarkdownDestinationValue(
-      source.slice(labelEnd + 2, lineEnd).replace(/\r$/, ''),
-    );
-    if (value !== undefined) {
-      destinations.push({
-        evidence,
-        label: source.slice(labelStart + 1, labelEnd),
-        value,
-      });
+
+    let destinationLine = line;
+    let rawValue = source.slice(labelEnd + 2, line.endOffset);
+    if (!rawValue.trim()) {
+      const continuation = lines[lineIndex + 1];
+      if (!continuation || continuation.quoteDepth !== line.quoteDepth) {
+        continue;
+      }
+      destinationLine = continuation;
+      rawValue = continuation.content;
     }
+    const value = extractMarkdownDestinationValue(rawValue);
+    if (value === undefined) {
+      continue;
+    }
+
+    const label = source.slice(labelStart + 1, labelEnd);
+    const normalizedLabel = normalizeMarkdownReferenceLabel(label);
+    definitionEndLines.add(lines.indexOf(destinationLine));
+    if (definedLabels.has(normalizedLabel) && !includeDuplicateDefinitions) {
+      continue;
+    }
+    definedLabels.add(normalizedLabel);
+    const valueStart = rawValue.search(/\S/);
+    destinations.push({
+      destinationEnd: destinationLine.endOffset,
+      destinationOffset:
+        destinationLine === line
+          ? labelEnd + 2 + valueStart
+          : destinationLine.contentOffset + valueStart,
+      evidence: source.slice(line.lineStart, destinationLine.endOffset).replace(/\r$/, ''),
+      label,
+      value,
+    });
   }
   return destinations;
 }
@@ -960,11 +1034,36 @@ function findExecutableJavascriptUrlEvidence(
     const values = (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).map(
       (attributeName) => getParsedAttributeValue(element, attributeName),
     );
+    if (element.namespaceURI === MATHML_NAMESPACE) {
+      values.push(
+        getParsedAttributeValue(element, 'href'),
+        getParsedAttributeValue(element, 'xlink:href'),
+      );
+    }
     const metaRefreshValue = getMetaRefreshValue(element);
     if (metaRefreshValue !== undefined) {
       values.push(metaRefreshValue);
     }
-    return values.some((value) => value !== undefined && hasJavascriptUrlValue(value));
+    if (values.some((value) => value !== undefined && hasJavascriptUrlValue(value))) {
+      return true;
+    }
+    return (
+      element.namespaceURI === SVG_NAMESPACE &&
+      (element.tagName === 'animate' || element.tagName === 'set') &&
+      ['href', 'xlink:href'].includes(
+        (
+          getParsedAttributeValue(element, 'attributeName') ??
+          getParsedAttributeValue(element, 'attributename')
+        )
+          ?.trim()
+          .toLowerCase() ?? '',
+      ) &&
+      ['values', 'from', 'to'].some((attributeName) =>
+        getParsedAttributeValue(element, attributeName)
+          ?.split(';')
+          .some((value) => hasJavascriptUrlValue(value)),
+      )
+    );
   });
   return node
     ? getElementEvidence(output, node, true)
@@ -1171,8 +1270,16 @@ function isInsideMarkdownImageLabel(source: string, offset: number): boolean {
 }
 
 function isMarkdownReferenceDefinitionDestination(source: string, offset: number): boolean {
+  if (
+    findMarkdownReferenceDestinations(source, true).some(
+      (destination) =>
+        offset >= destination.destinationOffset && offset < destination.destinationEnd,
+    )
+  ) {
+    return true;
+  }
   const lineStart = source.lastIndexOf('\n', Math.max(0, offset - 1)) + 1;
-  return /^\s{0,3}\[(?:\\[^\r\n]|[^\]\\\r\n])+\]:\s*(?:<\s*)?$/.test(
+  return /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\[(?:\\[^\r\n]|[^\]\\\r\n])+\]:\s*(?:<\s*)?$/.test(
     source.slice(lineStart, offset),
   );
 }
@@ -1267,6 +1374,18 @@ function findExecutableDataHtmlEvidence(
     const values = (DATA_HTML_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).map(
       (attributeName) => getParsedAttributeValue(element, attributeName),
     );
+    if (element.namespaceURI === SVG_NAMESPACE && element.tagName === 'use') {
+      values.push(
+        getParsedAttributeValue(element, 'href'),
+        getParsedAttributeValue(element, 'xlink:href'),
+      );
+    }
+    if (element.namespaceURI === MATHML_NAMESPACE) {
+      values.push(
+        getParsedAttributeValue(element, 'href'),
+        getParsedAttributeValue(element, 'xlink:href'),
+      );
+    }
     const metaRefreshValue = getMetaRefreshValue(element);
     if (metaRefreshValue !== undefined) {
       values.push(metaRefreshValue);

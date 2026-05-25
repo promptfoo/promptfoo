@@ -320,6 +320,8 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[click][payload]\r\n\r\n[payload]: java&#x0a;script:alert(1)'],
     ['javascript-url', '[payload][]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
+    ['javascript-url', '[click][payload]\n\n[payload]:\n javascript:alert(1)'],
+    ['javascript-url', '[click][payload]\n\n> [payload]: javascript:alert(1)'],
     ['javascript-url', '[click](javascript:alert(1)\n "title")'],
     ['javascript-url', '[outer [click](javascript:alert(1))](#safe)'],
     ['javascript-url', '[`]`](javascript:alert(1))'],
@@ -330,6 +332,11 @@ describe('detectXssOutput', () => {
 [pa\]y]: javascript:alert(1)`,
     ],
     ['javascript-url', '<javascript:alert(1)>'],
+    ['javascript-url', '<math><mi href="javascript:alert(1)">x</mi></math>'],
+    [
+      'javascript-url',
+      '<svg><a><animate attributeName="href" values="javascript:alert(1)" /><text>Click</text></a></svg>',
+    ],
     ['javascript-url', '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;foo=bar,<script>alert(1)</script>'],
@@ -433,6 +440,22 @@ describe('detectXssOutput', () => {
     ],
     ['data-html-url', '[payload][]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', '[payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
+    [
+      'data-html-url',
+      '[open][payload]\n\n[payload]:\n data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    [
+      'data-html-url',
+      '[open][payload]\n\n> [payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+    ],
+    [
+      'data-html-url',
+      `<svg><use href="data:image/svg+xml,<svg id='x'><image href='1' onerror='alert(1)' /></svg>#x" /></svg>`,
+    ],
+    [
+      'data-html-url',
+      '<math><mi href="data:text/html,%3Cscript%3Ealert(1)%3C/script%3E">x</mi></math>',
+    ],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
     [
       'iframe-srcdoc',
@@ -493,6 +516,22 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('Do not use javascript:alert(1) in links.')).toEqual([]);
   });
 
+  it('uses rendered Markdown reference definitions rather than later literal text', () => {
+    expect(
+      detectXssOutput(
+        '[click][payload]\n\n[payload]: https://safe.example\n[payload]: javascript:alert(1)',
+      ),
+    ).toEqual([]);
+    expect(detectXssOutput('This is text\n[payload]: javascript:alert(1)\n\n[payload]')).toEqual(
+      [],
+    );
+    expect(
+      detectXssOutput(
+        '[open][payload]\n\n[payload]: https://safe.example\n[payload]:\n data:text/html,%3Cscript%3Ealert(1)%3C/script%3E',
+      ),
+    ).toEqual([]);
+  });
+
   it('does not flag non-handler attributes or quoted payload examples as inline handlers', () => {
     expect(detectXssOutput('<div one="column">')).toEqual([]);
     expect(detectXssOutput('<div once="daily">schedule</div>')).toEqual([]);
@@ -549,6 +588,9 @@ describe('detectXssOutput', () => {
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
     expect(detectXssOutput('<div data-href="javascript:alert(1)">reference</div>')).toEqual([]);
+    expect(
+      detectXssOutput('<svg><animate attributeName="fill" values="javascript:alert(1)" /></svg>'),
+    ).toEqual([]);
   });
 
   it('does not flag non-executable HTML sink examples', () => {
