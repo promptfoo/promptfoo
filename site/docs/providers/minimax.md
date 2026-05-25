@@ -7,7 +7,7 @@ description: Configure MiniMax's OpenAI-compatible API with high-performance M2.
 
 # MiniMax
 
-[MiniMax](https://platform.minimax.io/) provides an OpenAI-compatible API for their language models. The MiniMax provider is compatible with all the options provided by the [OpenAI provider](/docs/providers/openai/).
+[MiniMax](https://platform.minimax.io/) provides an OpenAI-compatible API for their language models. The MiniMax provider follows the [OpenAI provider](/docs/providers/openai/) chat configuration pattern, with the MiniMax-specific parameter differences described below.
 
 ## Setup
 
@@ -23,48 +23,50 @@ providers:
   - id: minimax:MiniMax-M2.7
     config:
       temperature: 0.7
-      max_tokens: 4000
+      max_completion_tokens: 2048
       apiKey: YOUR_MINIMAX_API_KEY
 
   - id: minimax:MiniMax-M2.7-highspeed
     config:
-      max_tokens: 4000
+      max_completion_tokens: 2048
 ```
 
 ### Configuration Options
 
 - `temperature` - Range `(0.0, 1.0]`, cannot be 0
-- `max_tokens`
+- `max_completion_tokens` - Maximum completion tokens; the OpenAI-compatible API currently allows up to `2048`. Legacy `max_tokens` config is translated to this field for compatibility.
+- `apiBaseUrl` - Optional custom MiniMax-compatible proxy endpoint
 - `top_p`
-- `stream`
+
+When MiniMax reports prompt-cache reads, promptfoo calculates cost using the returned cached token count and the model's cache-read rate.
 
 ## Available Models
 
 ### MiniMax-M2.7 (Default)
 
 - Latest flagship model with enhanced reasoning and coding
-- 204,800 token context window, up to 192K output tokens
+- 204,800 token context window
 - Input: $0.06/1M (cache hit), $0.3/1M (cache miss)
 - Output: $1.2/1M
 
 ### MiniMax-M2.7-highspeed
 
 - High-speed version of M2.7 for low-latency scenarios
-- 204,800 token context window, up to 192K output tokens
+- 204,800 token context window
 - Input: $0.06/1M (cache hit), $0.6/1M (cache miss)
 - Output: $2.4/1M
 
 ### MiniMax-M2.5
 
 - Peak performance model with ultimate value
-- 204,800 token context window, up to 192K output tokens
+- 204,800 token context window
 - Input: $0.03/1M (cache hit), $0.3/1M (cache miss)
 - Output: $1.2/1M
 
 ### MiniMax-M2.5-highspeed
 
 - Same performance, faster and more agile
-- 204,800 token context window, up to 192K output tokens
+- 204,800 token context window
 - Input: $0.03/1M (cache hit), $0.6/1M (cache miss)
 - Output: $2.4/1M
 
@@ -77,7 +79,7 @@ providers:
   - id: minimax:MiniMax-M2.7
     config:
       temperature: 0.7
-      max_tokens: 4000
+      max_completion_tokens: 2048
   - id: openai:gpt-4o
     config:
       temperature: 0.7
