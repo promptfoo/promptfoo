@@ -1,20 +1,20 @@
 ---
 title: Gollem (Go Agent Framework) Integration
 sidebar_label: Gollem (Go Agent Framework)
-description: Test and evaluate LLM agents built with gollem, a Go framework for LLM-powered agents with tool use, using promptfoo's built-in OpenAI-compatible provider.
+description: Test Gollem agents with promptfoo by calling Gollem's HTTP handler, extracting responses, and comparing tool-enabled agent behavior across model backends.
 sidebar_position: 50
 ---
 
 # Gollem integration
 
-[Gollem](https://github.com/fugue-labs/gollem) is a Go framework for building LLM-powered agents with tool use, streaming, and multi-provider support. Because gollem's OpenAI provider speaks the standard OpenAI API protocol, you can point promptfoo at a gollem-powered server and evaluate your agents using promptfoo's built-in `openai:chat` provider.
+[Gollem](https://github.com/fugue-labs/gollem) is a Go framework for building LLM-powered agents with tool use, streaming, and multi-provider support. Gollem's HTTP adapters expose an agent endpoint that accepts a `prompt` field and returns a `response` field, which you can evaluate using promptfoo's [HTTP provider](/docs/providers/http/).
 
 ## How it works
 
-Gollem can serve any agent configuration behind an OpenAI-compatible HTTP API. This means promptfoo can communicate with your gollem agent using the same protocol it uses for OpenAI, with no custom provider needed.
+Gollem's `contrib/chi` adapter exposes its own small JSON contract. It is separate from Gollem's outbound OpenAI model provider: the handler does not accept an OpenAI Chat Completions `messages` body or return `choices`. Configure promptfoo to post the rendered prompt and extract the handler's response:
 
 ```text
-promptfoo ──► OpenAI API protocol ──► gollem server ──► LLM provider(s)
+promptfoo HTTP provider ──► gollem handler ──► LLM provider(s)
                                            │
                                            ▼
                                       Tool execution,
@@ -25,9 +25,18 @@ promptfoo ──► OpenAI API protocol ──► gollem server ──► LLM pr
 
 ### 1. Create a gollem server
 
-Write a Go server that exposes your gollem agent over HTTP using the chi handler adapter:
+Initialize a Go module. Gollem's current module declares Go 1.25.1 or newer:
 
-```go
+```bash
+mkdir gollem-eval-server
+cd gollem-eval-server
+go mod init gollem-eval-server
+go get github.com/fugue-labs/gollem@latest
+```
+
+Write `server.go` to expose a Gollem agent using its `contrib/chi` HTTP adapter:
+
+```go title="server.go"
 package main
 
 import (
@@ -43,7 +52,7 @@ import (
 
 // LookupParams defines the tool's input schema.
 type LookupParams struct {
-    Email string `json:"email" description:"The user's email address"`
+    Email string `json:"email" jsonschema:"description=The user's email address"`
 }
 
 func main() {
@@ -64,7 +73,7 @@ func main() {
     )
 
     mux := http.NewServeMux()
-    mux.HandleFunc("POST /v1/chat/completions",
+    mux.HandleFunc("POST /agent",
         chihandler.Handler(&chihandler.AgentWrapper{Agent: agent}))
 
     log.Println("gollem server listening on :8080")
@@ -75,21 +84,26 @@ func main() {
 Start the server:
 
 ```bash
+go mod tidy
 export OPENAI_API_KEY="your-key"
 go run server.go
 ```
 
 ### 2. Configure promptfoo
 
-Create a `promptfooconfig.yaml` that points the `openai:chat` provider at your gollem server:
+Create a `promptfooconfig.yaml` that sends the prompt in the format accepted by Gollem's handler and extracts its `response` value:
 
 ```yaml title="promptfooconfig.yaml"
 description: 'Evaluate gollem agent'
 
 providers:
-  - id: openai:chat:gpt-4o
+  - id: http
     config:
-      apiBaseUrl: http://localhost:8080/v1
+      url: http://localhost:8080/agent
+      method: POST
+      body:
+        prompt: '{{prompt}}'
+      transformResponse: json.response
 
 prompts:
   - 'You are a helpful assistant. {{message}}'
@@ -100,22 +114,16 @@ tests:
     assert:
       - type: contains
         value: 'alice'
-      - type: llm-rubric
-        value: 'The response should contain user information for alice@example.com'
-
-  - vars:
-      message: 'What can you help me with?'
-    assert:
-      - type: llm-rubric
-        value: 'The response should describe available capabilities including user lookup'
+      - type: contains
+        value: 'active'
 
   - vars:
       message: 'Look up bob@example.com and tell me their account status'
     assert:
       - type: contains
         value: 'bob'
-      - type: cost
-        threshold: 0.05
+      - type: contains
+        value: 'active'
 ```
 
 ### 3. Run the eval
@@ -132,44 +140,38 @@ npx promptfoo@latest view
 
 ## Testing tool use
 
-One of gollem's strengths is orchestrating tool calls. You can use promptfoo to verify that your agent correctly selects and uses tools:
+Use test cases that can only pass when the sample agent invokes `lookup_user` and returns its output:
 
 ```yaml title="promptfooconfig.yaml"
-description: 'Test gollem agent tool usage'
+description: 'Test Gollem lookup tool usage'
 
 providers:
-  - id: openai:chat:gpt-4o
+  - id: http
     config:
-      apiBaseUrl: http://localhost:8080/v1
+      url: http://localhost:8080/agent
+      method: POST
+      body:
+        prompt: '{{prompt}}'
+      transformResponse: json.response
 
 prompts:
   - |
-    You are a customer support agent. Use the available tools to help the user.
-
-    User: {{query}}
+    Use the lookup_user tool and return the account status for {{email}}.
 
 tests:
   - vars:
-      query: 'What is the status of order #12345?'
+      email: 'carol@example.com'
     assert:
-      - type: contains-any
-        value:
-          - 'order'
-          - '12345'
-      - type: llm-rubric
-        value: 'The response should include specific order status information'
+      - type: contains
+        value: 'carol@example.com'
+      - type: contains
+        value: 'active'
 
   - vars:
-      query: 'Cancel my subscription'
+      email: 'dave@example.com'
     assert:
-      - type: llm-rubric
-        value: 'The response should confirm the cancellation or ask for verification'
-
-  - vars:
-      query: 'Transfer me to a human agent'
-    assert:
-      - type: llm-rubric
-        value: 'The response should acknowledge the request for human assistance'
+      - type: contains
+        value: 'dave@example.com'
 ```
 
 ## Comparing providers
@@ -178,17 +180,25 @@ Since gollem supports multiple LLM providers, you can test the same agent with d
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  # gollem with OpenAI backend
-  - id: openai:chat:gpt-4o
+  # Gollem agent configured with an OpenAI backend
+  - id: http
     label: gollem-openai
     config:
-      apiBaseUrl: http://localhost:8080/v1
+      url: http://localhost:8080/agent
+      method: POST
+      body:
+        prompt: '{{prompt}}'
+      transformResponse: json.response
 
-  # gollem with Anthropic backend (on a different port)
-  - id: openai:chat:claude-sonnet-4-5-20250929
+  # Gollem agent configured with an Anthropic backend (on a different port)
+  - id: http
     label: gollem-anthropic
     config:
-      apiBaseUrl: http://localhost:8081/v1
+      url: http://localhost:8081/agent
+      method: POST
+      body:
+        prompt: '{{prompt}}'
+      transformResponse: json.response
 
   # Direct OpenAI for comparison
   - id: openai:chat:gpt-4o
@@ -217,4 +227,4 @@ tests:
 - **Start simple:** Test basic prompt/response quality before testing complex tool chains.
 - **Use caching:** Set `PROMPTFOO_CACHE_PATH` to avoid redundant API calls while iterating on assertions.
 - **Test edge cases:** Include test cases for malformed input, missing data, and error conditions to verify your agent handles them gracefully.
-- **Monitor costs:** Use the `cost` assertion type to ensure your agent stays within budget per interaction.
+- **Monitor costs:** Return cost metadata from your handler before using `cost` assertions with a custom HTTP provider.
