@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeRepeatPassRateViolations,
+  findRepeatPassRateViolations,
   formatRepeatPassRateViolation,
 } from '../../src/util/repeatPassRateThreshold';
 
+import type Eval from '../../src/models/eval';
 import type { AtomicTestCase } from '../../src/types/index';
 
 function makeResult(opts: {
@@ -166,6 +168,128 @@ describe('computeRepeatPassRateViolations', () => {
         passRate: 0,
         description: undefined,
       },
+    ]);
+  });
+});
+
+describe('findRepeatPassRateViolations', () => {
+  it('returns no violations when the threshold is not finite', async () => {
+    const evalRecord = {
+      persisted: false,
+      results: [makeResult({ testIdx: 0, promptIdx: 0, success: false })],
+    } as unknown as Eval;
+
+    expect(await findRepeatPassRateViolations(evalRecord, Number.NaN)).toEqual([]);
+    expect(await findRepeatPassRateViolations(evalRecord, Number.POSITIVE_INFINITY)).toEqual([]);
+  });
+
+  it('delegates to computeRepeatPassRateViolations for in-memory evals', async () => {
+    const evalRecord = {
+      persisted: false,
+      results: [
+        makeResult({ testIdx: 0, promptIdx: 0, success: true }),
+        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+      ],
+    } as unknown as Eval;
+
+    const violations = await findRepeatPassRateViolations(evalRecord, 80);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      testIdx: 0,
+      promptIdx: 0,
+      successes: 1,
+      total: 3,
+    });
+  });
+
+  it('streams batched results for persisted evals', async () => {
+    async function* fetchResultsBatched() {
+      yield [
+        makeResult({ testIdx: 0, promptIdx: 0, success: true }),
+        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+      ];
+      yield [
+        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 1, promptIdx: 0, success: true, description: 'OK test' }),
+      ];
+    }
+    const evalRecord = {
+      persisted: true,
+      fetchResultsBatched,
+    } as unknown as Eval;
+
+    const violations = await findRepeatPassRateViolations(evalRecord, 80);
+    expect(violations).toEqual([
+      {
+        testIdx: 0,
+        promptIdx: 0,
+        successes: 1,
+        total: 3,
+        passRate: (1 / 3) * 100,
+        description: undefined,
+      },
+    ]);
+  });
+
+  it('preserves descriptions when streaming persisted results', async () => {
+    async function* fetchResultsBatched() {
+      yield [
+        makeResult({
+          testIdx: 5,
+          promptIdx: 2,
+          success: false,
+          description: 'Tax calculation',
+        }),
+        makeResult({ testIdx: 5, promptIdx: 2, success: false }),
+      ];
+    }
+    const evalRecord = {
+      persisted: true,
+      fetchResultsBatched,
+    } as unknown as Eval;
+
+    const violations = await findRepeatPassRateViolations(evalRecord, 100);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      testIdx: 5,
+      promptIdx: 2,
+      description: 'Tax calculation',
+    });
+  });
+
+  it('returns no violations when persisted results are empty', async () => {
+    async function* fetchResultsBatched() {
+      // No yields
+    }
+    const evalRecord = {
+      persisted: true,
+      fetchResultsBatched,
+    } as unknown as Eval;
+
+    expect(await findRepeatPassRateViolations(evalRecord, 80)).toEqual([]);
+  });
+
+  it('sorts violations deterministically for persisted evals too', async () => {
+    async function* fetchResultsBatched() {
+      yield [
+        makeResult({ testIdx: 2, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 0, promptIdx: 1, success: false }),
+        makeResult({ testIdx: 0, promptIdx: 0, success: false }),
+        makeResult({ testIdx: 1, promptIdx: 0, success: false }),
+      ];
+    }
+    const evalRecord = {
+      persisted: true,
+      fetchResultsBatched,
+    } as unknown as Eval;
+
+    const violations = await findRepeatPassRateViolations(evalRecord, 100);
+    expect(violations.map((v) => [v.testIdx, v.promptIdx])).toEqual([
+      [0, 0],
+      [0, 1],
+      [1, 0],
+      [2, 0],
     ]);
   });
 });
