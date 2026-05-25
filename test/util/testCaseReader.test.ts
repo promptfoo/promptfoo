@@ -1082,10 +1082,10 @@ describe('readTests', () => {
 
   it('readTests expands assertion includes in a scalar JSON test file', async () => {
     vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
-      if (String(filePath).endsWith('/cases/tests.json')) {
+      if (String(filePath).endsWith(path.join('cases', 'tests.json'))) {
         return JSON.stringify([{ assert: [{ value: 'file://assertions/shared.yaml' }] }]);
       }
-      if (String(filePath).endsWith('/cases/assertions/shared.yaml')) {
+      if (String(filePath).endsWith(path.join('cases', 'assertions', 'shared.yaml'))) {
         return '- type: equals\n  value: expected';
       }
       throw new Error(`Unexpected test fixture read: ${String(filePath)}`);
