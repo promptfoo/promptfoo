@@ -1236,7 +1236,9 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-const DEFAULT_VERTEX_MODEL = 'gemini-2.5-pro';
+const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
+const DEFAULT_VERTEX_REGION = 'global';
+const DEFAULT_VERTEX_API_HOST = 'aiplatform.googleapis.com';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
 
 export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
@@ -1244,7 +1246,10 @@ export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
 }
 
 export function getGoogleVertexProviders(env?: EnvOverrides) {
-  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, { env });
+  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, {
+    env,
+    config: { region: DEFAULT_VERTEX_REGION, apiHost: DEFAULT_VERTEX_API_HOST },
+  });
   return {
     embeddingProvider: getGoogleVertexEmbeddingProvider(env),
     gradingJsonProvider: gradingProvider,
