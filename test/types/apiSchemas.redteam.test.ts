@@ -7,7 +7,7 @@ import {
   SuccessResponseSchema,
 } from '../../src/types/api/common';
 import { ConfigSchemas } from '../../src/types/api/configs';
-import { EvalSchemas } from '../../src/types/api/eval';
+import { EVAL_TABLE_MAX_PAGE_SIZE, EvalSchemas } from '../../src/types/api/eval';
 import { MediaSchemas } from '../../src/types/api/media';
 import { ModelAuditSchemas } from '../../src/types/api/modelAudit';
 import { ProviderSchemas } from '../../src/types/api/providers';
@@ -585,6 +585,18 @@ describe('API schema red-team coverage', () => {
       expect(EvalSchemas.Table.Query.safeParse({ limit: '1.5' }).success).toBe(false);
       expect(EvalSchemas.Table.Query.safeParse({ offset: '1.5' }).success).toBe(false);
       expect(EvalSchemas.Table.Query.safeParse({ format: 'xml' }).success).toBe(false);
+    });
+
+    it('should reject excessive table page sizes if the request is not an export', () => {
+      expect(
+        EvalSchemas.Table.Query.safeParse({ limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1) }).success,
+      ).toBe(false);
+      expect(
+        EvalSchemas.Table.Query.safeParse({
+          format: 'csv',
+          limit: String(EVAL_TABLE_MAX_PAGE_SIZE + 1),
+        }).success,
+      ).toBe(true);
     });
 
     it('accepts single comparison eval IDs for metadata keys and rejects empty metadata probes', () => {
