@@ -183,6 +183,32 @@ describe('Ruby assertions', () => {
     });
   });
 
+  it.each([
+    [
+      'preserved indentation',
+      'if output == "Expected output"\n  return true\nend',
+      '  if output == "Expected output"\n    return true\n  end',
+    ],
+    ['default indentation', 'return true\nreturn false', '  return true\n  return false'],
+  ])('should build multiline Ruby assertions with %s', async (_name, value, generatedBody) => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce(true);
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: { type: 'ruby', value },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(runRubyCode).toHaveBeenCalledWith(
+      expect.stringContaining(generatedBody),
+      'main',
+      expect.any(Array),
+    );
+    expect(result).toMatchObject({ pass: true, score: 1 });
+  });
+
   it('should not leak rendered template variables in failed inline ruby assertion reasons', async () => {
     vi.mocked(runRubyCode).mockResolvedValueOnce(false);
 
