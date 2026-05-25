@@ -783,6 +783,12 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve Ruby files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.rb', 'assertion');
+        expect(result).toBe('file://assert.rb');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should load Python files normally in general context', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('def test(): pass');
         const result = maybeLoadFromExternalFile('file://script.py', 'general');
@@ -853,6 +859,20 @@ describe('file utilities', () => {
         };
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Ruby assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'ruby',
+              value: 'file://assertion.rb:check_result',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://assertion.rb:check_result');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 

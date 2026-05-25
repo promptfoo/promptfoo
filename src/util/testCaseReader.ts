@@ -192,13 +192,19 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'js tests file',
     });
-    return readJavascriptTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
+    return expandTestCaseAssertionFileRefs(
+      await readJavascriptTestCases(pathWithoutFunction, maybeFunctionName, finalConfig),
+      path.dirname(pathWithoutFunction),
+    );
   }
   if (fileExtension === 'py') {
     telemetry.record('feature_used', {
       feature: 'python tests file',
     });
-    return readPythonTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
+    return expandTestCaseAssertionFileRefs(
+      await readPythonTestCases(pathWithoutFunction, maybeFunctionName, finalConfig),
+      path.dirname(pathWithoutFunction),
+    );
   }
 
   if (fileExtension === 'csv') {
@@ -217,13 +223,19 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
-    return readJsonTestCases(resolvedVarsPath);
+    return expandTestCaseAssertionFileRefs(
+      await readJsonTestCases(resolvedVarsPath),
+      path.dirname(resolvedVarsPath),
+    );
   }
   if (fileExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
-    return readJsonlTestCases(resolvedVarsPath);
+    return expandTestCaseAssertionFileRefs(
+      await readJsonlTestCases(resolvedVarsPath),
+      path.dirname(resolvedVarsPath),
+    );
   }
   if (fileExtension === 'yaml' || fileExtension === 'yml') {
     telemetry.record('feature_used', {
@@ -408,6 +420,21 @@ async function preExpandAssertionsInRawContent(raw: unknown, baseDir: string): P
       rawObj.assert = expanded as unknown as typeof rawObj.assert;
     }
   }
+}
+
+async function expandTestCaseAssertionFileRefs(
+  testCases: TestCase[],
+  baseDir: string,
+): Promise<TestCase[]> {
+  return Promise.all(
+    testCases.map(async (testCase) => {
+      if (!testCase.assert) {
+        return testCase;
+      }
+      const assert = await expandAssertionFileRefs(testCase.assert, { baseDir });
+      return assert ? { ...testCase, assert } : testCase;
+    }),
+  );
 }
 
 async function loadTestWithVars(

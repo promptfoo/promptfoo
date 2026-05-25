@@ -674,7 +674,7 @@ export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
-  assert: z.array(z.lazy(() => AssertionSchema)),
+  assert: z.array(z.lazy(() => z.union([AssertionSchema, AssertionFileRefSchema]))),
   // The weight of this assertion compared to other assertions in the test case. Defaults to 1.
   weight: z.number().optional(),
   // Tag this assertion result as a named metric
@@ -726,10 +726,28 @@ export const AssertionSchema = z.object({
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 /**
+ * Configuration-only syntax for including reusable assertion lists.
+ * The include is expanded before assertions are executed. Keep the resolved
+ * TestCase output type as Assertion so runtime consumers do not accept an
+ * unexpanded include.
+ */
+const AssertionFileRefSchema = z
+  .strictObject({
+    value: z
+      .string()
+      .regex(/^file:\/\/.+\.(?:json|ya?ml)$/i, 'Assertion include must reference YAML or JSON'),
+  })
+  .transform((include) => include as unknown as Assertion);
+
+/**
  * Schema for validating individual assertions (regular or assert-set).
  * Used for runtime validation of user-provided config.
  */
-export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
+export const AssertionOrSetSchema = z.union([
+  AssertionSetSchema,
+  AssertionSchema,
+  AssertionFileRefSchema,
+]);
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
@@ -858,7 +876,9 @@ export const TestCaseSchema = z.object({
   providerOutput: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
 
   // Optional list of automatic checks to run on the LLM output
-  assert: z.array(z.union([AssertionSetSchema, AssertionSchema])).optional(),
+  assert: z
+    .array(z.union([AssertionSetSchema, AssertionSchema, AssertionFileRefSchema]))
+    .optional(),
 
   // Optional scoring function to run on the LLM output
   assertScoringFunction: z

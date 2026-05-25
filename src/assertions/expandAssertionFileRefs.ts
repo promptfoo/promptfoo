@@ -17,6 +17,11 @@ interface ExpandOptions {
   depth?: number;
 }
 
+interface AssertionSetLike {
+  type: 'assert-set';
+  assert?: unknown;
+}
+
 function isFileRef(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('file://');
 }
@@ -30,7 +35,7 @@ function isAssertionFileInclude(item: unknown): item is { value: string } {
     return false;
   }
   const obj = item as Record<string, unknown>;
-  if (obj.type != null) {
+  if (Object.keys(obj).some((key) => key !== 'value')) {
     return false;
   }
   if (!isFileRef(obj.value)) {
@@ -38,6 +43,15 @@ function isAssertionFileInclude(item: unknown): item is { value: string } {
   }
   const { filePath } = parseFileUrl(obj.value);
   return hasAssertionFileExtension(filePath);
+}
+
+function isAssertionSetLike(item: unknown): item is AssertionSetLike {
+  return (
+    Boolean(item) &&
+    typeof item === 'object' &&
+    !Array.isArray(item) &&
+    (item as { type?: unknown }).type === 'assert-set'
+  );
 }
 
 function absolutizeFileRefs(value: unknown, baseDir: string): unknown {
@@ -94,6 +108,20 @@ function loadAssertionFile(resolvedPath: string): unknown {
   }
 }
 
+async function expandAssertionSet(
+  item: AssertionSetLike,
+  options: Required<Pick<ExpandOptions, 'baseDir' | 'inProgress' | 'depth'>>,
+): Promise<AssertionOrSet> {
+  if (!Array.isArray(item.assert)) {
+    return item as AssertionOrSet;
+  }
+  const assert = await expandAssertionFileRefs(item.assert as AssertionOrSet[], {
+    ...options,
+    depth: options.depth + 1,
+  });
+  return { ...item, assert: assert ?? [] } as AssertionOrSet;
+}
+
 /**
  * Expands `file://*.yaml|yml|json` include entries inside an assertion list.
  *
@@ -135,32 +163,10 @@ export async function expandAssertionFileRefs(
   const expanded: AssertionOrSet[] = [];
 
   for (const item of assertions) {
-    // Narrow shape-first, read `type` as an arbitrary string afterwards:
-    // `Assertion.type` is a string-literal union that does NOT include
-    // `'assert-set'` (that lives on `AssertionSet`), so TS would reject a
-    // direct `(item as Assertion).type === 'assert-set'` comparison with
-    // TS2367 "this comparison appears to be unintentional".
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      const maybeType = (item as { type?: unknown }).type;
-      if (maybeType === 'assert-set') {
-        const assertSet = item as { assert?: unknown };
-        // Pass malformed `assert-set` entries through unchanged so the
-        // downstream schema validator can surface a helpful error.
-        if (!Array.isArray(assertSet.assert)) {
-          expanded.push(item);
-          continue;
-        }
-        const expandedChildren = await expandAssertionFileRefs(
-          assertSet.assert as AssertionOrSet[],
-          {
-            baseDir,
-            inProgress,
-            depth: depth + 1,
-          },
-        );
-        expanded.push({ ...(item as object), assert: expandedChildren ?? [] } as AssertionOrSet);
-        continue;
-      }
+    if (isAssertionSetLike(item)) {
+      // Pass malformed sets through so the downstream validator reports them.
+      expanded.push(await expandAssertionSet(item, { baseDir, inProgress, depth }));
+      continue;
     }
 
     if (isAssertionFileInclude(item)) {

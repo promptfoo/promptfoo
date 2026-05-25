@@ -120,6 +120,17 @@ describe('expandAssertionFileRefs', () => {
     expect(out).toEqual(input);
   });
 
+  it('does not discard properties attached to an assertion include entry', async () => {
+    writeFixture('assertions/default.yaml', `- type: contains\n  value: hello\n`);
+    const input: AssertionOrSet[] = [
+      { value: 'file://assertions/default.yaml', threshold: 0.5 } as any,
+    ];
+
+    const out = await expandAssertionFileRefs(input);
+
+    expect(out).toEqual(input);
+  });
+
   it('treats two independent references to the same file as non-cyclic', async () => {
     writeFixture('assertions/shared.yaml', `- type: contains\n  value: hello\n`);
     const input: AssertionOrSet[] = [
