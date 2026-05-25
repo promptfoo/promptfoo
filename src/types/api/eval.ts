@@ -124,6 +124,7 @@ export const EvalTableResponseSchema = z
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),
+    nonEmptyPromptIndices: z.array(z.number().int().nonnegative()).nullable().optional(),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),
     version: z.number(),

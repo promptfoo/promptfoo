@@ -68,6 +68,11 @@ interface TestIndexRow {
   test_idx: number;
 }
 
+/** Result from queries selecting prompt_idx column. */
+interface PromptIndexRow {
+  prompt_idx: number;
+}
+
 /** Result from queries selecting distinct metadata or variable keys */
 interface MetadataKeyResult {
   key: string;
@@ -1055,6 +1060,34 @@ export default class Eval {
       numPrompts: this.prompts.length,
       whereSql,
     });
+  }
+
+  /**
+   * Returns prompt columns with persisted outputs anywhere in the complete filtered row set.
+   * This is intentionally based on result existence, not output text, because an executed
+   * provider may legitimately return an empty string or non-text media.
+   */
+  async getFilteredNonEmptyPromptIndices(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<number[]> {
+    const whereSql = this.buildFilterWhereSql(opts);
+    const rows = await getDb().all<PromptIndexRow>(sql`
+      WITH filtered_test_indices AS (
+        SELECT DISTINCT test_idx
+        FROM eval_results
+        WHERE ${whereSql}
+      )
+      SELECT DISTINCT results.prompt_idx AS prompt_idx
+      FROM eval_results AS results
+      JOIN filtered_test_indices AS filtered
+        ON filtered.test_idx = results.test_idx
+      WHERE results.eval_id = ${this.id}
+      ORDER BY results.prompt_idx
+    `);
+
+    return rows.map((row) => row.prompt_idx);
   }
 
   async getTablePage(opts: {

@@ -490,6 +490,11 @@ export type EvalTableDTO = {
   totalCount: number;
   filteredCount: number;
   filteredMetrics: PromptMetrics[] | null;
+  /**
+   * Prompt indices with at least one persisted output in the full filtered row set.
+   * null when the response does not support stable auto-hiding (for example, comparison mode).
+   */
+  nonEmptyPromptIndices?: number[] | null;
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;

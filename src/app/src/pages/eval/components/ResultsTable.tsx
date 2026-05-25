@@ -1605,6 +1605,7 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
+    nonEmptyPromptIndices,
     fetchEvalData,
     isFetching,
     filters,
@@ -1626,32 +1627,27 @@ function ResultsTable({
   const hasFilteredResultView =
     Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
 
-  // Auto-hide prompt columns that have no output data in the current filtered view.
-  // This handles 1:1 configurations where filtered results may leave some prompt columns entirely empty.
+  // Auto-hide columns only from the full filtered-result summary. The loaded body is
+  // page-scoped and cannot distinguish missing results from valid empty-text outputs.
   const effectiveColumnVisibility = React.useMemo(() => {
     const visibility: VisibilityState = { ...columnVisibility };
-    if (!hasFilteredResultView) {
+    if (!hasFilteredResultView || nonEmptyPromptIndices == null) {
       return visibility;
     }
 
+    const nonEmptyPrompts = new Set(nonEmptyPromptIndices);
     head.prompts.forEach((_, idx) => {
       const colId = `Prompt ${idx + 1}`;
       // Only auto-hide if the column is currently set to visible
       if (visibility[colId] === false) {
         return;
       }
-      const allEmpty =
-        body.length > 0 &&
-        body.every((row) => {
-          const output = row.outputs[idx];
-          return !output || (!output.text && !output.error);
-        });
-      if (allEmpty) {
+      if (!nonEmptyPrompts.has(idx)) {
         visibility[colId] = false;
       }
     });
     return visibility;
-  }, [body, columnVisibility, hasFilteredResultView, head.prompts]);
+  }, [columnVisibility, hasFilteredResultView, head.prompts, nonEmptyPromptIndices]);
 
   const visiblePromptCount = React.useMemo(
     () =>

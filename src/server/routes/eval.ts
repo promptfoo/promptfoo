@@ -425,6 +425,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   // Calculate filtered metrics when filters are active
   let filteredMetrics: PromptMetrics[] | null = null;
+  let nonEmptyPromptIndices: number[] | null = null;
   const hasActiveFilters = filterMode !== 'all' || searchText !== '' || filters.length > 0;
 
   if (hasActiveFilters) {
@@ -461,6 +462,23 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
       logger.error('[GET /:id/table] Failed to calculate filtered metrics', { error, evalId: id });
       // Don't fail the request, just return null for filteredMetrics
     }
+
+    // Comparison tables combine columns from multiple evals. Until they expose a combined
+    // full-result summary, keep all selected columns visible instead of using page data.
+    if (comparisonEvalIds.length === 0) {
+      try {
+        nonEmptyPromptIndices = await eval_.getFilteredNonEmptyPromptIndices({
+          filterMode,
+          searchQuery: searchText,
+          filters,
+        });
+      } catch (error) {
+        logger.error('[GET /:id/table] Failed to calculate non-empty prompt columns', {
+          error,
+          evalId: id,
+        });
+      }
+    }
   }
 
   const responsePayload = {
@@ -468,6 +486,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,
+    nonEmptyPromptIndices,
     config: eval_.config,
     author: eval_.author || null,
     version: eval_.version(),

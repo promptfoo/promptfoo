@@ -3786,12 +3786,64 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
       filterMode: 'all',
       filteredResultsCount: 3,
       totalResultsCount: 10,
+      nonEmptyPromptIndices: [0],
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(screen.queryByLabelText('No output for this prompt')).not.toBeInTheDocument();
     expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(3);
+  });
+
+  it('keeps a column visible when it has output elsewhere in the filtered result set', () => {
+    const mockPageWithSparseOutputs = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: '' }],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockPageWithSparseOutputs,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {
+          testFilter: {
+            id: 'testFilter',
+            type: 'metric',
+            operator: 'equals',
+            value: 'test',
+            logicOperator: 'and',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+      filterMode: 'all',
+      filteredResultsCount: 2,
+      totalResultsCount: 10,
+      nonEmptyPromptIndices: [0, 1],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByLabelText('No output for this prompt')).toBeInTheDocument();
+    expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(1);
   });
 });
 

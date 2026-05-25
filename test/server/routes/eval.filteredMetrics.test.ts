@@ -15,6 +15,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
+import { ResultFailureReason } from '../../../src/types/index';
 import EvalFactory from '../../factories/evalFactory';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
@@ -97,6 +98,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).toBeNull();
+      expect(response.body.nonEmptyPromptIndices).toBeNull();
     });
   });
 
@@ -313,6 +315,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         totalCount: expect.any(Number),
         filteredCount: expect.any(Number),
         filteredMetrics: expect.any(Array),
+        nonEmptyPromptIndices: expect.any(Array),
         config: expect.any(Object),
         author: null, // or expect.any(String) if author is set
         version: expect.any(Number),
@@ -368,6 +371,61 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       const metrics = response.body.filteredMetrics[0];
       expect(metrics.testPassCount).toBeGreaterThan(10);
     });
+
+    it('should summarize non-empty prompt columns across pages without inspecting output text', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await eval_.addPrompts([
+        { raw: 'prompt 0', label: 'prompt 0', provider: 'test-provider' },
+        { raw: 'prompt 1', label: 'prompt 1', provider: 'test-provider' },
+      ]);
+
+      await eval_.addResult({
+        description: 'empty text output',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {}, assert: [] },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test-provider' },
+        prompt: { raw: 'prompt 0', label: 'prompt 0' },
+        vars: {},
+        response: { output: '' },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 1,
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+      await eval_.addResult({
+        description: 'off page output',
+        promptIdx: 1,
+        testIdx: 1,
+        testCase: { vars: {}, assert: [] },
+        promptId: 'prompt-1',
+        provider: { id: 'test-provider', label: 'test-provider' },
+        prompt: { raw: 'prompt 1', label: 'prompt 1' },
+        vars: {},
+        response: { output: 'visible' },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 1,
+        namedScores: {},
+        cost: 0,
+        metadata: {},
+      });
+
+      const response = await api
+        .get(`/api/eval/${eval_.id}/table`)
+        .query({ filterMode: 'passes', limit: 1, offset: 0 });
+
+      expect(response.status, JSON.stringify(response.body)).toBe(200);
+      expect(response.body.table.body).toHaveLength(1);
+      expect(response.body.nonEmptyPromptIndices).toEqual([0, 1]);
+    });
   });
 
   describe('Comparison mode', () => {
@@ -400,6 +458,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
       // Verify the table includes both base and comparison prompts
       expect(response.body.table.head.prompts.length).toBeGreaterThan(1);
+      expect(response.body.nonEmptyPromptIndices).toBeNull();
     });
   });
 });
