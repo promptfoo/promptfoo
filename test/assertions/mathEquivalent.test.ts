@@ -253,6 +253,10 @@ describe('cleanMathText', async () => {
     expect(cleanMathText('Thinking: $$99$$\nSignature: AbCd123\n\n0.5')).toBe('0.5');
   });
 
+  it('strips a terminal signed thinking block', async () => {
+    expect(cleanMathText('Thinking: $$99$$\nSignature: AbCd123')).toBe('');
+  });
+
   it('strips signatureless thinking blocks', async () => {
     expect(cleanMathText('Thinking: $$99$$\n\n0.5')).toBe('0.5');
   });
@@ -577,6 +581,10 @@ describe('extractMathAnswer', async () => {
     expect(result).not.toContain('attained');
   });
 
+  it('preserves a comma inside a coordinate answer', async () => {
+    expect(await extractMathAnswer('Answer: (x, y)')).toBe('(x, y)');
+  });
+
   it('skips a trailing \\] line that follows a $$...$$ block', async () => {
     const raw = '$$\\frac{8\\pi}{3}$$\n\\]';
     const result = await extractMathAnswer(raw);
@@ -673,6 +681,9 @@ describe('extractMathAnswer', async () => {
       ['The answer is sin x', 'sin x'],
       ['The answer is (x + 1)', '(x + 1)'],
       ['The answer is [x + 1]', '[x + 1]'],
+      ['The answer is (x + y)', '(x + y)'],
+      ['The answer is [x + y]', '[x + y]'],
+      ['The answer is cos(x)', 'cos(x)'],
     ])('extracts compact symbolic prose tokens (no spaces around operators) (%s → %s)', async (input, expected) => {
       // Pre-fix: isMathShapedToken treated `x+y` (letters mixed with
       // operators, no digit and not single-letter) as non-math, so the
@@ -891,6 +902,10 @@ describe('extractMathAnswer', async () => {
       );
     });
 
+    it('does not extract math from a terminal signed thinking block', async () => {
+      expect(await extractMathAnswer('Thinking: $$2$$\nSignature: sig')).toBe('');
+    });
+
     it('ignores $$...$$ inside signatureless thinking blocks', async () => {
       expect(await extractMathAnswer('Thinking: $$2$$\n\nFinal answer: 3')).toBe('3');
     });
@@ -911,8 +926,8 @@ describe('extractMathAnswer', async () => {
       );
     });
 
-    it('ignores a display block on a Responses API Reasoning summary line', async () => {
-      expect(await extractMathAnswer('Reasoning: $$2$$\n3\nDone.')).toBe('3');
+    it('ignores display blocks on Responses API Reasoning summary lines', async () => {
+      expect(await extractMathAnswer('Reasoning: scratch\nReasoning: $$2$$\n3\nDone.')).toBe('3');
     });
   });
 });
@@ -1003,6 +1018,7 @@ describe('isMathEquivalent', async () => {
     it.each([
       ['The answer is cos 4', '$\\cos(4)$'],
       ['The answer is sin x', '$\\sin(x)$'],
+      ['The answer is cos(x)', '$\\cos(x)$'],
     ])('matches prose-wrapped bare function shorthand "%s"', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
     });
@@ -1234,6 +1250,7 @@ describe('isMathEquivalent', async () => {
       ['The answer is 10kg', '10'],
       ['Therefore 45°', '45'],
       ['The answer is (x + 1)', 'x + 1'],
+      ['The answer is (x + y)', 'x + y'],
     ])('grades prose-wrapped contiguous math expression "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
     });

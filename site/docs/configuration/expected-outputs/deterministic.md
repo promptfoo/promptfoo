@@ -885,7 +885,8 @@ trip up `equals` and `contains`:
 - Display math `$$ ... $$` and `\[ ... \]`, inline math `\( ... \)` and `$ ... $`
 - Markdown bold `**...**` and italic `*...*`
 - `<think>...</think>` / `<thinking>...</thinking>` blocks, Anthropic-style
-  redacted thinking blocks, and prefixed Responses API `Reasoning:` summary lines
+  signed or redacted thinking blocks, and every prefixed Responses API
+  `Reasoning:` summary line
 - Unicode minus `−`, multiplication `×` and `·`, division `÷`, and root `√`
 - `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
   `\frac{1}\pi` (backslash-command denominator)
@@ -904,10 +905,11 @@ trip up `equals` and `contains`:
 - "Total: 14", "Answer: 42", and "Final answer is 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer
 - Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42",
-  "The answer is 1 / 2", "The answer is (x + 1)", "Therefore 6 ÷ 2" (the
-  contiguous trailing math expression on a prose line wins, including Unicode
-  operators `×`, `÷`, `−`, `·`; trailing sentence punctuation `. , ; : ?`
-  is stripped from the extracted tokens, while `!` is preserved as factorial)
+  "The answer is 1 / 2", "The answer is (x + y)", "The answer is cos(x)",
+  "Therefore 6 ÷ 2" (the contiguous trailing math expression on a prose line
+  wins, including Unicode operators `×`, `÷`, `−`, `·`; trailing sentence
+  punctuation `. , ; : ?` is stripped from the extracted tokens, while `!`
+  is preserved as factorial)
 - A labelled final-line answer beats earlier display blocks:
   `$$2$$\nAnswer: 3` is graded against `3`, not `2`
 - A pure-prose final line ("This is the final result.", "Done.") is

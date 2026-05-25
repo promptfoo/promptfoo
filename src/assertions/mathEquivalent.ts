@@ -391,7 +391,10 @@ function isMathShapedToken(tok: string): boolean {
   if (/^[A-Za-z]$/.test(tok)) {
     return true;
   }
-  if (/^[([{]+(?:[A-Za-z]|\d+|\\[A-Za-z]+)$/.test(tok)) {
+  if (/^[([{]*(?:[A-Za-z]|\d+|\\[A-Za-z]+)[)\]}]*$/.test(tok)) {
+    return true;
+  }
+  if (TRIG_FNS.some((fn) => tok.startsWith(`${fn}(`) && tok.endsWith(')'))) {
     return true;
   }
   if (/^[+\-*/^=<>(){}[\]_~|\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(tok)) {
@@ -439,6 +442,47 @@ function extractRightmostMathExpression(text: string): string | undefined {
   return collected.length > 0 ? cleanMathText(collected.join(' ')) : undefined;
 }
 
+function stripTopLevelTrailingProse(text: string): string {
+  let roundDepth = 0;
+  let squareDepth = 0;
+  let curlyDepth = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    switch (text[i]) {
+      case '(':
+        roundDepth++;
+        break;
+      case ')':
+        roundDepth = Math.max(0, roundDepth - 1);
+        break;
+      case '[':
+        squareDepth++;
+        break;
+      case ']':
+        squareDepth = Math.max(0, squareDepth - 1);
+        break;
+      case '{':
+        curlyDepth++;
+        break;
+      case '}':
+        curlyDepth = Math.max(0, curlyDepth - 1);
+        break;
+      case ',':
+        if (
+          roundDepth === 0 &&
+          squareDepth === 0 &&
+          curlyDepth === 0 &&
+          /^\s+(?:[A-Za-z]|\\\()/.test(text.slice(i + 1))
+        ) {
+          return text.slice(0, i);
+        }
+        break;
+    }
+  }
+
+  return text;
+}
+
 function extractFromLastLine(cleanedLines: string[]): string | undefined {
   if (cleanedLines.length === 0) {
     return undefined;
@@ -460,7 +504,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   if (finalPrefixMatch) {
     candidate = finalPrefixMatch[1].trim();
   }
-  candidate = candidate.replace(/,\s+(?=[A-Za-z]|\\\().*$/, '');
+  candidate = stripTopLevelTrailingProse(candidate);
   candidate = candidate.trim();
   if (!candidate) {
     return undefined;
@@ -552,12 +596,18 @@ function stripThinkingBlocks(text: string): string {
       // Provider-native XML thinking wrappers (Bedrock, etc.).
       .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
       .replace(/<think>[\s\S]*?<\/think>/gi, '')
-      // Anthropic extended thinking: multi-line body, then a Signature line, then a blank line.
-      .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:\r?\n)+/gi, '$1')
+      // Anthropic extended thinking: multi-line body, then a Signature line.
+      // A terminal thinking block may not be followed by a blank line.
+      .replace(
+        /(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:(?:\r?\n)+|$)/gi,
+        '$1',
+      )
       // Anthropic redacted thinking is a single rendered line.
       .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\n]*(?:\r?\n)+/gi, '$1')
-      // Responses API reasoning summaries are rendered as a prefixed line.
-      .replace(/(^|\r?\n)[ \t]*Reasoning:[^\n]*(?:\r?\n|$)/gi, '$1')
+      // Responses API reasoning summaries are rendered as individually prefixed lines.
+      // Keep line separators available for the next global match so adjacent
+      // prefixed summary lines are all removed.
+      .replace(/(^|\r?\n)[ \t]*Reasoning:[^\r\n]*(?=\r?\n|$)/gi, '$1')
       // OpenAI/OpenRouter-style signatureless thinking (`Thinking: ${reasoning}\n\n${output}`).
       // Stop at the first blank-line separator so later blank lines inside ${output}
       // (e.g. "Final answer: 3\n\nNotes") are not consumed.

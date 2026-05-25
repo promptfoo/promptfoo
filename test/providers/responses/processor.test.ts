@@ -154,7 +154,23 @@ describe('ResponsesProcessor', () => {
       const result = await processor.processResponseOutput(mockData, {}, false);
 
       expect(result.output).toContain('Reasoning: Step 1: Analyze the problem');
-      expect(result.output).toContain('Step 2: Find the solution');
+      expect(result.output).toContain('Reasoning: Step 2: Find the solution');
+    });
+
+    it('should mark every line of multi-line reasoning output', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'reasoning',
+            summary: [{ text: 'Step 1: Analyze\nStep 2: Solve' }],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 20 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.output).toBe('Reasoning: Step 1: Analyze\nReasoning: Step 2: Solve');
     });
 
     it('should suppress reasoning output when requested', async () => {

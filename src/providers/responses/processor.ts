@@ -359,7 +359,10 @@ export class ResponsesProcessor {
       return Promise.resolve({});
     }
 
-    const reasoningText = `Reasoning: ${item.summary.map((s: { text: string }) => s.text).join('\n')}`;
+    const reasoningText = item.summary
+      .flatMap((summary: { text: string }) => summary.text.split(/\r?\n/))
+      .map((line: string) => `Reasoning: ${line}`)
+      .join('\n');
     return Promise.resolve({ content: reasoningText });
   }
 
