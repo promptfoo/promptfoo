@@ -179,6 +179,10 @@ const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN = new RegExp(
   String.raw`<\s*${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>`,
   'gi',
 );
+const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN = new RegExp(
+  String.raw`^<\s*${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>$`,
+  'i',
+);
 const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   a: ['href', 'xlink:href'],
   area: ['href'],
@@ -404,7 +408,7 @@ function hasJavascriptUrlValue(value: string | undefined): boolean {
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
   const normalized = normalizeUrlDetectionOutput(output);
   for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
-    if (!isMarkdownImageDestination(normalized, match.index ?? 0)) {
+    if (!isMarkdownImageDestination(normalized, (match.index ?? 0) + 2)) {
       return match[0];
     }
   }
@@ -522,8 +526,12 @@ function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]):
   const masked = [...output];
   const maskNodes = (nodeList: ParsedHtmlNode[]): void => {
     for (const node of nodeList) {
-      for (const location of Object.values(node.sourceCodeLocation?.attrs ?? {})) {
-        masked.fill(' ', location.startOffset, location.endOffset);
+      const startTag = node.sourceCodeLocation?.startTag;
+      const sourceTag = startTag ? output.slice(startTag.startOffset, startTag.endOffset) : '';
+      if (!MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN.test(sourceTag)) {
+        for (const location of Object.values(node.sourceCodeLocation?.attrs ?? {})) {
+          masked.fill(' ', location.startOffset, location.endOffset);
+        }
       }
       if (
         node.sourceCodeLocation &&
