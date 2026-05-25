@@ -244,7 +244,18 @@ describe('redteamConfigSchema', () => {
     { id: 'empty-purpose', purpose: '' },
     { id: 'blank-purpose', purpose: '   ' },
   ])('should accept contexts with optional or blank purposes: $id', (context) => {
-    expect(RedteamContextSchema.safeParse(context).success).toBe(true);
+    const result = RedteamContextSchema.safeParse(context);
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      return;
+    }
+
+    if (context.purpose === undefined) {
+      expect(result.data.purpose).toBeUndefined();
+    } else {
+      expect(result.data.purpose).toBeTypeOf('string');
+      expect(result.data.purpose?.trim()).toBe('');
+    }
   });
 
   it('should accept a valid configuration with all fields', () => {
