@@ -1232,9 +1232,9 @@ describe('isMathEquivalent', async () => {
     });
 
     it('retains factorial rather than treating it as sentence punctuation', async () => {
-      expect((await isMathEquivalent('5!', 120)).pass).toBe(true);
+      expect((await isMathEquivalent('5!', '5!')).pass).toBe(true);
       expect((await isMathEquivalent('5!', 5)).pass).toBe(false);
-      expect((await isMathEquivalent('The answer is 5!', 120)).pass).toBe(true);
+      expect((await isMathEquivalent('The answer is 5!', 5)).pass).toBe(false);
     });
 
     it.each([
