@@ -16,7 +16,9 @@ tests:
       answer: The retrieved travel policy does not answer laptop replacement timing.
     assert:
       - type: javascript
-        value: context.vars.context.includes('three years')
+        value: |
+          return context.vars.context.includes('equipment-policy.md#laptops')
+            && context.vars.context.includes('laptop replacement every three years');
 
   - description: Irrelevant retrieved context should be flagged
     vars:
@@ -26,7 +28,9 @@ tests:
       answer: I found equipment reimbursement guidance, not PTO carryover policy details.
     assert:
       - type: javascript
-        value: context.vars.context.includes('pto-policy.md#carryover')
+        value: |
+          return context.vars.context.includes('pto-policy.md#carryover')
+            && context.vars.context.includes('Employees may carry over up to 5 PTO days.');
 
   - description: Answer should not ignore available context
     vars:
@@ -49,7 +53,7 @@ tests:
         Employees may request reimbursement for ergonomic home-office equipment with manager approval.
       answer: Employees may request ergonomic home-office equipment reimbursement with manager approval.
     assert:
-      - type: not-contains
+      - type: not-icontains
         value: 'guaranteed standing desk reimbursement'
       - type: contains
         value: 'manager approval'
@@ -66,7 +70,7 @@ tests:
         value: 'equipment-policy.md#laptops'
       - type: javascript
         value: |
-          const citations = output.match(/[a-z-]+\.md#[a-z-]+/gi) || [];
+          const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
           return citations.every((citation) => context.vars.context.includes(citation));
 
   - description: Source metadata should be preserved

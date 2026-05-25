@@ -30,14 +30,14 @@ npx promptfoo@latest init --example rag-failure-modes
 From the initialized example directory:
 
 ```bash
-npx promptfoo@latest eval -c promptfooconfig.yaml
+PROMPTFOO_PASS_RATE_THRESHOLD=0 npx promptfoo@latest eval -c promptfooconfig.yaml
 npx promptfoo@latest view
 ```
 
 Or from the repository root during local development:
 
 ```bash
-npm run local -- eval -c examples/rag-failure-modes/promptfooconfig.yaml --no-cache -o output.json
+PROMPTFOO_PASS_RATE_THRESHOLD=0 npm run local -- eval -c examples/rag-failure-modes/promptfooconfig.yaml --no-cache -o output.json
 ```
 
 Expected result:
@@ -49,6 +49,8 @@ Expected result:
 ```
 
 The two failures are intentional. The missing and irrelevant retrieval cases run JavaScript assertions directly against `context.vars.context`, so they fail even though their answer fixtures responsibly acknowledge that evidence is absent. The remaining cases test answer behavior. In a real project, replace the fixtures with your pipeline output and consider `context-recall` or `context-relevance` when model-graded retrieval checks are appropriate.
+
+`PROMPTFOO_PASS_RATE_THRESHOLD=0` keeps this intentional-failure demonstration from exiting nonzero before you can inspect the report. Remove it in CI when failures should fail the build.
 
 ## How to adapt this example
 
