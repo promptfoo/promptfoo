@@ -80,6 +80,7 @@ import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophan
 import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
+import { PathTraversalOutputGrader } from './plugins/pathTraversalOutput';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
 import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
 import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInteraction';
@@ -99,7 +100,6 @@ import { RealEstateLendingDiscriminationPluginGrader } from './plugins/realestat
 import { RealEstateSourceOfIncomePluginGrader } from './plugins/realestate/sourceOfIncome';
 import { RealEstateSteeringPluginGrader } from './plugins/realestate/steering';
 import { RealEstateValuationBiasPluginGrader } from './plugins/realestate/valuationBias';
-import { PathTraversalOutputGrader } from './plugins/pathTraversalOutput';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
