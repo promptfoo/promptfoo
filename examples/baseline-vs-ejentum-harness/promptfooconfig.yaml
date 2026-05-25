@@ -5,17 +5,19 @@ prompts:
   - '{{task}}'
 
 providers:
-  - id: openai:gpt-4o-mini
-    label: baseline-gpt-4o-mini
+  - id: openai:chat:gpt-5.4-mini
+    label: baseline-gpt-5.4-mini
     config:
-      temperature: 0
+      reasoning_effort: none
+      verbosity: low
 
   - id: file://provider.js
-    label: ejentum-reasoning-gpt-4o-mini
+    label: ejentum-reasoning-gpt-5.4-mini
     config:
       mode: reasoning
-      model: gpt-4o-mini
-      temperature: 0
+      model: gpt-5.4-mini
+      reasoning_effort: none
+      verbosity: low
 
 defaultTest:
   assert:

@@ -2,7 +2,7 @@
  * Custom promptfoo provider that pre-fetches a cognitive scaffold from the
  * Ejentum Logic API for the given mode, then calls OpenAI with the scaffold
  * stitched into the system message. The baseline provider in the same config
- * uses plain openai:gpt-4o-mini so the eval table makes the lift visible.
+ * uses plain openai:chat:gpt-5.4-mini so the eval table makes the lift visible.
  */
 
 // The Ejentum Logic API base URL. Resolved in priority order:
@@ -18,21 +18,19 @@ const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 class EjentumAugmentedProvider {
   constructor(options = {}) {
     this.config = options.config || {};
-    this.providerId =
-      options.id || `ejentum:${this.config.mode || 'reasoning'}`;
+    this.providerId = options.id || `ejentum:${this.config.mode || 'reasoning'}`;
   }
 
   id() {
     return this.providerId;
   }
 
-  async callApi(prompt, context) {
+  async callApi(prompt) {
     const ejentumKey = process.env.EJENTUM_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
     if (!ejentumKey) {
       return {
-        error:
-          'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
+        error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
       };
     }
     if (!openaiKey) {
@@ -40,11 +38,10 @@ class EjentumAugmentedProvider {
     }
 
     const mode = this.config.mode || 'reasoning';
-    const model = this.config.model || 'gpt-4o-mini';
-    const temperature =
-      this.config.temperature !== undefined ? this.config.temperature : 0;
-    const ejentumUrl =
-      this.config.apiUrl || process.env.EJENTUM_API_URL || DEFAULT_EJENTUM_URL;
+    const model = this.config.model || 'gpt-5.4-mini';
+    const reasoningEffort = this.config.reasoning_effort || 'none';
+    const verbosity = this.config.verbosity || 'low';
+    const ejentumUrl = this.config.apiUrl || process.env.EJENTUM_API_URL || DEFAULT_EJENTUM_URL;
 
     // Step 1: fetch the cognitive scaffold for this task.
     let scaffold = '';
@@ -61,7 +58,13 @@ class EjentumAugmentedProvider {
         return { error: `Ejentum API ${r.status}: ${await r.text()}` };
       }
       const body = await r.json();
-      scaffold = Array.isArray(body) && body[0] ? body[0][mode] || '' : '';
+      scaffold =
+        Array.isArray(body) && typeof body[0]?.[mode] === 'string' ? body[0][mode].trim() : '';
+      if (!scaffold) {
+        return {
+          error: `Ejentum API response did not include a non-empty "${mode}" scaffold.`,
+        };
+      }
     } catch (err) {
       return { error: `Ejentum fetch failed: ${String(err)}` };
     }
@@ -76,7 +79,8 @@ class EjentumAugmentedProvider {
         },
         body: JSON.stringify({
           model,
-          temperature,
+          reasoning_effort: reasoningEffort,
+          verbosity,
           messages: [
             {
               role: 'system',
@@ -94,8 +98,14 @@ class EjentumAugmentedProvider {
           error: `OpenAI error: ${body.error?.message || r.status}`,
         };
       }
+      const output = body.choices?.[0]?.message?.content;
+      if (typeof output !== 'string' || output.trim() === '') {
+        return {
+          error: 'OpenAI response did not include non-empty assistant content.',
+        };
+      }
       return {
-        output: body.choices?.[0]?.message?.content || '',
+        output,
         tokenUsage: {
           prompt: body.usage?.prompt_tokens || 0,
           completion: body.usage?.completion_tokens || 0,
