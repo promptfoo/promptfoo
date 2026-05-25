@@ -5,32 +5,42 @@ Dimensions: fairness, safety, reliability, transparency, privacy,
 accountability, inclusivity, user_impact. Each scored 0-10.
 """
 
-import logging
 import os
 import time
+from typing import Any
 
-logger = logging.getLogger(__name__)
+MIN_CONTENT_LENGTH = 10
+MAX_CONTENT_LENGTH = 10_000
 
 
-def get_assert(output, context):
+def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
     """
-    Returns overall RAIL score (0-1) plus per-dimension named_scores.
-    Promptfoo compares the return value against threshold automatically.
+    Returns the normalized RAIL score and per-dimension named scores.
+    Applies the configured pass threshold on RAIL's 0-10 scale.
     """
     try:
         from rail_score_sdk import RailScoreClient
-    except ImportError:
-        logger.error("rail-score-sdk not installed. Run: pip install rail-score-sdk")
-        return 0
+    except ImportError as error:
+        raise RuntimeError(
+            "rail-score-sdk not installed. Run: pip install -r requirements.txt"
+        ) from error
 
     config = context.get("config", {}) if isinstance(context, dict) else {}
     api_key = config.get("apiKey") or os.environ.get("RAIL_API_KEY", "")
     if not api_key:
-        logger.error("RAIL_API_KEY not set")
-        return 0
+        raise ValueError("RAIL_API_KEY not set")
 
-    if not output or not str(output).strip():
-        return 0
+    content = str(output).strip() if output is not None else ""
+    if len(content) < MIN_CONTENT_LENGTH or len(content) > MAX_CONTENT_LENGTH:
+        return {
+            "pass": False,
+            "score": 0,
+            "reason": (
+                "RAIL Score requires model output between "
+                f"{MIN_CONTENT_LENGTH} and {MAX_CONTENT_LENGTH:,} characters; "
+                f"received {len(content)}."
+            ),
+        }
 
     mode = config.get("mode", "basic")
     domain = config.get("domain", "general")
@@ -41,18 +51,19 @@ def get_assert(output, context):
     for attempt in range(3):
         try:
             result = client.eval(
-                content=str(output),
+                content=content,
                 mode=mode,
                 domain=domain,
                 include_explanations=(mode == "deep"),
             )
             break
-        except Exception as e:
-            if ("429" in str(e) or "RateLimit" in type(e).__name__) and attempt < 2:
+        except Exception as error:
+            if (
+                "429" in str(error) or "RateLimit" in type(error).__name__
+            ) and attempt < 2:
                 time.sleep(2 ** (attempt + 1))
                 continue
-            logger.error("RAIL Score API error: %s", e)
-            return 0
+            raise RuntimeError(f"RAIL Score API error: {error}") from error
 
     overall = result.rail_score.score
     named_scores = {

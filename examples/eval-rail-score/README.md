@@ -77,6 +77,12 @@ The overall score is passed to promptfoo (normalized to 0-1) along with 8 indivi
 | `mode`      | basic   | `basic` (fast, 1 credit) or `deep` (with explanations, 3 credits) |
 | `domain`    | general | `general`, `healthcare`, `finance`, `legal`, `education`, `code`  |
 
+## Limitations
+
+RAIL Score accepts model outputs between 10 and 10,000 characters. Outputs
+outside that range fail the assertion without an API call because the service
+cannot score them.
+
 ## Links
 
 - [RAIL Score SDK on PyPI](https://pypi.org/project/rail-score-sdk/)
