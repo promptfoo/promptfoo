@@ -884,7 +884,8 @@ trip up `equals` and `contains`:
 - `\boxed{...}` with nested braces — last box wins
 - Display math `$$ ... $$` and `\[ ... \]`, inline math `\( ... \)` and `$ ... $`
 - Markdown bold `**...**` and italic `*...*`
-- `<think>...</think>` blocks and Anthropic-style redacted thinking blocks
+- `<think>...</think>` / `<thinking>...</thinking>` blocks, Anthropic-style
+  redacted thinking blocks, and prefixed Responses API `Reasoning:` summary lines
 - Unicode minus `−`, multiplication `×` and `·`, division `÷`, and root `√`
 - `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
   `\frac{1}\pi` (backslash-command denominator)
@@ -900,10 +901,10 @@ trip up `equals` and `contains`:
 - Approximation symbols (`≈`, `\approx`) treated as equality, including in
   chain form (`1/2 ≈ 0.5` is graded against `0.5`)
 - Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins
-- "Total: 14", "Answer: 42" label prefixes
+- "Total: 14", "Answer: 42", and "Final answer is 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer
 - Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42",
-  "The answer is 1 / 2", "The answer is x + 1", "Therefore 6 ÷ 2" (the
+  "The answer is 1 / 2", "The answer is (x + 1)", "Therefore 6 ÷ 2" (the
   contiguous trailing math expression on a prose line wins, including Unicode
   operators `×`, `÷`, `−`, `·`; trailing sentence punctuation `. , ; : ?`
   is stripped from the extracted tokens, while `!` is preserved as factorial)

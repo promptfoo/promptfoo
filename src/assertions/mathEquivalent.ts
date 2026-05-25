@@ -180,7 +180,11 @@ function stripTrailingUnit(text: string): string {
     return trimmed;
   }
   const value = match[1].trimEnd();
-  if (NUMERIC_VALUE_PATTERN.test(value) || isSelfContainedLatexValue(value)) {
+  if (
+    NUMERIC_VALUE_PATTERN.test(value) ||
+    isSelfContainedLatexValue(value) ||
+    isSelfContainedLatexValue(normalizeLatex(value))
+  ) {
     return value;
   }
   return trimmed;
@@ -212,13 +216,12 @@ export function cleanMathText(text: string): string {
   s = s.replace(/\$([^$]+)\$/g, '$1');
 
   // Markdown bold/italic. Guard against asterisks used as math operators
-  // (e.g. "2*3*4" or "x**y**z") by requiring a non-word boundary on both
-  // sides of the marker pair — real markdown emphasis is whitespace- or
-  // punctuation-flanked, never digit/letter-flanked. The italic guard also
-  // excludes adjacent `*` so the inner pair of `**3**` isn't stripped to
-  // `*3*` then to `3`.
+  // (e.g. "2*3*4", "2 * 3 * 4", or "x**y**z"). Markdown emphasis cannot
+  // start or end with whitespace, which keeps spaced multiplication intact.
+  // The italic guard also excludes adjacent `*` so the inner pair of
+  // `**3**` is not stripped to `*3*` and then to `3`.
   s = s.replace(/(?<![*A-Za-z0-9_])\*\*([^*]+)\*\*(?![*A-Za-z0-9_])/g, '$1');
-  s = s.replace(/(?<![*A-Za-z0-9_])\*([^*]+)\*(?![*A-Za-z0-9_])/g, '$1');
+  s = s.replace(/(?<![*A-Za-z0-9_])\*((?!\s)[^*]*?\S)\*(?![*A-Za-z0-9_])/g, '$1');
 
   return s.trim();
 }
@@ -388,6 +391,9 @@ function isMathShapedToken(tok: string): boolean {
   if (/^[A-Za-z]$/.test(tok)) {
     return true;
   }
+  if (/^[([{]+(?:[A-Za-z]|\d+|\\[A-Za-z]+)$/.test(tok)) {
+    return true;
+  }
   if (/^[+\-*/^=<>(){}[\]_~|\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(tok)) {
     return true;
   }
@@ -449,7 +455,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
     candidate = labelMatch[2].trim();
   }
   const finalPrefixMatch = candidate.match(
-    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)\s+(.+)$/i,
+    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)(?:\s+(?:is|equals?))?\s+(.+)$/i,
   );
   if (finalPrefixMatch) {
     candidate = finalPrefixMatch[1].trim();
@@ -550,6 +556,8 @@ function stripThinkingBlocks(text: string): string {
       .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:\r?\n)+/gi, '$1')
       // Anthropic redacted thinking is a single rendered line.
       .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\n]*(?:\r?\n)+/gi, '$1')
+      // Responses API reasoning summaries are rendered as a prefixed line.
+      .replace(/(^|\r?\n)[ \t]*Reasoning:[^\n]*(?:\r?\n|$)/gi, '$1')
       // OpenAI/OpenRouter-style signatureless thinking (`Thinking: ${reasoning}\n\n${output}`).
       // Stop at the first blank-line separator so later blank lines inside ${output}
       // (e.g. "Final answer: 3\n\nNotes") are not consumed.

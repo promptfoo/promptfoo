@@ -339,6 +339,8 @@ describe('cleanMathText', async () => {
     ['\\frac{8\\pi}{3} m', '\\frac{8\\pi}{3}'],
     ['\\dfrac{1}{2} m', '\\dfrac{1}{2}'],
     ['\\sqrt{2} m', '\\sqrt{2}'],
+    ['√2 m', '√2'],
+    ['√\\pi m', '√\\pi'],
     ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
     ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
   ])('strips trailing unit after a fractional/LaTeX answer (%s → %s)', async (input, expected) => {
@@ -381,6 +383,7 @@ describe('cleanMathText', async () => {
     ['1*2', '1*2'],
     ['x*y*z', 'x*y*z'],
     ['2*x*3', '2*x*3'],
+    ['2 * 3 * 4', '2 * 3 * 4'],
   ])('preserves * multiplication operators (%s)', async (input, expected) => {
     // The italic regex must NOT match asterisks adjacent to digits/letters,
     // otherwise "2*3*4" silently collapses to "234" before parsing.
@@ -644,6 +647,8 @@ describe('extractMathAnswer', async () => {
       ['Answer 42', '42'],
       ['Therefore 0.5', '0.5'],
       ['Total 14', '14'],
+      ['Final answer is 42', '42'],
+      ['Answer is 0.5', '0.5'],
     ])('extracts a numeric final after an unpunctuated answer prefix (%s → %s)', async (input, expected) => {
       expect(await extractMathAnswer(input)).toBe(expected);
     });
@@ -666,6 +671,8 @@ describe('extractMathAnswer', async () => {
       ['So the value is a-b*c', 'a-b*c'],
       ['The answer is cos 4', 'cos 4'],
       ['The answer is sin x', 'sin x'],
+      ['The answer is (x + 1)', '(x + 1)'],
+      ['The answer is [x + 1]', '[x + 1]'],
     ])('extracts compact symbolic prose tokens (no spaces around operators) (%s → %s)', async (input, expected) => {
       // Pre-fix: isMathShapedToken treated `x+y` (letters mixed with
       // operators, no digit and not single-letter) as non-math, so the
@@ -903,6 +910,10 @@ describe('extractMathAnswer', async () => {
         '3',
       );
     });
+
+    it('ignores a display block on a Responses API Reasoning summary line', async () => {
+      expect(await extractMathAnswer('Reasoning: $$2$$\n3\nDone.')).toBe('3');
+    });
   });
 });
 
@@ -1139,6 +1150,7 @@ describe('isMathEquivalent', async () => {
       ['2*3*4', '24'],
       ['1*2', 2],
       ['2*3', '6'],
+      ['2 * 3 * 4', 24],
     ])('grades * multiplication ("%s" vs %s) as equivalent', async (actual, expected) => {
       // Without the asterisk-preservation fix, "2*3*4" would clean to "234"
       // and grade as 234 ≠ 24.
@@ -1204,6 +1216,8 @@ describe('isMathEquivalent', async () => {
       ['\\frac{1}{2} kg', 0.5],
       ['\\frac{1}{2}m', '0.5'],
       ['\\sqrt{2} m', '\\sqrt{2}'],
+      ['√2 m', '\\sqrt{2}'],
+      ['√\\pi m', '\\sqrt{\\pi}'],
       ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
       ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
     ])('grades fractional / LaTeX answers with trailing units "%s" against %s', async (actual, expected) => {
@@ -1219,6 +1233,7 @@ describe('isMathEquivalent', async () => {
       ['And so the answer is -1 / 4', '-0.25'],
       ['The answer is 10kg', '10'],
       ['Therefore 45°', '45'],
+      ['The answer is (x + 1)', 'x + 1'],
     ])('grades prose-wrapped contiguous math expression "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
     });
@@ -1227,6 +1242,8 @@ describe('isMathEquivalent', async () => {
       ['Answer 42', 42],
       ['Therefore 0.5', '0.5'],
       ['Total 14', 14],
+      ['Final answer is 42', 42],
+      ['Answer is 0.5', '0.5'],
     ])('grades unpunctuated answer-prefix finals "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
     });
