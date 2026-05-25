@@ -595,7 +595,7 @@ export async function getGoogleAccessToken(credentials?: string): Promise<string
   }
 }
 
-export function getCandidate(data: GeminiResponseData) {
+export function getCandidate(data: GeminiResponseData): Candidate {
   if (!data || !data.candidates || data.candidates.length < 1) {
     // Check if the prompt was blocked
     let errorDetails = 'No candidates returned in API response.';
@@ -629,7 +629,34 @@ export function getCandidate(data: GeminiResponseData) {
     );
   }
   const candidate = data.candidates[0];
+  if (!candidate) {
+    throw new Error(
+      `No candidates returned in API response.\n\nGot response: ${JSON.stringify(data)}`,
+    );
+  }
   return candidate;
+}
+
+export function isNonCandidateStreamChunk(datum: GeminiResponseData): boolean {
+  return (
+    !datum.candidates?.length &&
+    ((Boolean(datum.usageMetadata) && !datum.promptFeedback) ||
+      (Boolean(datum.promptFeedback?.safetyRatings) && !datum.promptFeedback?.blockReason))
+  );
+}
+
+export function getLastPromptSafetyRatings(
+  data: GeminiResponseData[],
+): NonNullable<GeminiResponseData['promptFeedback']>['safetyRatings'] | undefined {
+  let safetyRatings: NonNullable<GeminiResponseData['promptFeedback']>['safetyRatings'] | undefined;
+
+  for (const datum of data) {
+    if (datum.promptFeedback?.safetyRatings) {
+      safetyRatings = datum.promptFeedback.safetyRatings;
+    }
+  }
+
+  return safetyRatings;
 }
 
 export function formatCandidateContents(candidate: Candidate) {
