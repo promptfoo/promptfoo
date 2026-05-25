@@ -790,7 +790,8 @@ export function formatCandidateContents(candidate: Candidate) {
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {
   if (parts1 === undefined) {
-    return parts2;
+    // Detach the accumulator from the raw multipart response before appending later chunks.
+    return typeof parts2 === 'string' ? parts2 : [...parts2];
   }
 
   if (typeof parts1 === 'string' && typeof parts2 === 'string') {

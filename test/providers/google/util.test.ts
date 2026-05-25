@@ -22,6 +22,7 @@ import {
   loadFile,
   maybeCoerceToGeminiFormat,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
@@ -2960,6 +2961,25 @@ describe('util', () => {
         'file://tools.json',
         'file://tools.yaml',
         { codeExecution: {} },
+      ]);
+    });
+  });
+
+  describe('mergeParts', () => {
+    it('detaches the initial multipart chunk and reuses the accumulator thereafter', () => {
+      const firstChunk = [{ functionCall: { name: 'look_up', args: { query: 'weather' } } }];
+      const secondChunk = [{ text: 'done' }];
+
+      const accumulator = mergeParts(undefined, firstChunk);
+      if (!Array.isArray(accumulator)) {
+        throw new Error('Expected multipart output');
+      }
+
+      expect(accumulator).not.toBe(firstChunk);
+      expect(mergeParts(accumulator, secondChunk)).toBe(accumulator);
+      expect(accumulator).toEqual([...firstChunk, ...secondChunk]);
+      expect(firstChunk).toEqual([
+        { functionCall: { name: 'look_up', args: { query: 'weather' } } },
       ]);
     });
   });
