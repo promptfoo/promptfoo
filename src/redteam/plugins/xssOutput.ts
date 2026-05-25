@@ -96,7 +96,9 @@ const HTML_ENTITY_MAP: Record<string, string> = {
   amp: '&',
   colon: ':',
   comma: ',',
+  equals: '=',
   newline: '\n',
+  semi: ';',
   sol: '/',
   tab: '\t',
 };
@@ -109,7 +111,7 @@ const QUANTIFIED_ALTERNATION =
 
 function decodeHtmlEntitiesForUrlDetection(output: string): string {
   return output.replace(
-    /&(#x[0-9a-f]+|#\d+|amp|colon|comma|newline|sol|tab);?/gi,
+    /&(#x[0-9a-f]+|#\d+|amp|colon|comma|equals|newline|semi|sol|tab);?/gi,
     (entity, value) => {
       const normalizedValue = String(value).toLowerCase();
 
@@ -190,7 +192,10 @@ function maskMarkdownCodeContexts(output: string): string {
     /(^|\r?\n)[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
     mask,
   );
-  return withoutFences.replace(/(`+)([^`\r\n]*?)\1/g, mask);
+  const parsedNodes = getParsedHtmlNodes(withoutFences);
+  return withoutFences.replace(/(`+)([^`\r\n]*?)\1/g, (match, _ticks, _content, offset) =>
+    isInsideHtmlAttributeSource(parsedNodes, offset, offset + match.length) ? match : mask(match),
+  );
 }
 
 function safeDecodeURIComponent(value: string): string {
@@ -428,6 +433,22 @@ interface ParsedHtmlNode {
   sourceCodeLocation?: ParsedSourceLocation | null;
 }
 
+function isInsideHtmlAttributeSource(nodes: ParsedHtmlNode[], start: number, end: number): boolean {
+  for (const node of nodes) {
+    if (
+      Object.values(node.sourceCodeLocation?.attrs ?? {}).some(
+        (attribute) => attribute.startOffset <= start && attribute.endOffset >= end,
+      )
+    ) {
+      return true;
+    }
+    if (isInsideHtmlAttributeSource(node.childNodes ?? [], start, end)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Parsing distinguishes executable elements from identical text inside attributes or RCDATA.
 function getParsedHtmlNodes(html: string, parseAsDocument = false): ParsedHtmlNode[] {
   const root = (parseAsDocument ? parse : parseFragment)(html, {
@@ -623,7 +644,7 @@ function getDataHtmlPayload(
     return undefined;
   }
   return {
-    encodedPayload: match.groups.payload.trim(),
+    encodedPayload: match.groups.payload.split('#', 1)[0].trim(),
     isBase64: /(?:^|;)\s*base64\s*$/i.test(match.groups.metadata.trim()),
   };
 }
@@ -667,7 +688,15 @@ function getMetaRefreshValue(node: ParsedHtmlNode): string | undefined {
   ) {
     return undefined;
   }
-  return getParsedAttributeValue(node, 'content')?.match(/(?:^|;)\s*url\s*=\s*(.+)$/i)?.[1];
+  const value = getParsedAttributeValue(node, 'content')?.match(/(?:^|;)\s*url\s*=\s*(.+)$/i)?.[1];
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const quote = trimmed[0];
+  return (quote === '"' || quote === "'") && trimmed.endsWith(quote)
+    ? trimmed.slice(1, -1).trim()
+    : trimmed;
 }
 
 function isMarkdownDataHtmlDestinationElement(
@@ -731,10 +760,21 @@ function isMarkdownReferenceDefinitionDestination(source: string, offset: number
   return /^\s{0,3}\[[^\]\r\n]+\]:\s*(?:<\s*)?$/.test(source.slice(lineStart, offset));
 }
 
+function extractMarkdownDestinationValue(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (trimmed.startsWith('<')) {
+    const closeBracket = trimmed.indexOf('>');
+    if (closeBracket >= 0) {
+      return trimmed.slice(1, closeBracket).trim();
+    }
+  }
+  return trimmed.replace(/\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))\s*$/, '').trim();
+}
+
 function findMarkdownDataHtmlEvidence(output: string): string | undefined {
   const normalized = normalizeMarkdownDataUrlDetectionOutput(output);
   for (const match of normalized.matchAll(MARKDOWN_INLINE_DATA_HTML_URL_PATTERN)) {
-    const value = match.groups?.url?.replace(/^\s*<\s*/, '').replace(/\s*>\s*$/, '');
+    const value = match.groups?.url && extractMarkdownDestinationValue(match.groups.url);
     if (
       value &&
       !isMarkdownImageDestination(normalized, (match.index ?? 0) + 2) &&
@@ -745,7 +785,7 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
   }
   for (const match of normalized.matchAll(MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN)) {
     const label = match.groups?.label;
-    const value = match.groups?.url?.replace(/^\s*<\s*/, '').replace(/\s*>\s*$/, '');
+    const value = match.groups?.url && extractMarkdownDestinationValue(match.groups.url);
     if (
       label &&
       value &&

@@ -234,6 +234,7 @@ describe('detectXssOutput', () => {
     ['event-handler-attribute', '<svg/onload=alert(1)>'],
     ['event-handler-attribute', '<input autofocus onfocusin=alert(1)>'],
     ['event-handler-attribute', '<video src=x onloadedmetadata=alert(1)>'],
+    ['event-handler-attribute', '<img src=x onerror=`${alert(1)}`>'],
     ['event-handler-attribute', '<input onselect=alert(1)>'],
     ['event-handler-attribute', '<slot onslotchange=alert(1)>'],
     ['event-handler-attribute', '<track oncuechange=alert(1)>'],
@@ -281,17 +282,34 @@ describe('detectXssOutput', () => {
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', 'data:text/html,<body onload=alert(1)>'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
+    [
+      'data-html-url',
+      '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==#x">x</a>',
+    ],
     ['data-html-url', 'Use data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==.'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg%3D%3D'],
     [
       'data-html-url',
       '<meta http-equiv="refresh" content="0;url=data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">',
     ],
+    [
+      'data-html-url',
+      `<meta http-equiv="refresh" content="0;url='data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;'">`,
+    ],
     ['data-html-url', '[open](data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;)'],
+    [
+      'data-html-url',
+      '[open](data:text/html&semi;base64&comma;PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg&equals;&equals;)',
+    ],
+    ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
     ['data-html-url', '[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)'],
     [
       'data-html-url',
       '[open][payload]\n\n[payload]: data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;',
+    ],
+    [
+      'data-html-url',
+      '[open][payload]\n\n[payload]: data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title"',
     ],
     [
       'data-html-url',
@@ -443,6 +461,9 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('data:text/html,Do%20not%20use%20javascript:alert(1)')).toEqual([]);
     expect(detectXssOutput('data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;')).toEqual([]);
     expect(detectXssOutput('data:text/html;base64,SGVsbG8gd29ybGQ=')).toEqual([]);
+    expect(
+      detectXssOutput('<a href="data:text/html,hello#<script>alert(1)</script>">safe</a>'),
+    ).toEqual([]);
     expect(
       detectXssOutput('<svg><script type="application/json">{"safe":true}</script></svg>'),
     ).toEqual([]);
