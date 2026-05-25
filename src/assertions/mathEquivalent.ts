@@ -131,6 +131,61 @@ export function normalizeLatex(text: string): string {
   return s;
 }
 
+const TRAILING_UNIT_PATTERN = /^(.*?)(?:\s*)(rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/;
+const NUMERIC_VALUE_PATTERN = /^-?\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?$/;
+
+function isSelfContainedLatexValue(text: string): boolean {
+  let value = text.startsWith('-') ? text.slice(1).trimStart() : text;
+  if (!value.startsWith('\\')) {
+    return false;
+  }
+
+  const command = value.match(/^\\[A-Za-z]+/);
+  if (!command) {
+    return false;
+  }
+  value = value.slice(command[0].length);
+  let sawArgument = false;
+
+  while (value) {
+    if (!value.startsWith('{')) {
+      return false;
+    }
+    sawArgument = true;
+    let depth = 0;
+    let end = -1;
+    for (let i = 0; i < value.length; i++) {
+      if (value[i] === '{') {
+        depth++;
+      } else if (value[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end < 0) {
+      return false;
+    }
+    value = value.slice(end);
+  }
+  return sawArgument;
+}
+
+function stripTrailingUnit(text: string): string {
+  const trimmed = text.trim();
+  const match = trimmed.match(TRAILING_UNIT_PATTERN);
+  if (!match) {
+    return trimmed;
+  }
+  const value = match[1].trimEnd();
+  if (NUMERIC_VALUE_PATTERN.test(value) || isSelfContainedLatexValue(value)) {
+    return value;
+  }
+  return trimmed;
+}
+
 /**
  * Strip formatting wrappers that don't affect mathematical meaning.
  */
@@ -143,20 +198,9 @@ export function cleanMathText(text: string): string {
   // Trailing backslash-space sequences left over from \text removal.
   s = s.trim().replace(/\\+\s*$/, '');
 
-  // Trailing common units. Anchor the strip so a SELF-CONTAINED math value
-  // must be the immediate left context of the unit — a number, a numeric
-  // fraction (`1/2`, `1.5/2.5`), or a LaTeX command with its braces
-  // (`\frac{1}{2}`, `\dfrac{8\pi}{3}`, `\sqrt{2}`). This preserves both
-  // attached forms ("10kg") and whitespace-separated ("10 m", "1/2 m",
-  // "\frac{1}{2} kg"), while leaving algebraic expressions intact
-  // ("x + m" stays "x + m", an expected "2*m" stays "2*m"). Longer unit
-  // alternatives come first so "100ms" matches "ms", not "m".
-  s = s
-    .trim()
-    .replace(
-      /(^|\s)((?:-?\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?)|\\[A-Za-z]+(?:\{[^{}]*\}){1,2})\s*(?:rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/,
-      '$1$2',
-    );
+  // Remove units only after self-contained numeric or brace-balanced LaTeX
+  // values, so `x + m` remains symbolic while `\frac{1}{\sqrt{2}} m` works.
+  s = stripTrailingUnit(s);
   s = s.trim().replace(/\s*°\s*$/, '');
 
   // Display math fences.
@@ -361,8 +405,9 @@ function isMathShapedToken(tok: string): boolean {
  * expression (sequence of math-shaped tokens, joined by spaces). Multi-letter
  * prose words (`is`, `the`, `Therefore`) terminate the run; multi-letter
  * non-math tokens at the very end are skipped while we look for the math
- * suffix. Strips trailing sentence punctuation (`.,;:!?`) per token so
+ * suffix. Strips trailing sentence punctuation (`.,;:?`) per token so
  * "The answer is 0.5." hands "0.5" — not "0.5." — to the parser.
+ * `!` is preserved because it is also the factorial operator.
  *
  * "The answer is 1 / 2"   → "1 / 2"
  * "The answer is x + 1"   → "x + 1"
@@ -372,7 +417,8 @@ function extractRightmostMathExpression(text: string): string | undefined {
   const tokens = text.split(/\s+/).filter(Boolean);
   const collected: string[] = [];
   for (let i = tokens.length - 1; i >= 0; i--) {
-    const stripped = tokens[i].replace(/[.,;:!?]+$/, '');
+    // `!` is factorial in math, so do not silently trim it as punctuation.
+    const stripped = tokens[i].replace(/[.,;:?]+$/, '');
     if (!stripped) {
       continue;
     }
@@ -384,7 +430,7 @@ function extractRightmostMathExpression(text: string): string | undefined {
       break;
     }
   }
-  return collected.length > 0 ? collected.join(' ') : undefined;
+  return collected.length > 0 ? cleanMathText(collected.join(' ')) : undefined;
 }
 
 function extractFromLastLine(cleanedLines: string[]): string | undefined {
@@ -401,6 +447,12 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   const labelMatch = candidate.match(/\s([A-Za-z][A-Za-z\s]*):\s*(\S.*)$/);
   if (labelMatch) {
     candidate = labelMatch[2].trim();
+  }
+  const finalPrefixMatch = candidate.match(
+    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)\s+(.+)$/i,
+  );
+  if (finalPrefixMatch) {
+    candidate = finalPrefixMatch[1].trim();
   }
   candidate = candidate.replace(/,\s+(?=[A-Za-z]|\\\().*$/, '');
   candidate = candidate.trim();
@@ -424,7 +476,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   // this, a labelled answer like "Answer: 0.5." (after the prefix strip) would
   // become "0.5." and fail to parse — only the prose-extraction branch did
   // this previously, so labelled non-prose lines slipped through.
-  candidate = candidate.replace(/[.,;:!?]+$/, '');
+  candidate = candidate.replace(/[.,;:?]+$/, '');
   // If the last line is pure prose with no math content (e.g. a closing
   // sentence like "This is the final result."), bail so the caller can
   // fall back to display-block extraction or earlier candidates instead

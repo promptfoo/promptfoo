@@ -311,6 +311,8 @@ describe('cleanMathText', async () => {
     ['Vm', 'Vm'],
     ['5kgsmth', '5kgsmth'],
     ['50sec', '50sec'],
+    ['\\sum', '\\sum'],
+    ['\\lim', '\\lim'],
   ])('does not strip an identifier whose suffix happens to contain a unit (%s)', async (input, expected) => {
     expect(cleanMathText(input)).toBe(expected);
   });
@@ -337,6 +339,8 @@ describe('cleanMathText', async () => {
     ['\\frac{8\\pi}{3} m', '\\frac{8\\pi}{3}'],
     ['\\dfrac{1}{2} m', '\\dfrac{1}{2}'],
     ['\\sqrt{2} m', '\\sqrt{2}'],
+    ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
+    ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
   ])('strips trailing unit after a fractional/LaTeX answer (%s → %s)', async (input, expected) => {
     // The unit cleanup previously only matched a plain integer/decimal as
     // the left context, so "1/2 m" or "\\frac{1}{2} kg" left the unit in
@@ -607,7 +611,7 @@ describe('extractMathAnswer', async () => {
     it.each([
       ['The answer is 0.5.', '0.5'],
       ['The answer is 42.', '42'],
-      ['Therefore the result is 7!', '7'],
+      ['Therefore the result is 7.', '7'],
       ['So the value comes out to 3.14159.', '3.14159'],
       ['After simplification we get \\frac{1}{2}.', '\\frac{1}{2}'],
     ])('strips terminal sentence punctuation (%s → %s)', async (input, expected) => {
@@ -617,7 +621,7 @@ describe('extractMathAnswer', async () => {
     it.each([
       ['Answer: 0.5.', '0.5'],
       ['Final answer: 42.', '42'],
-      ['Total: 14!', '14'],
+      ['Total: 14.', '14'],
       ['Result: 3.14159.', '3.14159'],
     ])('strips terminal sentence punctuation from labelled (non-prose) answers (%s → %s)', async (input, expected) => {
       expect(await extractMathAnswer(input)).toBe(expected);
@@ -634,6 +638,26 @@ describe('extractMathAnswer', async () => {
       // "1 / 2"), turning correct fractional/algebraic answers into
       // failures and even passing the wrong value.
       expect(await extractMathAnswer(input)).toBe(expected);
+    });
+
+    it.each([
+      ['Answer 42', '42'],
+      ['Therefore 0.5', '0.5'],
+      ['Total 14', '14'],
+    ])('extracts a numeric final after an unpunctuated answer prefix (%s → %s)', async (input, expected) => {
+      expect(await extractMathAnswer(input)).toBe(expected);
+    });
+
+    it.each([
+      ['The answer is 10kg', '10'],
+      ['Therefore 45°', '45'],
+    ])('normalizes units in prose-extracted final answers (%s → %s)', async (input, expected) => {
+      expect(await extractMathAnswer(input)).toBe(expected);
+    });
+
+    it('preserves factorial as a mathematical operator', async () => {
+      expect(await extractMathAnswer('5!')).toBe('5!');
+      expect(await extractMathAnswer('The answer is 5!')).toBe('5!');
     });
 
     it.each([
@@ -1152,7 +1176,7 @@ describe('isMathEquivalent', async () => {
 
     it.each([
       ['The answer is 0.5.', '0.5'],
-      ['Therefore the result is 7!', 7],
+      ['Therefore the result is 7.', 7],
       ['So the answer comes out to 3.14159.', '3.14159'],
     ])('grades sentence-terminated prose "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
@@ -1180,6 +1204,8 @@ describe('isMathEquivalent', async () => {
       ['\\frac{1}{2} kg', 0.5],
       ['\\frac{1}{2}m', '0.5'],
       ['\\sqrt{2} m', '\\sqrt{2}'],
+      ['\\frac{1}{\\sqrt{2}} m', '\\frac{1}{\\sqrt{2}}'],
+      ['\\frac{1}{\\sqrt{\\frac{2}{3}}} kg', '\\frac{1}{\\sqrt{\\frac{2}{3}}}'],
     ])('grades fractional / LaTeX answers with trailing units "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
     });
@@ -1191,8 +1217,24 @@ describe('isMathEquivalent', async () => {
       ['Therefore the result is x + y - 3', 'x + y - 3'],
       ['So the value comes out to 1 + 2 + 3', '6'],
       ['And so the answer is -1 / 4', '-0.25'],
+      ['The answer is 10kg', '10'],
+      ['Therefore 45°', '45'],
     ])('grades prose-wrapped contiguous math expression "%s" against %s', async (actual, expected) => {
       expect((await isMathEquivalent(actual, expected)).pass).toBe(true);
+    });
+
+    it.each([
+      ['Answer 42', 42],
+      ['Therefore 0.5', '0.5'],
+      ['Total 14', 14],
+    ])('grades unpunctuated answer-prefix finals "%s" against %s', async (actual, expected) => {
+      expect((await isMathEquivalent(actual, expected as string | number)).pass).toBe(true);
+    });
+
+    it('retains factorial rather than treating it as sentence punctuation', async () => {
+      expect((await isMathEquivalent('5!', 120)).pass).toBe(true);
+      expect((await isMathEquivalent('5!', 5)).pass).toBe(false);
+      expect((await isMathEquivalent('The answer is 5!', 120)).pass).toBe(true);
     });
 
     it.each([
