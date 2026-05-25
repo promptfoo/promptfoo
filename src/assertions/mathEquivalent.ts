@@ -475,6 +475,27 @@ function isMathShapedToken(tok: string): boolean {
   );
 }
 
+function isCoordinateMathComponent(component: string): boolean {
+  const value = component.trim();
+  return (
+    /^[A-Za-z]$/.test(value) ||
+    /\d/.test(value) ||
+    (/^[A-Za-z0-9.+\-*/^=<>_\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(value) &&
+      /[+\-*/^=<>\u00b1\u00b7\u00d7\u00f7\u2212]/.test(value))
+  );
+}
+
+function extractTrailingCoordinateExpression(text: string): string | undefined {
+  const match = text.match(/(\([^()\r\n]*,[^()\r\n]*\)|\[[^\[\]\r\n]*,[^\[\]\r\n]*\])[.,;:?]*$/);
+  if (!match) {
+    return undefined;
+  }
+  const components = match[1].slice(1, -1).split(',');
+  return components.length > 1 && components.every(isCoordinateMathComponent)
+    ? match[1]
+    : undefined;
+}
+
 /**
  * Walk a prose line from the right and return the contiguous trailing math
  * expression (sequence of math-shaped tokens, joined by spaces). Multi-letter
@@ -489,6 +510,10 @@ function isMathShapedToken(tok: string): boolean {
  * "Therefore … 42"        → "42"
  */
 function extractRightmostMathExpression(text: string): string | undefined {
+  const trailingCoordinate = extractTrailingCoordinateExpression(text);
+  if (trailingCoordinate) {
+    return trailingCoordinate;
+  }
   const tokens = text.split(/\s+/).filter(Boolean);
   const collected: string[] = [];
   for (let i = tokens.length - 1; i >= 0; i--) {

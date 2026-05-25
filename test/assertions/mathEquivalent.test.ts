@@ -635,6 +635,14 @@ describe('extractMathAnswer', async () => {
     expect(await extractMathAnswer('Answer: (x, y)')).toBe('(x, y)');
   });
 
+  it.each([
+    ['The answer is (x,y)', '(x,y)'],
+    ['The answer is (x, y)', '(x, y)'],
+    ['Therefore the point is [x+1,y-1]', '[x+1,y-1]'],
+  ])('extracts a coordinate expression from prose ("%s")', async (input, expected) => {
+    expect(await extractMathAnswer(input)).toBe(expected);
+  });
+
   it('skips a trailing \\] line that follows a $$...$$ block', async () => {
     const raw = '$$\\frac{8\\pi}{3}$$\n\\]';
     const result = await extractMathAnswer(raw);
