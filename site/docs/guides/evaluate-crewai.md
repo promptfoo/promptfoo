@@ -209,7 +209,7 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
     """
     agent = Agent(
         role="Senior Recruiter specializing in technical roles",
-        goal="Find the best candidates for a given set of job requirements and return the results in a valid JSON format.",
+        goal="Find the best candidates for a given set of job requirements and return candidates with a short summary in valid JSON format.",
         backstory=textwrap.dedent("""
             You are an expert recruiter with years of experience in sourcing top talent for the tech industry.
             You have a keen eye for detail and are a master at following instructions to the letter, especially when it comes to output formats.
@@ -223,12 +223,13 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
     task = Task(
         description="Find the top 3 candidates based on the following job requirements: {job_requirements}",
         expected_output=textwrap.dedent("""
-            A single valid JSON object. The JSON object must have a single key called "candidates".
+            A single valid JSON object with "candidates" and "summary" keys.
             The value of the "candidates" key must be an array of JSON objects.
             Each object in the array must have the following keys: "name", "experience", and "skills".
             - "name" must be a string representing the candidate's name.
             - "experience" must be a string summarizing the candidate's relevant experience.
             - "skills" must be an array of strings listing the candidate's skills.
+            - "summary" must be a short string explaining the recommendation.
 
             Example of the expected final output:
             {
@@ -238,7 +239,8 @@ def get_recruitment_agent(model: str = "openai:gpt-5") -> Crew:
                   "experience": "8 years of experience in Ruby on Rails and React, with a strong focus on building scalable web applications.",
                   "skills": ["Ruby on Rails", "React", "JavaScript", "PostgreSQL", "TDD"]
                 }
-              ]
+              ],
+              "summary": "Jane Doe is a strong match based on her extensive Rails and React experience."
             }
         """).strip(),
         agent=agent
@@ -655,7 +657,7 @@ Go to the **dashboard** and review:
 
 Final takeaway: You now have a clear, visual, and detailed view of how your CrewAI recruitment agent performed across hundreds of security, fairness, and robustness probes — all inside Promptfoo.
 
-Your CrewAI agent is now red-team tested and certified.
+Your CrewAI agent is now tested against the selected red-team checks.
 <img width="800" alt="LLM Risk overview" src="/img/docs/crewai/llm-risk.png" />
 <img width="800" alt="Security summary report" src="/img/docs/crewai/security.png" />
 <img width="800" alt="Detected vulnerabilities list" src="/img/docs/crewai/vulnerabilities.png" />
