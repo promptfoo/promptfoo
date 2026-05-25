@@ -82,7 +82,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         { query: params, signal },
       );
       set({
-        historicalScans: data.scans as HistoricalScan[],
+        historicalScans: data.scans as unknown as HistoricalScan[],
         totalCount: data.total,
         isLoadingHistory: false,
       });
@@ -123,7 +123,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         ModelAuditSchemas.ListScans.Response,
         { query: params, signal },
       );
-      const scans = data.scans as HistoricalScan[];
+      const scans = data.scans as unknown as HistoricalScan[];
       const { total } = data;
       set({
         totalCount: total,
@@ -154,7 +154,7 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
         }
         throw new Error('Failed to fetch scan');
       }
-      return response.data as HistoricalScan;
+      return response.data as unknown as HistoricalScan;
     } catch (error) {
       // Re-throw AbortError so caller can handle it appropriately
       if (error instanceof Error && error.name === 'AbortError') {

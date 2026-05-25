@@ -109,7 +109,7 @@ const EvaluateTestSuiteCreator = () => {
           ProviderSchemas.ConfigStatus.Response,
         );
         if (isMounted) {
-          setHasCustomConfig('data' in data ? data.data.hasCustomConfig : false);
+          setHasCustomConfig(data.success === true ? data.data.hasCustomConfig : false);
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);

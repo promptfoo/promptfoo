@@ -49,7 +49,7 @@ export function useEvalOperations() {
       params: { evaluationId: evalId },
       signal,
     });
-    return Array.isArray(data.traces) ? data.traces : [];
+    return Array.isArray(data.traces) ? (data.traces as unknown as Trace[]) : [];
   }, []);
 
   return {

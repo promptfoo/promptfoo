@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 import {
   createServerOpenApiDocument,
@@ -7,6 +10,19 @@ import {
 import { ALL_API_ROUTES, ApiRoutes, buildApiPath } from '../../src/types/api/routes';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
+const ROOT_SERVER_FILE = 'src/server/server.ts';
+const ROUTER_SOURCE_FILES = [
+  'src/server/routes/blobs.ts',
+  'src/server/routes/configs.ts',
+  'src/server/routes/eval.ts',
+  'src/server/routes/media.ts',
+  'src/server/routes/modelAudit.ts',
+  'src/server/routes/providers.ts',
+  'src/server/routes/redteam.ts',
+  'src/server/routes/traces.ts',
+  'src/server/routes/user.ts',
+  'src/server/routes/version.ts',
+] as const;
 
 function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   return Object.entries(document.paths ?? {}).flatMap(([path, pathItem]) =>
@@ -46,6 +62,32 @@ describe('server OpenAPI generation', () => {
       '/eval/suite%2Fresult%201/table',
     );
     expect(() => buildApiPath(ApiRoutes.Blobs.Get)).toThrow('Missing API path parameter: hash');
+  });
+
+  it('requires server API registrations to use shared route contracts', () => {
+    const rootSource = fs.readFileSync(path.resolve(ROOT_SERVER_FILE), 'utf8');
+    const rootLiteralPaths = [
+      ...rootSource.matchAll(/\bapp\.(?:get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\1/g),
+    ]
+      .map((match) => match[2])
+      .filter((registeredPath) => registeredPath !== '/*splat');
+    const literalApiMounts = [
+      ...rootSource.matchAll(/\bapp\.use\(\s*(['"`])(\/api(?:\/[^'"`]*)?)\1/g),
+    ].map((match) => match[2]);
+
+    expect(rootLiteralPaths).toEqual([]);
+    expect(literalApiMounts).toEqual([]);
+
+    for (const sourceFile of ROUTER_SOURCE_FILES) {
+      const source = fs.readFileSync(path.resolve(sourceFile), 'utf8');
+      const literalHandlerPaths = [
+        ...source.matchAll(
+          /\b(?:[A-Za-z]+Router|router)\.(?:get|post|put|patch|delete)\(\s*(['"`])([^'"`]+)\1/g,
+        ),
+      ].map((match) => match[2]);
+
+      expect(literalHandlerPaths, sourceFile).toEqual([]);
+    }
   });
 
   it('documents representative request and response shapes', () => {

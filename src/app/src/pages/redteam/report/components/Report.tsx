@@ -126,7 +126,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
               { cache: 'no-store' },
             );
             if (body.data && body.data.length > 0) {
-              const latestEvalId = (body.data as ResultLightweightWithLabel[])[0].evalId;
+              const latestEvalId = (body.data as unknown as ResultLightweightWithLabel[])[0].evalId;
               setEvalId(latestEvalId);
               fetchEvalById(latestEvalId);
             } else {

@@ -366,12 +366,15 @@ export const TestCaseGenerationProvider: React.FC<{
           testCase.prompt,
           abortController,
         );
+        const typedProviderResponse = providerResponse as
+          | { output?: string; error?: string }
+          | undefined;
 
         setTargetResponses((prev) => [
           ...prev,
           {
-            output: providerResponse?.output ?? null,
-            error: providerResponse?.error ?? null,
+            output: typedProviderResponse?.output ?? null,
+            error: typedProviderResponse?.error ?? null,
           },
         ]);
 

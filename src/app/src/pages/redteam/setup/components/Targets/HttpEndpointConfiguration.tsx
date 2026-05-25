@@ -203,8 +203,8 @@ Content-Type: application/json
         setTestResult({
           success: isSuccess,
           message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
+          providerResponse: (data.providerResponse as TestResult['providerResponse']) || {},
+          transformedRequest: data.transformedRequest as TestResult['transformedRequest'],
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
         });

@@ -2,9 +2,21 @@ import { useEffect, useRef, useState } from 'react';
 
 import { callApiJson } from '@app/utils/api';
 import { ApiRoutes } from '@promptfoo/types/api/routes';
-import { type VersionResponse, VersionSchemas } from '@promptfoo/types/api/version';
+import { VersionSchemas } from '@promptfoo/types/api/version';
 
-type VersionInfo = VersionResponse;
+interface VersionInfo {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  selfHosted?: boolean;
+  isNpx?: boolean;
+  updateCommands?: {
+    primary: string;
+    alternative: string | null;
+    commandType?: 'docker' | 'npx' | 'npm';
+  };
+  commandType?: 'docker' | 'npx' | 'npm';
+}
 
 interface UseVersionCheckResult {
   versionInfo: VersionInfo | null;

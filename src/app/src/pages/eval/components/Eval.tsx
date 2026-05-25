@@ -88,7 +88,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       const body = await callApiJson(ApiRoutes.Results.List, ServerSchemas.ResultList.Response, {
         cache: 'no-store',
       });
-      const evals = body.data as ResultLightweightWithLabel[];
+      const evals = body.data as unknown as ResultLightweightWithLabel[];
       setRecentEvals(evals);
       return evals;
     } catch {

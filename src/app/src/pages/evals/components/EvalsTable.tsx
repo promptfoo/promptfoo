@@ -59,7 +59,7 @@ export default function EvalsTable({
         cache: 'no-store',
         signal,
       });
-      setEvals(body.data as EvalSummary[]);
+      setEvals(body.data as unknown as EvalSummary[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {

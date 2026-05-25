@@ -119,7 +119,10 @@ export default function ModelAuditSetupPage() {
       if (!response.ok) {
         throw response.error;
       }
-      const data = response.data as ScanResult & { auditId?: string; persisted?: boolean };
+      const data = response.data as unknown as ScanResult & {
+        auditId?: string;
+        persisted?: boolean;
+      };
 
       setScanResults(data);
       addRecentScan(paths);

@@ -1,6 +1,8 @@
 import React from 'react';
 
 import { callApiJson } from '@app/utils/api';
+import { ApiRoutes } from '@promptfoo/types/api/routes';
+import { ServerSchemas } from '@promptfoo/types/api/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,6 +57,11 @@ describe('useApiHealth', () => {
     });
 
     expect(result.current.data.message).toBe('Cloud API is healthy');
+    expect(mockCallApiJson).toHaveBeenCalledWith(
+      ApiRoutes.RemoteHealth,
+      ServerSchemas.RemoteHealth.Response,
+      { cache: 'no-store' },
+    );
     expect(result.current.isLoading).toBe(false);
   });
 

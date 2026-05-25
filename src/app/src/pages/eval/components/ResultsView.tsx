@@ -585,7 +585,7 @@ export default function ResultsView({
         const newConfig = { ...config, description: newName };
 
         await callApiJson(ApiRoutes.Eval.Update, EvalSchemas.Update.Response, {
-          params: { id: evalId },
+          params: { id: evalId as string },
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',

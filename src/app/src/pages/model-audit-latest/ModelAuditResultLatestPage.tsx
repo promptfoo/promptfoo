@@ -47,7 +47,7 @@ export default function ModelAuditResultLatestPage() {
         return;
       }
 
-      const scans = data.scans as HistoricalScan[];
+      const scans = data.scans as unknown as HistoricalScan[];
 
       if (scans.length > 0) {
         setLatestScan(scans[0]);

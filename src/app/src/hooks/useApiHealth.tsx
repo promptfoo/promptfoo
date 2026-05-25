@@ -19,7 +19,7 @@ export function useApiHealth() {
     queryFn: async () => {
       try {
         const { status, message } = await callApiJson(
-          ApiRoutes.RemoteHealth.Get,
+          ApiRoutes.RemoteHealth,
           ServerSchemas.RemoteHealth.Response,
           { cache: 'no-store' },
         );

@@ -69,7 +69,7 @@ interface PolicyPlugin {
 
 interface JobStatusResponse {
   hasRunningJob: boolean;
-  jobId?: string;
+  jobId?: string | null;
 }
 
 interface IntentEntry {

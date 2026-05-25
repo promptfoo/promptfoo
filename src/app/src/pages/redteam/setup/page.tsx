@@ -243,7 +243,7 @@ export default function RedTeamSetupPage() {
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
       setConfigName(configName);
-      setConfigDate(data.createdAt);
+      setConfigDate(String(data.createdAt));
     } catch (error) {
       console.error('Failed to save configuration', error);
       toast.showToast(
@@ -264,11 +264,13 @@ export default function RedTeamSetupPage() {
 
       setHasUnsavedChanges(false);
 
+      const configs: SavedConfig[] = data.configs.map(({ id, name, updatedAt }) => ({
+        id,
+        name,
+        updatedAt: String(updatedAt),
+      }));
       setSavedConfigs(
-        data.configs.sort(
-          (a: SavedConfig, b: SavedConfig) =>
-            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-        ),
+        configs.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
       );
     } catch (error) {
       console.error('Failed to load configurations', error);
@@ -286,9 +288,9 @@ export default function RedTeamSetupPage() {
         params: { type: 'redteam', id },
       });
 
-      setFullConfig(data.config);
+      setFullConfig(data.config as Config);
       setConfigName(data.name);
-      setConfigDate(data.updatedAt);
+      setConfigDate(String(data.updatedAt));
       lastSavedConfig.current = JSON.stringify(data.config);
       setHasUnsavedChanges(false);
 

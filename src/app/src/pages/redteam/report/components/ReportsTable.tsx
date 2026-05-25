@@ -50,7 +50,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
         cache: 'no-store',
         signal,
       });
-      setReports(body.data as EvalSummary[]);
+      setReports(body.data as unknown as EvalSummary[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {

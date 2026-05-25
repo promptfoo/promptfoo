@@ -1,4 +1,3 @@
-import type { GetScanResponse } from '@promptfoo/types/api/modelAudit';
 import type { ModelAuditCheck } from '@promptfoo/types/modelAudit';
 
 import type { ModelAuditScanResults } from '../../../../types/modelAudit';
@@ -99,7 +98,24 @@ export interface ScanResult extends ModelAuditScanResults {
 /**
  * A historical scan record retrieved from the database.
  */
-export type HistoricalScan = Omit<GetScanResponse, 'metadata' | 'results'> & {
+export interface HistoricalScan {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  name?: string | null;
+  author?: string | null;
+  modelPath: string;
+  modelType?: string | null;
   results: ScanResult;
+  hasErrors: boolean;
+  totalChecks?: number | null;
+  passedChecks?: number | null;
+  failedChecks?: number | null;
   metadata?: Record<string, unknown> | null;
-};
+  modelId?: string | null;
+  revisionSha?: string | null;
+  contentHash?: string | null;
+  modelSource?: string | null;
+  sourceLastModified?: number | null;
+  scannerVersion?: string | null;
+}

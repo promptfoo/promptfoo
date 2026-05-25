@@ -53,10 +53,14 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
     }
 
     const data = response.data;
+    const result =
+      typeof data.result === 'object' && data.result !== null && 'output' in data.result
+        ? data.result.output
+        : data.result;
     return {
       success: data.success,
-      result: data.result?.output ?? data.result,
-      error: data.error,
+      result,
+      error: data.success ? undefined : data.error,
     };
   };
 
