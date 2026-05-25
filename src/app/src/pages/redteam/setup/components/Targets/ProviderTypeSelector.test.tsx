@@ -86,6 +86,20 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
+  it('labels provider search and clear controls', async () => {
+    const user = userEvent.setup();
+    const mockSetProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={mockSetProvider} />,
+    );
+
+    const searchInput = screen.getByRole('searchbox', { name: 'Search providers' });
+    await user.type(searchInput, 'openai');
+
+    expect(screen.getByRole('button', { name: 'Clear provider search' })).toBeInTheDocument();
+  });
+
   it('stacks filters above search before the layout has room for a shared row', () => {
     const mockSetProvider = vi.fn();
 
