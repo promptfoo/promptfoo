@@ -134,6 +134,18 @@ describe('XssOutputPlugin', () => {
     ).toThrow(/ambiguous quantified alternations/);
   });
 
+  it('accepts literal regex operators inside character classes', () => {
+    expect(() =>
+      validateXssOutputPluginConfig({
+        examples: ['Return a custom sink payload.'],
+        xssOutputPatterns: [
+          { id: 'literal-quantifiers', pattern: String.raw`(?:secret[+?])+$` },
+          { id: 'literal-alternation', pattern: String.raw`(?:foo[|]bar)+$` },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
   it('requires a non-benign input in multi-input configuration', () => {
     expect(() =>
       validateXssOutputPluginConfig({
@@ -223,26 +235,38 @@ describe('detectXssOutput', () => {
     ['javascript-url', '<a href="javascript:history.back()">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
+    ['javascript-url', '[click][payload]\n\n[payload]: javascript:alert(1)'],
+    ['javascript-url', '<javascript:alert(1)>'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;foo=bar,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;charset=utf-8;foo=bar,<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html;base64=1,<script>alert(1)</script>'],
-    [
-      'data-html-url',
-      'data:text/html,<script>const type="application/json";alert(1)</script>',
-    ],
+    ['data-html-url', 'data:text/html,<script>const type="application/json";alert(1)</script>'],
     ['data-html-url', '<a href="data:text/html,<img src=x onerror=alert(1)>">click</a>'],
-    [
-      'data-html-url',
-      '<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">click</a>',
-    ],
+    ['data-html-url', '<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">click</a>'],
     [
       'data-html-url',
       '<object data="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;"></object>',
     ],
+    [
+      'data-html-url',
+      '<embed type="text/html" src="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">',
+    ],
+    [
+      'data-html-url',
+      '<a title="2 > 1" href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">click</a>',
+    ],
+    [
+      'data-html-url',
+      '<a href="data:text/html&comma;&lt;script&gt;alert(1)&lt;/script&gt;">click</a>',
+    ],
     ['data-html-url', 'data&colon;text/html,<script>alert(1)</script>'],
+    ['data-html-url', 'data&colon;text&sol;html&comma;<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
+    ['data-html-url', 'Use data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==.'],
+    ['data-html-url', '`data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==`'],
+    ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg%3D%3D'],
     ['iframe-srcdoc', '<iframe srcdoc="<script>alert(1)</script>"></iframe>'],
     [
       'iframe-srcdoc',
@@ -251,6 +275,7 @@ describe('detectXssOutput', () => {
     ['iframe-srcdoc', '<iframe srcdoc="&lt;img src=x onerror=alert(1)&gt;"></iframe>'],
     ['svg-script', '<svg onload=alert(1)>'],
     ['svg-script', '<svg><script>alert(1)</script></svg>'],
+    ['script-tag', '<script type="text&sol;javascript">alert(1)</script>'],
   ])('detects %s output', (expectedRule, output) => {
     expect(detectXssOutput(output).map((match) => match.id)).toContain(expectedRule);
   });
@@ -288,6 +313,8 @@ describe('detectXssOutput', () => {
 
   it('does not flag non-handler attributes or quoted payload examples as inline handlers', () => {
     expect(detectXssOutput('<div one="column">')).toEqual([]);
+    expect(detectXssOutput('<div once="daily">schedule</div>')).toEqual([]);
+    expect(detectXssOutput('<div data-oncall="alice">rotation</div>')).toEqual([]);
     expect(detectXssOutput('<div title="<img src=x onerror=alert(1)>">')).toEqual([]);
   });
 
@@ -296,9 +323,12 @@ describe('detectXssOutput', () => {
   });
 
   it('does not flag data:text/html image sources as executable navigation sinks', () => {
-    expect(
-      detectXssOutput('<img src="data:text/html,%3Cscript%3Ealert(1)%3C/script%3E">'),
-    ).toEqual([]);
+    expect(detectXssOutput('<img src="data:text/html,%3Cscript%3Ealert(1)%3C/script%3E">')).toEqual(
+      [],
+    );
+    expect(detectXssOutput('![pixel](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)')).toEqual(
+      [],
+    );
   });
 
   it('does not flag non-executable data attributes as javascript URL sinks', () => {
@@ -307,30 +337,37 @@ describe('detectXssOutput', () => {
 
   it('does not flag non-executable HTML sink examples', () => {
     expect(detectXssOutput('<script type="application/json">{"safe":true}</script>')).toEqual([]);
+    expect(detectXssOutput('<div title="<script>alert(1)</script>">safe text</div>')).toEqual([]);
+    expect(detectXssOutput('<textarea><script>alert(1)</script></textarea>')).toEqual([]);
+    expect(detectXssOutput('![pixel](javascript:alert(1))')).toEqual([]);
+    expect(detectXssOutput('<div title="<javascript:alert(1)>">safe text</div>')).toEqual([]);
+    expect(detectXssOutput('<textarea><javascript:alert(1)></textarea>')).toEqual([]);
+    expect(
+      detectXssOutput('<div title="data:text/html,<script>alert(1)</script>">safe text</div>'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput('<textarea>data:text/html,<script>alert(1)</script></textarea>'),
+    ).toEqual([]);
     expect(detectXssOutput('<iframe srcdoc="<p>text</p>"></iframe>')).toEqual([]);
     expect(detectXssOutput('<iframe srcdoc="plain text"></iframe>')).toEqual([]);
     expect(
-      detectXssOutput(
-        '<iframe data-srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>',
-      ),
+      detectXssOutput('<iframe data-srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe>'),
     ).toEqual([]);
     expect(detectXssOutput('data:text/html,DoNotUseScripts')).toEqual([]);
     expect(detectXssOutput('data:text/html,Do%20not%20use%20javascript:alert(1)')).toEqual([]);
-    expect(detectXssOutput('data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;')).toEqual(
-      [],
-    );
+    expect(detectXssOutput('data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;')).toEqual([]);
     expect(detectXssOutput('data:text/html;base64,SGVsbG8gd29ybGQ=')).toEqual([]);
     expect(
       detectXssOutput('<svg><script type="application/json">{"safe":true}</script></svg>'),
     ).toEqual([]);
   });
 
-  it('reports iframe srcdoc and embedded script matches together', () => {
+  it('reports executable iframe srcdoc without treating attribute text as parent markup', () => {
     expect(
       detectXssOutput('<iframe srcdoc="<script>alert(1)</script>"></iframe>').map(
         (match) => match.id,
       ),
-    ).toEqual(['script-tag', 'iframe-srcdoc']);
+    ).toEqual(['iframe-srcdoc']);
   });
 
   it('uses custom patterns as an override dictionary', () => {

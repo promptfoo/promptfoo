@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { parseFragment } from 'parse5';
 import { getInputDescription, normalizeInputDefinition } from '../../types/shared';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { getShortPluginId } from '../util';
@@ -81,9 +82,8 @@ export interface XssOutputPatternConfig {
 export interface XssOutputRule {
   id: string;
   description: string;
-  pattern: RegExp;
-  normalizeOutput?: (output: string) => string;
-  validateMatch?: (evidence: string) => boolean;
+  pattern?: RegExp;
+  findEvidence?: (output: string, parsedNodes?: ParsedHtmlNode[]) => string | undefined;
 }
 
 export interface XssOutputMatch {
@@ -95,17 +95,12 @@ export interface XssOutputMatch {
 const HTML_ENTITY_MAP: Record<string, string> = {
   amp: '&',
   colon: ':',
+  comma: ',',
   newline: '\n',
+  sol: '/',
   tab: '\t',
 };
 
-const HTML_ATTRIBUTE_ENTITY_MAP: Record<string, string> = {
-  ...HTML_ENTITY_MAP,
-  apos: "'",
-  gt: '>',
-  lt: '<',
-  quot: '"',
-};
 const NESTED_QUANTIFIER =
   /\((?:[^()\\]|\\.)*(?:[+*]|\?(?![:=!<])|\{\d+(?:,\d*)?\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+(?:,\d*)?\})/;
 const UNBOUNDED_WILDCARD = /(^|[^\\])\.(?:\*|\+)/;
@@ -113,27 +108,30 @@ const QUANTIFIED_ALTERNATION =
   /\((?:\?:)?(?<alternatives>(?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*)\)(?:[+*]|\{\d+(?:,\d*)?\})/g;
 
 function decodeHtmlEntitiesForUrlDetection(output: string): string {
-  return output.replace(/&(#x[0-9a-f]+|#\d+|amp|colon|newline|tab);?/gi, (entity, value) => {
-    const normalizedValue = String(value).toLowerCase();
+  return output.replace(
+    /&(#x[0-9a-f]+|#\d+|amp|colon|comma|newline|sol|tab);?/gi,
+    (entity, value) => {
+      const normalizedValue = String(value).toLowerCase();
 
-    if (normalizedValue.startsWith('#x')) {
-      try {
-        return decodeUrlEntityCodePoint(entity, Number.parseInt(normalizedValue.slice(2), 16));
-      } catch {
-        return entity;
+      if (normalizedValue.startsWith('#x')) {
+        try {
+          return decodeUrlEntityCodePoint(entity, Number.parseInt(normalizedValue.slice(2), 16));
+        } catch {
+          return entity;
+        }
       }
-    }
 
-    if (normalizedValue.startsWith('#')) {
-      try {
-        return decodeUrlEntityCodePoint(entity, Number.parseInt(normalizedValue.slice(1), 10));
-      } catch {
-        return entity;
+      if (normalizedValue.startsWith('#')) {
+        try {
+          return decodeUrlEntityCodePoint(entity, Number.parseInt(normalizedValue.slice(1), 10));
+        } catch {
+          return entity;
+        }
       }
-    }
 
-    return HTML_ENTITY_MAP[normalizedValue] ?? entity;
-  });
+      return HTML_ENTITY_MAP[normalizedValue] ?? entity;
+    },
+  );
 }
 
 function decodeUrlEntityCodePoint(entity: string, codePoint: number): string {
@@ -145,33 +143,6 @@ function decodeUrlEntityCodePoint(entity: string, codePoint: number): string {
   return decoded === '<' || decoded === '>' || decoded === '"' || decoded === "'"
     ? entity
     : decoded;
-}
-
-function decodeHtmlAttributeEntities(value: string): string {
-  return value.replace(
-    /&(#x[0-9a-f]+|#\d+|amp|apos|colon|gt|lt|newline|quot|tab);?/gi,
-    (entity, rawValue) => {
-      const normalizedValue = String(rawValue).toLowerCase();
-
-      if (normalizedValue.startsWith('#x')) {
-        try {
-          return String.fromCodePoint(Number.parseInt(normalizedValue.slice(2), 16));
-        } catch {
-          return entity;
-        }
-      }
-
-      if (normalizedValue.startsWith('#')) {
-        try {
-          return String.fromCodePoint(Number.parseInt(normalizedValue.slice(1), 10));
-        } catch {
-          return entity;
-        }
-      }
-
-      return HTML_ATTRIBUTE_ENTITY_MAP[normalizedValue] ?? entity;
-    },
-  );
 }
 
 function normalizeUrlDetectionOutput(output: string): string {
@@ -187,30 +158,26 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 const JAVASCRIPT_URL_PATTERN = String.raw`javascript\s*:`;
-const OPENING_HTML_TAG_PATTERN_SOURCE = String.raw`<\s*[\w:-]+\b(?:[^>"']|"[^"]*"|'[^']*')*>`;
-const JAVASCRIPT_URL_SINK_PATTERN = new RegExp(
-  String.raw`(?:${OPENING_HTML_TAG_PATTERN_SOURCE}|\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\))`,
+const JAVASCRIPT_URL_VALUE_PATTERN = new RegExp(String.raw`^\s*${JAVASCRIPT_URL_PATTERN}`, 'i');
+const DATA_HTML_URL_VALUE_PATTERN = new RegExp(
+  String.raw`^\s*data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,`,
   'i',
 );
-const SCRIPT_TAG_PATTERN = /<\s*script\b[^>]*>[\s\S]*?(?:<\s*\/\s*script\s*>|$)/i;
-const IFRAME_SRCDOC_PATTERN =
-  /<\s*iframe\b[^>]*[\s/]+srcdoc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i;
-const DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n"']+`;
-const DATA_HTML_URL_BARE_VALUE_PATTERN = String.raw`data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`;
-const DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`(?:<[^>]*[\s/](?:href|src|action|formaction|xlink:href|data)\s*=\s*(?:"[^"]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|'[^']*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN}|[^\s>]*?\b${DATA_HTML_URL_ATTRIBUTE_VALUE_PATTERN})|\b${DATA_HTML_URL_BARE_VALUE_PATTERN})`,
-  'i',
+const DATA_HTML_URL_BARE_PATTERN = new RegExp(
+  String.raw`\bdata\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`,
+  'gi',
 );
-const EVENT_HANDLER_ATTRIBUTE_PATTERN = new RegExp(OPENING_HTML_TAG_PATTERN_SOURCE, 'i');
-const SVG_CONTAINER_PATTERN = /<\s*svg\b[\s\S]*?(?:<\s*\/\s*svg\s*>|$)/i;
-const EVENT_HANDLER_ATTRIBUTE_NAME_PATTERN = /^on[a-z]{2,}$/i;
-const MARKDOWN_JAVASCRIPT_URL_PATTERN = new RegExp(
-  String.raw`^\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)]*\)$`,
-  'i',
+const MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN = new RegExp(
+  String.raw`\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)\r\n]*\)`,
+  'gi',
 );
-const JAVASCRIPT_URL_VALUE_PATTERN = new RegExp(
-  String.raw`^\s*${JAVASCRIPT_URL_PATTERN}`,
-  'i',
+const MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN = new RegExp(
+  String.raw`^\s{0,3}\[([^\]\r\n]+)\]:\s*(?:<\s*)?${JAVASCRIPT_URL_PATTERN}[^\r\n>]*(?:>)?`,
+  'gim',
+);
+const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN = new RegExp(
+  String.raw`<\s*${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>`,
+  'gi',
 );
 const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   a: ['href', 'xlink:href'],
@@ -230,7 +197,92 @@ const DATA_HTML_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   iframe: ['src'],
   input: ['formaction'],
   object: ['data'],
+  embed: ['src'],
 };
+const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
+  'onabort',
+  'onanimationcancel',
+  'onanimationend',
+  'onanimationiteration',
+  'onanimationstart',
+  'onauxclick',
+  'onbeforeinput',
+  'onbeforetoggle',
+  'onbeforeunload',
+  'onbegin',
+  'onblur',
+  'oncancel',
+  'onchange',
+  'onclick',
+  'onclose',
+  'oncontextmenu',
+  'oncopy',
+  'oncut',
+  'ondblclick',
+  'ondrag',
+  'ondragend',
+  'ondragenter',
+  'ondragleave',
+  'ondragover',
+  'ondragstart',
+  'ondrop',
+  'onend',
+  'onerror',
+  'onfocus',
+  'onformdata',
+  'onhashchange',
+  'oninput',
+  'oninvalid',
+  'onkeydown',
+  'onkeypress',
+  'onkeyup',
+  'onload',
+  'onmessage',
+  'onmousedown',
+  'onmouseenter',
+  'onmouseleave',
+  'onmousemove',
+  'onmouseout',
+  'onmouseover',
+  'onmouseup',
+  'onoffline',
+  'ononline',
+  'onpagehide',
+  'onpageshow',
+  'onpaste',
+  'onpointercancel',
+  'onpointerdown',
+  'onpointerenter',
+  'onpointerleave',
+  'onpointermove',
+  'onpointerout',
+  'onpointerover',
+  'onpointerup',
+  'onpopstate',
+  'onreadystatechange',
+  'onreset',
+  'onscroll',
+  'onsubmit',
+  'ontimeupdate',
+  'ontoggle',
+  'ontouchcancel',
+  'ontouchend',
+  'ontouchmove',
+  'ontouchstart',
+  'ontransitionend',
+  'onunload',
+  'onvolumechange',
+  'onwheel',
+]);
+const INERT_TEXT_CONTAINER_TAGS = new Set([
+  'noembed',
+  'noframes',
+  'plaintext',
+  'style',
+  'textarea',
+  'title',
+  'xmp',
+]);
 const EXECUTABLE_SCRIPT_TYPES = new Set([
   '',
   'application/ecmascript',
@@ -252,206 +304,179 @@ const EXECUTABLE_SCRIPT_TYPES = new Set([
   'text/x-javascript',
 ]);
 
-interface HtmlAttribute {
+interface ParsedHtmlAttribute {
   name: string;
-  value?: string;
+  value: string;
 }
 
-function getHtmlOpeningTag(html: string): string {
-  let quote: '"' | "'" | undefined;
-  let openingTagEnd = -1;
+interface ParsedSourceLocation {
+  startOffset: number;
+  endOffset: number;
+  startTag?: ParsedSourceLocation;
+  attrs?: Record<string, ParsedSourceLocation>;
+}
 
-  for (let index = 0; index < html.length; index++) {
-    const character = html[index];
-    if (quote) {
-      if (character === quote) {
-        quote = undefined;
-      }
-      continue;
+interface ParsedHtmlNode {
+  tagName?: string;
+  attrs?: ParsedHtmlAttribute[];
+  childNodes?: ParsedHtmlNode[];
+  sourceCodeLocation?: ParsedSourceLocation | null;
+}
+
+// Parsing distinguishes executable elements from identical text inside attributes or RCDATA.
+function getParsedHtmlNodes(html: string): ParsedHtmlNode[] {
+  const fragment = parseFragment(html, {
+    sourceCodeLocationInfo: true,
+  }) as unknown as ParsedHtmlNode;
+  return fragment.childNodes ?? [];
+}
+
+function findParsedElement(
+  nodes: ParsedHtmlNode[],
+  predicate: (node: ParsedHtmlNode) => boolean,
+): ParsedHtmlNode | undefined {
+  for (const node of nodes) {
+    if (node.tagName && predicate(node)) {
+      return node;
     }
-
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-
-    if (character === '>') {
-      openingTagEnd = index;
-      break;
+    const childMatch = findParsedElement(node.childNodes ?? [], predicate);
+    if (childMatch) {
+      return childMatch;
     }
   }
-
-  return openingTagEnd >= 0 ? html.slice(0, openingTagEnd + 1) : html;
+  return undefined;
 }
 
-function getHtmlTagName(html: string): string | undefined {
-  return getHtmlOpeningTag(html).match(/^<\s*([\w:-]+)/i)?.[1]?.toLowerCase();
+function getParsedAttributeValue(node: ParsedHtmlNode, attributeName: string): string | undefined {
+  return node.attrs?.find((attribute) => attribute.name === attributeName)?.value;
 }
 
-function getHtmlAttributes(html: string): HtmlAttribute[] {
-  const openingTag = getHtmlOpeningTag(html);
-  const tagMatch = openingTag.match(/^<\s*[\w:-]+/i);
-  if (!tagMatch) {
-    return [];
-  }
-
-  const attributes: HtmlAttribute[] = [];
-  let index = tagMatch[0].length;
-
-  while (index < openingTag.length) {
-    while (/[\s/]/.test(openingTag[index] ?? '')) {
-      index++;
-    }
-    if (index >= openingTag.length || openingTag[index] === '>') {
-      break;
-    }
-
-    const nameStart = index;
-    while (index < openingTag.length && !/[\s=/>]/.test(openingTag[index] ?? '')) {
-      index++;
-    }
-    const name = openingTag.slice(nameStart, index).toLowerCase();
-    if (!name) {
-      break;
-    }
-
-    while (/\s/.test(openingTag[index] ?? '')) {
-      index++;
-    }
-
-    let value: string | undefined;
-    if (openingTag[index] === '=') {
-      index++;
-      while (/\s/.test(openingTag[index] ?? '')) {
-        index++;
-      }
-
-      const quote = openingTag[index];
-      if (quote === '"' || quote === "'") {
-        index++;
-        const valueStart = index;
-        while (index < openingTag.length && openingTag[index] !== quote) {
-          index++;
-        }
-        value = openingTag.slice(valueStart, index);
-        if (openingTag[index] === quote) {
-          index++;
-        }
-      } else {
-        const valueStart = index;
-        while (index < openingTag.length && !/[\s>]/.test(openingTag[index] ?? '')) {
-          index++;
-        }
-        value = openingTag.slice(valueStart, index);
-      }
-    }
-
-    attributes.push({ name, value });
-  }
-
-  return attributes;
+function getElementEvidence(output: string, node: ParsedHtmlNode, startTagOnly = false): string {
+  const location = startTagOnly
+    ? (node.sourceCodeLocation?.startTag ?? node.sourceCodeLocation)
+    : node.sourceCodeLocation;
+  return location ? output.slice(location.startOffset, location.endOffset) : `<${node.tagName}>`;
 }
 
-function getHtmlAttributeValue(html: string, attributeName: string): string | undefined {
-  return getHtmlAttributes(html).find((attribute) => attribute.name === attributeName)?.value;
-}
-
-function isExecutableScriptTag(evidence: string): boolean {
-  const type = getHtmlAttributeValue(evidence, 'type');
+function isExecutableScriptElement(node: ParsedHtmlNode): boolean {
+  const type = getParsedAttributeValue(node, 'type');
   if (type === undefined) {
     return true;
   }
 
-  const normalizedType = decodeHtmlAttributeEntities(type).split(';')[0].trim().toLowerCase();
+  const normalizedType = type.split(';')[0].trim().toLowerCase();
   return EXECUTABLE_SCRIPT_TYPES.has(normalizedType);
 }
 
-function hasExecutableScriptTag(html: string): boolean {
+function findExecutableScriptEvidence(
+  output: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
+): string | undefined {
+  const node = findParsedElement(
+    nodes,
+    (element) => element.tagName === 'script' && isExecutableScriptElement(element),
+  );
+  return node ? getElementEvidence(output, node) : undefined;
+}
+
+function hasExecutableEventHandlerAttribute(node: ParsedHtmlNode): boolean {
   return Boolean(
-    findRuleEvidence(html, {
-      id: 'script-tag',
-      description: 'script tag',
-      pattern: SCRIPT_TAG_PATTERN,
-      validateMatch: isExecutableScriptTag,
-    }),
+    node.attrs?.some(
+      ({ name, value }) => EXECUTABLE_EVENT_HANDLER_ATTRIBUTES.has(name) && value.trim().length > 0,
+    ),
   );
 }
 
-function hasExecutableEventHandlerAttribute(evidence: string): boolean {
-  return getHtmlAttributes(evidence).some(
-    ({ name, value }) =>
-      value !== undefined && EVENT_HANDLER_ATTRIBUTE_NAME_PATTERN.test(name),
-  );
+function findExecutableEventHandlerEvidence(
+  output: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
+): string | undefined {
+  const node = findParsedElement(nodes, hasExecutableEventHandlerAttribute);
+  return node ? getElementEvidence(output, node, true) : undefined;
 }
 
 function hasJavascriptUrlValue(value: string | undefined): boolean {
   return (
-    value !== undefined &&
-    JAVASCRIPT_URL_VALUE_PATTERN.test(
-      normalizeUrlDetectionOutput(decodeHtmlAttributeEntities(value)),
-    )
+    value !== undefined && JAVASCRIPT_URL_VALUE_PATTERN.test(normalizeUrlDetectionOutput(value))
   );
 }
 
-function hasExecutableJavascriptUrlSink(evidence: string): boolean {
-  if (MARKDOWN_JAVASCRIPT_URL_PATTERN.test(evidence)) {
-    return true;
+function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
+  const normalized = normalizeUrlDetectionOutput(output);
+  for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
+    if (normalized[(match.index ?? 0) - 1] !== '!') {
+      return match[0];
+    }
   }
-
-  const tagName = getHtmlTagName(evidence);
-  if (!tagName) {
-    return false;
+  for (const match of normalized.matchAll(MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN)) {
+    const label = match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(String.raw`(?<!!)\[[^\]\r\n]+\]\[\s*${label}\s*\]`, 'i').test(normalized)) {
+      return match[0];
+    }
   }
+  return normalized.match(MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN)?.[0];
+}
 
-  return (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[tagName] ?? []).some((attributeName) =>
-    hasJavascriptUrlValue(getHtmlAttributeValue(evidence, attributeName)),
+function findExecutableJavascriptUrlEvidence(
+  output: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
+): string | undefined {
+  const node = findParsedElement(nodes, (element) =>
+    (JAVASCRIPT_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).some((attributeName) =>
+      hasJavascriptUrlValue(getParsedAttributeValue(element, attributeName)),
+    ),
   );
+  return node
+    ? getElementEvidence(output, node, true)
+    : findMarkdownJavascriptUrlEvidence(maskNonExecutableHtmlContexts(output, nodes));
 }
 
 function containsExecutableXssContent(html: string): boolean {
+  const nodes = getParsedHtmlNodes(html);
   return (
-    hasExecutableScriptTag(html) ||
-    findRuleEvidence(html, {
-      id: 'event-handler-attribute',
-      description: 'event handler attribute',
-      pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
-      validateMatch: hasExecutableEventHandlerAttribute,
-    }) !== undefined ||
-    findRuleEvidence(html, {
-      id: 'javascript-url',
-      description: 'javascript URL sink',
-      pattern: JAVASCRIPT_URL_SINK_PATTERN,
-      normalizeOutput: normalizeUrlDetectionOutput,
-      validateMatch: hasExecutableJavascriptUrlSink,
-    }) !== undefined
+    findExecutableScriptEvidence(html, nodes) !== undefined ||
+    findExecutableEventHandlerEvidence(html, nodes) !== undefined ||
+    findExecutableJavascriptUrlEvidence(html, nodes) !== undefined
   );
 }
 
-function hasExecutableSvgContent(evidence: string): boolean {
-  return (
-    hasExecutableScriptTag(evidence) ||
-    findRuleEvidence(evidence, {
-      id: 'event-handler-attribute',
-      description: 'event handler attribute',
-      pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
-      validateMatch: hasExecutableEventHandlerAttribute,
-    }) !== undefined
+function findExecutableSvgEvidence(
+  output: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
+): string | undefined {
+  const node = findParsedElement(
+    nodes,
+    (element) =>
+      element.tagName === 'svg' &&
+      (hasExecutableEventHandlerAttribute(element) ||
+        findParsedElement(
+          element.childNodes ?? [],
+          (child) =>
+            (child.tagName === 'script' && isExecutableScriptElement(child)) ||
+            hasExecutableEventHandlerAttribute(child),
+        ) !== undefined),
   );
+  return node ? getElementEvidence(output, node) : undefined;
 }
 
-function getSrcdocValue(evidence: string): string | undefined {
-  return getHtmlAttributeValue(evidence, 'srcdoc');
-}
-
-function hasExecutableSrcdoc(evidence: string): boolean {
-  const srcdoc = getSrcdocValue(evidence);
-  return srcdoc !== undefined && containsExecutableXssContent(decodeHtmlAttributeEntities(srcdoc));
+function findExecutableSrcdocEvidence(
+  output: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
+): string | undefined {
+  const node = findParsedElement(nodes, (element) => {
+    if (element.tagName !== 'iframe') {
+      return false;
+    }
+    const srcdoc = getParsedAttributeValue(element, 'srcdoc');
+    return srcdoc !== undefined && containsExecutableXssContent(srcdoc);
+  });
+  return node ? getElementEvidence(output, node, true) : undefined;
 }
 
 function getDataHtmlPayload(
-  evidence: string,
+  value: string,
 ): { encodedPayload: string; isBase64: boolean } | undefined {
-  const match = evidence.match(/\bdata\s*:\s*text\/html(?<metadata>[^,]*)\s*,(?<payload>[\s\S]*)/i);
+  const match = value.match(/\bdata\s*:\s*text\/html(?<metadata>[^,]*)\s*,(?<payload>[\s\S]*)/i);
   if (!match?.groups) {
     return undefined;
   }
@@ -462,7 +487,9 @@ function getDataHtmlPayload(
 }
 
 function decodeBase64Payload(payload: string): string | undefined {
-  const normalizedPayload = payload.replace(/\s/g, '');
+  const normalizedPayload = safeDecodeURIComponent(payload)
+    .replace(/\s/g, '')
+    .replace(/[`'")\]}>.,;!?]+$/g, '');
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalizedPayload)) {
     return undefined;
   }
@@ -474,29 +501,12 @@ function decodeBase64Payload(payload: string): string | undefined {
   }
 }
 
-function hasExecutableDataHtmlPayload(evidence: string): boolean {
-  if (evidence.trimStart().startsWith('<')) {
-    const tagName = getHtmlTagName(evidence);
-    if (!tagName) {
-      return false;
-    }
-
-    const allowedAttributes = DATA_HTML_URL_ALLOWED_ATTRIBUTES[tagName] ?? [];
-    const hasAllowedDataHtmlAttribute = allowedAttributes.some((attributeName) => {
-      const value = getHtmlAttributeValue(evidence, attributeName);
-      return (
-        value !== undefined &&
-        /\bdata\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,/i.test(
-          value,
-        )
-      );
-    });
-    if (!hasAllowedDataHtmlAttribute) {
-      return false;
-    }
+function hasExecutableDataHtmlValue(value: string): boolean {
+  const normalizedValue = normalizeUrlDetectionOutput(value);
+  if (!DATA_HTML_URL_VALUE_PATTERN.test(normalizedValue)) {
+    return false;
   }
-
-  const payload = getDataHtmlPayload(evidence);
+  const payload = getDataHtmlPayload(normalizedValue);
   if (!payload) {
     return false;
   }
@@ -504,52 +514,97 @@ function hasExecutableDataHtmlPayload(evidence: string): boolean {
   const decodedPayload = payload.isBase64
     ? decodeBase64Payload(payload.encodedPayload)
     : safeDecodeURIComponent(payload.encodedPayload);
-  const executablePayload =
-    decodedPayload !== undefined && evidence.trimStart().startsWith('<')
-      ? decodeHtmlAttributeEntities(decodedPayload)
-      : decodedPayload;
 
-  return executablePayload !== undefined && containsExecutableXssContent(executablePayload);
+  return decodedPayload !== undefined && containsExecutableXssContent(decodedPayload);
+}
+
+function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]): string {
+  const masked = [...output];
+  const maskNodes = (nodeList: ParsedHtmlNode[]): void => {
+    for (const node of nodeList) {
+      for (const location of Object.values(node.sourceCodeLocation?.attrs ?? {})) {
+        masked.fill(' ', location.startOffset, location.endOffset);
+      }
+      if (
+        node.sourceCodeLocation &&
+        (INERT_TEXT_CONTAINER_TAGS.has(node.tagName ?? '') ||
+          (node.tagName === 'script' && !isExecutableScriptElement(node)))
+      ) {
+        masked.fill(' ', node.sourceCodeLocation.startOffset, node.sourceCodeLocation.endOffset);
+        continue;
+      }
+      maskNodes(node.childNodes ?? []);
+    }
+  };
+  maskNodes(nodes);
+  return masked.join('');
+}
+
+function isMarkdownImageDestination(source: string, offset: number): boolean {
+  const opener = source.lastIndexOf('](', offset);
+  return opener > 0 && source[opener - 1] === '!' && !source.slice(opener, offset).includes(')');
+}
+
+function findExecutableDataHtmlEvidence(
+  output: string,
+  nodes: ParsedHtmlNode[] = getParsedHtmlNodes(output),
+): string | undefined {
+  const node = findParsedElement(nodes, (element) =>
+    (DATA_HTML_URL_ALLOWED_ATTRIBUTES[element.tagName ?? ''] ?? []).some((attributeName) => {
+      const value = getParsedAttributeValue(element, attributeName);
+      return value !== undefined && hasExecutableDataHtmlValue(value);
+    }),
+  );
+  if (node) {
+    return getElementEvidence(output, node, true);
+  }
+
+  const scanBareValues = (source: string): string | undefined => {
+    for (const match of source.matchAll(DATA_HTML_URL_BARE_PATTERN)) {
+      if (
+        !isMarkdownImageDestination(source, match.index ?? 0) &&
+        hasExecutableDataHtmlValue(match[0])
+      ) {
+        return match[0];
+      }
+    }
+    return undefined;
+  };
+
+  const bareOutput = maskNonExecutableHtmlContexts(output, nodes);
+  return scanBareValues(bareOutput) ?? scanBareValues(normalizeUrlDetectionOutput(bareOutput));
 }
 
 export const DEFAULT_XSS_OUTPUT_RULES: XssOutputRule[] = [
   {
     id: 'script-tag',
     description: 'Unescaped executable script tag',
-    pattern: SCRIPT_TAG_PATTERN,
-    validateMatch: isExecutableScriptTag,
+    findEvidence: findExecutableScriptEvidence,
   },
   {
     id: 'event-handler-attribute',
     description: 'HTML element with an inline event-handler attribute',
-    pattern: EVENT_HANDLER_ATTRIBUTE_PATTERN,
-    validateMatch: hasExecutableEventHandlerAttribute,
+    findEvidence: findExecutableEventHandlerEvidence,
   },
   {
     id: 'javascript-url',
     description: 'javascript: URL payload in an HTML or Markdown URL sink',
-    pattern: JAVASCRIPT_URL_SINK_PATTERN,
-    normalizeOutput: normalizeUrlDetectionOutput,
-    validateMatch: hasExecutableJavascriptUrlSink,
+    findEvidence: findExecutableJavascriptUrlEvidence,
   },
   {
     id: 'data-html-url',
     description: 'data:text/html URL containing executable HTML content',
-    pattern: DATA_HTML_URL_PATTERN,
-    normalizeOutput: normalizeUrlDetectionOutput,
-    validateMatch: hasExecutableDataHtmlPayload,
+    findEvidence: findExecutableDataHtmlEvidence,
   },
   {
     id: 'iframe-srcdoc',
     description: 'iframe srcdoc containing executable HTML content',
-    pattern: IFRAME_SRCDOC_PATTERN,
-    validateMatch: hasExecutableSrcdoc,
+    findEvidence: findExecutableSrcdocEvidence,
   },
   {
     id: 'svg-script',
     description: 'SVG element containing script or event-handler execution',
-    pattern: SVG_CONTAINER_PATTERN,
-    validateMatch: hasExecutableSvgContent,
+    findEvidence: findExecutableSvgEvidence,
   },
 ];
 
@@ -579,15 +634,45 @@ function hasCustomPatterns(config?: PluginConfig): boolean {
   );
 }
 
+function stripCharacterClasses(source: string): string {
+  let stripped = '';
+  let inCharacterClass = false;
+
+  for (let index = 0; index < source.length; index++) {
+    const character = source[index];
+    if (character === '\\') {
+      stripped += inCharacterClass ? '  ' : `${character}${source[index + 1] ?? ''}`;
+      index++;
+      continue;
+    }
+    if (!inCharacterClass && character === '[') {
+      inCharacterClass = true;
+      stripped += ' ';
+      continue;
+    }
+    if (inCharacterClass && character === ']') {
+      inCharacterClass = false;
+      stripped += ' ';
+      continue;
+    }
+    stripped += inCharacterClass ? ' ' : character;
+  }
+
+  return stripped;
+}
+
 function validateConfiguredRegexSafety(source: string, label: string): void {
-  if (NESTED_QUANTIFIER.test(source)) {
+  const sourceWithoutCharacterClasses = stripCharacterClasses(source);
+  if (NESTED_QUANTIFIER.test(sourceWithoutCharacterClasses)) {
     throw new Error(`Invalid xss-output ${label}: nested quantified groups are not allowed`);
   }
-  if (UNBOUNDED_WILDCARD.test(source)) {
+  if (UNBOUNDED_WILDCARD.test(sourceWithoutCharacterClasses)) {
     throw new Error(`Invalid xss-output ${label}: unbounded wildcard operators are not allowed`);
   }
-  if (hasAmbiguousQuantifiedAlternation(source)) {
-    throw new Error(`Invalid xss-output ${label}: ambiguous quantified alternations are not allowed`);
+  if (hasAmbiguousQuantifiedAlternation(sourceWithoutCharacterClasses)) {
+    throw new Error(
+      `Invalid xss-output ${label}: ambiguous quantified alternations are not allowed`,
+    );
   }
 }
 
@@ -629,23 +714,33 @@ function truncateEvidence(evidence: string): string {
   return evidence.length > 120 ? `${evidence.slice(0, 117)}...` : evidence;
 }
 
-function findRuleEvidence(output: string, rule: XssOutputRule): string | undefined {
-  const normalizedOutput = rule.normalizeOutput?.(output) ?? output;
+function findRuleEvidence(
+  output: string,
+  rule: XssOutputRule,
+  parsedNodes?: ParsedHtmlNode[],
+): string | undefined {
+  if (rule.findEvidence) {
+    const evidence = rule.findEvidence(output, parsedNodes);
+    return evidence === undefined ? undefined : truncateEvidence(evidence);
+  }
+  if (!rule.pattern) {
+    return undefined;
+  }
   const pattern = getGlobalPattern(rule.pattern);
 
-  for (const match of normalizedOutput.matchAll(pattern)) {
+  for (const match of output.matchAll(pattern)) {
     const evidence = match[0] ?? '';
-    if (!rule.validateMatch || rule.validateMatch(evidence)) {
-      return truncateEvidence(evidence);
-    }
+    return truncateEvidence(evidence);
   }
 
   return undefined;
 }
 
 export function detectXssOutput(output: string, config?: PluginConfig): XssOutputMatch[] {
-  return getRules(config).flatMap((rule) => {
-    const evidence = findRuleEvidence(output, rule);
+  const rules = getRules(config);
+  const parsedNodes = hasCustomPatterns(config) ? undefined : getParsedHtmlNodes(output);
+  return rules.flatMap((rule) => {
+    const evidence = findRuleEvidence(output, rule, parsedNodes);
     if (evidence === undefined) {
       return [];
     }
