@@ -404,7 +404,7 @@ function hasJavascriptUrlValue(value: string | undefined): boolean {
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
   const normalized = normalizeUrlDetectionOutput(output);
   for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
-    if (normalized[(match.index ?? 0) - 1] !== '!') {
+    if (!isMarkdownImageDestination(normalized, match.index ?? 0)) {
       return match[0];
     }
   }
