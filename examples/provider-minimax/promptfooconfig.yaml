@@ -6,11 +6,11 @@ providers:
   - id: minimax:MiniMax-M2.7
     config:
       temperature: 0.7
-      max_tokens: 256
+      max_completion_tokens: 256
   - id: minimax:MiniMax-M2.7-highspeed
     config:
       temperature: 0.7
-      max_tokens: 256
+      max_completion_tokens: 256
 tests:
   - vars:
       question: What is the capital of France?

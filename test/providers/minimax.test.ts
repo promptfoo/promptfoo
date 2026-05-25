@@ -1,11 +1,18 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import {
   calculateMiniMaxCost,
   createMiniMaxProvider,
   MINIMAX_CHAT_MODELS,
 } from '../../src/providers/minimax';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
+import { mockProcessEnv } from '../util/utils';
 
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -66,10 +73,30 @@ describe('calculateMiniMaxCost', () => {
     expect(cost).toBeUndefined();
   });
 
+  it('should charge input cost when a response has zero completion tokens', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 0);
+    expect(cost).toBeCloseTo(0.3);
+  });
+
+  it('should clamp inconsistent cached-token usage to prompt token usage', () => {
+    const cost = calculateMiniMaxCost('MiniMax-M2.7', {}, 1000000, 0, 2000000);
+    expect(cost).toBeCloseTo(0.06);
+  });
+
   it('should use custom cost from config', () => {
     const config = { cost: 1.0 / 1e6 };
     const cost = calculateMiniMaxCost('MiniMax-M2.7', config, 1000000, 1000000);
     expect(cost).toBeCloseTo(2.0); // (1.0 + 1.0) from config override
+  });
+
+  it('should use separate input and output cost overrides', () => {
+    const cost = calculateMiniMaxCost(
+      'MiniMax-M2.7',
+      { inputCost: 1.0 / 1e6, outputCost: 2.0 / 1e6 },
+      1000000,
+      1000000,
+    );
+    expect(cost).toBeCloseTo(3.0);
   });
 
   it('should handle unknown model names', () => {
@@ -163,7 +190,24 @@ describe('createMiniMaxProvider', () => {
 });
 
 describe('MiniMaxProvider', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.mocked(fetchWithCache).mockReset();
+    restoreEnv = mockProcessEnv({
+      MINIMAX_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      OPENAI_ORGANIZATION: undefined,
+      OPENAI_API_HOST: undefined,
+      OPENAI_API_BASE_URL: undefined,
+      OPENAI_BASE_URL: undefined,
+      OPENAI_TEMPERATURE: undefined,
+      OPENAI_MAX_TOKENS: undefined,
+    });
+  });
+
   afterEach(() => {
+    restoreEnv();
     vi.restoreAllMocks();
   });
 
@@ -213,6 +257,140 @@ describe('MiniMaxProvider', () => {
     const provider = createMiniMaxProvider('minimax:MiniMax-M2.7');
     const json = (provider as any).toJSON();
     expect(json.config.apiKeyEnvar).toBe('MINIMAX_API_KEY');
+  });
+
+  it('should preserve explicit API endpoint and API key environment overrides', () => {
+    const restoreCustomEnv = mockProcessEnv({ CUSTOM_MINIMAX_KEY: 'custom-minimax-key' });
+    try {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+        config: {
+          config: {
+            apiBaseUrl: 'https://proxy.example.com/minimax/v1',
+            apiKeyEnvar: 'CUSTOM_MINIMAX_KEY',
+          },
+        },
+      }) as any;
+
+      expect(provider.getApiUrl()).toBe('https://proxy.example.com/minimax/v1');
+      expect(provider.getApiKey()).toBe('custom-minimax-key');
+    } finally {
+      restoreCustomEnv();
+    }
+  });
+
+  it('should not forward OpenAI credentials, organization, or endpoint environment values', () => {
+    const restoreOpenAiEnv = mockProcessEnv({
+      OPENAI_API_KEY: 'sk-openai-secret',
+      OPENAI_ORGANIZATION: 'org-openai-secret',
+      OPENAI_API_HOST: 'wrong-service.example.com',
+      OPENAI_API_BASE_URL: 'https://wrong-service.example.com/v1',
+    });
+    try {
+      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7') as any;
+
+      expect(provider.getApiKey()).toBeUndefined();
+      expect(provider.getOrganization()).toBeUndefined();
+      expect(provider.getApiUrl()).toBe('https://api.minimax.io/v1');
+    } finally {
+      restoreOpenAiEnv();
+    }
+  });
+
+  it('should send MiniMax completion limits and omit its invalid inherited temperature default', async () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: { config: { max_tokens: 256 } },
+    }) as any;
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_completion_tokens).toBe(256);
+    expect(body.max_tokens).toBeUndefined();
+    expect(body.temperature).toBeUndefined();
+  });
+
+  it('should preserve explicit supported MiniMax request parameters', async () => {
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: { config: { max_completion_tokens: 512, temperature: 0.7 } },
+    }) as any;
+    const { body } = await provider.getOpenAiBody('Test prompt');
+
+    expect(body.max_completion_tokens).toBe(512);
+    expect(body.max_tokens).toBeUndefined();
+    expect(body.temperature).toBe(0.7);
+  });
+
+  it('should call a configured MiniMax-compatible endpoint and charge prompt-cache reads', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        choices: [{ message: { content: 'MiniMax output' }, finish_reason: 'stop' }],
+        usage: {
+          total_tokens: 15,
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          prompt_tokens_details: { cached_tokens: 4 },
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: {
+        config: {
+          apiKey: 'minimax-key',
+          apiBaseUrl: 'https://proxy.example.com/minimax/v1',
+          max_tokens: 256,
+          temperature: 0.7,
+        },
+      },
+    });
+    const result = await provider.callApi('Test prompt');
+
+    const [url, init] = vi.mocked(fetchWithCache).mock.calls[0] ?? [];
+    expect(url).toBe('https://proxy.example.com/minimax/v1/chat/completions');
+    expect((init as RequestInit).headers).toMatchObject({
+      Authorization: 'Bearer minimax-key',
+    });
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body).toMatchObject({ max_completion_tokens: 256, temperature: 0.7 });
+    expect(body.max_tokens).toBeUndefined();
+    expect(result.output).toBe('MiniMax output');
+    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 10, 5, 4));
+  });
+
+  it('should return API errors from the MiniMax endpoint', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { error: { message: 'invalid model' } },
+      cached: false,
+      status: 400,
+      statusText: 'Bad Request',
+    } as never);
+
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: { config: { apiKey: 'minimax-key' } },
+    });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('API error: 400 Bad Request');
+    expect(result.error).toContain('invalid model');
+  });
+
+  it('should preserve structured rate-limit errors', async () => {
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(
+      new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 1000,
+      }),
+    );
+
+    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+      config: { config: { apiKey: 'minimax-key' } },
+    });
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.error).toContain('Rate limit exceeded');
+    expect(result.metadata?.rateLimitKind).toBe('rate_limit');
   });
 
   it('should calculate cost from cached token metadata in string raw responses', async () => {
