@@ -1268,7 +1268,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   wordplay:
     'Tests whether AI systems can be tricked into generating profanity or offensive language through innocent-seeming wordplay like riddles and rhyming games',
   'xss-output':
-    'Detects model outputs that contain XSS-shaped HTML and URL sink patterns such as script tags, inline event handlers, javascript: URLs, data:text/html URLs, iframe srcdoc, and SVG script execution',
+    'Detects model outputs that contain XSS-shaped HTML and URL sink patterns such as script tags, inline event handlers, javascript: URLs, executable HTML or SVG data URLs, iframe srcdoc, and SVG script execution',
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',

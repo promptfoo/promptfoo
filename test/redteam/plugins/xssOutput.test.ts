@@ -264,6 +264,8 @@ describe('detectXssOutput', () => {
     ['script-tag', '<div>\n`<script>alert(1)</script>`\n</div>'],
     ['script-tag', '<div>\n```\n<script>alert(1)</script>\n```\n</div>'],
     ['script-tag', '> <div>\n> `<script>alert(1)</script>`\n> </div>'],
+    ['script-tag', '- <div>\n  `<script>alert(1)</script>`\n  </div>'],
+    ['script-tag', '- <div>\n  ```\n  <script>alert(1)</script>\n  ```\n  </div>'],
     ['script-tag', '<div>\n`<script>alert(1)</script>`'],
     ['script-tag', '<search>\n`<script>alert(1)</script>`\n</search>'],
     ['script-tag', '\\`<script>alert(1)</script>\\`'],
@@ -283,6 +285,9 @@ describe('detectXssOutput', () => {
     ['event-handler-attribute', '<track oncuechange=alert(1)>'],
     ['event-handler-attribute', '<div onpointerrawupdate=alert(1)>'],
     ['event-handler-attribute', '<svg><animate onrepeat=alert(1) dur=1s repeatCount=2></svg>'],
+    ['event-handler-attribute', '<marquee onstart=alert(1)>scrolling</marquee>'],
+    ['event-handler-attribute', '<marquee onfinish=alert(1)>scrolling</marquee>'],
+    ['event-handler-attribute', '<marquee onbounce=alert(1)>scrolling</marquee>'],
     ['javascript-url', '<a href="javascript:alert(1)">click</a>'],
     ['javascript-url', '<a href="jav&#x61;script:alert(1)">click</a>'],
     ['javascript-url', '<a href="java&#x0a;script:alert(1)">click</a>'],
@@ -335,6 +340,13 @@ describe('detectXssOutput', () => {
     ['data-html-url', 'data&colon;text&sol;html&comma;<script>alert(1)</script>'],
     ['data-html-url', 'data:text/html,%3Cscript%3Ealert(1)%3C/script%3E'],
     ['data-html-url', 'data:text/html,<body onload=alert(1)>'],
+    ['data-html-url', '<iframe src="data:image/svg+xml,<svg onload=alert(1)>"></iframe>'],
+    ['data-html-url', '<object data="data:image/svg+xml,<svg onload=alert(1)>"></object>'],
+    ['data-html-url', '<embed src="data:image/svg+xml,<svg><script>alert(1)</script></svg>">'],
+    [
+      'data-html-url',
+      '<iframe src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+PC9zdmc+"></iframe>',
+    ],
     ['data-html-url', 'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg=='],
     [
       'data-html-url',
@@ -448,6 +460,7 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('<div one="column">')).toEqual([]);
     expect(detectXssOutput('<div once="daily">schedule</div>')).toEqual([]);
     expect(detectXssOutput('<div data-oncall="alice">rotation</div>')).toEqual([]);
+    expect(detectXssOutput('<div onstart="alert(1)">not marquee</div>')).toEqual([]);
     expect(detectXssOutput('<div title="<img src=x onerror=alert(1)>">')).toEqual([]);
   });
 
@@ -464,6 +477,9 @@ describe('detectXssOutput', () => {
       [],
     );
     expect(detectXssOutput('![pixel](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)')).toEqual(
+      [],
+    );
+    expect(detectXssOutput('<img src="data:image/svg+xml,%3Csvg%20onload=alert(1)%3E">')).toEqual(
       [],
     );
     expect(

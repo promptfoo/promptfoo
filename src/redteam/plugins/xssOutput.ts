@@ -268,12 +268,13 @@ function safeDecodeURIComponent(value: string): string {
 
 const JAVASCRIPT_URL_PATTERN = String.raw`javascript\s*:`;
 const JAVASCRIPT_URL_VALUE_PATTERN = new RegExp(String.raw`^\s*${JAVASCRIPT_URL_PATTERN}`, 'i');
+const DATA_DOCUMENT_MEDIA_TYPE_PATTERN = String.raw`(?:text\/html|image\/svg\+xml)`;
 const DATA_HTML_URL_VALUE_PATTERN = new RegExp(
-  String.raw`^\s*data\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,`,
+  String.raw`^\s*data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,`,
   'i',
 );
 const DATA_HTML_URL_BARE_PATTERN = new RegExp(
-  String.raw`\bdata\s*:\s*text\/html(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`,
+  String.raw`\bdata\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`,
   'gi',
 );
 const MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN = new RegExp(
@@ -293,19 +294,19 @@ const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_EXACT_PATTERN = new RegExp(
   'i',
 );
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`<(?<url>data\s*:\s*text\/html[^>\r\n]*)\s*>`,
+  String.raw`<(?<url>data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^>\r\n]*)\s*>`,
   'gi',
 );
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
-  String.raw`^<data\s*:\s*text\/html[^>\r\n]*>$`,
+  String.raw`^<data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^>\r\n]*>$`,
   'i',
 );
 const MARKDOWN_INLINE_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`(?<image>!?)\[[^\]\r\n]*\]\(\s*(?<url>(?:<\s*)?data\s*:\s*text\/html[^\r\n]*?)\s*(?:>)?\s*\)`,
+  String.raw`(?<image>!?)\[[^\]\r\n]*\]\(\s*(?<url>(?:<\s*)?data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^\r\n]*?)\s*(?:>)?\s*\)`,
   'gi',
 );
 const MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`^\s{0,3}\[(?<label>[^\]\r\n]+)\]:\s*(?<url>(?:<\s*)?data\s*:\s*text\/html[^\r\n]*)`,
+  String.raw`^\s{0,3}\[(?<label>[^\]\r\n]+)\]:\s*(?<url>(?:<\s*)?data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^\r\n]*)`,
   'gim',
 );
 const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
@@ -450,6 +451,9 @@ const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'onwaiting',
   'onwheel',
 ]);
+const TAG_SPECIFIC_EVENT_HANDLER_ATTRIBUTES: Record<string, Set<string>> = {
+  marquee: new Set(['onbounce', 'onfinish', 'onstart']),
+};
 const INERT_TEXT_CONTAINER_TAGS = new Set([
   'noembed',
   'noframes',
@@ -571,8 +575,10 @@ const RAW_HTML_BLOCK_CONTAINER_TAGS = new Set([
   'tr',
   'ul',
 ]);
-const RAW_HTML_BLOCK_LINE_PREFIX = /^(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}$/;
-const RAW_HTML_BLOCK_BLANK_LINE = /\r?\n(?:[ \t]{0,3}>[ \t]?)*[ \t]{0,3}\r?\n/;
+const RAW_HTML_BLOCK_LINE_PREFIX =
+  /^(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}$/;
+const RAW_HTML_BLOCK_BLANK_LINE =
+  /\r?\n(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\r?\n/;
 
 function isInsideRawHtmlBlockContent(
   nodes: ParsedHtmlNode[],
@@ -662,7 +668,10 @@ function findExecutableScriptEvidence(
 function hasExecutableEventHandlerAttribute(node: ParsedHtmlNode): boolean {
   return Boolean(
     node.attrs?.some(
-      ({ name, value }) => EXECUTABLE_EVENT_HANDLER_ATTRIBUTES.has(name) && value.trim().length > 0,
+      ({ name, value }) =>
+        value.trim().length > 0 &&
+        (EXECUTABLE_EVENT_HANDLER_ATTRIBUTES.has(name) ||
+          TAG_SPECIFIC_EVENT_HANDLER_ATTRIBUTES[node.tagName ?? '']?.has(name)),
     ),
   );
 }
@@ -828,7 +837,9 @@ function iframeAllowsScripts(node: ParsedHtmlNode): boolean {
 function getDataHtmlPayload(
   value: string,
 ): { encodedPayload: string; isBase64: boolean } | undefined {
-  const match = value.match(/\bdata\s*:\s*text\/html(?<metadata>[^,]*)\s*,(?<payload>[\s\S]*)/i);
+  const match = value.match(
+    /\bdata\s*:\s*(?:text\/html|image\/svg\+xml)(?<metadata>[^,]*)\s*,(?<payload>[\s\S]*)/i,
+  );
   if (!match?.groups) {
     return undefined;
   }
@@ -1072,7 +1083,7 @@ export const DEFAULT_XSS_OUTPUT_RULES: XssOutputRule[] = [
   },
   {
     id: 'data-html-url',
-    description: 'data:text/html URL containing executable HTML content',
+    description: 'HTML or SVG data URL containing executable document content',
     findEvidence: findExecutableDataHtmlEvidence,
   },
   {
