@@ -458,7 +458,7 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, {});
 
       expect(fs.promises.readFile).toHaveBeenCalledWith(
-        expect.stringContaining('reports/report:2026.txt'),
+        actualPathResolve('reports', 'report:2026.txt'),
         'utf8',
       );
       expect(renderedPrompt).toBe('Report: Colon report content');

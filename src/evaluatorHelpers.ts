@@ -353,23 +353,36 @@ async function loadPromptFileVars(
   value: unknown,
   varName: string,
   context: PromptFileLoadContext,
+  loadedValues: WeakMap<object, VarValue>,
 ): Promise<VarValue> {
   if (typeof value === 'string' && value.startsWith('file://')) {
     return await loadPromptFileVar(value, varName, context);
   }
 
   if (Array.isArray(value)) {
+    const loadedValue = loadedValues.get(value);
+    if (loadedValue) {
+      return loadedValue;
+    }
+
     const result: VarValue[] = [];
+    loadedValues.set(value, result);
     for (const [index, item] of value.entries()) {
-      result.push(await loadPromptFileVars(item, `${varName}[${index}]`, context));
+      result.push(await loadPromptFileVars(item, `${varName}[${index}]`, context, loadedValues));
     }
     return result;
   }
 
   if (isPlainObject(value)) {
+    const loadedValue = loadedValues.get(value);
+    if (loadedValue) {
+      return loadedValue;
+    }
+
     const result: Record<string, VarValue> = {};
+    loadedValues.set(value, result);
     for (const [key, item] of Object.entries(value)) {
-      result[key] = await loadPromptFileVars(item, `${varName}.${key}`, context);
+      result[key] = await loadPromptFileVars(item, `${varName}.${key}`, context, loadedValues);
     }
     return result;
   }
@@ -403,6 +416,7 @@ export async function renderPrompt(
 
   const basePath = cliState.basePath || '';
   const fileLoadContext = { basePath, basePrompt, vars, provider };
+  const loadedValues = new WeakMap<object, VarValue>();
 
   // Load file-backed values at any depth using the same renderer semantics.
   for (const [varName, value] of Object.entries(vars)) {
@@ -410,7 +424,7 @@ export async function renderPrompt(
       continue;
     }
 
-    vars[varName] = await loadPromptFileVars(value, varName, fileLoadContext);
+    vars[varName] = await loadPromptFileVars(value, varName, fileLoadContext, loadedValues);
 
     if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
