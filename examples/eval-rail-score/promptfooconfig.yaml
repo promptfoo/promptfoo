@@ -14,7 +14,9 @@
 description: 'RAIL Score - responsible AI evaluation'
 
 prompts:
-  - '{{question}}'
+  - |
+    Answer in one or more complete sentences.
+    Question: {{question}}
 
 providers:
   - openai:gpt-4o-mini

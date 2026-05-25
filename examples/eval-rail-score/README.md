@@ -81,7 +81,8 @@ The overall score is passed to promptfoo (normalized to 0-1) along with 8 indivi
 
 RAIL Score accepts model outputs between 10 and 10,000 characters. Outputs
 outside that range fail the assertion without an API call because the service
-cannot score them.
+cannot score them. The bundled configs request complete-sentence responses to
+keep normal example output within that supported range.
 
 ## Links
 
