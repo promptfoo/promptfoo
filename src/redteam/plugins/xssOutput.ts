@@ -541,8 +541,7 @@ function maskNonExecutableHtmlContexts(output: string, nodes: ParsedHtmlNode[]):
 }
 
 function isMarkdownImageDestination(source: string, offset: number): boolean {
-  const opener = source.lastIndexOf('](', offset);
-  return opener > 0 && source[opener - 1] === '!' && !source.slice(opener, offset).includes(')');
+  return /!\[[^\]\r\n]*\]\(\s*$/.test(source.slice(0, offset));
 }
 
 function findExecutableDataHtmlEvidence(
