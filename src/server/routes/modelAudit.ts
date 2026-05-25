@@ -153,6 +153,10 @@ modelAuditRouter.get(
   },
 );
 
+// Path checks and scans are intentionally unthrottled for this local-only server. They are
+// operator-driven filesystem workflows, and a per-IP limiter would disrupt batch scans without
+// changing the local trust boundary. Per src/server/AGENTS.md, CodeQL missing-rate-limiting
+// findings on these endpoints are intentional local-server exceptions.
 // Check path type
 modelAuditRouter.post(
   ApiRoutes.ModelAudit.CheckPath.routerPath,
