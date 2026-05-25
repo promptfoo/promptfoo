@@ -122,8 +122,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [contains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                   | output contains all list of substrings                             |
 | [icontains-any](/docs/configuration/expected-outputs/deterministic/#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
 | [icontains-all](/docs/configuration/expected-outputs/deterministic/#contains-all)                                  | output contains all list of substrings, case insensitive           |
-| [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (optional json schema validation)             |
-| [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [is-json](/docs/configuration/expected-outputs/deterministic/#is-json)                                             | output is valid json (schema may be boolean)                       |
+| [contains-json](/docs/configuration/expected-outputs/deterministic/#contains-json)                                 | output contains valid json (schema may be boolean)                 |
 | [contains-html](/docs/configuration/expected-outputs/deterministic/#contains-html)                                 | output contains HTML content                                       |
 | [is-html](/docs/configuration/expected-outputs/deterministic/#is-html)                                             | output is valid HTML                                               |
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                                |
