@@ -13,6 +13,7 @@
  */
 
 import { fetchWithCache } from '../../cache';
+import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -23,13 +24,17 @@ import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
+  collectGroundingMetadata,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
+  getLastPromptSafetyRatings,
+  isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
+  mergeParts,
   normalizeSafetySettings,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -48,6 +53,49 @@ import type { GeminiApiResponse, GeminiErrorResponse, GeminiResponseData } from 
 type GaxiosError = any;
 
 const DEFAULT_AI_STUDIO_HOST = 'generativelanguage.googleapis.com';
+
+interface SafetyRelevantAssertion {
+  type?: string;
+  assert?: SafetyRelevantAssertion[];
+}
+
+type SafetyRelevantContext = CallApiContextParams & {
+  test?: NonNullable<CallApiContextParams['test']> & {
+    assert?: SafetyRelevantAssertion[];
+  };
+};
+
+function hasScorableSafetyAssertion(assertion: SafetyRelevantAssertion): boolean {
+  if (
+    assertion.type === 'guardrails' ||
+    assertion.type === 'not-guardrails' ||
+    assertion.type?.startsWith('promptfoo:redteam:')
+  ) {
+    return true;
+  }
+
+  return (
+    assertion.type === 'assert-set' &&
+    Array.isArray(assertion.assert) &&
+    assertion.assert.some(hasScorableSafetyAssertion)
+  );
+}
+
+function shouldExposeSafetyBlockAsOutput(context?: CallApiContextParams): boolean {
+  if (cliState.config?.redteam) {
+    return true;
+  }
+
+  const test = (context as SafetyRelevantContext | undefined)?.test;
+  if (
+    typeof test?.metadata?.pluginId === 'string' &&
+    (Boolean(test.metadata.pluginConfig) || Boolean(test.metadata.goal))
+  ) {
+    return true;
+  }
+
+  return test?.assert?.some(hasScorableSafetyAssertion) ?? false;
+}
 
 /**
  * Unified Google provider for Gemini models.
@@ -102,8 +150,9 @@ export class GoogleProvider extends GoogleGenericProvider {
    * Get the API version.
    *
    * For Vertex AI: Uses config.apiVersion, env vars, or defaults to 'v1'.
-   * For AI Studio: Uses config.apiVersion if set, otherwise auto-detects
-   * based on model (v1alpha for thinking/gemini-3 models, v1beta for others).
+   * For AI Studio: Uses config.apiVersion if set, otherwise defaults to
+   * v1beta (including the Gemini 3.x family). The legacy
+   * gemini-2.0-flash-thinking-exp model only responds on v1alpha.
    */
   private getApiVersion(): string {
     if (this.isVertexMode) {
@@ -118,11 +167,9 @@ export class GoogleProvider extends GoogleGenericProvider {
       if (this.config.apiVersion) {
         return this.config.apiVersion;
       }
-      // Auto-detect: v1alpha for thinking models and gemini-3, v1beta for others
-      return this.modelName === 'gemini-2.0-flash-thinking-exp' ||
-        this.modelName.startsWith('gemini-3-')
-        ? 'v1alpha'
-        : 'v1beta';
+      // gemini-2.0-flash-thinking-exp only responds on v1alpha; everything
+      // else (including Gemini 3.x) uses the stable v1beta endpoint.
+      return this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
     }
   }
 
@@ -439,7 +486,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
@@ -455,7 +502,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       }
 
       const dataWithResponse = normalizedData as GeminiResponseData[];
-      let output;
+      let output: ReturnType<typeof formatCandidateContents> | undefined;
 
       for (const datum of dataWithResponse) {
         // Check for blockReason first
@@ -495,6 +542,10 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
         }
 
+        if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
+          continue;
+        }
+
         const candidate = getCandidate(datum);
         const safetyFinishReasons = [
           'SAFETY',
@@ -518,23 +569,35 @@ export class GoogleProvider extends GoogleGenericProvider {
             flaggedOutput: true,
             reason: finishReason,
           };
-          return { output: finishReason, tokenUsage, guardrails };
+          const safetyResponse = {
+            tokenUsage,
+            guardrails,
+            raw: data,
+            cached,
+          };
+          if (shouldExposeSafetyBlockAsOutput(context)) {
+            // Assertions must receive safety refusals as scorable provider outputs.
+            return { output: finishReason, ...safetyResponse };
+          }
+          return { error: finishReason, ...safetyResponse };
         } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
           // MAX_TOKENS is treated as a successful completion
           if (candidate.content?.parts) {
-            output = formatCandidateContents(candidate);
+            output = mergeParts(output, formatCandidateContents(candidate));
           }
         } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
           return {
             error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
           };
         } else if (candidate.content?.parts) {
-          output = formatCandidateContents(candidate);
-        } else {
-          return {
-            error: `No output found in response: ${JSON.stringify(data)}`,
-          };
+          output = mergeParts(output, formatCandidateContents(candidate));
         }
+      }
+
+      if (output === undefined) {
+        return {
+          error: `No output found in response: ${JSON.stringify(data)}`,
+        };
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
@@ -566,23 +629,18 @@ export class GoogleProvider extends GoogleGenericProvider {
           };
 
       let guardrails: GuardrailResponse | undefined;
-      const candidate = getCandidate(lastData);
-      if (lastData.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastData.promptFeedback?.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
+      const lastDataWithCandidate =
+        dataWithResponse.filter((datum) => datum.candidates?.length).at(-1) ?? lastData;
+      const candidate = getCandidate(lastDataWithCandidate);
+      const promptSafetyRatings = getLastPromptSafetyRatings(dataWithResponse);
+      if (promptSafetyRatings || candidate.safetyRatings) {
+        const flaggedInput = promptSafetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
         const flagged = flaggedInput || flaggedOutput;
         guardrails = { flaggedInput, flaggedOutput, flagged };
       }
 
-      // Extract grounding metadata
-      const candidateWithMetadata = dataWithResponse
-        .map((datum) => getCandidate(datum))
-        .find(
-          (c) =>
-            c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
-        );
+      const grounding = collectGroundingMetadata(dataWithResponse);
 
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
@@ -606,20 +664,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: {
-          ...(candidateWithMetadata?.groundingMetadata && {
-            groundingMetadata: candidateWithMetadata.groundingMetadata,
-          }),
-          ...(candidateWithMetadata?.groundingChunks && {
-            groundingChunks: candidateWithMetadata.groundingChunks,
-          }),
-          ...(candidateWithMetadata?.groundingSupports && {
-            groundingSupports: candidateWithMetadata.groundingSupports,
-          }),
-          ...(candidateWithMetadata?.webSearchQueries && {
-            webSearchQueries: candidateWithMetadata.webSearchQueries,
-          }),
-        },
+        metadata: { ...grounding },
       };
 
       // Handle function tool callbacks
