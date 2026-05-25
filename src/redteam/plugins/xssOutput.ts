@@ -154,7 +154,7 @@ function normalizeUrlDetectionOutput(output: string): string {
 function normalizeMarkdownUrlDetectionOutput(output: string): string {
   return output
     .split(/\r\n?|\n/)
-    .map((line) => normalizeUrlDetectionOutput(line))
+    .map((line) => normalizeUrlDetectionOutput(line).replace(/\\([/:;,=])/g, '$1'))
     .join('\n');
 }
 
@@ -162,7 +162,7 @@ function normalizeMarkdownDataUrlDetectionOutput(output: string): string {
   return output
     .split(/\r\n?|\n/)
     .map((line) =>
-      normalizeUrlDetectionOutput(line).replace(
+      normalizeMarkdownUrlDetectionOutput(line).replace(
         /&(lt|gt|quot|apos|#x(?:3c|3e|22|27)|#(?:60|62|34|39));?/gi,
         (_entity, value) => {
           const decoded: Record<string, string> = {
@@ -192,31 +192,47 @@ function maskMarkdownCodeContexts(output: string): string {
     /(^|\r?\n)[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
     mask,
   );
-  const parsedNodes = getParsedHtmlNodes(withoutFences);
-  const masked = withoutFences.split('');
+  const lines = withoutFences.split(/(\r?\n)/);
+  let inIndentedBlock = false;
+  let previousLineWasBlank = true;
+  for (let index = 0; index < lines.length; index += 2) {
+    const line = lines[index];
+    const blank = /^[ \t]*$/.test(line);
+    const indented = /^(?: {4}|\t)/.test(line);
+    if (indented && (previousLineWasBlank || inIndentedBlock)) {
+      lines[index] = mask(line);
+      inIndentedBlock = true;
+    } else if (!blank) {
+      inIndentedBlock = false;
+    }
+    previousLineWasBlank = blank;
+  }
+  const withoutCodeBlocks = lines.join('');
+  const parsedNodes = getParsedHtmlNodes(withoutCodeBlocks);
+  const masked = withoutCodeBlocks.split('');
 
-  for (let start = 0; start < withoutFences.length; start++) {
-    if (withoutFences[start] !== '`') {
+  for (let start = 0; start < withoutCodeBlocks.length; start++) {
+    if (withoutCodeBlocks[start] !== '`') {
       continue;
     }
     let openingEnd = start;
-    while (withoutFences[openingEnd] === '`') {
+    while (withoutCodeBlocks[openingEnd] === '`') {
       openingEnd++;
     }
     const delimiterLength = openingEnd - start;
     let cursor = openingEnd;
-    while (cursor < withoutFences.length) {
-      const closeStart = withoutFences.indexOf('`', cursor);
-      if (closeStart < 0 || withoutFences.slice(cursor, closeStart).includes('\n')) {
+    while (cursor < withoutCodeBlocks.length) {
+      const closeStart = withoutCodeBlocks.indexOf('`', cursor);
+      if (closeStart < 0) {
         break;
       }
       let closeEnd = closeStart;
-      while (withoutFences[closeEnd] === '`') {
+      while (withoutCodeBlocks[closeEnd] === '`') {
         closeEnd++;
       }
       if (closeEnd - closeStart === delimiterLength) {
         if (!isInsideHtmlAttributeSource(parsedNodes, start, closeEnd)) {
-          masked.splice(start, closeEnd - start, ...mask(withoutFences.slice(start, closeEnd)));
+          masked.splice(start, closeEnd - start, ...mask(withoutCodeBlocks.slice(start, closeEnd)));
         }
         start = closeEnd - 1;
         break;
@@ -248,7 +264,7 @@ const DATA_HTML_URL_BARE_PATTERN = new RegExp(
   'gi',
 );
 const MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN = new RegExp(
-  String.raw`\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)\r\n]*\)`,
+  String.raw`(?<image>!?)\[[^\]\r\n]*\]\(\s*${JAVASCRIPT_URL_PATTERN}[^)\r\n]*\)`,
   'gi',
 );
 const MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN = new RegExp(
@@ -272,7 +288,7 @@ const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
   'i',
 );
 const MARKDOWN_INLINE_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`\]\(\s*(?<url>(?:<\s*)?data\s*:\s*text\/html[^\r\n]*?)\s*(?:>)?\s*\)`,
+  String.raw`(?<image>!?)\[[^\]\r\n]*\]\(\s*(?<url>(?:<\s*)?data\s*:\s*text\/html[^\r\n]*?)\s*(?:>)?\s*\)`,
   'gi',
 );
 const MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN = new RegExp(
@@ -427,6 +443,7 @@ const INERT_TEXT_CONTAINER_TAGS = new Set([
   'plaintext',
   'style',
   'textarea',
+  'template',
   'title',
   'xmp',
 ]);
@@ -558,9 +575,7 @@ function findExecutableEventHandlerEvidence(
 ): string | undefined {
   const node =
     findParsedElement(nodes, hasExecutableEventHandlerAttribute) ??
-    (/^\s*<(?:html|body|frameset)\b/i.test(output)
-      ? findParsedElement(getParsedHtmlNodes(output, true), hasExecutableEventHandlerAttribute)
-      : undefined);
+    findParsedElement(getParsedHtmlNodes(output, true), hasExecutableEventHandlerAttribute);
   return node ? getElementEvidence(output, node, true) : undefined;
 }
 
@@ -574,17 +589,30 @@ function normalizeMarkdownReferenceLabel(label: string): string {
   return label.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function isEscapedMarkdownDelimiter(source: string, index: number): boolean {
+  let precedingBackslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && source[cursor] === '\\'; cursor--) {
+    precedingBackslashes++;
+  }
+  return precedingBackslashes % 2 === 1;
+}
+
 function hasActiveMarkdownReference(source: string, label: string): boolean {
   const normalizedLabel = normalizeMarkdownReferenceLabel(label);
   for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\]\[\s*([^\]\r\n]*)\s*\]/g)) {
     const referencedLabel = match[3] || match[2];
-    if (match[1] !== '!' && normalizeMarkdownReferenceLabel(referencedLabel) === normalizedLabel) {
+    if (
+      match[1] !== '!' &&
+      !isEscapedMarkdownDelimiter(source, match.index ?? 0) &&
+      normalizeMarkdownReferenceLabel(referencedLabel) === normalizedLabel
+    ) {
       return true;
     }
   }
   for (const match of source.matchAll(/(!?)\[([^\]\r\n]+)\](?![ \t]*(?:\[|:|\())/g)) {
     if (
       match[1] !== '!' &&
+      !isEscapedMarkdownDelimiter(source, match.index ?? 0) &&
       source[(match.index ?? 0) - 1] !== ']' &&
       normalizeMarkdownReferenceLabel(match[2]) === normalizedLabel
     ) {
@@ -597,7 +625,7 @@ function hasActiveMarkdownReference(source: string, label: string): boolean {
 function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
   const normalized = normalizeMarkdownUrlDetectionOutput(output);
   for (const match of normalized.matchAll(MARKDOWN_INLINE_JAVASCRIPT_URL_PATTERN)) {
-    if (!isMarkdownImageDestination(normalized, (match.index ?? 0) + 2)) {
+    if (match.groups?.image !== '!' && !isEscapedMarkdownDelimiter(normalized, match.index ?? 0)) {
       return match[0];
     }
   }
@@ -823,7 +851,8 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
     const value = match.groups?.url && extractMarkdownDestinationValue(match.groups.url);
     if (
       value &&
-      !isMarkdownImageDestination(normalized, (match.index ?? 0) + 2) &&
+      match.groups?.image !== '!' &&
+      !isEscapedMarkdownDelimiter(normalized, match.index ?? 0) &&
       hasExecutableDataHtmlValue(value)
     ) {
       return match[0];

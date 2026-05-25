@@ -234,11 +234,14 @@ describe('detectXssOutput', () => {
     ['script-tag', '<script>alert(1)</script>'],
     ['script-tag', '<script>alert(1)'],
     ['script-tag', '<script src=//evil.example/x.js>'],
+    ['script-tag', '<div>\n    <script>alert(1)</script>\n</div>'],
     ['script-tag', '<script>const type="application/json";alert(1)</script>'],
     ['script-tag', '<script data-type="application/json">alert(1)</script>'],
     ['event-handler-attribute', '<img src=x onerror=alert(1)>'],
     ['event-handler-attribute', '<body onload=alert(1)>'],
     ['event-handler-attribute', '<frameset onload=alert(1)>'],
+    ['event-handler-attribute', '<!doctype html><body onload=alert(1)>'],
+    ['event-handler-attribute', '<!-- document --><body onload=alert(1)>'],
     ['event-handler-attribute', '<svg/onload=alert(1)>'],
     ['event-handler-attribute', '<input autofocus onfocusin=alert(1)>'],
     ['event-handler-attribute', '<video src=x onloadedmetadata=alert(1)>'],
@@ -255,6 +258,7 @@ describe('detectXssOutput', () => {
     ['javascript-url', '<a href="javascript:open(\'/x\')">click</a>'],
     ['javascript-url', '<a href="javascript:history.back()">click</a>'],
     ['javascript-url', '[click](javascript:alert(1))'],
+    ['javascript-url', String.raw`[click](javascript\:alert(1))`],
     ['javascript-url', '[click](java&#x0a;script:alert(1))'],
     ['javascript-url', "[click](javascript:eval('alert(1)'))"],
     ['javascript-url', '[click][payload]\n\n[payload]: javascript:alert(1)'],
@@ -432,18 +436,26 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('<!-- data:text/html,<script>alert(1)</script> -->')).toEqual([]);
     expect(detectXssOutput('`[click](javascript:alert(1))`')).toEqual([]);
     expect(detectXssOutput('`<script>alert(1)</script>`')).toEqual([]);
+    expect(detectXssOutput('`<script>\nalert(1)</script>`')).toEqual([]);
     expect(detectXssOutput('``<img src=x onerror=`alert(1)`>``')).toEqual([]);
     expect(detectXssOutput('`data:text/html,<script>alert(1)</script>`')).toEqual([]);
     expect(detectXssOutput('`data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==`')).toEqual(
       [],
     );
     expect(detectXssOutput('```html\n<script>alert(1)</script>\n```')).toEqual([]);
+    expect(detectXssOutput('    <script>alert(1)</script>')).toEqual([]);
+    expect(detectXssOutput('    [click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<code>[click](javascript:alert(1))</code>')).toEqual([]);
     expect(detectXssOutput('<pre>[click](javascript:alert(1))</pre>')).toEqual([]);
     expect(detectXssOutput('<pre>data:text/html,%3Cscript%3Ealert(1)%3C/script%3E</pre>')).toEqual(
       [],
     );
     expect(detectXssOutput('<noscript>[click](javascript:alert(1))</noscript>')).toEqual([]);
+    expect(detectXssOutput('<template>[click](javascript:alert(1))</template>')).toEqual([]);
+    expect(
+      detectXssOutput('<template>data:text/html,<script>alert(1)</script></template>'),
+    ).toEqual([]);
+    expect(detectXssOutput(String.raw`\[click](javascript:alert(1))`)).toEqual([]);
     expect(
       detectXssOutput('<div title="data:text/html,<script>alert(1)</script>">safe text</div>'),
     ).toEqual([]);
