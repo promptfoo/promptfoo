@@ -8,7 +8,7 @@ This codebase uses Drizzle ORM with SQLite. All database queries must use parame
 - Use `sql.join()` for dynamic lists such as `IN (...)` clauses.
 - Pass `SQL<unknown>` fragments between functions, not strings.
 - Do not build queries with `sql.raw()` or string interpolation.
-- The only exception is SQLite JSON paths. Use the existing vetted helper `buildSafeJsonPath` in `src/models/eval.ts` instead of ad-hoc escaping.
+- Use the existing vetted `buildSafeJsonPath` helper in `src/models/eval.ts` for user-controlled SQLite JSON keys.
 
 ## Required Pattern: Use `sql` Template Strings
 
@@ -57,12 +57,9 @@ const whereClause = `eval_id = '${evalId}'`;
 const query = sql.raw(`SELECT * FROM eval_results WHERE ${whereClause}`);
 ```
 
-## Special Case: JSON Paths in SQLite
+## JSON Paths in SQLite
 
-SQLite's `json_extract()` requires the JSON path to be a string literal, so this is the one case where `sql.raw()` may be necessary. Do not hand-roll escaping at each callsite. Always use the existing helper in `src/models/eval.ts`, which escapes:
-
-- Backslashes and double quotes for JSON path syntax
-- Single quotes before embedding the path in a SQL string literal
+SQLite `json_extract()` accepts bound JSON path values. Do not use `sql.raw()` or hand-roll SQL escaping for user-controlled JSON keys. Use the existing helper in `src/models/eval.ts`, which escapes backslashes and double quotes for JSON path syntax before the path is bound as a normal Drizzle value.
 
 Reuse `buildSafeJsonPath` from `src/models/eval.ts`:
 
