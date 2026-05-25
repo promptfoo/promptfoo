@@ -321,6 +321,14 @@ describe('detectXssOutput', () => {
     ['javascript-url', '[payload][]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[payload]\n\n[payload]: javascript:alert(1)'],
     ['javascript-url', '[click](javascript:alert(1)\n "title")'],
+    ['javascript-url', '[outer [click](javascript:alert(1))](#safe)'],
+    ['javascript-url', '[`]`](javascript:alert(1))'],
+    [
+      'javascript-url',
+      String.raw`[click][pa\]y]
+
+[pa\]y]: javascript:alert(1)`,
+    ],
     ['javascript-url', '<javascript:alert(1)>'],
     ['javascript-url', '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">'],
     ['data-html-url', 'data:text/html,<script>alert(1)</script>'],
@@ -395,6 +403,9 @@ describe('detectXssOutput', () => {
     ],
     ['data-html-url', '[open](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg== "title")'],
     ['data-html-url', '[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E\n "title")'],
+    ['data-html-url', String.raw`[open](data:text/html,\<script\>alert(1)\</script\>)`],
+    ['data-html-url', '[outer [open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)](#safe)'],
+    ['data-html-url', '[`]`](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)'],
     ['data-html-url', '[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)'],
     ['data-html-url', String.raw`\![open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)`],
     ['data-html-url', '<data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==>'],
@@ -575,6 +586,36 @@ describe('detectXssOutput', () => {
     expect(detectXssOutput('<div>\n</div>\n[click](javascript:alert(1))')).toEqual([]);
     expect(detectXssOutput('<my-widget>\n[click](javascript:alert(1))\n</my-widget>')).toEqual([]);
     expect(detectXssOutput('[click](javascript:alert(1)\n not-a-title)')).toEqual([]);
+    expect(detectXssOutput('[click](javascript:alert(1) not-a-title)')).toEqual([]);
+    expect(detectXssOutput('[click](< javascript:alert(1)>)')).toEqual([]);
+    expect(detectXssOutput('[click][payload]\n\n[payload]: < javascript:alert(1)>')).toEqual([]);
+    expect(
+      detectXssOutput('[click][payload]\n\n[payload]: javascript:alert(1) not-a-title'),
+    ).toEqual([]);
+    expect(detectXssOutput('![outer [click](javascript:alert(1))](#safe)')).toEqual([]);
+    expect(detectXssOutput('![outer <javascript:alert(1)>](#safe)')).toEqual([]);
+    expect(detectXssOutput('[open](< data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)')).toEqual(
+      [],
+    );
+    expect(
+      detectXssOutput('[open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E not-a-title)'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '[open][payload]\n\n[payload]: < data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>',
+      ),
+    ).toEqual([]);
+    expect(
+      detectXssOutput(
+        '[open][payload]\n\n[payload]: data:text/html,%3Cscript%3Ealert(1)%3C/script%3E not-a-title',
+      ),
+    ).toEqual([]);
+    expect(
+      detectXssOutput('![outer [open](data:text/html,%3Cscript%3Ealert(1)%3C/script%3E)](#safe)'),
+    ).toEqual([]);
+    expect(
+      detectXssOutput('![outer <data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>](#safe)'),
+    ).toEqual([]);
     expect(
       detectXssOutput('<div>\n[open](<data:text/html,%3Cscript%3Ealert(1)%3C/script%3E>)\n</div>'),
     ).toEqual([]);

@@ -275,10 +275,6 @@ const DATA_HTML_URL_BARE_PATTERN = new RegExp(
   String.raw`\bdata\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,[^\r\n]+`,
   'gi',
 );
-const MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN = new RegExp(
-  String.raw`^\s{0,3}\[([^\]\r\n]+)\]:\s*(?:<\s*)?${JAVASCRIPT_URL_PATTERN}[^\r\n>]*(?:>)?`,
-  'gim',
-);
 const MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN = new RegExp(
   String.raw`<${JAVASCRIPT_URL_PATTERN}[^>\r\n]*>`,
   'gi',
@@ -294,10 +290,6 @@ const MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN = new RegExp(
 const MARKDOWN_AUTOLINK_DATA_HTML_URL_EXACT_PATTERN = new RegExp(
   String.raw`^<data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^>\r\n]*>$`,
   'i',
-);
-const MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN = new RegExp(
-  String.raw`^\s{0,3}\[(?<label>[^\]\r\n]+)\]:\s*(?<url>(?:<\s*)?data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}[^\r\n]*)`,
-  'gim',
 );
 const JAVASCRIPT_URL_ALLOWED_ATTRIBUTES: Record<string, string[]> = {
   a: ['href', 'xlink:href'],
@@ -728,10 +720,17 @@ function isEscapedMarkdownDelimiter(source: string, index: number): boolean {
 }
 
 interface MarkdownInlineDestination {
+  destinationEnd: number;
   destinationOffset: number;
   evidence: string;
   image: boolean;
   value: string | undefined;
+}
+
+interface MarkdownReferenceDestination {
+  evidence: string;
+  label: string;
+  value: string;
 }
 
 function findBalancedMarkdownDelimiter(
@@ -740,11 +739,26 @@ function findBalancedMarkdownDelimiter(
   opening: string,
   closing: string,
   allowLineBreak = false,
+  skipCodeSpans = false,
 ): number | undefined {
   let depth = 1;
   for (let cursor = start + 1; cursor < source.length; cursor++) {
     if (source[cursor] === '\\') {
       cursor++;
+    } else if (
+      skipCodeSpans &&
+      source[cursor] === '`' &&
+      !isEscapedMarkdownDelimiter(source, cursor)
+    ) {
+      let openingEnd = cursor;
+      while (source[openingEnd] === '`') {
+        openingEnd++;
+      }
+      const delimiter = source.slice(cursor, openingEnd);
+      const closingStart = source.indexOf(delimiter, openingEnd);
+      if (closingStart >= 0) {
+        cursor = closingStart + delimiter.length - 1;
+      }
     } else if (source[cursor] === opening) {
       depth++;
     } else if (source[cursor] === closing) {
@@ -759,10 +773,48 @@ function findBalancedMarkdownDelimiter(
   return undefined;
 }
 
+function findMarkdownImageLabelRanges(source: string): SourceRange[] {
+  const imageLabelRanges: SourceRange[] = [];
+
+  for (let imageStart = 0; imageStart < source.length; imageStart++) {
+    if (
+      source[imageStart] !== '!' ||
+      source[imageStart + 1] !== '[' ||
+      isEscapedMarkdownDelimiter(source, imageStart)
+    ) {
+      continue;
+    }
+    const labelStart = imageStart + 1;
+    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
+    if (labelEnd === undefined || source[labelEnd + 1] !== '(') {
+      continue;
+    }
+    const destinationEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '(', ')', true);
+    if (destinationEnd === undefined) {
+      continue;
+    }
+    let destinationOffset = labelEnd + 2;
+    while (source[destinationOffset] === ' ' || source[destinationOffset] === '\t') {
+      destinationOffset++;
+    }
+    if (
+      extractMarkdownDestinationValue(source.slice(destinationOffset, destinationEnd)) !== undefined
+    ) {
+      imageLabelRanges.push({ start: labelStart + 1, end: labelEnd });
+    }
+  }
+  return imageLabelRanges;
+}
+
 function findMarkdownInlineDestinations(source: string): MarkdownInlineDestination[] {
   const destinations: MarkdownInlineDestination[] = [];
+  const imageLabelRanges = findMarkdownImageLabelRanges(source);
+
   for (let labelStart = 0; labelStart < source.length; labelStart++) {
     if (source[labelStart] !== '[' || isEscapedMarkdownDelimiter(source, labelStart)) {
+      continue;
+    }
+    if (imageLabelRanges.some((range) => labelStart >= range.start && labelStart < range.end)) {
       continue;
     }
 
@@ -771,7 +823,7 @@ function findMarkdownInlineDestinations(source: string): MarkdownInlineDestinati
       imageStart >= 0 &&
       source[imageStart] === '!' &&
       !isEscapedMarkdownDelimiter(source, imageStart);
-    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']');
+    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
     if (labelEnd === undefined || source[labelEnd + 1] !== '(') {
       continue;
     }
@@ -786,12 +838,38 @@ function findMarkdownInlineDestinations(source: string): MarkdownInlineDestinati
     }
     const start = image ? imageStart : labelStart;
     destinations.push({
+      destinationEnd,
       destinationOffset,
       evidence: source.slice(start, destinationEnd + 1),
       image,
       value: extractMarkdownDestinationValue(source.slice(destinationOffset, destinationEnd)),
     });
-    labelStart = destinationEnd;
+  }
+  return destinations;
+}
+
+function findMarkdownReferenceDestinations(source: string): MarkdownReferenceDestination[] {
+  const destinations: MarkdownReferenceDestination[] = [];
+  for (const match of source.matchAll(/^[ \t]{0,3}\[/gm)) {
+    const lineStart = match.index ?? 0;
+    const labelStart = lineStart + match[0].lastIndexOf('[');
+    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
+    if (labelEnd === undefined || source[labelEnd + 1] !== ':') {
+      continue;
+    }
+    const nextLine = source.indexOf('\n', labelEnd + 2);
+    const lineEnd = nextLine < 0 ? source.length : nextLine;
+    const evidence = source.slice(lineStart, lineEnd).replace(/\r$/, '');
+    const value = extractMarkdownDestinationValue(
+      source.slice(labelEnd + 2, lineEnd).replace(/\r$/, ''),
+    );
+    if (value !== undefined) {
+      destinations.push({
+        evidence,
+        label: source.slice(labelStart + 1, labelEnd),
+        value,
+      });
+    }
   }
   return destinations;
 }
@@ -809,13 +887,20 @@ function hasActiveMarkdownReference(source: string, label: string): boolean {
     if (image) {
       continue;
     }
-    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']');
+    const labelEnd = findBalancedMarkdownDelimiter(source, labelStart, '[', ']', false, true);
     if (labelEnd === undefined) {
       continue;
     }
     const linkLabel = source.slice(labelStart + 1, labelEnd);
     if (source[labelEnd + 1] === '[') {
-      const referenceEnd = findBalancedMarkdownDelimiter(source, labelEnd + 1, '[', ']');
+      const referenceEnd = findBalancedMarkdownDelimiter(
+        source,
+        labelEnd + 1,
+        '[',
+        ']',
+        false,
+        true,
+      );
       if (referenceEnd === undefined) {
         continue;
       }
@@ -843,14 +928,18 @@ function findMarkdownJavascriptUrlEvidence(output: string): string | undefined {
       return destination.evidence;
     }
   }
-  for (const match of normalized.matchAll(MARKDOWN_REFERENCE_JAVASCRIPT_URL_PATTERN)) {
-    if (hasActiveMarkdownReference(normalized, match[1])) {
-      return match[0];
+  for (const destination of findMarkdownReferenceDestinations(normalized)) {
+    if (
+      hasJavascriptUrlValue(destination.value) &&
+      hasActiveMarkdownReference(normalized, destination.label)
+    ) {
+      return destination.evidence;
     }
   }
   for (const match of normalized.matchAll(MARKDOWN_AUTOLINK_JAVASCRIPT_URL_PATTERN)) {
     if (
       !isMarkdownImageDestination(normalized, match.index ?? 0) &&
+      !isInsideMarkdownImageLabel(normalized, match.index ?? 0) &&
       !isEscapedMarkdownDelimiter(normalized, match.index ?? 0)
     ) {
       return match[0];
@@ -1069,9 +1158,23 @@ function isMarkdownImageDestination(source: string, offset: number): boolean {
   );
 }
 
+function isMarkdownInlineDestination(source: string, offset: number): boolean {
+  return findMarkdownInlineDestinations(source).some(
+    (destination) => offset >= destination.destinationOffset && offset < destination.destinationEnd,
+  );
+}
+
+function isInsideMarkdownImageLabel(source: string, offset: number): boolean {
+  return findMarkdownImageLabelRanges(source).some(
+    (range) => offset >= range.start && offset < range.end,
+  );
+}
+
 function isMarkdownReferenceDefinitionDestination(source: string, offset: number): boolean {
   const lineStart = source.lastIndexOf('\n', Math.max(0, offset - 1)) + 1;
-  return /^\s{0,3}\[[^\]\r\n]+\]:\s*(?:<\s*)?$/.test(source.slice(lineStart, offset));
+  return /^\s{0,3}\[(?:\\[^\r\n]|[^\]\\\r\n])+\]:\s*(?:<\s*)?$/.test(
+    source.slice(lineStart, offset),
+  );
 }
 
 function isEscapedMarkdownAutolinkDestination(source: string, offset: number): boolean {
@@ -1081,6 +1184,9 @@ function isEscapedMarkdownAutolinkDestination(source: string, offset: number): b
 
 function extractMarkdownDestinationValue(rawValue: string): string | undefined {
   const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return undefined;
+  }
   if (/[\r\n]/.test(trimmed)) {
     const titledDestination = trimmed.match(
       /^([\s\S]*?)[ \t]*\r?\n[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))$/,
@@ -1091,11 +1197,28 @@ function extractMarkdownDestinationValue(rawValue: string): string | undefined {
   }
   if (trimmed.startsWith('<')) {
     const closeBracket = trimmed.indexOf('>');
-    if (closeBracket >= 0) {
-      return trimmed.slice(1, closeBracket).trim();
+    if (closeBracket < 0) {
+      return undefined;
     }
+    const angleDestination = trimmed.slice(1, closeBracket);
+    const suffix = trimmed.slice(closeBracket + 1).trim();
+    if (
+      !angleDestination ||
+      /[\s<>]/.test(angleDestination) ||
+      (suffix && !/^(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))$/.test(suffix))
+    ) {
+      return undefined;
+    }
+    return angleDestination;
   }
-  return trimmed.replace(/\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))\s*$/, '').trim();
+  const destination = trimmed
+    .replace(/\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\))\s*$/, '')
+    .trim();
+  return destination && !/\s/.test(destination) ? destination : undefined;
+}
+
+function normalizeMarkdownDataDestinationValue(value: string): string {
+  return value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/g, '$1');
 }
 
 function findMarkdownDataHtmlEvidence(output: string): string | undefined {
@@ -1104,21 +1227,17 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
     if (
       !destination.image &&
       destination.value !== undefined &&
-      hasExecutableDataHtmlValue(destination.value)
+      hasExecutableDataHtmlValue(normalizeMarkdownDataDestinationValue(destination.value))
     ) {
       return destination.evidence;
     }
   }
-  for (const match of normalized.matchAll(MARKDOWN_REFERENCE_DATA_HTML_URL_PATTERN)) {
-    const label = match.groups?.label;
-    const value = match.groups?.url && extractMarkdownDestinationValue(match.groups.url);
+  for (const destination of findMarkdownReferenceDestinations(normalized)) {
     if (
-      label &&
-      value &&
-      hasActiveMarkdownReference(normalized, label) &&
-      hasExecutableDataHtmlValue(value)
+      hasActiveMarkdownReference(normalized, destination.label) &&
+      hasExecutableDataHtmlValue(normalizeMarkdownDataDestinationValue(destination.value))
     ) {
-      return match[0];
+      return destination.evidence;
     }
   }
   for (const match of normalized.matchAll(MARKDOWN_AUTOLINK_DATA_HTML_URL_PATTERN)) {
@@ -1126,8 +1245,9 @@ function findMarkdownDataHtmlEvidence(output: string): string | undefined {
     if (
       value &&
       !isMarkdownImageDestination(normalized, match.index ?? 0) &&
+      !isInsideMarkdownImageLabel(normalized, match.index ?? 0) &&
       !isEscapedMarkdownDelimiter(normalized, match.index ?? 0) &&
-      hasExecutableDataHtmlValue(value)
+      hasExecutableDataHtmlValue(normalizeMarkdownDataDestinationValue(value))
     ) {
       return match[0];
     }
@@ -1164,6 +1284,8 @@ function findExecutableDataHtmlEvidence(
     for (const match of source.matchAll(DATA_HTML_URL_BARE_PATTERN)) {
       if (
         !isMarkdownImageDestination(source, match.index ?? 0) &&
+        !isMarkdownInlineDestination(source, match.index ?? 0) &&
+        !isInsideMarkdownImageLabel(source, match.index ?? 0) &&
         !isMarkdownReferenceDefinitionDestination(source, match.index ?? 0) &&
         !isEscapedMarkdownAutolinkDestination(source, match.index ?? 0) &&
         hasExecutableDataHtmlValue(match[0])
