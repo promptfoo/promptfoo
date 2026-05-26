@@ -116,22 +116,40 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
 
 const URL_USERINFO = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@\s]+)@/i;
 const URL_QUERY_PARAMETER = /([?&])([^=&#]+)=([^&#]*)/g;
-const NUNJUCKS_REFERENCE =
-  /\{\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\s*\.\s*[A-Za-z_][A-Za-z0-9_]*)*(?:\s*\|\s*(?:trim|urlencode)\s*)*\s*\}\}/g;
+const NUNJUCKS_REFERENCE = /\{\{[^{}]*\}\}/g;
+const NUNJUCKS_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const SAFE_CREDENTIAL_TEMPLATE_FILTERS = new Set(['trim', 'urlencode']);
+
+const stripSafeNunjucksReferences = (value: string): string =>
+  value.replace(NUNJUCKS_REFERENCE, (reference) => {
+    const [path, ...filters] = reference
+      .slice(2, -2)
+      .split('|')
+      .map((part) => part.trim());
+    const safePath =
+      path.length > 0 && path.split('.').every((part) => NUNJUCKS_NAME.test(part.trim()));
+    const safeFilters = filters.every((filter) => SAFE_CREDENTIAL_TEMPLATE_FILTERS.has(filter));
+    return safePath && safeFilters ? '' : reference;
+  });
 
 const isTemplatedCredentialReference = (value: unknown): boolean => {
   if (typeof value !== 'string' || !value.includes('{{')) {
     return false;
   }
-  const literal = value.replace(NUNJUCKS_REFERENCE, '').trim();
-  return literal === '' || /^(?:bearer|basic|token|api[-_]?key)$/i.test(literal);
+  const literal = stripSafeNunjucksReferences(value);
+  if (literal === value) {
+    return false;
+  }
+  const trimmedLiteral = literal.trim();
+  return trimmedLiteral === '' || /^(?:bearer|basic|token|api[-_]?key)$/i.test(trimmedLiteral);
 };
 
 const isTemplatedUrlUserinfo = (value: string): boolean => {
   if (!value.includes('{{')) {
     return false;
   }
-  return /^:?$/.test(value.replace(NUNJUCKS_REFERENCE, '').trim());
+  const literal = stripSafeNunjucksReferences(value);
+  return literal !== value && /^:?$/.test(literal.trim());
 };
 
 const looksLikeUrlCredentialParameter = (rawName: string): boolean => {
