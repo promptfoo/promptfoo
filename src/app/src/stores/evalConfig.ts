@@ -28,9 +28,6 @@ export const DEFAULT_CONFIG: Partial<UnifiedConfig> = {
   extensions: [],
 };
 
-// Names that look like credentials in any casing convention. A few runtime
-// selectors contain these words without storing secret material, so they are
-// allowlisted below.
 const CREDENTIAL_TOKEN_PATTERN =
   /(?:^|_)(ssh_?key|id_?token|jwt_?token|x_?api_?key|json_?web_?token|api_?key|api_?secret|key|secret|token|password|passphrase|credential|signature|cookie|authorization|bearer)s?(?:_|$)/;
 
@@ -48,19 +45,14 @@ const INLINE_CREDENTIAL_MATERIAL_NAMES = new Set([
   'pfx_content',
 ]);
 
-// Header names that look like auth carriers but escape the main regex (e.g. a
-// bare `Auth` or `X-Auth` header). Only checked when the parent key is the
-// well-known `headers` bag.
+// Bare auth-carrier header names that escape the main regex. Only consulted
+// when the parent key is the `headers` bag.
 const HEADER_CREDENTIAL_NAMES = new Set([
   'auth',
   'x_auth',
   'proxy_authorization',
   'x_amz_security_token',
 ]);
-
-// Common header-name prefixes for secrets in raw HTTP request strings.
-const RAW_HTTP_SECRET_HEADERS =
-  /^([ \t]*)(authorization|proxy[-_]authorization|cookie|set[-_]cookie|x[-_]api[-_]key|x[-_]auth[-_]token|x[-_]auth|x[-_]amz[-_]security[-_]token|api[-_]key|bearer)([ \t]*:[ \t]*)(.+)$/gim;
 
 const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)api_bearer_token_envar$/,
@@ -71,8 +63,6 @@ const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)key_filename$/,
   /(?:^|_)key_name$/,
   /(?:^|_)key_path$/,
-  // `max_tokens`, `max_completion_tokens`, `max_new_tokens`,
-  // `max_tokens_to_sample`, `max_response_tokens`, `max_thinking_tokens`, ...
   /(?:^|_)max(?:_[a-z0-9]+)*_tokens?(?:_[a-z0-9]+)*$/,
   /(?:^|_)pay_per_token$/,
   /(?:^|_)private_key_path$/,
@@ -97,12 +87,11 @@ const OPAQUE_PROVIDER_CONFIG_KEYS = new Set([
   'json_schema',
 ]);
 
+// Normalize so the credential regex can match any casing convention
+// (camelCase, PascalCase, ALL_CAPS, kebab-case, all-caps acronyms).
 const normalizeCredentialName = (name: string): string =>
   name
-    // Split camelCase boundaries (`abcDef` → `abc_Def`).
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-    // Split adjacent-uppercase → trailing-mixed (`SSHKey` → `SSH_Key`,
-    // `JSONWebToken` → after first pass: `JSONWeb_Token`; here: `JSON_Web_Token`).
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .replace(/-/g, '_')
     .toLowerCase();
@@ -123,15 +112,23 @@ const looksLikeCredentialHeader = (headerName: string): boolean => {
 };
 
 // Scrub `Authorization: Bearer …` and similar lines from raw HTTP request
-// strings persisted under HTTP provider `config.request`. Returns the original
-// string unchanged when nothing matches.
-const scrubRawHttpRequest = (raw: string): string =>
-  raw.replace(RAW_HTTP_SECRET_HEADERS, (_match, indent, name, sep) => `${indent}${name}${sep}[REDACTED]`);
+// strings persisted under HTTP provider `config.request`. The local regex
+// avoids any cross-call state from the `g`/`m` flags.
+const scrubRawHttpRequest = (raw: string): string => {
+  const headerLine =
+    /^([ \t]*)(authorization|proxy[-_]authorization|cookie|set[-_]cookie|x[-_]api[-_]key|x[-_]auth[-_]token|x[-_]auth|x[-_]amz[-_]security[-_]token|api[-_]key|bearer)([ \t]*:[ \t]*)(.+)$/gim;
+  return raw.replace(headerLine, (_match, indent, name, sep) => `${indent}${name}${sep}[REDACTED]`);
+};
 
 const isMultipartFieldPart = (value: Record<string, unknown>): boolean =>
   value.kind === 'field' && typeof value.name === 'string';
 
-const omitProviderCredentials = (value: unknown, parentKey?: string): unknown => {
+// Guard against pathological user input: a cycle or extreme nesting in the
+// in-memory config must not throw and bypass redaction. Both limits are far
+// above any realistic provider config.
+const MAX_WALK_DEPTH = 64;
+
+const walkValue = (value: unknown, parentKey: string | undefined, seen: WeakSet<object>, depth: number): unknown => {
   if (typeof value === 'string') {
     if (parentKey === 'request') {
       return scrubRawHttpRequest(value);
@@ -139,18 +136,23 @@ const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
     return value;
   }
 
-  if (Array.isArray(value)) {
-    return value.map((item) => omitProviderCredentials(item, parentKey));
-  }
-
   if (!value || typeof value !== 'object') {
     return value;
+  }
+
+  if (depth > MAX_WALK_DEPTH || seen.has(value as object)) {
+    // Fail closed: drop the subtree rather than persist it unredacted.
+    return Array.isArray(value) ? [] : {};
+  }
+  seen.add(value as object);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => walkValue(item, parentKey, seen, depth + 1));
   }
 
   const normalizedParent = parentKey === undefined ? undefined : normalizeCredentialName(parentKey);
 
   if (normalizedParent !== undefined && OPAQUE_PROVIDER_CONFIG_KEYS.has(normalizedParent)) {
-    // Model-facing schema; do not redact field names inside.
     return value;
   }
 
@@ -161,7 +163,9 @@ const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
   if (isMultipartFieldPart(record) && looksLikeCredential(record.name as string)) {
     return Object.fromEntries(
       Object.entries(record).flatMap(([key, nested]) =>
-        key === 'value' ? [] : [[key, omitProviderCredentials(nested, key)]],
+        key === 'value' || looksLikeCredential(key)
+          ? []
+          : [[key, walkValue(nested, key, seen, depth + 1)]],
       ),
     );
   }
@@ -175,10 +179,13 @@ const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
       if (credential || (isApiKeyAuth && key === 'value')) {
         return [];
       }
-      return [[key, omitProviderCredentials(nestedValue, key)]];
+      return [[key, walkValue(nestedValue, key, seen, depth + 1)]];
     }),
   );
 };
+
+const omitProviderCredentials = (value: unknown, parentKey?: string): unknown =>
+  walkValue(value, parentKey, new WeakSet<object>(), 0);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -316,31 +323,39 @@ const omitSensitiveEnv = (env: Partial<UnifiedConfig>['env']): Partial<UnifiedCo
   return filtered as Partial<UnifiedConfig>['env'];
 };
 
+const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => ({
+  ...config,
+  env: omitSensitiveEnv(config.env),
+  providers: omitProviderCredentials(config.providers) as Partial<UnifiedConfig>['providers'],
+  targets: omitProviderCredentials(config.targets) as Partial<UnifiedConfig>['targets'],
+  prompts: omitPromptCredentials(config.prompts) as Partial<UnifiedConfig>['prompts'],
+  defaultTest: omitTestCaseProviderCredentials(
+    config.defaultTest,
+  ) as Partial<UnifiedConfig>['defaultTest'],
+  tests: Array.isArray(config.tests)
+    ? (config.tests.map(omitTestCaseProviderCredentials) as Partial<UnifiedConfig>['tests'])
+    : config.tests,
+  scenarios: Array.isArray(config.scenarios)
+    ? (config.scenarios.map(omitScenarioProviderCredentials) as Partial<UnifiedConfig>['scenarios'])
+    : config.scenarios,
+  redteam: omitRedteamProviderCredentials(config.redteam) as Partial<UnifiedConfig>['redteam'],
+  ...(hasOwn(config, 'tracing')
+    ? { tracing: omitTracingCredentials(config.tracing) as Partial<UnifiedConfig>['tracing'] }
+    : {}),
+});
+
+// Fail closed: if redaction throws (e.g. on a pathological config) we must
+// never let zustand persist the raw state instead. Returning the defaults
+// loses unsaved UI work but never leaks credentials.
 const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
-  return {
-    ...config,
-    env: omitSensitiveEnv(config.env),
-    providers: omitProviderCredentials(config.providers) as Partial<UnifiedConfig>['providers'],
-    targets: omitProviderCredentials(config.targets) as Partial<UnifiedConfig>['targets'],
-    prompts: omitPromptCredentials(config.prompts) as Partial<UnifiedConfig>['prompts'],
-    defaultTest: omitTestCaseProviderCredentials(
-      config.defaultTest,
-    ) as Partial<UnifiedConfig>['defaultTest'],
-    tests: Array.isArray(config.tests)
-      ? (config.tests.map(omitTestCaseProviderCredentials) as Partial<UnifiedConfig>['tests'])
-      : config.tests,
-    scenarios: Array.isArray(config.scenarios)
-      ? (config.scenarios.map(
-          omitScenarioProviderCredentials,
-        ) as Partial<UnifiedConfig>['scenarios'])
-      : config.scenarios,
-    redteam: omitRedteamProviderCredentials(config.redteam) as Partial<UnifiedConfig>['redteam'],
-    ...(hasOwn(config, 'tracing')
-      ? {
-          tracing: omitTracingCredentials(config.tracing) as Partial<UnifiedConfig>['tracing'],
-        }
-      : {}),
-  };
+  try {
+    return buildSanitizedConfig(config);
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[evalConfig] credential redaction failed; persisting defaults', err);
+    }
+    return { ...DEFAULT_CONFIG };
+  }
 };
 
 export const useStore = create<EvalConfigState>()(
@@ -395,7 +410,7 @@ export const useStore = create<EvalConfigState>()(
         };
       },
       onRehydrateStorage: () => (state) => {
-        // Purge credentials persisted by earlier app versions after sanitizing the loaded state.
+        // Re-persist so credentials dropped during merge are also cleared from storage.
         state?.setConfig(state.config);
       },
     },

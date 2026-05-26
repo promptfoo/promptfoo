@@ -618,6 +618,26 @@ describe('evalConfig store', () => {
       expect(serialized).not.toContain('base64-key-content-secret');
     });
 
+    it('fails closed on cyclic provider config rather than persisting raw secrets', () => {
+      const cyclic: Record<string, unknown> = {
+        id: 'http',
+        config: { apiKey: 'cyclic-leak-secret', endpoint: 'https://example.com' },
+      };
+      (cyclic.config as Record<string, unknown>).self = cyclic;
+
+      useStore.getState().setConfig({ providers: [cyclic as any] } as any);
+
+      const serialized = localStorage.getItem('promptfoo') ?? '';
+      expect(serialized).not.toContain('cyclic-leak-secret');
+      const persisted = JSON.parse(serialized).state.config;
+      // Walker resolves the cycle by dropping the offending subtree, and the
+      // outer apiKey is still stripped by name.
+      const cfg = (persisted.providers ?? [])[0]?.config;
+      if (cfg) {
+        expect(cfg.apiKey).toBeUndefined();
+      }
+    });
+
     it('does not corrupt JSON schemas inside provider tools/functions', () => {
       useStore.getState().setConfig({
         providers: [
