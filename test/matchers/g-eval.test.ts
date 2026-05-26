@@ -125,7 +125,7 @@ describe('matchesGEval', () => {
     DefaultGradingProvider.callApi = originalCallApi;
   });
 
-  it('uses a configured LiteLLM grader for both G-Eval phases', async () => {
+  it('passes LiteLLM provider context through both G-Eval phases', async () => {
     const criteria = 'Reward factual grounding and completeness';
     const configuredLiteLLM = createLiteLLMProvider('litellm:gemini-pro', {
       config: {

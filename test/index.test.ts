@@ -692,7 +692,7 @@ describe('evaluate function', () => {
               {
                 type: 'equals' as const,
                 value: 'expected',
-                provider: 'existing-provider', // Should resolve by ID
+                provider: 'echo',
               },
             ],
           },
@@ -701,14 +701,13 @@ describe('evaluate function', () => {
 
       await evaluate(testSuite);
 
-      // Verify the evaluation completed successfully using the fallback provider
       expect(doEvaluate).toHaveBeenCalledWith(
         expect.objectContaining({
           tests: expect.arrayContaining([
             expect.objectContaining({
               assert: expect.arrayContaining([
                 expect.objectContaining({
-                  provider: mockExistingProvider,
+                  provider: expect.not.objectContaining({ id: mockExistingProvider.id }),
                 }),
               ]),
             }),
@@ -717,6 +716,12 @@ describe('evaluate function', () => {
         expect.anything(),
         expect.anything(),
       );
+      const runtimeSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+      const runtimeAssertion = runtimeSuite?.tests?.[0].assert?.[0];
+      if (!runtimeAssertion || runtimeAssertion.type === 'assert-set') {
+        throw new Error('Expected a regular assertion with a fallback provider');
+      }
+      expect(runtimeAssertion.provider.id()).toBe('echo');
     });
 
     it('should handle providers without labels in providerMap', async () => {
@@ -935,7 +940,7 @@ describe('evaluate function', () => {
                 {
                   type: 'g-eval' as const,
                   value: 'Evaluate response',
-                  provider: 'litellm:gpt-4', // Use existing provider from main array
+                  provider: 'echo',
                 },
               ],
             },
@@ -944,7 +949,6 @@ describe('evaluate function', () => {
 
         await evaluate(testSuite);
 
-        // Verify the evaluation completed successfully using the fallback provider
         expect(doEvaluate).toHaveBeenCalledWith(
           expect.objectContaining({
             tests: expect.arrayContaining([
@@ -952,7 +956,7 @@ describe('evaluate function', () => {
                 assert: expect.arrayContaining([
                   expect.objectContaining({
                     type: 'g-eval',
-                    provider: mockMainProvider,
+                    provider: expect.not.objectContaining({ id: mockMainProvider.id }),
                   }),
                 ]),
               }),
@@ -961,6 +965,12 @@ describe('evaluate function', () => {
           expect.anything(),
           expect.anything(),
         );
+        const runtimeSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+        const runtimeAssertion = runtimeSuite?.tests?.[0].assert?.[0];
+        if (!runtimeAssertion || runtimeAssertion.type === 'assert-set') {
+          throw new Error('Expected a regular assertion with a fallback provider');
+        }
+        expect(runtimeAssertion.provider.id()).toBe('echo');
       });
     });
   });

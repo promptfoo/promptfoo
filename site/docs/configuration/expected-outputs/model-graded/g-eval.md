@@ -89,16 +89,11 @@ See the [llm-rubric grader override docs](/docs/configuration/expected-outputs/m
 
 ### Using LiteLLM as the G-Eval grader
 
-G-Eval makes two grader calls: one to generate evaluation steps (`g-eval-steps`) and one to score the output (`g-eval`). When using a LiteLLM proxy as the grader, define the LiteLLM provider once and reference the same provider ID from the assertion so the configured proxy URL, key, and model parameters are reused for both calls:
+G-Eval makes two grader calls: one to generate evaluation steps (`g-eval-steps`) and one to score the output (`g-eval`). Entries in the top-level `providers` list are evaluation targets. If LiteLLM should only grade another provider's responses, configure it directly on the assertion:
 
 ```yaml
 providers:
   - id: openai:gpt-5
-  - id: litellm:gemini-pro
-    config:
-      apiBaseUrl: http://localhost:4000
-      apiKey: ${LITELLM_API_KEY}
-      temperature: 0
 
 tests:
   - vars:
@@ -107,6 +102,30 @@ tests:
       - type: g-eval
         value: 'Check whether the answer is grounded in the policy and does not add unsupported details'
         threshold: 0.7
+        provider:
+          id: litellm:gemini-pro
+          config:
+            apiBaseUrl: http://localhost:4000
+            apiKey: ${LITELLM_API_KEY}
+            temperature: 0
+```
+
+If the configured LiteLLM provider is intentionally also an evaluation target, an assertion can reference its provider ID instead. Promptfoo reuses the loaded provider instance, including its proxy URL, key, and model parameters, for both grader calls:
+
+```yaml
+providers:
+  - id: litellm:gemini-pro
+    config:
+      apiBaseUrl: http://localhost:4000
+      apiKey: ${LITELLM_API_KEY}
+      temperature: 0
+
+tests:
+  - providers:
+      - litellm:gemini-pro
+    assert:
+      - type: g-eval
+        value: 'Check whether the answer is grounded and complete'
         provider: litellm:gemini-pro
 ```
 

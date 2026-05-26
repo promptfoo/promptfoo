@@ -1990,6 +1990,66 @@ function buildPromptIndexMap(prompts: CompletedPrompt[]) {
   return promptIndexMap;
 }
 
+function buildConfiguredProviderMap(providers: ApiProvider[]): Record<string, ApiProvider> {
+  const providerMap: Record<string, ApiProvider> = {};
+  for (const provider of providers) {
+    providerMap[provider.id()] = provider;
+    if (provider.label) {
+      providerMap[provider.label] = provider;
+    }
+  }
+  return providerMap;
+}
+
+function resolveConfiguredProviderReference<T>(
+  provider: T,
+  providerMap: Record<string, ApiProvider>,
+): T | ApiProvider {
+  if (typeof provider === 'string' && providerMap[provider]) {
+    return providerMap[provider];
+  }
+  return provider;
+}
+
+function resolveAssertionProviderReferences(
+  assertion: AssertionOrSet,
+  providerMap: Record<string, ApiProvider>,
+): AssertionOrSet {
+  if (assertion.type === 'assert-set') {
+    const resolvedAssertions = assertion.assert.map(
+      (child) => resolveAssertionProviderReferences(child, providerMap) as Assertion,
+    );
+    if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
+      return assertion;
+    }
+    return { ...assertion, assert: resolvedAssertions };
+  }
+
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap);
+  return provider === assertion.provider ? assertion : { ...assertion, provider };
+}
+
+function resolveRuntimeGradingProviderReferences(
+  testCase: AtomicTestCase,
+  providerMap: Record<string, ApiProvider>,
+): void {
+  if (testCase.options?.provider) {
+    const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
+    if (provider !== testCase.options.provider) {
+      testCase.options = { ...testCase.options, provider };
+    }
+  }
+
+  if (testCase.assert) {
+    const assertions = testCase.assert.map((assertion) =>
+      resolveAssertionProviderReferences(assertion, providerMap),
+    );
+    if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
+      testCase.assert = assertions;
+    }
+  }
+}
+
 function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
@@ -2136,6 +2196,7 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const promptIdCache = new Map<Prompt, string>();
+  const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
   for (const prompt of testSuite.prompts) {
     promptIdCache.set(prompt, generateIdFromPrompt(prompt));
   }
@@ -2144,6 +2205,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
