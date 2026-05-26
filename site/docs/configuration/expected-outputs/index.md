@@ -141,6 +141,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU score is above a given threshold (default 0.5)                |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU score is above a given threshold (default 0.5)                |
 | [levenshtein](/docs/configuration/expected-outputs/deterministic/#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [math-equivalent](/docs/configuration/expected-outputs/deterministic/#math-equivalent)                             | output is symbolically equivalent to the expected math value       |
 | [latency](/docs/configuration/expected-outputs/deterministic/#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [meteor](/docs/configuration/expected-outputs/deterministic/#meteor)                                               | METEOR score is above a given threshold (default 0.5)              |
 | [perplexity](/docs/configuration/expected-outputs/deterministic/#perplexity)                                       | Perplexity is below a threshold                                    |

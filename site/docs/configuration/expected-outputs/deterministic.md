@@ -881,12 +881,12 @@ by symbolically simplifying `actual - expected` and checking the result is
 zero. As a side effect it tolerates a number of common formatting quirks that
 trip up `equals` and `contains`:
 
-- `\boxed{...}` with nested braces — last box wins
+- `\boxed{...}` with nested braces — the last box wins unless later visible final-answer text follows it
 - Display math `$$ ... $$` and `\[ ... \]`, inline math `\( ... \)` and `$ ... $`
 - Markdown bold `**...**` and italic `*...*`
-- `<think>...</think>` / `<thinking>...</thinking>` blocks, Anthropic-style
-  signed or redacted thinking blocks, and every prefixed Responses API
-  `Reasoning:` summary line
+- Explicitly marked hidden-thought text such as `<think>...</think>` /
+  `<thinking>...</thinking>`, signed or redacted `Thinking:` blocks, and
+  individually prefixed `Reasoning:` lines
 - Unicode minus `−`, multiplication `×` and `·`, division `÷`, and root `√`
 - `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
   `\frac{1}\pi` (backslash-command denominator)
@@ -895,9 +895,9 @@ trip up `equals` and `contains`:
 - Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`),
   whether whitespace-separated (`10 kg`), directly attached (`10kg`, `45deg`),
   or following a fraction / LaTeX command (`1/2 m`, `\frac{1}{2} kg`,
-  `\sqrt{2} m`). Units are only stripped when a self-contained math value is
-  the immediate left context, so algebraic expressions like `x + m` and an
-  expected `2*m` are left intact.
+  `\sqrt{2} m`, `sqrt2 m`, `10\,\mathrm{m}`). Units are only stripped when
+  a self-contained math value is the immediate left context, so algebraic
+  expressions like `x + m` and an expected `2*m` are left intact.
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
 - Approximation symbols (`≈`, `\approx`) treated as equality, including in
   chain form (`1/2 ≈ 0.5` is graded against `0.5`)
@@ -937,11 +937,14 @@ Cases that intentionally do **not** pass:
 - Extra factors like a stray `\pi`
 - Pure prose that contains no parseable expression
 - Constraint equations (`x^2 = 4`, `\sin{x} = 1`) and systems
-  (`x = 1, y = 2` or `x = 1 and y = 2`) are not silently reduced to one
+  (`x = 1, y = 2`, `x = 1 and y = 2`, or separate assignment lines) are not silently reduced to one
   right-hand value
 - Explicitly negated or unequal claims such as "The answer is not 42" or
-  "The answer is unequal to 42" are not extracted as the positive answer `42`,
+  "The answer isn't 42" are not extracted as the positive answer `42`,
   even when the negation is inside a boxed `\text{...}` value
+- Relational or rejected-answer claims such as "The answer is less than 42",
+  "The answer is ≤ 42", "The value cannot be 42", and "Incorrect answer: 42"
+  are not graded as `42`
 
 To prevent pathological misuse like `value: 'apple'` matching any output that
 happens to contain the same letters, the assertion rejects "prose-shaped"
@@ -958,7 +961,7 @@ assert:
 
 `not-math-equivalent` only inverts the equivalence comparison; if the model
 output (or expected value) cannot be parsed as a math expression at all, the
-assertion fails with a parse-error reason rather than passing. This avoids
+assertion fails with a generic parse-error reason rather than passing. This avoids
 silently accepting empty / refused / garbage outputs.
 
 Non-finite numeric expected values (`NaN`, `±Infinity`) are rejected with a
