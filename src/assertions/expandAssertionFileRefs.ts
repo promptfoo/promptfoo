@@ -3,7 +3,6 @@ import * as path from 'path';
 
 import yaml from 'js-yaml';
 import cliState from '../cliState';
-import logger from '../logger';
 import { parseFileUrl } from '../util/functions/loadFunction';
 
 import type { AssertionOrSet } from '../types';
@@ -14,6 +13,7 @@ const ASSERTION_FILE_EXTENSIONS = new Set(['.yaml', '.yml', '.json']);
 interface ExpandOptions {
   baseDir?: string;
   inProgress?: Set<string>;
+  includeChain?: string[];
   depth?: number;
 }
 
@@ -110,15 +110,12 @@ function loadAssertionFile(resolvedPath: string): unknown {
 
 async function expandAssertionSet(
   item: AssertionSetLike,
-  options: Required<Pick<ExpandOptions, 'baseDir' | 'inProgress' | 'depth'>>,
+  options: Required<Pick<ExpandOptions, 'baseDir' | 'inProgress' | 'includeChain' | 'depth'>>,
 ): Promise<AssertionOrSet> {
   if (!Array.isArray(item.assert)) {
     return item as AssertionOrSet;
   }
-  const assert = await expandAssertionFileRefs(item.assert as AssertionOrSet[], {
-    ...options,
-    depth: options.depth + 1,
-  });
+  const assert = await expandAssertionFileRefs(item.assert as AssertionOrSet[], options);
   return { ...item, assert: assert ?? [] } as AssertionOrSet;
 }
 
@@ -133,9 +130,9 @@ async function expandAssertionSet(
  *
  * `assert-set` entries are traversed into their own `assert` array.
  *
- * A cycle is detected by tracking the include chain in `inProgress`. When a
- * cycle or the depth cap of 16 is hit, the remaining include entries are
- * left as literals and a debug/warn message is logged.
+ * A cycle is detected by tracking the include chain in `inProgress`. Cyclic
+ * includes or include nesting beyond the depth cap fail with an explicit
+ * configuration error.
  */
 export async function expandAssertionFileRefs(
   assertions: AssertionOrSet[] | undefined,
@@ -151,13 +148,15 @@ export async function expandAssertionFileRefs(
 
   const baseDir = options.baseDir ?? cliState.basePath ?? process.cwd();
   const inProgress = options.inProgress ?? new Set<string>();
+  const includeChain = options.includeChain ?? [];
   const depth = options.depth ?? 0;
 
   if (depth > MAX_DEPTH) {
-    logger.warn(
-      `Assertion file-ref expansion exceeded max depth ${MAX_DEPTH}; leaving remaining includes unresolved.`,
+    throw new Error(
+      `Assertion file include expansion exceeded maximum depth of ${MAX_DEPTH}. Include chain: ${includeChain.join(
+        ' -> ',
+      )}`,
     );
-    return assertions;
   }
 
   const expanded: AssertionOrSet[] = [];
@@ -165,7 +164,7 @@ export async function expandAssertionFileRefs(
   for (const item of assertions) {
     if (isAssertionSetLike(item)) {
       // Pass malformed sets through so the downstream validator reports them.
-      expanded.push(await expandAssertionSet(item, { baseDir, inProgress, depth }));
+      expanded.push(await expandAssertionSet(item, { baseDir, inProgress, includeChain, depth }));
       continue;
     }
 
@@ -173,11 +172,9 @@ export async function expandAssertionFileRefs(
       const resolvedPath = resolveAssertionFilePath(item.value, baseDir);
 
       if (inProgress.has(resolvedPath)) {
-        logger.debug(
-          `Assertion file-ref cycle detected; leaving literal in place: ${item.value} (resolved ${resolvedPath})`,
+        throw new Error(
+          `Cyclic assertion file include detected: ${[...includeChain, resolvedPath].join(' -> ')}`,
         );
-        expanded.push(item as unknown as AssertionOrSet);
-        continue;
       }
 
       const loaded = loadAssertionFile(resolvedPath);
@@ -196,6 +193,7 @@ export async function expandAssertionFileRefs(
         const childExpanded = await expandAssertionFileRefs(rebasedList, {
           baseDir: nestedBaseDir,
           inProgress,
+          includeChain: [...includeChain, resolvedPath],
           depth: depth + 1,
         });
         if (childExpanded) {

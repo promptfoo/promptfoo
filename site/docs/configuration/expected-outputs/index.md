@@ -65,6 +65,8 @@ Included files may include additional assertion files. Relative `file://` refere
   value: success
 ```
 
+Cyclic include chains and include nesting deeper than 16 levels are rejected with an error.
+
 Use a normal typed assertion, such as `{ type: is-json, value: file://schemas/result.json }`, when the referenced file is an assertion value rather than a reusable assertion list.
 
 ## Assertion properties

@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { expandAssertionFileRefs } from '../../src/assertions/expandAssertionFileRefs';
 import cliState from '../../src/cliState';
 
@@ -157,19 +157,43 @@ describe('expandAssertionFileRefs', () => {
     expect(out?.[1]).toMatchObject({ type: 'contains', value: 'hello' });
   });
 
-  it('stops at a real cycle and leaves the second visit as a literal', async () => {
+  it('reports a real include cycle with the files that form the loop', async () => {
     writeFixture('cycle/a.yaml', `- value: file://b.yaml\n`);
     writeFixture('cycle/b.yaml', `- value: file://a.yaml\n`);
 
-    const debugSpy = vi.spyOn(await import('../../src/logger'), 'default', 'get');
-    // We don't care about the log format; just that the function terminates.
     const input: AssertionOrSet[] = [{ value: 'file://cycle/a.yaml' } as any];
-    const out = await expandAssertionFileRefs(input);
+    const aPath = path.resolve(fixtureDir, 'cycle/a.yaml');
+    const bPath = path.resolve(fixtureDir, 'cycle/b.yaml');
 
-    expect(out).toHaveLength(1);
-    // At the cycle boundary, the literal include stays in place.
-    expect((out?.[0] as any).value).toMatch(/^file:\/\//);
-    debugSpy.mockRestore();
+    await expect(expandAssertionFileRefs(input)).rejects.toThrow(
+      `Cyclic assertion file include detected: ${aPath} -> ${bPath} -> ${aPath}`,
+    );
+  });
+
+  it('reports include nesting beyond the recursion limit explicitly', async () => {
+    for (let index = 0; index < 18; index++) {
+      writeFixture(`depth/${index}.yaml`, `- value: file://${index + 1}.yaml\n`);
+    }
+    const input: AssertionOrSet[] = [{ value: 'file://depth/0.yaml' } as any];
+
+    await expect(expandAssertionFileRefs(input)).rejects.toThrow(
+      'Assertion file include expansion exceeded maximum depth of 16',
+    );
+  });
+
+  it('does not count nested assert-set groups toward file include depth', async () => {
+    writeFixture('assertions/default.yaml', `- type: contains\n  value: hello\n`);
+    let nested: unknown = { value: 'file://assertions/default.yaml' };
+    for (let index = 0; index < 20; index++) {
+      nested = { type: 'assert-set', assert: [nested] };
+    }
+
+    const out = await expandAssertionFileRefs([nested as AssertionOrSet]);
+    let assertion = out?.[0] as { assert?: unknown[] };
+    for (let index = 0; index < 20; index++) {
+      assertion = assertion.assert?.[0] as { assert?: unknown[] };
+    }
+    expect(assertion).toMatchObject({ type: 'contains', value: 'hello' });
   });
 
   it('does not mutate the input assertions array', async () => {
