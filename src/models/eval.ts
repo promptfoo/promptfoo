@@ -167,6 +167,11 @@ export class EvalQueries {
       acc[r.eval_id].push(r.key);
       return acc;
     }, {});
+    // Legacy evals have no persisted display order, so backfill a stable
+    // (lexicographic) order per eval; keep in sync with getVarsFromEval.
+    for (const list of Object.values(vars)) {
+      list.sort();
+    }
     return vars;
   }
 
@@ -184,7 +189,8 @@ export class EvalQueries {
     `;
 
     const results = await db.all<VarKeyResult>(query);
-    const vars = results.map((r) => r.key);
+    // Legacy evals have no persisted display order, so backfill a stable one.
+    const vars = results.map((r) => r.key).sort();
 
     return vars;
   }
@@ -1150,8 +1156,9 @@ export default class Eval {
       return (hasSessionIds || hasSessionId) && notInVars;
     });
     if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
+      // Append sessionId instead of re-sorting so we preserve the variable
+      // order the user defined in their config. See #244, #1320.
       vars.push('sessionId');
-      vars.sort();
     }
 
     // Group results by test index
@@ -1328,6 +1335,7 @@ export default class Eval {
       config: this.config,
       author: this.author || null,
       prompts: this.getPrompts(),
+      ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces }),
     };
