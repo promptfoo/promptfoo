@@ -29,7 +29,13 @@ const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe
 
 type TestablePythonWorker = {
   flushStderr(): void;
+  handleDone(responseFile: string): void;
   handleStderr(data: Buffer | string): void;
+  pendingRequest: {
+    responseFile: string;
+    resolve: (result: unknown) => void;
+    reject: (error: Error) => void;
+  } | null;
 };
 
 function createTestableWorker() {
@@ -282,6 +288,20 @@ describe('PythonWorker stderr parsing', () => {
     worker.handleStderr(longLine);
 
     expect(logger.warn).toHaveBeenCalledWith(`Python worker stderr: ${longLine}`);
+  });
+});
+
+describe('PythonWorker completion markers', () => {
+  it('accepts a valid response path terminated by a carriage return', () => {
+    const worker = createTestableWorker();
+    const responseFile = path.join(os.tmpdir(), 'response.json');
+    const resolve = vi.fn();
+
+    worker.pendingRequest = { responseFile, resolve, reject: vi.fn() };
+    worker.handleDone(`${responseFile}\r`);
+
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(worker.pendingRequest).toBeNull();
   });
 });
 

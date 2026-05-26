@@ -349,7 +349,8 @@ export class PythonWorker {
   }
 
   private handleDone(responseFile: string): void {
-    if (this.pendingRequest?.responseFile === responseFile) {
+    const normalizedResponseFile = responseFile.replace(/[\r\n]+$/, '');
+    if (this.pendingRequest?.responseFile === normalizedResponseFile) {
       this.pendingRequest.resolve(undefined);
       this.pendingRequest = null;
       return;
